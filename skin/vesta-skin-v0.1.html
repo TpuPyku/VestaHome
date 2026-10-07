@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Скин ММС Весты</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700&family=PT+Sans:wght@400;700&display=swap">
+<style>
+/* Layout: one dark document; screens are 800x480 SVG frames at the real HU resolution, each with a caption that says what is image and what is layout. */
+:root {
+  color-scheme: dark;
+  --ink: #0b0c0e;        /* screen and page ground: graphite, not pure black (TN panels crush pure black) */
+  --panel: #17191c;      /* raised surfaces: tiles, presets, panels */
+  --panel-2: #22252a;    /* pressed / nested */
+  --line: #34383f;       /* 2px separators, never thinner on the HU */
+  --text: #f3f1ec;       /* warm white, matches orange */
+  --muted: #a3a8b0;      /* secondary text, >= 7:1 on --ink */
+  --orange: #ff6b1a;     /* the one accent: active state, focus, facets */
+  --orange-deep: #b8460c;
+  --orange-tint: rgba(255, 107, 26, .16);
+  --ok: #2fbf71;         /* call */
+  --stop: #e8483b;       /* hang up */
+  --f-display: "Exo 2", "Arial Narrow", sans-serif;
+  --f-body: "PT Sans", "Arial", sans-serif;
+  --s-xs: .8125rem; --s-sm: .9375rem; --s-md: 1.0625rem; --s-lg: 1.375rem; --s-xl: 2rem; --s-xxl: 2.75rem;
+}
+* { box-sizing: border-box }
+html { background: var(--ink) }
+body { background: var(--ink); color: var(--text); font-family: var(--f-body); font-size: var(--s-md); line-height: 1.5; padding-inline: 16px; padding-block: 0 64px }
+.wrap { max-width: 1120px; margin-inline: auto }
+header.top { padding-block: 40px 28px; display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) auto; align-items: end; border-bottom: 2px solid var(--line) }
+.eyebrow { font-family: var(--f-display); font-weight: 600; font-size: var(--s-xs); letter-spacing: .14em; text-transform: uppercase; color: var(--orange) }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.05; margin: 6px 0 12px; text-wrap: balance; letter-spacing: -.01em }
+.lede { color: var(--muted); max-width: 62ch; margin: 0 }
+.spec { font-family: var(--f-display); font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--s-sm); text-align: right; display: grid; gap: 2px }
+.spec b { color: var(--text); font-weight: 600 }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: var(--s-xl); margin: 56px 0 6px; text-wrap: balance }
+.sub { color: var(--muted); max-width: 70ch; margin: 0 0 24px }
+.hero { margin-top: 32px }
+figure { margin: 0; display: grid; gap: 12px; min-width: 0 }
+svg.screen { width: 100%; height: auto; display: block; border-radius: 10px; box-shadow: 0 0 0 2px var(--line), 0 18px 40px rgba(0,0,0,.55) }
+figcaption { display: grid; gap: 6px; min-width: 0 }
+.cap-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center }
+.cap-head strong { font-family: var(--f-display); font-weight: 600; font-size: var(--s-lg) }
+.chip { font-family: var(--f-display); font-size: var(--s-xs); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; border: 2px solid var(--line); color: var(--muted) }
+.chip.now { border-color: var(--orange); color: var(--orange) }
+.chip.patch { border-color: var(--muted); color: var(--text) }
+figcaption p { margin: 0; color: var(--muted); font-size: var(--s-sm); max-width: 75ch }
+code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .85em; color: var(--text); background: var(--panel); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 40px 32px }
+.tokens { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 12px }
+.tok { background: var(--panel); border-radius: 10px; overflow: hidden; border: 2px solid var(--line) }
+.tok i { display: block; height: 64px }
+.tok div { padding: 10px 12px; display: grid; gap: 2px }
+.tok b { font-family: var(--f-display); font-weight: 600 }
+.tok span { color: var(--muted); font-size: var(--s-xs); font-variant-numeric: tabular-nums }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px 32px; margin: 0; padding: 0; list-style: none }
+.rules li { border-top: 2px solid var(--line); padding-top: 12px; min-width: 0 }
+.rules li b { display: block; font-family: var(--f-display); font-weight: 600; font-size: var(--s-md); margin-bottom: 4px }
+.rules li span { color: var(--muted); font-size: var(--s-sm) }
+.states { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 24px }
+.states svg { width: 100%; height: auto; display: block }
+ol.next { padding-left: 1.4em; margin: 0; display: grid; gap: 10px; max-width: 75ch }
+ol.next li::marker { color: var(--orange); font-family: var(--f-display); font-weight: 700 }
+ol.next li { color: var(--muted) }
+ol.next li b { color: var(--text) }
+/* SVG text roles */
+.t-disp { font-family: var(--f-display) }
+.t-body { font-family: var(--f-body) }
+@media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2.4s ease-in-out infinite } @keyframes pulse { 50% { opacity: .55 } } }
+</style>
+<style>
+@page { size: A4 landscape; margin: 12mm }
+@media print {
+  html, body { background: #0b0c0e !important; -webkit-print-color-adjust: exact; print-color-adjust: exact }
+  body { padding-block: 0 }
+  .pulse { animation: none !important }
+  figure, .tok, .rules li, .states svg { break-inside: avoid }
+  .hero, .grid > figure { break-inside: avoid; break-after: auto }
+  .grid { grid-template-columns: 1fr 1fr }
+  h2 { break-after: avoid }
+  svg.screen { box-shadow: 0 0 0 2px #34383f }
+}
+</style>
+
+</head>
+<body>
+
+
+<!-- Shared defs: triangle patterns and line icons, referenced by every screen -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Graphite triangles: tile 48 x 41.57, two up + two down, three close shades -->
+    <pattern id="tri" width="48" height="41.57" patternUnits="userSpaceOnUse">
+      <rect width="48" height="41.57" fill="#0e0f12"/>
+      <path d="M0 41.57 L24 0 L48 41.57 Z" fill="#14161a"/>
+      <path d="M-24 0 L0 41.57 L24 0 Z" fill="#111316"/>
+      <path d="M24 0 L48 41.57 L72 0 Z" fill="#17191d"/>
+    </pattern>
+    <!-- Orange facets, used only on bands and accent corners -->
+    <pattern id="tri-or" width="48" height="41.57" patternUnits="userSpaceOnUse">
+      <rect width="48" height="41.57" fill="#8f3608"/>
+      <path d="M0 41.57 L24 0 L48 41.57 Z" fill="#c24a0b"/>
+      <path d="M-24 0 L0 41.57 L24 0 Z" fill="#a83f09"/>
+      <path d="M24 0 L48 41.57 L72 0 Z" fill="#e65a12"/>
+    </pattern>
+    <linearGradient id="fade-up" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#0b0c0e" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0b0c0e" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="fade-band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b0c0e" stop-opacity="1"/>
+      <stop offset=".55" stop-color="#0b0c0e" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#0b0c0e" stop-opacity=".15"/>
+    </linearGradient>
+
+    <symbol id="i-nav" viewBox="0 0 48 48"><path d="M24 5 L39 41 L24 32 L9 41 Z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-radio" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="17" width="38" height="25" rx="4"/><path d="M13 17 L33 6"/><circle cx="32" cy="29.5" r="5.5"/><path d="M11 25 h10 M11 31 h10 M11 37 h10"/></g></symbol>
+    <symbol id="i-music" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 36 V11 L39 7 V31"/><circle cx="13" cy="36" r="5"/><circle cx="34" cy="31" r="5"/></g></symbol>
+    <symbol id="i-video" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"><rect x="5" y="12" width="27" height="24" rx="3"/><path d="M32 20 L43 13 V35 L32 28 Z"/></g></symbol>
+    <symbol id="i-photo" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="9" width="38" height="30" rx="3"/><circle cx="16" cy="19" r="3.5"/><path d="M8 35 L19 24 L27 31 L33 25 L41 33"/></g></symbol>
+    <symbol id="i-phone" viewBox="0 0 48 48"><path d="M15 6 h6 l3.5 9 -5 3.5 a22 22 0 0 0 10 10 l3.5 -5 9 3.5 v6 a4 4 0 0 1 -4 4 C 21 38 10 27 11 10 a4 4 0 0 1 4 -4 z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-aux" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M24 4 V17"/><rect x="18" y="17" width="12" height="9" rx="1.5"/><path d="M20 26 V43 h8 V26"/></g></symbol>
+    <symbol id="i-gear" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><circle cx="24" cy="24" r="7"/><path d="M24 5 v6 M24 37 v6 M5 24 h6 M37 24 h6 M10.6 10.6 l4.2 4.2 M33.2 33.2 l4.2 4.2 M10.6 37.4 l4.2 -4.2 M33.2 14.8 l4.2 -4.2"/><circle cx="24" cy="24" r="13"/></g></symbol>
+    <symbol id="i-map" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"><path d="M5 11 L17 6 L31 11 L43 6 V37 L31 42 L17 37 L5 42 Z"/><path d="M17 6 V37 M31 11 V42"/></g></symbol>
+    <symbol id="i-bt" viewBox="0 0 48 48"><path d="M14 15 L33 32 L24 41 V7 L33 16 L14 33" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-usb" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M24 6 V40"/><circle cx="24" cy="40" r="3.5"/><path d="M24 30 L14 22 V16 M24 25 L34 18 V12"/><path d="M20 10 L24 5 L28 10"/></g></symbol>
+    <symbol id="i-back" viewBox="0 0 48 48"><path d="M30 9 L15 24 L30 39" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-next" viewBox="0 0 48 48"><path d="M18 9 L33 24 L18 39" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 48 48"><g fill="currentColor"><path d="M40 10 V38 L20 24 Z"/><rect x="9" y="10" width="5" height="28" rx="1.5"/></g></symbol>
+    <symbol id="i-fwd" viewBox="0 0 48 48"><g fill="currentColor"><path d="M8 10 V38 L28 24 Z"/><rect x="34" y="10" width="5" height="28" rx="1.5"/></g></symbol>
+    <symbol id="i-pause" viewBox="0 0 48 48"><g fill="currentColor"><rect x="12" y="9" width="8" height="30" rx="2"/><rect x="28" y="9" width="8" height="30" rx="2"/></g></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14 h8 l18 20 h9 M6 34 h8 l5 -6 M27 20 l5 -6 h9"/><path d="M36 9 l5 5 -5 5 M36 29 l5 5 -5 5"/></g></symbol>
+    <symbol id="i-repeat" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 22 V18 a6 6 0 0 1 6 -6 h24 M40 26 v4 a6 6 0 0 1 -6 6 H10"/><path d="M33 7 l5 5 -5 5 M15 31 l-5 5 5 5"/></g></symbol>
+    <symbol id="i-list" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M16 12 h26 M16 24 h26 M16 36 h26"/><circle cx="7" cy="12" r="1.5"/><circle cx="7" cy="24" r="1.5"/><circle cx="7" cy="36" r="1.5"/></g></symbol>
+    <symbol id="i-vol" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18 h8 l11 -9 V39 L14 30 H6 Z"/><path d="M32 17 a10 10 0 0 1 0 14 M37 11 a18 18 0 0 1 0 26"/></g></symbol>
+    <symbol id="i-moon" viewBox="0 0 48 48"><path d="M36 30 A15 15 0 1 1 22 8 A12 12 0 0 0 36 30 Z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-home" viewBox="0 0 48 48"><path d="M6 23 L24 7 L42 23 M11 19 V41 H37 V19" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-call" viewBox="0 0 48 48"><path d="M15 6 h6 l3.5 9 -5 3.5 a22 22 0 0 0 10 10 l3.5 -5 9 3.5 v6 a4 4 0 0 1 -4 4 C 21 38 10 27 11 10 a4 4 0 0 1 4 -4 z" fill="currentColor"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"><path d="M5 18 a27 27 0 0 1 38 0 M11 25 a18 18 0 0 1 26 0 M17 32 a9 9 0 0 1 14 0"/><circle cx="24" cy="38" r="1.8" fill="currentColor"/></g></symbol>
+    <symbol id="i-del" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"><path d="M16 10 H42 V38 H16 L4 24 Z"/><path d="M23 18 l12 12 M35 18 l-12 12"/></g></symbol>
+
+    <!-- Top status bar, shared by every screen (800 wide, 56 tall) -->
+    <g id="statusbar">
+      <rect width="800" height="56" fill="#0b0c0e"/>
+      <rect y="54" width="800" height="2" fill="#34383f"/>
+      <use href="#i-bt" x="640" y="14" width="28" height="28" color="#a3a8b0"/>
+      <use href="#i-usb" x="676" y="14" width="28" height="28" color="#a3a8b0"/>
+      <text x="784" y="38" text-anchor="end" class="t-disp" font-size="26" font-weight="600" fill="#f3f1ec">14:32</text>
+    </g>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Концепт скина · штатная оболочка G3NavHMI</div>
+      <h1>Скин ММС Весты</h1>
+      <p class="lede">Тёмный контрастный скин для экрана 800×480. Графитовый фон с паттерном треугольников, как на облицовке салона Весты 2018 года. Оранжевый появляется только там, где есть действие или активное состояние.</p>
+    </div>
+    <div class="spec"><span>Экран <b>800 × 480</b></span><span>Папка <b>res/img/Itelma/MMC27</b></span><span>Версия <b>0.1</b></span></div>
+  </header>
+
+  <!-- HERO: main menu in the CURRENT geometry -->
+  <section class="hero">
+    <figure>
+      <svg class="screen" viewBox="0 0 800 480" role="img" aria-label="Главное меню в текущей раскладке: четыре плитки Радио, Аудио, Навигация, Телефон">
+        <rect width="800" height="480" fill="#0b0c0e"/>
+        <rect y="56" width="800" height="424" fill="url(#tri)" opacity=".9"/>
+        <rect y="56" width="800" height="300" fill="url(#fade-band)"/>
+        <rect y="404" width="800" height="76" fill="url(#tri-or)"/>
+        <rect y="404" width="800" height="76" fill="url(#fade-up)" opacity=".55"/>
+        <rect y="402" width="800" height="3" fill="#ff6b1a"/>
+        <use href="#statusbar"/>
+        <text x="20" y="37" class="t-disp" font-size="22" font-weight="600" letter-spacing="2.5" fill="#f3f1ec">ГЛАВНОЕ МЕНЮ</text>
+
+        <!-- arrows -->
+        <use href="#i-back" x="4" y="200" width="40" height="40" color="#5d636c"/>
+        <use href="#i-next" x="756" y="200" width="40" height="40" color="#f3f1ec"/>
+
+        <!-- tile 1: Radio (normal) -->
+        <g transform="translate(23 120)">
+          <rect x="6" y="6" width="166" height="166" rx="18" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+          <path d="M126 6 H154 a18 18 0 0 1 18 18 V52 Z" fill="#c24a0b"/>
+          <use href="#i-radio" x="51" y="43" width="76" height="76" color="#f3f1ec"/>
+          <text x="89" y="152" text-anchor="middle" class="t-disp" font-size="17" font-weight="600" letter-spacing="2" fill="#a3a8b0">РАДИО</text>
+        </g>
+        <!-- tile 2: Audio (pressed) -->
+        <g transform="translate(218 120)">
+          <rect x="6" y="6" width="166" height="166" rx="18" fill="#ff6b1a"/>
+          <path d="M126 6 H154 a18 18 0 0 1 18 18 V52 Z" fill="#ffffff" opacity=".28"/>
+          <use href="#i-music" x="51" y="43" width="76" height="76" color="#0b0c0e"/>
+          <text x="89" y="152" text-anchor="middle" class="t-disp" font-size="17" font-weight="700" letter-spacing="2" fill="#0b0c0e">АУДИО</text>
+        </g>
+        <!-- tile 3: Navigation -->
+        <g transform="translate(413 120)">
+          <rect x="6" y="6" width="166" height="166" rx="18" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+          <path d="M126 6 H154 a18 18 0 0 1 18 18 V52 Z" fill="#c24a0b"/>
+          <use href="#i-nav" x="51" y="43" width="76" height="76" color="#f3f1ec"/>
+          <text x="89" y="152" text-anchor="middle" class="t-disp" font-size="17" font-weight="600" letter-spacing="2" fill="#a3a8b0">НАВИГАЦИЯ</text>
+        </g>
+        <!-- tile 4: Phone -->
+        <g transform="translate(608 120)">
+          <rect x="6" y="6" width="166" height="166" rx="18" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+          <path d="M126 6 H154 a18 18 0 0 1 18 18 V52 Z" fill="#c24a0b"/>
+          <use href="#i-phone" x="51" y="43" width="76" height="76" color="#f3f1ec"/>
+          <text x="89" y="152" text-anchor="middle" class="t-disp" font-size="17" font-weight="600" letter-spacing="2" fill="#a3a8b0">ТЕЛЕФОН</text>
+        </g>
+        <!-- page dots -->
+        <rect x="372" y="336" width="28" height="6" rx="3" fill="#ff6b1a"/>
+        <rect x="408" y="336" width="20" height="6" rx="3" fill="#5d636c"/>
+        <!-- band labels -->
+        <text x="24" y="450" class="t-body" font-size="17" font-weight="700" fill="#f3f1ec">Европа Плюс · 106.2 FM</text>
+        <text x="776" y="450" text-anchor="end" class="t-body" font-size="17" fill="#f3f1ec">Громкость 18</text>
+      </svg>
+      <figcaption>
+        <div class="cap-head"><strong>Главное меню</strong><span class="chip now">текущая раскладка</span></div>
+        <p>Круглые кнопки 187×187 стали плитками со скошенным оранжевым углом, рисунок остался внутри того же квадрата. Нажатая плитка заливается оранжевым целиком: на экране с плохими углами обзора это видно лучше, чем тонкая обводка. Файлы: <code>Temp/main/main_symbol_*.png</code>, подписи <code>*_lettering(_a).png</code>, полоса <code>main_folders_first_screen.png</code>, фон <code>Temp/common/background.png</code>.</p>
+      </figcaption>
+    </figure>
+  </section>
+
+  <h2>Экраны</h2>
+  <p class="sub">Экраны с пометкой «текущая раскладка» делаются одной заменой картинок. «Нужна правка раскладки» означает, что кнопки придётся передвинуть патчем <code>G3NavHMI.exe</code>. Положение элементов в текущей раскладке восстановлено по размерам картинок, его надо сверить со снимками с ГУ.</p>
+
+  <div class="grid">
+    <!-- Main menu, proposed layout -->
+    <figure>
+      <svg class="screen" viewBox="0 0 800 480" role="img" aria-label="Главное меню в новой раскладке: виджеты слева, сетка из шести плиток справа, нижняя панель">
+        <rect width="800" height="480" fill="#0b0c0e"/>
+        <rect y="56" width="800" height="424" fill="url(#tri)"/>
+        <use href="#statusbar"/>
+        <text x="20" y="37" class="t-disp" font-size="22" font-weight="600" letter-spacing="2.5" fill="#f3f1ec">ГЛАВНОЕ МЕНЮ</text>
+        <!-- widget: now playing -->
+        <rect x="16" y="72" width="284" height="196" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+        <rect x="32" y="88" width="88" height="88" rx="8" fill="url(#tri-or)"/>
+        <text x="136" y="104" class="t-disp" font-size="13" font-weight="600" letter-spacing="2" fill="#ff6b1a">СЕЙЧАС ИГРАЕТ</text>
+        <text x="136" y="132" class="t-disp" font-size="22" font-weight="700" fill="#f3f1ec">Группа крови</text>
+        <text x="136" y="156" class="t-body" font-size="17" fill="#a3a8b0">Кино · USB</text>
+        <rect x="32" y="196" width="252" height="6" rx="3" fill="#34383f"/>
+        <rect x="32" y="196" width="92" height="6" rx="3" fill="#ff6b1a"/>
+        <use href="#i-prev" x="52" y="216" width="36" height="36" color="#f3f1ec"/>
+        <circle cx="158" cy="234" r="24" fill="#ff6b1a"/>
+        <use href="#i-pause" x="141" y="217" width="34" height="34" color="#0b0c0e"/>
+        <use href="#i-fwd" x="228" y="216" width="36" height="36" color="#f3f1ec"/>
+        <!-- widget: radio -->
+        <rect x="16" y="280" width="284" height="104" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+        <text x="32" y="308" class="t-disp" font-size="13" font-weight="600" letter-spacing="2" fill="#a3a8b0">РАДИО · FM</text>
+        <text x="32" y="358" class="t-disp" font-size="44" font-weight="700" fill="#f3f1ec">106.2</text>
+        <text x="160" y="358" class="t-body" font-size="17" fill="#a3a8b0">Европа Плюс</text>
+        <!-- tiles 3x2 -->
+        <g class="t-disp" font-size="15" font-weight="600" letter-spacing="1.5" text-anchor="middle">
+          <g transform="translate(316 72)"><rect width="148" height="150" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/><path d="M112 0 H134 a14 14 0 0 1 14 14 V36 Z" fill="#c24a0b"/><use href="#i-map" x="46" y="30" width="56" height="56" color="#f3f1ec"/><text x="74" y="126" fill="#a3a8b0">КАРТЫ</text></g>
+          <g transform="translate(476 72)"><rect width="148" height="150" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/><use href="#i-nav" x="46" y="30" width="56" height="56" color="#f3f1ec"/><text x="74" y="126" fill="#a3a8b0">НАВИГАЦИЯ</text></g>
+          <g transform="translate(636 72)"><rect width="148" height="150" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/><use href="#i-phone" x="46" y="30" width="56" height="56" color="#f3f1ec"/><text x="74" y="126" fill="#a3a8b0">ТЕЛЕФОН</text></g>
+          <g transform="translate(316 234)"><rect width="148" height="150" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/><use href="#i-video" x="46" y="30" width="56" height="56" color="#f3f1ec"/><text x="74" y="126" fill="#a3a8b0">ВИДЕО</text></g>
+          <g transform="translate(476 234)"><rect width="148" height="150" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/><use href="#i-photo" x="46" y="30" width="56" height="56" color="#f3f1ec"/><text x="74" y="126" fill="#a3a8b0">ФОТО</text></g>
+          <g transform="translate(636 234)"><rect width="148" height="150" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/><use href="#i-gear" x="46" y="30" width="56" height="56" color="#f3f1ec"/><text x="74" y="126" fill="#a3a8b0">НАСТРОЙКИ</text></g>
+        </g>
+        <!-- dock -->
+        <rect y="398" width="800" height="82" fill="#0b0c0e"/>
+        <rect y="398" width="800" height="2" fill="#34383f"/>
+        <g color="#f3f1ec">
+          <rect x="16" y="410" width="120" height="58" rx="10" fill="#ff6b1a"/>
+          <use href="#i-home" x="56" y="419" width="40" height="40" color="#0b0c0e"/>
+          <use href="#i-radio" x="188" y="419" width="40" height="40"/>
+          <use href="#i-music" x="300" y="419" width="40" height="40"/>
+          <use href="#i-aux" x="412" y="419" width="40" height="40"/>
+          <use href="#i-moon" x="524" y="419" width="40" height="40"/>
+          <use href="#i-vol" x="636" y="419" width="40" height="40"/>
+          <text x="728" y="448" class="t-disp" font-size="22" font-weight="700" fill="#f3f1ec">18</text>
+        </g>
+      </svg>
+      <figcaption>
+        <div class="cap-head"><strong>Главное меню, новая раскладка</strong><span class="chip patch">нужна правка раскладки</span></div>
+        <p>Все разделы на одном экране вместо двух страниц по четыре. Слева виджеты «сейчас играет» и радио, внизу постоянная панель: домой, источники, ночной режим, громкость. «Карты» запускают YaMapsCE или OSMapsCE через <code>ExternNavi.cfg</code>. Виджеты рисует не скин, их нет в штатной оболочке. Это работа для своей программы или глубокого патча.</p>
+      </figcaption>
+    </figure>
+
+    <!-- Radio -->
+    <figure>
+      <svg class="screen" viewBox="0 0 800 480" role="img" aria-label="Радио: частота 106.2 FM, шкала, восемь кнопок станций, нижняя панель управления">
+        <rect width="800" height="480" fill="#0b0c0e"/>
+        <rect y="56" width="800" height="424" fill="url(#tri)"/>
+        <use href="#statusbar"/>
+        <rect x="8" y="8" width="48" height="40" rx="8" fill="#17191c"/>
+        <use href="#i-back" x="14" y="10" width="36" height="36" color="#f3f1ec"/>
+        <text x="72" y="37" class="t-disp" font-size="22" font-weight="600" letter-spacing="2.5" fill="#f3f1ec">РАДИО</text>
+        <!-- frequency panel -->
+        <rect x="16" y="68" width="768" height="140" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+        <text x="40" y="160" class="t-disp" font-size="92" font-weight="700" fill="#f3f1ec">106.2</text>
+        <text x="300" y="118" class="t-disp" font-size="20" font-weight="700" letter-spacing="2" fill="#ff6b1a">FM 1</text>
+        <text x="300" y="148" class="t-disp" font-size="28" font-weight="600" fill="#f3f1ec">Европа Плюс</text>
+        <text x="300" y="176" class="t-body" font-size="17" fill="#a3a8b0">RDS · Хиты нон-стоп</text>
+        <rect x="660" y="94" width="104" height="30" rx="15" fill="none" stroke="#a3a8b0" stroke-width="2"/>
+        <text x="712" y="115" text-anchor="middle" class="t-disp" font-size="15" font-weight="600" letter-spacing="1.5" fill="#a3a8b0">СТЕРЕО</text>
+        <!-- tuning scale 87.5..108 over x 40..760 -->
+        <g stroke="#5d636c" stroke-width="2">
+          <path d="M40 196 v-8 M75 196 v-5 M110 196 v-8 M145 196 v-5 M180 196 v-8 M215 196 v-5 M250 196 v-8 M285 196 v-5 M320 196 v-8 M355 196 v-5 M390 196 v-8 M425 196 v-5 M460 196 v-8 M495 196 v-5 M530 196 v-8 M565 196 v-5 M600 196 v-8 M635 196 v-5 M670 196 v-8 M705 196 v-5 M740 196 v-8"/>
+        </g>
+        <rect x="695" y="182" width="4" height="18" rx="2" fill="#ff6b1a"/>
+        <!-- presets 4x2 -->
+        <g class="t-disp">
+          <g transform="translate(16 222)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="16" y="30" font-size="14" font-weight="600" fill="#5d636c">1</text><text x="16" y="60" font-size="26" font-weight="700" fill="#f3f1ec">101.7</text><text x="166" y="60" text-anchor="end" class="t-body" font-size="14" fill="#a3a8b0">Хит FM</text></g>
+          <g transform="translate(210 222)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="16" y="30" font-size="14" font-weight="600" fill="#5d636c">2</text><text x="16" y="60" font-size="26" font-weight="700" fill="#f3f1ec">102.5</text><text x="166" y="60" text-anchor="end" class="t-body" font-size="14" fill="#a3a8b0">Маяк</text></g>
+          <g transform="translate(404 222)"><rect width="182" height="76" rx="12" fill="#ff6b1a"/><text x="16" y="30" font-size="14" font-weight="700" fill="#0b0c0e">3</text><text x="16" y="60" font-size="26" font-weight="700" fill="#0b0c0e">106.2</text><text x="166" y="60" text-anchor="end" class="t-body" font-size="14" font-weight="700" fill="#0b0c0e">Европа+</text></g>
+          <g transform="translate(598 222)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="16" y="30" font-size="14" font-weight="600" fill="#5d636c">4</text><text x="16" y="60" font-size="26" font-weight="700" fill="#f3f1ec">104.3</text><text x="166" y="60" text-anchor="end" class="t-body" font-size="14" fill="#a3a8b0">Авторадио</text></g>
+          <g transform="translate(16 310)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="16" y="30" font-size="14" font-weight="600" fill="#5d636c">5</text><text x="16" y="60" font-size="26" font-weight="700" fill="#f3f1ec">107.4</text><text x="166" y="60" text-anchor="end" class="t-body" font-size="14" fill="#a3a8b0">Рок</text></g>
+          <g transform="translate(210 310)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="16" y="30" font-size="14" font-weight="600" fill="#5d636c">6</text><text x="16" y="60" font-size="26" font-weight="700" fill="#f3f1ec">88.3</text><text x="166" y="60" text-anchor="end" class="t-body" font-size="14" fill="#a3a8b0">Ретро</text></g>
+          <g transform="translate(404 310)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="16" y="30" font-size="14" font-weight="600" fill="#5d636c">7</text><text x="16" y="60" font-size="26" font-weight="700" fill="#f3f1ec">99.2</text><text x="166" y="60" text-anchor="end" class="t-body" font-size="14" fill="#a3a8b0">Вести FM</text></g>
+          <g transform="translate(598 310)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2" stroke-dasharray="6 6"/><text x="91" y="48" text-anchor="middle" font-size="16" font-weight="600" letter-spacing="1.5" fill="#5d636c">ЗАПОМНИТЬ</text></g>
+        </g>
+        <!-- dock -->
+        <rect y="398" width="800" height="82" fill="#0b0c0e"/>
+        <rect y="398" width="800" height="2" fill="#34383f"/>
+        <g class="t-disp" font-size="18" font-weight="700" letter-spacing="1.5" text-anchor="middle">
+          <rect x="16" y="410" width="96" height="58" rx="10" fill="#22252a"/><text x="64" y="446" fill="#ff6b1a">FM</text>
+          <rect x="120" y="410" width="96" height="58" rx="10" fill="none" stroke="#34383f" stroke-width="2"/><text x="168" y="446" fill="#a3a8b0">AM</text>
+          <use href="#i-prev" x="268" y="417" width="44" height="44" color="#f3f1ec"/>
+          <rect x="344" y="410" width="112" height="58" rx="10" fill="none" stroke="#34383f" stroke-width="2"/><text x="400" y="446" fill="#f3f1ec">ПОИСК</text>
+          <use href="#i-fwd" x="488" y="417" width="44" height="44" color="#f3f1ec"/>
+          <use href="#i-list" x="600" y="417" width="44" height="44" color="#f3f1ec"/>
+          <use href="#i-gear" x="712" y="417" width="44" height="44" color="#f3f1ec"/>
+        </g>
+      </svg>
+      <figcaption>
+        <div class="cap-head"><strong>Радио</strong><span class="chip now">текущая раскладка</span></div>
+        <p>Укладывается в штатную панель 796×270 с окном частоты сверху и восемью кнопками станций (2 × 4). Текущая станция подсвечена заливкой. Частоту и названия рисует сама оболочка своим шрифтом, скин задаёт подложки. Файлы: <code>Radio/window_buttons_for_radio_and_background_band_title.png</code>, <code>Temp/radio/*</code>.</p>
+      </figcaption>
+    </figure>
+
+    <!-- Player -->
+    <figure>
+      <svg class="screen" viewBox="0 0 800 480" role="img" aria-label="Аудиоплеер: обложка, название трека, прогресс, кнопки управления">
+        <rect width="800" height="480" fill="#0b0c0e"/>
+        <rect y="56" width="800" height="424" fill="url(#tri)"/>
+        <use href="#statusbar"/>
+        <rect x="8" y="8" width="48" height="40" rx="8" fill="#17191c"/>
+        <use href="#i-back" x="14" y="10" width="36" height="36" color="#f3f1ec"/>
+        <text x="72" y="37" class="t-disp" font-size="22" font-weight="600" letter-spacing="2.5" fill="#f3f1ec">АУДИО · USB</text>
+        <!-- cover -->
+        <rect x="24" y="76" width="236" height="236" rx="14" fill="url(#tri-or)"/>
+        <rect x="24" y="76" width="236" height="236" rx="14" fill="none" stroke="#34383f" stroke-width="2"/>
+        <use href="#i-music" x="92" y="144" width="100" height="100" color="#0b0c0e" opacity=".55"/>
+        <!-- meta -->
+        <text x="290" y="112" class="t-disp" font-size="14" font-weight="600" letter-spacing="2" fill="#a3a8b0">ТРЕК 3 ИЗ 11</text>
+        <text x="290" y="156" class="t-disp" font-size="40" font-weight="700" fill="#f3f1ec">Группа крови</text>
+        <text x="290" y="190" class="t-body" font-size="20" fill="#a3a8b0">Кино · «Группа крови», 1988</text>
+        <!-- progress -->
+        <rect x="290" y="232" width="486" height="8" rx="4" fill="#34383f"/>
+        <rect x="290" y="232" width="174" height="8" rx="4" fill="#ff6b1a"/>
+        <circle cx="464" cy="236" r="11" fill="#f3f1ec"/>
+        <text x="290" y="270" class="t-disp" font-size="17" font-weight="600" fill="#a3a8b0" style="font-variant-numeric:tabular-nums">1:42</text>
+        <text x="776" y="270" text-anchor="end" class="t-disp" font-size="17" font-weight="600" fill="#a3a8b0">4:46</text>
+        <!-- controls -->
+        <use href="#i-shuffle" x="300" y="308" width="40" height="40" color="#5d636c"/>
+        <use href="#i-prev" x="398" y="304" width="48" height="48" color="#f3f1ec"/>
+        <circle cx="533" cy="328" r="44" fill="#ff6b1a" class="pulse"/>
+        <use href="#i-pause" x="509" y="304" width="48" height="48" color="#0b0c0e"/>
+        <use href="#i-fwd" x="620" y="304" width="48" height="48" color="#f3f1ec"/>
+        <use href="#i-repeat" x="726" y="308" width="40" height="40" color="#ff6b1a"/>
+        <!-- dock: sources -->
+        <rect y="398" width="800" height="82" fill="#0b0c0e"/>
+        <rect y="398" width="800" height="2" fill="#34383f"/>
+        <g class="t-disp" font-size="18" font-weight="700" letter-spacing="1.5" text-anchor="middle">
+          <rect x="16" y="410" width="112" height="58" rx="10" fill="#22252a"/><text x="72" y="446" fill="#ff6b1a">USB</text>
+          <rect x="136" y="410" width="112" height="58" rx="10" fill="none" stroke="#34383f" stroke-width="2"/><text x="192" y="446" fill="#a3a8b0">SD</text>
+          <rect x="256" y="410" width="112" height="58" rx="10" fill="none" stroke="#34383f" stroke-width="2"/><text x="312" y="446" fill="#a3a8b0">BT</text>
+          <rect x="376" y="410" width="112" height="58" rx="10" fill="none" stroke="#34383f" stroke-width="2"/><text x="432" y="446" fill="#a3a8b0">AUX</text>
+          <use href="#i-list" x="600" y="417" width="44" height="44" color="#f3f1ec"/>
+          <use href="#i-gear" x="712" y="417" width="44" height="44" color="#f3f1ec"/>
+        </g>
+      </svg>
+      <figcaption>
+        <div class="cap-head"><strong>Аудиоплеер</strong><span class="chip patch">нужна правка раскладки</span></div>
+        <p>Крупная обложка слева, одна главная кнопка «пауза» по центру. В штатном плеере есть эквалайзер 553×128 и список 562×448. Их можно перерисовать сразу, а вот перенос кнопок управления под обложку требует патча. Файлы: <code>Player/*</code>, <code>Playlist/*</code>, <code>Temp/media/*</code>.</p>
+      </figcaption>
+    </figure>
+
+    <!-- Phone -->
+    <figure>
+      <svg class="screen" viewBox="0 0 800 480" role="img" aria-label="Телефон: набранный номер, последние вызовы, клавиатура, кнопки вызова и сброса">
+        <rect width="800" height="480" fill="#0b0c0e"/>
+        <rect y="56" width="800" height="424" fill="url(#tri)"/>
+        <use href="#statusbar"/>
+        <rect x="8" y="8" width="48" height="40" rx="8" fill="#17191c"/>
+        <use href="#i-back" x="14" y="10" width="36" height="36" color="#f3f1ec"/>
+        <text x="72" y="37" class="t-disp" font-size="22" font-weight="600" letter-spacing="2.5" fill="#f3f1ec">ТЕЛЕФОН · Redmi Note</text>
+        <!-- number -->
+        <rect x="16" y="72" width="356" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+        <text x="32" y="122" class="t-disp" font-size="28" font-weight="700" fill="#f3f1ec" style="font-variant-numeric:tabular-nums">+7 912 345-67-8</text>
+        <rect x="292" y="99" width="3" height="28" fill="#ff6b1a" class="pulse"/>
+        <use href="#i-del" x="320" y="92" width="38" height="38" color="#a3a8b0"/>
+        <!-- recents -->
+        <text x="16" y="182" class="t-disp" font-size="14" font-weight="600" letter-spacing="2" fill="#a3a8b0">НЕДАВНИЕ</text>
+        <g class="t-body" font-size="18">
+          <rect x="16" y="194" width="356" height="60" rx="10" fill="#17191c"/><text x="32" y="230" fill="#f3f1ec" font-weight="700">Мама</text><text x="356" y="230" text-anchor="end" fill="#a3a8b0">12:05</text>
+          <rect x="16" y="262" width="356" height="60" rx="10" fill="#17191c"/><text x="32" y="298" fill="#f3f1ec" font-weight="700">Сервис Лада</text><text x="356" y="298" text-anchor="end" fill="#a3a8b0">вчера</text>
+          <rect x="16" y="330" width="356" height="60" rx="10" fill="#17191c"/><text x="32" y="366" fill="#e8483b" font-weight="700">+7 495 000-11-22</text><text x="356" y="366" text-anchor="end" fill="#a3a8b0">пн</text>
+        </g>
+        <!-- keypad 3x4 -->
+        <g class="t-disp" font-size="30" font-weight="700" text-anchor="middle" fill="#f3f1ec">
+          <g transform="translate(388 72)">
+            <rect width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="62" y="42">1</text>
+            <rect x="136" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="198" y="42">2</text>
+            <rect x="272" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="334" y="42">3</text>
+            <rect y="72" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="62" y="114">4</text>
+            <rect x="136" y="72" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="198" y="114">5</text>
+            <rect x="272" y="72" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="334" y="114">6</text>
+            <rect y="144" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="62" y="186">7</text>
+            <rect x="136" y="144" width="124" height="62" rx="10" fill="#ff6b1a"/><text x="198" y="186" fill="#0b0c0e">8</text>
+            <rect x="272" y="144" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="334" y="186">9</text>
+            <rect y="216" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="62" y="258">*</text>
+            <rect x="136" y="216" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="198" y="258">0</text>
+            <rect x="272" y="216" width="124" height="62" rx="10" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="334" y="258">#</text>
+          </g>
+        </g>
+        <!-- call / hang up -->
+        <rect x="388" y="364" width="192" height="72" rx="12" fill="#2fbf71"/>
+        <use href="#i-call" x="462" y="378" width="44" height="44" color="#0b0c0e"/>
+        <rect x="592" y="364" width="192" height="72" rx="12" fill="#e8483b"/>
+        <use href="#i-call" x="666" y="378" width="44" height="44" color="#0b0c0e" transform="rotate(135 688 400)"/>
+      </svg>
+      <figcaption>
+        <div class="cap-head"><strong>Телефон</strong><span class="chip now">текущая раскладка</span></div>
+        <p>Цифры крупные, 30 px по высоте, кнопки 124×62. Зелёный и красный нужны только для вызова и сброса: оранжевый в паре с красным на этом экране читается плохо. Подложка клавиатуры штатная, 572×325 (<code>Temp/phone/phone_panel_digits.png</code>), поэтому сетку держим в её границах.</p>
+      </figcaption>
+    </figure>
+
+    <!-- Settings -->
+    <figure>
+      <svg class="screen" viewBox="0 0 800 480" role="img" aria-label="Настройки экрана: список разделов слева, ползунки яркости и переключатели справа">
+        <rect width="800" height="480" fill="#0b0c0e"/>
+        <rect y="56" width="800" height="424" fill="url(#tri)"/>
+        <use href="#statusbar"/>
+        <rect x="8" y="8" width="48" height="40" rx="8" fill="#17191c"/>
+        <use href="#i-back" x="14" y="10" width="36" height="36" color="#f3f1ec"/>
+        <text x="72" y="37" class="t-disp" font-size="22" font-weight="600" letter-spacing="2.5" fill="#f3f1ec">НАСТРОЙКИ</text>
+        <!-- left nav -->
+        <g class="t-disp" font-size="19" font-weight="600">
+          <rect x="16" y="72" width="212" height="56" rx="10" fill="#17191c"/><use href="#i-vol" x="30" y="86" width="28" height="28" color="#a3a8b0"/><text x="70" y="107" fill="#a3a8b0">Звук</text>
+          <rect x="16" y="136" width="212" height="56" rx="10" fill="#ff6b1a"/><use href="#i-moon" x="30" y="150" width="28" height="28" color="#0b0c0e"/><text x="70" y="171" fill="#0b0c0e" font-weight="700">Экран</text>
+          <rect x="16" y="200" width="212" height="56" rx="10" fill="#17191c"/><use href="#i-radio" x="30" y="214" width="28" height="28" color="#a3a8b0"/><text x="70" y="235" fill="#a3a8b0">Радио</text>
+          <rect x="16" y="264" width="212" height="56" rx="10" fill="#17191c"/><use href="#i-bt" x="30" y="278" width="28" height="28" color="#a3a8b0"/><text x="70" y="299" fill="#a3a8b0">Телефон</text>
+          <rect x="16" y="328" width="212" height="56" rx="10" fill="#17191c"/><use href="#i-wifi" x="30" y="342" width="28" height="28" color="#a3a8b0"/><text x="70" y="363" fill="#a3a8b0">Wi-Fi</text>
+          <rect x="16" y="392" width="212" height="56" rx="10" fill="#17191c"/><use href="#i-gear" x="30" y="406" width="28" height="28" color="#a3a8b0"/><text x="70" y="427" fill="#a3a8b0">Система</text>
+        </g>
+        <!-- right panel -->
+        <rect x="240" y="72" width="544" height="392" rx="14" fill="#17191c" stroke="#34383f" stroke-width="2"/>
+        <g class="t-body" font-size="19" fill="#f3f1ec">
+          <text x="264" y="114" font-weight="700">Подсветка днём</text>
+          <rect x="264" y="134" width="432" height="8" rx="4" fill="#34383f"/><rect x="264" y="134" width="346" height="8" rx="4" fill="#ff6b1a"/><circle cx="610" cy="138" r="13" fill="#f3f1ec"/>
+          <text x="760" y="146" text-anchor="end" class="t-disp" font-size="22" font-weight="700" fill="#f3f1ec">80</text>
+          <rect x="256" y="166" width="512" height="2" fill="#34383f"/>
+          <text x="264" y="204" font-weight="700">Подсветка ночью</text>
+          <rect x="264" y="224" width="432" height="8" rx="4" fill="#34383f"/><rect x="264" y="224" width="130" height="8" rx="4" fill="#ff6b1a"/><circle cx="394" cy="228" r="13" fill="#f3f1ec"/>
+          <text x="760" y="236" text-anchor="end" class="t-disp" font-size="22" font-weight="700" fill="#f3f1ec">30</text>
+          <rect x="256" y="256" width="512" height="2" fill="#34383f"/>
+          <text x="264" y="296" font-weight="700">Ночной режим</text>
+          <rect x="480" y="268" width="288" height="44" rx="10" fill="#0b0c0e" stroke="#34383f" stroke-width="2"/>
+          <rect x="482" y="270" width="95" height="40" rx="8" fill="#ff6b1a"/>
+          <g class="t-disp" font-size="17" font-weight="700" text-anchor="middle"><text x="529" y="296" fill="#0b0c0e">АВТО</text><text x="624" y="296" fill="#a3a8b0">ВКЛ</text><text x="719" y="296" fill="#a3a8b0">ВЫКЛ</text></g>
+          <rect x="256" y="330" width="512" height="2" fill="#34383f"/>
+          <text x="264" y="372" font-weight="700">Заставка с часами</text>
+          <rect x="696" y="350" width="72" height="36" rx="18" fill="#ff6b1a"/><circle cx="750" cy="368" r="14" fill="#0b0c0e"/>
+          <text x="264" y="430" font-weight="700">Калибровка экрана</text>
+          <use href="#i-next" x="736" y="406" width="32" height="32" color="#a3a8b0"/>
+        </g>
+      </svg>
+      <figcaption>
+        <div class="cap-head"><strong>Настройки экрана</strong><span class="chip now">текущая раскладка</span></div>
+        <p>Слева разделы, справа панель 580×445 со строками на всю ширину. Каждая строка — одна зона нажатия высотой не меньше 56 px. Пункты на панели здесь условные, набор задаёт оболочка. Файлы: <code>Settings/*</code>, <code>Temp/setting/*/set_*_panel.png</code>, переключатель <code>set_main_switch.png</code>.</p>
+      </figcaption>
+    </figure>
+  </div>
+
+  <h2>Основа</h2>
+  <p class="sub">Палитра проверена на контраст для экрана с узкими углами обзора: основной текст около 17:1, второстепенный около 8:1. Оранжевый на графите даёт около 6,8:1.</p>
+  <div class="tokens">
+    <div class="tok"><i style="background:#0b0c0e;box-shadow:inset 0 -2px 0 #34383f"></i><div><b>Графит</b><span>#0B0C0E · фон</span></div></div>
+    <div class="tok"><i style="background:#17191c"></i><div><b>Панель</b><span>#17191C · плитки, кнопки</span></div></div>
+    <div class="tok"><i style="background:#34383f"></i><div><b>Линия</b><span>#34383F · рамки 2 px</span></div></div>
+    <div class="tok"><i style="background:#f3f1ec"></i><div><b>Текст</b><span>#F3F1EC · основной</span></div></div>
+    <div class="tok"><i style="background:#a3a8b0"></i><div><b>Подпись</b><span>#A3A8B0 · второстепенный</span></div></div>
+    <div class="tok"><i style="background:#ff6b1a"></i><div><b>Оранжевый</b><span>#FF6B1A · действие</span></div></div>
+    <div class="tok"><i style="background:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2241.57%22><rect width=%2248%22 height=%2241.57%22 fill=%22%230e0f12%22/><path d=%22M0 41.57 L24 0 L48 41.57 Z%22 fill=%22%2314161a%22/><path d=%22M24 0 L48 41.57 L72 0 Z%22 fill=%22%2317191d%22/></svg>')"></i><div><b>Паттерн</b><span>треугольник 48 px · 3 тона</span></div></div>
+    <div class="tok"><i style="background:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2241.57%22><rect width=%2248%22 height=%2241.57%22 fill=%22%238f3608%22/><path d=%22M0 41.57 L24 0 L48 41.57 Z%22 fill=%22%23c24a0b%22/><path d=%22M24 0 L48 41.57 L72 0 Z%22 fill=%22%23e65a12%22/></svg>')"></i><div><b>Грань</b><span>оранжевый паттерн · акценты</span></div></div>
+  </div>
+
+  <h2>Правила</h2>
+  <ul class="rules">
+    <li><b>Оранжевый только для действия</b><span>Активная плитка, нажатая кнопка, текущая станция, ползунок. Всё остальное в графите и белом.</span></li>
+    <li><b>Нажатие заливкой, не обводкой</b><span>Тонкие обводки и свечения пропадают на экране ГУ. Нажатое состояние — сплошная оранжевая заливка с тёмным знаком.</span></li>
+    <li><b>Линии не тоньше 2 px</b><span>Иконки рисуем линией 3,5 px в сетке 48 px, рамки 2 px. Градиентов на кнопках нет.</span></li>
+    <li><b>Паттерн приглушён</b><span>Треугольники фона отличаются от графита на 3–4 % яркости: фактура видна, но не спорит с текстом. Яркий оранжевый паттерн — только на полосе и гранях.</span></li>
+    <li><b>Зона нажатия от 56 px</b><span>В машине жмут на ходу. Мелкие кнопки оболочки (стрелки 27×37) рисуем с запасом и центрируем знак.</span></li>
+    <li><b>Шрифт текста задаёт оболочка</b><span>Названия станций, треков и пунктов меню G3NavHMI пишет своим шрифтом. Надписи главного меню — картинки <code>*_lettering.png</code>, их рисуем шрифтом скина.</span></li>
+  </ul>
+
+  <h2>Состояния кнопок</h2>
+  <div class="states">
+    <svg viewBox="0 0 620 200" role="img" aria-label="Плитка главного меню: обычная, нажатая, недоступная">
+      <rect width="620" height="200" fill="#0b0c0e"/>
+      <g class="t-disp" font-size="14" font-weight="600" letter-spacing="2" text-anchor="middle">
+        <g transform="translate(20 16)"><rect width="160" height="140" rx="16" fill="#17191c" stroke="#34383f" stroke-width="2"/><path d="M122 0 H144 a16 16 0 0 1 16 16 V38 Z" fill="#c24a0b"/><use href="#i-radio" x="52" y="30" width="56" height="56" color="#f3f1ec"/><text x="80" y="120" fill="#a3a8b0">РАДИО</text><text x="80" y="176" fill="#5d636c">ОБЫЧНАЯ</text></g>
+        <g transform="translate(230 16)"><rect width="160" height="140" rx="16" fill="#ff6b1a"/><path d="M122 0 H144 a16 16 0 0 1 16 16 V38 Z" fill="#ffffff" opacity=".28"/><use href="#i-radio" x="52" y="30" width="56" height="56" color="#0b0c0e"/><text x="80" y="120" fill="#0b0c0e" font-weight="700">РАДИО</text><text x="80" y="176" fill="#5d636c">НАЖАТА · _a</text></g>
+        <g transform="translate(440 16)"><rect width="160" height="140" rx="16" fill="#111316" stroke="#22252a" stroke-width="2"/><use href="#i-radio" x="52" y="30" width="56" height="56" color="#3d424a"/><text x="80" y="120" fill="#3d424a">РАДИО</text><text x="80" y="176" fill="#5d636c">НЕДОСТУПНА</text></g>
+      </g>
+    </svg>
+    <svg viewBox="0 0 620 200" role="img" aria-label="Кнопка станции: обычная, текущая, пустая">
+      <rect width="620" height="200" fill="#0b0c0e"/>
+      <g class="t-disp">
+        <g transform="translate(20 40)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2"/><text x="16" y="30" font-size="14" font-weight="600" fill="#5d636c">1</text><text x="16" y="60" font-size="26" font-weight="700" fill="#f3f1ec">101.7</text><text x="91" y="152" text-anchor="middle" font-size="14" font-weight="600" letter-spacing="2" fill="#5d636c">ОБЫЧНАЯ</text></g>
+        <g transform="translate(219 40)"><rect width="182" height="76" rx="12" fill="#ff6b1a"/><text x="16" y="30" font-size="14" font-weight="700" fill="#0b0c0e">3</text><text x="16" y="60" font-size="26" font-weight="700" fill="#0b0c0e">106.2</text><text x="91" y="152" text-anchor="middle" font-size="14" font-weight="600" letter-spacing="2" fill="#5d636c">ТЕКУЩАЯ</text></g>
+        <g transform="translate(418 40)"><rect width="182" height="76" rx="12" fill="#17191c" stroke="#34383f" stroke-width="2" stroke-dasharray="6 6"/><text x="91" y="45" text-anchor="middle" font-size="16" font-weight="600" letter-spacing="1.5" fill="#5d636c">ЗАПОМНИТЬ</text><text x="91" y="152" text-anchor="middle" font-size="14" font-weight="600" letter-spacing="2" fill="#5d636c">ПУСТАЯ</text></g>
+      </g>
+    </svg>
+  </div>
+
+  <h2>Что дальше</h2>
+  <ol class="next">
+    <li><b>Сверить раскладку со снимками с ГУ.</b> Нужны фото или скриншоты главного меню (обе страницы), радио, плеера, телефона и настроек. По ним уточню, где оболочка реально ставит каждую картинку.</li>
+    <li><b>Утвердить стиль на одном экране.</b> Главное меню в текущей раскладке: плитки, подписи, фон, полоса.</li>
+    <li><b>Собрать генератор картинок.</b> Скрипт рисует все PNG скина в точных размерах из этих же цветов и иконок, чтобы правка палитры меняла весь скин разом.</li>
+    <li><b>Решить, какие экраны переставлять.</b> Для каждого экрана из списка найти в <code>G3NavHMI.exe</code> координаты кнопок и оценить патч.</li>
+  </ol>
+</div>
+
+</body>
+</html>

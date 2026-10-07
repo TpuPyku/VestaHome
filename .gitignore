@@ -1,0 +1,26 @@
+# build output
+obj/
+__pycache__/
+*.pyc
+
+# desktop test builds
+*PC.exe
+
+# VestaHome deploy state
+VestaHome/VestaHome/*.log
+VestaHome/VestaHome/apps.txt
+
+# G3patch generated / large
+G3patch/ghidra/
+G3patch/out/
+G3patch/skin-vesta/
+G3patch/*.log
+G3patch/orig/
+
+# installer build artifacts
+G3patch/native/payload.bin
+Install/VestaInstall.exe
+VestaLaunch/VestaLaunch/*.log
+
+# skin: generated reference renders from the .ai
+skin/_ai/
