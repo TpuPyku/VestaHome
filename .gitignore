@@ -35,3 +35,6 @@ SPIPower/ghidra/
 # the rescue .upg carries vendor DLL bytes (same policy as G3patch/orig/):
 # rebuild it from MAIN/ with SPIPower/tools/make_rescue.py
 SPIPower/rescue/SwDnl.upg
+# the drill package carries no vendor bytes (one generated text marker), so it is
+# committed together with its cfg; only the ARM build output is kept out:
+SPIPower/rescue/drill/*.exe

@@ -22,6 +22,11 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
 - `test/` — `SPIPowerTest.exe` (ARM, импорт COREDLL): без G3NavHMI грузит proxy, проверяет
   `DllMain` (ищет `_orig` рядом с собой) и все 139 экспортов; лог — `\SDMMC` или
   `\StaticStore\SPIPower_test.log`, иначе рядом с самим exe.
+- `install/spipower_install.cpp` + `install/build.bat` — `SPIPowerInstall.exe` (ARM, импорт COREDLL):
+  `status | install [p2|p3] | rollback | drill | drill-off` (раздел «Установщик» ниже).
+- `tools/make_drill.py` — drill-пакет для проверки загрузочного rescue-пути **до** подмены DLL:
+  `rescue/drill/SwDnl_drill.upg` (один файл `\navigation\app\VestaDrill.txt`) + `SwDnl.cfg` +
+  копия `SPIPowerInstall.exe` рядом с ними.
 - `native/gen_thunks.py <real_dll>` — генерит из оригинала:
   - `thunks.s` — по одному ARM-trampoline на экспорт (`ldr ip,[pc,#off]; ldr ip,[ip]; mov pc,ip`),
     tail-jump в таблицу указателей `g_real[]`; сигнатуры функций знать не нужно;
@@ -69,6 +74,53 @@ python tools\make_test_dir.py   # папка: proxy + orig + зависимос�
 Ожидаемо: `RESULT: OK`, `exports resolved 139/139, missing 0`. При провале в логе будет
 `LoadLibrary(proxy): err=N`, `orig: MISSING (DllMain will fail)` или список `MISSING: <имя>`.
 Выход 0 = OK, 1 = FAIL (то же в MessageBox).
+
+## Установщик (ГУ): `SPIPowerInstall.exe`
+```
+install\build.bat                       # → out\SPIPowerInstall.exe
+```
+Запускать можно из любой папки: proxy берётся **рядом с exe**, поэтому всю папку можно положить и на
+SD, и на `\SDMMC`. Подкоманды:
+
+| Команда | Действие |
+|---|---|
+| `status` | состояние: `dll/orig/sd-bak/flag/shell` + `sd/swflag/drill/marker` |
+| `install` | бэкап заводской DLL в 2 места, подмена на proxy, старт оболочки, watchdog 30 с, автооткат |
+| `install p2` | то же + флаг `\SDMMC\SPIPower.on` (лог исходящих) |
+| `install p3` | то же с флагом (лог входящих через vtable скелетона) |
+| `rollback` | kill оболочки, возврат заводской DLL, снять флаг, старт |
+| `drill` | зарядить заводской апдейтер `SwDnl.exe` безобидным маркером (см. ниже) |
+| `drill-off` | снять `\ResidentFlash\SwUpdate.flag`, убрать drill-файлы с SD, выдать вердикт |
+
+`install*` отказывается работать, пока заряжен `\ResidentFlash\SwUpdate.flag` (иначе после следующей
+загрузки над работающим proxy отработал бы загрузочный апдейтер из того, что лежит на SD).
+
+### Точки монтирования (ROM-реестр `MAIN/4120_unpacked/TINYNK/Registry/default.reg`)
+| Путь | Что это |
+|---|---|
+| `\SDMemory` | SD-карта (`Profiles\SDMemory`, «SD Memory Card») — **сюда смотрят `SwDnl.exe` и `Main.exe`** |
+| `\SDMMC` | внутренний eMMC (`Profiles\MMC`/`MMC2`, «EMMC Disk Drive») |
+| `\SDMemory2` | второй том eMMC |
+
+SD-тома в эмуляторе нет (общая папка — `\StaticStore`), поэтому `\SDMMC` там пуст. Пути proxy/теста
+(`\SDMMC\SPIPower.on`, `\SDMMC\SPIPower.log`) пока остаются на eMMC — это контракт установщика и
+proxy; перенос на `\SDMemory` делать только после `status` на живом ГУ (увидим, какие тома есть).
+
+### Drill: проверка rescue-пути до подмены DLL
+```
+python tools\make_drill.py rescue\drill   # SwDnl_drill.upg + SwDnl.cfg + SPIPowerInstall.exe
+```
+1. Скопировать папку `rescue\drill\` на SD и запустить `SPIPowerInstall.exe drill`: на SD
+   раскладываются `SwDnl_drill.upg` + `SwDnl.cfg`, в `\ResidentFlash\SwUpdate.flag` пишется байт `0x02`.
+   `drill` отказывается, если: нет SD, рядом с exe нет пакета, в пакете нет маркера `VestaDrill`,
+   на SD лежит `update.pkg`/`RdDnl.upg`/`CANUpdate.s19` (это пути прошивки OS/Radio/CAN).
+2. Перезагрузить ГУ, **оставив SD**: `Main.exe` пропустит `G3NavHMI` и поднимет `SwDnl.exe`, тот
+   распакует пакет в `\ResidentFlash` и снимет бит `0x2`.
+3. `SPIPowerInstall.exe status` (или `drill-off`) даёт вердикт: PASS = маркер
+   `\ResidentFlash\navigation\app\VestaDrill.txt` появился и `swflag:none`. Тот же прогон отвечает на
+   вопрос «автостарт или диалог `Update Start!`» (если маркера нет, а флаг остался — апдейтер не
+   стартовал сам).
+4. `drill-off`: снимает флаг и удаляет drill-файлы с SD (пакет `rescue\drill\` на PC не трогается).
 
 ## Риск
 Ошибка proxy → G3NavHMI падает → перезагрузки по кругу (см. `PROJECT.md`).

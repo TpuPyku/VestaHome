@@ -9,6 +9,20 @@
 - `SwDnl.cfg` — минимальный конфиг: цель `ResidentFlash`, источник `SDMemory\SwDnl.upg`,
   **без** директив удаления (`SWDNL_NAV_DEL_*`) — только перезапись одного DLL, `navigation\app` не трогается.
 
+## Сначала drill: проверить путь без риска для DLL
+Тот же путь применяется безобидным маркером (`\navigation\app\VestaDrill.txt`) — так проверяются том
+`\SDMemory`, парсинг cfg, флаг `0x02` и распаковка в `\ResidentFlash` до того, как на ГУ попадёт
+хоть один байт вместо `SPIPowerMgr.dll`:
+
+1. на PC: `python tools\make_drill.py rescue\drill` → `SwDnl_drill.upg` + `SwDnl.cfg` +
+   `SPIPowerInstall.exe`;
+2. скопировать папку на SD, запустить `SPIPowerInstall.exe drill` — файлы на SD и флаг `0x02` кладёт
+   сама программа (вручную ничего создавать не нужно);
+3. выключить/включить ГУ (SD оставить), затем `SPIPowerInstall.exe status` → PASS = маркер
+   `\ResidentFlash\navigation\app\VestaDrill.txt` есть, `swflag:none`; то же отвечает на вопрос,
+   стартует апдейтер сам или ждёт кнопку `Update Start!`;
+4. `SPIPowerInstall.exe drill-off` — снять флаг и убрать drill-файлы с SD.
+
 ## Как пользоваться (выверено по коду `SwDnl.exe`, разбор — `../SWDNL.md`)
 
 1. На SD-карту в корень (`\SDMemory\`) положить **только два файла** — `SwDnl.upg` и `SwDnl.cfg`.
@@ -17,7 +31,7 @@
 2. Триггер — `\ResidentFlash\SwUpdate.flag`, **один байт `0x02`** (бит Navi). Если ГУ циклически
    перезагружается из-за прокси, `Main.exe` сам пишет `0x02` после третьего провала запуска
    `G3NavHMI` и поднимает `SwDnl.exe` с SD (то есть откат может пройти уже с первой загрузки);
-   при живой оболочке флаг создаётся вручную.
+   при живой оболочке флаг создаётся вручную (`SPIPowerInstall.exe drill`, раздел выше).
 3. Вставить SD, включить ГУ. `SwDnl.exe` стартует **до** оболочки, берёт пакет по ключу
    `SWDNL_SRC_NV_FILE` и распаковывает его в `SWDNL_DST_DIR` (`ResidentFlash`), т.е. в
    `\ResidentFlash\navigation\app\SPIPowerMgr.dll`. Если появится диалог — нажать

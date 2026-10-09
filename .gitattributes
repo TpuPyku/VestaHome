@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# boot-updater artifacts must keep their exact bytes (SwDnl parses the .cfg as raw
+# ANSI tokens and the .upg is a binary package)
+SPIPower/rescue/*.cfg -text
+SPIPower/rescue/drill/*.cfg -text
+SPIPower/rescue/drill/*.upg -text

@@ -193,3 +193,20 @@ ExtractFiles(<SRC_NV_FILE>, delDirs, delFiles)      // FUN_00021d44
   в этом бинаре `VA = file_off + 0x10E00` для `.rdata`).
 * Выгрузки (`ghidra/swdnl_*.txt`, `ghidra/import_swdnl.log`) — генерируются, в git не хранятся.
 * `tools/pe_exports.py` по `coredll.dll` — таблица «ординал → имя», без неё декомпиляция нечитаема.
+
+## 10. Проверка этого пути на ГУ (drill)
+
+Практический прогон цепочки «том `\SDMemory` → `SwDnl.cfg` → `SwUpdate.flag = 0x02` → распаковка в
+`\ResidentFlash`» без подмены DLL делает `SPIPowerInstall.exe drill` (`install/spipower_install.cpp`,
+пакет — `tools/make_drill.py` → `rescue/drill/SwDnl_drill.upg`: один файл `\navigation\app\VestaDrill.txt`):
+
+1. `drill` кладёт на SD (том резолвится в рантайме: `\SDMemory` → `\SDMMC`) `SwDnl_drill.upg` +
+   сгенерированный `SwDnl.cfg` (`SWDNL_DST_DIR` + `SWDNL_SRC_NV_FILE`, ANSI-токены в кавычках — как в
+   заводском файле) и пишет в `\ResidentFlash\SwUpdate.flag` один байт `0x02`. Отказы: нет SD; на SD
+   лежит `update.pkg`/`RdDnl.upg`/`CANUpdate.s19` (пути OS/Radio/CAN); в пакете нет маркера `VestaDrill`.
+2. Ребут: `Main.exe` (флаг есть и `(b & 0x0F) != 0`) пропускает `G3NavHMI` и поднимает `SwDnl.exe` —
+   тот снимает бит `0x2` (`CompleteUpdate(2)`) и удаляет файл, когда маска обнулится.
+3. Вердикт: `SPIPowerInstall.exe status` → `swflag:none drill:staged marker:y` = PASS (маркер появился
+   в `\ResidentFlash\navigation\app\`); `drill-off` снимает флаг, убирает drill-файлы с SD и печатает
+   итог. Если флаг остался `0x02` — апдейтер не стартовал: это и есть ответ на открытый вопрос
+   «автостарт или кнопка `Update Start!` в `CAutoUpdateDlg`».
