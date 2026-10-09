@@ -7,9 +7,13 @@
 //
 // The proxy is searched in several directories so the same exe works on the HU
 // (\SDMMC\SPIPower_test\) and in the emulator (\StaticStore\SPIPower_test\ or the
-// exe's own folder). The log goes to the first writable of
-// \SDMMC\SPIPower_test.log, \StaticStore\SPIPower_test.log, <exe dir>\...
-// Exit code 0 = OK, 1 = FAIL.
+// exe's own folder; the emulator is launched with /sharedfolder StaticStore, so
+// \SDMMC does not exist there at all). A candidate counts only when
+// SPIPowerMgr_orig.dll sits beside the proxy - without it the proxy's DllMain
+// returns FALSE on purpose (HU brick guard) and the failure would be misread.
+// The log goes to the exe's own folder (\SDMMC\SPIPower_test on the HU or the shared
+// StaticStore folder in the emulator), else \SDMMC\SPIPower_test.log, else
+// \StaticStore\SPIPower_test.log. Exit code 0 = OK, 1 = FAIL.
 #include <windows.h>
 #include "../native/g_proxy.h"
 
@@ -64,17 +68,29 @@ static void join(wchar_t* out, const wchar_t* dir, const wchar_t* name)
     wsprintfW(out, L"%s%s", dir, name);
 }
 
+static int writable(const wchar_t* p)
+{
+    HANDLE h = CreateFileW(p, GENERIC_WRITE, FILE_SHARE_READ, NULL,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    CloseHandle(h);
+    return 1;
+}
+
+// Log location: the exe's own folder first - on the HU that is \SDMMC\SPIPower_test
+// and in the emulator it is the shared StaticStore folder, so the log can be read
+// from the host immediately (an emulator \SDMMC is RAM-only and vanishes with the
+// session). Then \SDMMC, then \StaticStore.
 static void pickLog(const wchar_t* ownDir)
 {
     static const wchar_t* roots[] = { L"\\SDMMC\\", L"\\StaticStore\\" };
+    join(g_log, ownDir, L"SPIPower_test.log");
+    if (writable(g_log)) return;
     for (int i = 0; i < 2; i++)
     {
         join(g_log, roots[i], L"SPIPower_test.log");
-        HANDLE h = CreateFileW(g_log, GENERIC_WRITE, FILE_SHARE_READ, NULL,
-                               CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (h != INVALID_HANDLE_VALUE) { CloseHandle(h); return; }
+        if (writable(g_log)) return;
     }
-    join(g_log, ownDir, L"SPIPower_test.log");
 }
 
 // Append "<what>: err=<n>" as one line.
@@ -87,12 +103,12 @@ static void dumpErr(const wchar_t* what, DWORD err)
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
 {
-    wchar_t exe[MAX_PATH], ownDir[MAX_PATH], b[160];
+    wchar_t exe[MAX_PATH], ownDir[MAX_PATH], b[512];
     if (!GetModuleFileNameW(NULL, exe, MAX_PATH)) exe[0] = 0;
     dirOf(exe, ownDir);
     pickLog(ownDir);
 
-    line(L"SPIPowerTest: proxy load check");
+    line(L"SPIPowerTest v2 (2026-10-09): proxy load check");
     w(L"log:     "); line(g_log);
     w(L"exe dir: "); line(ownDir);
     wsprintfW(b, L"exports in proxy: %d", (int)PROXY_COUNT);
@@ -100,6 +116,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
 
     // Candidate directories, most specific first; the app folder is last, so the
     // harness also works after the proxy has been swapped in on the HU.
+    // A candidate is accepted only when proxy AND factory DLL are both there: the
+    // emulator has no \SDMMC (shared folder = StaticStore) and a half-populated
+    // folder would make the proxy fail with "LoadLibrary returned NULL" although
+    // the proxy itself is fine.
     wchar_t cands[4][MAX_PATH];
     wcscpy(cands[0], L"\\SDMMC\\SPIPower_test\\");
     wcscpy(cands[1], L"\\StaticStore\\SPIPower_test\\");
@@ -111,10 +131,17 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     for (i = 0; i < 4 && !found; i++)
     {
         wchar_t p[MAX_PATH], o[MAX_PATH];
+        int hp, ho;
         if (!cands[i][0]) continue;
         join(p, cands[i], kDllName);
         join(o, cands[i], kOrigName);
-        if (!exists(p)) { w(L"  skip (no proxy): "); line(p); continue; }
+        hp = exists(p);
+        ho = exists(o);
+        w(L"  check "); w(cands[i]);
+        w(L"proxy="); w(hp ? L"yes" : L"no");
+        w(L" orig="); w(ho ? L"yes" : L"no"); line(L"");
+        if (!hp) { line(L"    -> no proxy here"); continue; }
+        if (!ho) { line(L"    -> incomplete: no _orig beside it, skipped"); continue; }
         wcscpy(proxy, p);
         wcscpy(orig, o);
         wcscpy(used, cands[i]);
@@ -141,8 +168,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
         {
             wchar_t dp[MAX_PATH];
             join(dp, used, deps[i]);
-            if (!exists(dp)) continue;
             w(L"  preload "); w(deps[i]);
+            if (!exists(dp)) { line(L": absent from this folder"); continue; }
             if (LoadLibraryW(dp)) line(L": ok");
             else { w(L" "); dumpErr(L"failed", GetLastError()); }
         }
@@ -151,13 +178,17 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     HMODULE h = LoadLibraryW(proxy);
     if (!h)
     {
-        dumpErr(L"LoadLibrary(proxy)", GetLastError());
+        DWORD e = GetLastError();   // 126 = file/dependency not found, 1114 = DllMain FALSE
+        dumpErr(L"LoadLibrary(proxy)", e);
         HMODULE ho = LoadLibraryW(orig);       // is the factory DLL loadable here?
         if (ho) { line(L"  note: the factory DLL itself loads fine here"); FreeLibrary(ho); }
         else    { dumpErr(L"LoadLibrary(factory)", GetLastError());
                   line(L"  -> a dependency of the factory DLL is missing here"); }
+        wchar_t m[512];
+        wsprintfW(m, L"SPIPowerTest FAIL: proxy did not load (err=%u)\r\nlog: %s",
+                  (unsigned)e, g_log);
         line(L"RESULT: FAIL");
-        finish(L"SPIPowerTest FAIL: proxy did not load (see the log)", 1);
+        finish(m, 1);
     }
 
     int missing = 0, shown = 0;
@@ -176,8 +207,12 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     line(missing == 0 ? L"RESULT: OK" : L"RESULT: FAIL");
     FreeLibrary(h);
 
-    finish(missing == 0 ? L"SPIPowerTest OK: all exports resolved"
-                        : L"SPIPowerTest FAIL: some exports missing (see the log)",
-           missing == 0 ? 0 : 1);
+    wchar_t m[512];
+    if (missing == 0)
+        wsprintfW(m, L"SPIPowerTest OK: %d/%d exports resolved\r\nlog: %s",
+                  PROXY_COUNT, PROXY_COUNT, g_log);
+    else
+        wsprintfW(m, L"SPIPowerTest FAIL: %d exports missing\r\nsee: %s", missing, g_log);
+    finish(m, missing == 0 ? 0 : 1);
     return 0;
 }

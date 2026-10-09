@@ -41,7 +41,8 @@ native\build.bat        # нужно, чтобы рядом был исходн�
   логируют аргументы в `\SDMMC\SPIPower.log`, если есть флаг `\SDMMC\SPIPower.on`.
 - P3 (перехват входящих) готов: `SPApi_SetSkelonton` подменяет vtable каждого скелетона
   (slot 1 → хук, логирует `msg`/`len`/payload и форвардит), только при флаге.
-- На ГУ **не запускался**. Уровень 0 (тест-харнес) подготовлен к прогону на эмуляторе.
+- На ГУ **не запускался**. Уровень 0 на эмуляторе **пройден** (2026-10-09): `RESULT: OK`,
+  `exports resolved 139/139`, `orig: present`, обе зависимости подгружены.
 - Заводская `SPIPowerMgr.dll` импортирует `desay_sdk_api.dll` (ПЗУ, `\Windows`) и `NCL_BaseCom.dll`
   (`navigation\app`); proxy — только COREDLL. Поэтому для Уровня 0 обе DLL кладутся рядом с
   `SPIPowerMgr_orig.dll` (их копирует `tools/make_test_dir.py`).
