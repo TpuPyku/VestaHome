@@ -24,3 +24,14 @@ VestaLaunch/VestaLaunch/*.log
 
 # skin: generated reference renders from the .ai
 skin/_ai/
+
+# SPIPower proxy: generated + build artifacts
+SPIPower/native/thunks.s
+SPIPower/native/spipower.def
+SPIPower/native/g_proxy.h
+SPIPower/out/
+SPIPower/ghidra*/
+
+# the rescue .upg carries vendor DLL bytes (same policy as G3patch/orig/):
+# rebuild it from MAIN/ with SPIPower/tools/make_rescue.py
+SPIPower/rescue/SwDnl.upg
