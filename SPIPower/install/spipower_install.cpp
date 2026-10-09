@@ -4,6 +4,7 @@
 //
 // Usage: SPIPowerInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off
 //        (no command line arguments -> the GUI at the bottom: the same actions as buttons)
+//   UI buttons    -> СТАТУС | УСТАНОВИТЬ | УСТ. + ЛОГ | ТЕСТ ВОССТ. | СНЯТЬ ТЕСТ | УДАЛИТЬ | FORCE | ВЫХОД
 //   status        -> report current state to \SDMMC\SPIPower_install.log + a message box
 //   install       -> backup the factory DLL, swap in the proxy, start the shell and
 //                    watch it (pure pass-through, no flag)
@@ -389,7 +390,7 @@ static int InstallCheck(int verbose, wchar_t* rep, int repLen)
         if (verbose) {
             const wchar_t* v;
             if (rc == 4)      v = L"ИТОГ: самопроверка не прошла — папка установщика не та, под которую он собран.\n";
-            else if (rc == 3) v = L"ИТОГ: SPIPowerMgr.dll уже наш proxy — сначала rollback.\n";
+            else if (rc == 3) v = L"ИТОГ: SPIPowerMgr.dll уже наш proxy — сначала удалить (rollback).\n";
             else if (rc == 2) v = L"ИТОГ: SPIPowerMgr.dll не из 4120 (HARD) — proxy собран под 4120, на другой прошивке оболочка не запустится.\n";
             else if (rc == 1) v = L"ИТОГ: часть файлов не из 4120 (SOFT) — install откажет, продолжить на свой риск: install force.\n";
             else              v = L"ИТОГ: файлы соответствуют прошивке 4120 — установка безопасна.\n";
@@ -578,7 +579,7 @@ static void DoInstall(int logging, int force)
     LogMsg(logging ? L"--- install (logging on) ---" : L"--- install (pass-through) ---");
 
     if (FlagByte() >= 0) {
-        wcscpy(g_status, L"Отказ: заряжен \\ResidentFlash\\SwUpdate.flag (загрузочное обновление) — сначала: drill-off (кнопка ОТКЛ. ТЕСТ)");
+        wcscpy(g_status, L"Отказ: заряжен \\ResidentFlash\\SwUpdate.flag (загрузочное обновление) — сначала: drill-off (кнопка СНЯТЬ ТЕСТ)");
         return;
     }
     if (!FileExists(g_dll)) { wcscpy(g_status, L"Ошибка: SPIPowerMgr.dll не найден в app"); return; }
@@ -599,7 +600,7 @@ static void DoInstall(int logging, int force)
     LogMsg(rep);
     if (rc && !force) {
         if (rc == 4)      wcscpy(g_status, L"Отказ: самопроверка MD5 не прошла — proxy рядом с exe не тот, под который собран этот установщик.");
-        else if (rc == 3) wcscpy(g_status, L"Отказ: SPIPowerMgr.dll уже наш proxy — сначала SPIPowerInstall.exe rollback");
+        else if (rc == 3) wcscpy(g_status, L"Отказ: SPIPowerMgr.dll уже наш proxy — сначала удалить (rollback или кнопка УДАЛИТЬ)");
         else if (rc == 2) wcscpy(g_status, L"Отказ: SPIPowerMgr.dll не из прошивки 4120 (HARD) — подмена убьёт оболочку. Продолжить осознанно: install force");
         else              wcscpy(g_status, L"Отказ: часть файлов не из прошивки 4120 (SOFT). Продолжить на свой риск: install force");
         AppendStr(g_status, 4096, L"\n\n");
@@ -623,7 +624,7 @@ static void DoInstall(int logging, int force)
     if (fail) {
         LogMsg(L"install: watchdog failed -> rollback");
         Rollback();
-        wcscpy(g_status, L"ПРОВАЛ: оболочка упала или proxy не ответил; выполнен откат.");
+        wcscpy(g_status, L"ПРОВАЛ: оболочка упала или proxy не ответил; заводская DLL возвращена (откат).");
         return;
     }
 
@@ -765,7 +766,7 @@ static void DoDrill(int force)
     }
     LogMsg(L"drill: armed, \\ResidentFlash\\SwUpdate.flag = 0x02");
     _snwprintf(g_status, 512,
-        L"Тест отката заряжен.\nSD: %s\nпакет: %s\ncfg: %s\nфлаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
+        L"Тест восстановления заряжен.\nSD: %s\nпакет: %s\ncfg: %s\nфлаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
         L"Перезагрузите ГУ, оставив SD в слоте. После загрузки: кнопка СТАТУС (или SPIPowerInstall.exe status)\n"
         L"Ожидание: маркер \\ResidentFlash\\navigation\\app\\VestaDrill.txt есть, флаг снят.",
         sd, dstUpg, dstCfg);
@@ -799,7 +800,7 @@ static void DoDrillOff()
     else
         wcscpy(verdict, L"ИТОГ: флаг не 0x02 — разбирать по debug-логу SwDnl (NKDbgPrintfW).");
 
-    _snwprintf(g_status, 512, L"Тест отката выключен: флаг был %s, маркер %s; с SD убраны %s/%s.\n%s",
+    _snwprintf(g_status, 512, L"Тест восстановления снят: флаг был %s, маркер %s; с SD убраны %s/%s.\n%s",
                flagTxt, marker ? L"есть" : L"нет", kDrillCfg, kDrillUpg, verdict);
 }
 
@@ -823,9 +824,9 @@ static const Btn g_btns[8] = {
     { {  24, 380, 206, 420 }, L"СТАТУС",      B_STATUS   },
     { { 214, 380, 396, 420 }, L"УСТАНОВИТЬ",  B_INSTALL  },
     { { 404, 380, 586, 420 }, L"УСТ. + ЛОГ",  B_INST_LOG },
-    { { 594, 380, 776, 420 }, L"ТЕСТ ОТКАТА", B_DRILL    },
-    { {  24, 428, 206, 468 }, L"ОТКЛ. ТЕСТ",  B_DRILLOFF },
-    { { 214, 428, 396, 468 }, L"ОТКАТ",       B_ROLLBACK },
+    { { 594, 380, 776, 420 }, L"ТЕСТ ВОССТ.", B_DRILL    },
+    { {  24, 428, 206, 468 }, L"СНЯТЬ ТЕСТ", B_DRILLOFF },
+    { { 214, 428, 396, 468 }, L"УДАЛИТЬ",     B_ROLLBACK },
     { { 404, 428, 586, 468 }, L"FORCE: ВЫКЛ", B_FORCE    },
     { { 594, 428, 776, 468 }, L"ВЫХОД",       B_EXIT     },
 };
@@ -971,10 +972,10 @@ static void RunAction(int id)
 
     if (id == B_INSTALL || id == B_INST_LOG) {
         if (!Confirm(L"Заменить SPIPowerMgr.dll на proxy и перезапустить оболочку?\n"
-                     L"Откат — кнопкой ОТКАТ."))
+                     L"Вернуть заводскую DLL — кнопкой УДАЛИТЬ."))
             return;
     } else if (id == B_DRILL) {
-        if (!Confirm(L"Тест отката: зарядить заводской загрузочный апдейтер (drill)?\n"
+        if (!Confirm(L"Тест восстановления: зарядить заводской загрузочный апдейтер (drill)?\n"
                      L"Потребуется ПЕРЕЗАГРУЗКА ГУ; SD не вынимать во время загрузки."))
             return;
     }
@@ -988,7 +989,7 @@ static void RunAction(int id)
     else if (id == B_DRILLOFF) DoDrillOff();
     else if (id == B_ROLLBACK) {
         Rollback();
-        wcscpy(g_status, L"Откат выполнен: оригинал восстановлен, оболочка перезапущена.");
+        wcscpy(g_status, L"Удаление выполнено: заводская DLL возвращена, оболочка перезапущена.");
     }
 
     g_busy = 0;
@@ -1088,7 +1089,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
         DoDrill(force);
     } else if (wcsstr(a, L"rollback")) {
         Rollback();
-        wcscpy(g_status, L"Откат выполнен: оригинал восстановлен, оболочка перезапущена.");
+        wcscpy(g_status, L"Удаление выполнено: заводская DLL возвращена, оболочка перезапущена.");
     } else if (wcsstr(a, L"status")) {
         DoStatus();
     } else if (wcsstr(a, L"install")) {
