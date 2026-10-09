@@ -9,6 +9,14 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
 
 ## Устройство
 - `tools/pe_exports.py` — дамп таблицы экспорта PE (имя/ординал/RVA).
+- `tools/pe_strings.py` — строки (ASCII + UTF-16LE) с офсетами: в CE-бинару wide и narrow строки
+  смешаны, поэтому обычный поиск по путям/ключам в ASCII ничего не находит.
+- `tools/ghidra_post.bat` — запуск Ghidra-скриптов над программой проекта `ghidra/`
+  (`PROGRAM=` выбирает программу, по умолчанию `SwDnl.exe`).
+- `ghidra_scripts/` — скрипты разбора: `StrRefDecomp` (поиск строк в обеих кодировках + xrefs +
+  декомпиляция), `Callers` (вызывающие, включая ссылки из таблиц), `DecompAt`, `DumpW`.
+- `MAIN.md` — разбор `Main.exe` (триггер сброса/отката, окно ≈6 с); `SWDNL.md` — разбор заводского
+  апдейтера `SwDnl.exe` (байт `SwUpdate.flag`, ключи `SwDnl.cfg`, распаковка `.upg`).
 - `tools/make_test_dir.py` — собирает папку Уровня 0: `SPIPowerMgr.dll` (proxy) +
   `SPIPowerMgr_orig.dll` (заводская) + `NCL_BaseCom.dll` + `desay_sdk_api.dll` + `SPIPowerTest.exe`.
 - `test/` — `SPIPowerTest.exe` (ARM, импорт COREDLL): без G3NavHMI грузит proxy, проверяет
@@ -72,4 +80,11 @@ python tools\make_test_dir.py   # папка: proxy + orig + зависимос�
 `LoadLibrary`'ит эту DLL), так что её можно логировать/гасить. Аварийный откат:
 файл `\ResidentFlash\SwUpdate.flag` из одного байта `0x02` заставляет Main пропустить
 G3NavHMI и запустить `SwDnl`; снять откат — удалить файл.
+
+Процедура rescue выверена по коду `SwDnl.exe` (разбор — `SWDNL.md`, инструкция —
+`rescue/README.md`): на SD в `\SDMemory\` кладутся **только** `SwDnl.upg` + `SwDnl.cfg`
+(пакет берётся по ключу `SWDNL_SRC_NV_FILE`, распаковка идёт в `SWDNL_DST_DIR` =
+`\ResidentFlash\navigation\app\`), флаг `0x02` = бит Navi, при отсутствии `SWDNL_NAV_DEL_*`
+ничего не удаляется. `update.pkg`, `RdDnl.upg`, `CANUpdate.s19` на SD не класть — это пути
+прошивки OS/радио/CAN.
 
