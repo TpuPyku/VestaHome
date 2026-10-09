@@ -23,7 +23,15 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
   `DllMain` (ищет `_orig` рядом с собой) и все 139 экспортов; лог — `\SDMMC` или
   `\StaticStore\SPIPower_test.log`, иначе рядом с самим exe.
 - `install/spipower_install.cpp` + `install/build.bat` — `SPIPowerInstall.exe` (ARM, импорт COREDLL):
-  `status | install [p2|p3] | rollback | drill | drill-off` (раздел «Установщик» ниже).
+  `status | install [p2|p3] [force] | rollback | drill [force] | drill-off` (раздел «Установщик» ниже).
+  Исходник — UTF-8 **с BOM**: без BOM MSVC 2005 читает его как cp1251 и все русские строки в exe
+  получаются двойной перекодировкой (`РћС‚РєР°Р·` вместо `Отказ`).
+- `install/md5.h` — MD5 (RFC 1321) одним файлом, без `windows.h`; тот же код собирается и для ПК
+  (`tools/md5_hosttest.bat` — векторы + хеши файлов, сверка с `hashlib`), и в ARM-сборку установщика.
+- `install/fingerprints.h` — **генерируемая** таблица эталонов прошивки (HARD/SOFT/INFO) для гейта
+  версии. `tools/gen_fingerprints.py` берёт байты из официального пакета `MAIN/4120/SwDnl.upg`
+  (TOC `0x03276D3F`, то же значение, что в `make_rescue.py`) и из образа `MAIN/4120_unpacked/NK`,
+  а также md5 наших артефактов (proxy рядом с exe, drill-пакет).
 - `tools/make_drill.py` — drill-пакет для проверки загрузочного rescue-пути **до** подмены DLL:
   `rescue/drill/SwDnl_drill.upg` (один файл `\navigation\app\VestaDrill.txt`) + `SwDnl.cfg` +
   копия `SPIPowerInstall.exe` рядом с ними.
@@ -88,12 +96,44 @@ SD, и на `\SDMMC`. Подкоманды:
 | `install` | бэкап заводской DLL в 2 места, подмена на proxy, старт оболочки, watchdog 30 с, автооткат |
 | `install p2` | то же + флаг `\SDMMC\SPIPower.on` (лог исходящих) |
 | `install p3` | то же с флагом (лог входящих через vtable скелетона) |
+| `install force` | то же, но **обойти** гейт версии прошивки (только осознанно, см. ниже) |
 | `rollback` | kill оболочки, возврат заводской DLL, снять флаг, старт |
 | `drill` | зарядить заводской апдейтер `SwDnl.exe` безобидным маркером (см. ниже) |
 | `drill-off` | снять `\ResidentFlash\SwUpdate.flag`, убрать drill-файлы с SD, выдать вердикт |
 
 `install*` отказывается работать, пока заряжен `\ResidentFlash\SwUpdate.flag` (иначе после следующей
 загрузки над работающим proxy отработал бы загрузочный апдейтер из того, что лежит на SD).
+
+### Проверка версии прошивки (гейт 4120)
+Наш proxy собран под конкретные байты заводской DLL: в **4120** это `SPIPowerMgr.dll` =
+111 104 Б / `438505b7…`. На других версиях файл **того же размера, но с другими байтами**
+(например, копия в дереве CE-эмулятора `MAIN/WinCE_Emulator_StaticStore+SDMMC/.../SPIPowerMgr.dll`
+= `2e1351…`; там же другой `NCL_BaseCom.dll`) — подмена такой DLL ломает оболочку. Поэтому
+`install*` перед свопом считает MD5 файлов и сверяет их с таблицей `install/fingerprints.h`:
+
+| Уровень | Файл | Поведение |
+|---|---|---|
+| `HARD` | `\ResidentFlash\navigation\app\SPIPowerMgr.dll` | не совпал/не читается → **install отказывает** |
+| `SOFT` | `\ResidentFlash\Main.exe`, `…\app\NCL_BaseCom.dll`, `\Windows\SPIPowerMgr_OS.dll`, `\Windows\desay_sdk_api.dll` | не совпал → отказ, обойти можно только `install force` |
+| `INFO` | `\ResidentFlash\SwDnl.exe`, `…\app\G3NavHMI.exe` | только показывается в `status` (наш `G3NavHMI` пропатчен `G3patch`, поэтому он и не может быть HARD) |
+
+Отдельно проверяется **самопроверка MD5 на месте**: хешируются proxy рядом с exe и `SwDnl_drill.upg`
+и сверяются с md5, записанными при генерации таблицы. Это одновременно (а) доказывает, что MD5-код
+работает на этом ГУ, и (б) ловит папку установщика, собранную из разных сборок (proxy не от этого
+`SPIPowerInstall.exe`) — в этом случае тоже отказ (код `4`).
+
+Если `SPIPowerMgr.dll` уже равен нашему proxy — `install` скажет «сначала `rollback`» (отдельный
+код `3`), а не «чужая прошивка».
+
+```text
+python tools\gen_fingerprints.py            # перегенерировать таблицу + отчёт (какие файлы где не совпали)
+python tools\gen_fingerprints.py --check    # проверить, что fingerprints.h актуален
+python tools\gen_fingerprints.py --simulate \ResidentFlash=..\..\MAIN\ResidentFlash   # вердикт гейта на ПК
+tools\md5_hosttest.bat                      # MD5-ядро: векторы RFC 1321 (+ файлы для сверки с hashlib)
+```
+`--simulate` читает **сгенерированный** `fingerprints.h` и повторяет вердикт установщика на деревьях
+файлов ПК: на дампе ГУ (`MAIN/ResidentFlash`, `MAIN/4120_unpacked/NK/fs/Windows`) выходит
+`install would proceed`, на дереве эмулятора — `REFUSE` (HARD `SPIPowerMgr.dll`).
 
 ### Точки монтирования (ROM-реестр `MAIN/4120_unpacked/TINYNK/Registry/default.reg`)
 | Путь | Что это |
@@ -112,8 +152,11 @@ python tools\make_drill.py rescue\drill   # SwDnl_drill.upg + SwDnl.cfg + SPIPow
 ```
 1. Скопировать папку `rescue\drill\` на SD и запустить `SPIPowerInstall.exe drill`: на SD
    раскладываются `SwDnl_drill.upg` + `SwDnl.cfg`, в `\ResidentFlash\SwUpdate.flag` пишется байт `0x02`.
-   `drill` отказывается, если: нет SD, рядом с exe нет пакета, в пакете нет маркера `VestaDrill`,
-   на SD лежит `update.pkg`/`RdDnl.upg`/`CANUpdate.s19` (это пути прошивки OS/Radio/CAN).
+   `drill` отказывается, если: нет SD, рядом с exe нет пакета, md5 пакета не равен эталону
+   (`8800cb0e…`, 357 Б — таблица в `fingerprints.h`; обойти: `drill force`), в пакете нет маркера
+   `VestaDrill`, на SD лежит `update.pkg`/`RdDnl.upg`/`CANUpdate.s19` (это пути прошивки OS/Radio/CAN).
+   После изменения `make_drill.py` пакет нужно пересобрать **и** обновить таблицу:
+   `python tools\make_drill.py rescue\drill && python tools\gen_fingerprints.py`.
 2. Перезагрузить ГУ, **оставив SD**: `Main.exe` пропустит `G3NavHMI` и поднимет `SwDnl.exe`, тот
    распакует пакет в `\ResidentFlash` и снимет бит `0x2`.
 3. `SPIPowerInstall.exe status` (или `drill-off`) даёт вердикт: PASS = маркер

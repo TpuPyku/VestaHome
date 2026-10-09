@@ -5,3 +5,6 @@
 SPIPower/rescue/*.cfg -text
 SPIPower/rescue/drill/*.cfg -text
 SPIPower/rescue/drill/*.upg -text
+# the installer's generated fingerprint table keeps exact CRLF so that
+# "tools/gen_fingerprints.py --check" can compare it byte-for-byte after a fresh clone
+SPIPower/install/fingerprints.h -text
