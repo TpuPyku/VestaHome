@@ -57,7 +57,7 @@ ENTRIES = (
          note='boot updater = the rollback path (drill depends on it)'),
     dict(dev=r'\ResidentFlash\navigation\app\G3NavHMI.exe', tier='INFO',
          src=('pkg', '\\navigation\\app\\', 'G3NavHMI.exe'),
-         note='pristine 4120 shell; ours is G3patch-modified, so INFO only'),
+         note='pristine 4120 shell (fb1288ff...); APPLAUNCHER changes its bytes, original saved as .bak - so INFO, not HARD'),
 )
 
 # trees we compare the references against (report only, never written to the header)

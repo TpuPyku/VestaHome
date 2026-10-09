@@ -34,7 +34,7 @@ static const FwFile kFw[] = {
     { L"\\Windows\\SPIPowerMgr_OS.dll", 99840u, "1aae31c06218a16b048adac637818ef3", FW_SOFT },   // OS-side twin of SPIPowerMgr from the 4120 NK image
     { L"\\Windows\\desay_sdk_api.dll", 26112u, "caf34a73f8ae5a26639927e7a77849b1", FW_SOFT },   // SPI transport the factory DLL imports (4120 NK image)
     { L"\\ResidentFlash\\SwDnl.exe", 895488u, "6c5f7368b9b553a70d8c948ca17a8b9d", FW_INFO },   // boot updater = the rollback path (drill depends on it)
-    { L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", 4077056u, "fb1288ff9a3d0777da7ad28be5c8bb2c", FW_INFO },   // pristine 4120 shell; ours is G3patch-modified, so INFO only
+    { L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", 4077056u, "fb1288ff9a3d0777da7ad28be5c8bb2c", FW_INFO },   // pristine 4120 shell (fb1288ff...); APPLAUNCHER changes its bytes, original saved as .bak - so INFO, not HARD
 };
 static const int kFwN = (int)(sizeof(kFw) / sizeof(kFw[0]));
 

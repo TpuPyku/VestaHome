@@ -3,6 +3,7 @@
 // VestaInstall (toolhelp KillProcess, .bak-style backups, append-only log).
 //
 // Usage: SPIPowerInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off
+//        (no command line arguments -> the GUI at the bottom: the same actions as buttons)
 //   status        -> report current state to \SDMMC\SPIPower_install.log + a message box
 //   install       -> backup the factory DLL, swap in the proxy, start the shell and
 //                    watch it (pure pass-through, no flag)
@@ -802,6 +803,271 @@ static void DoDrillOff()
                flagTxt, marker ? L"есть" : L"нет", kDrillCfg, kDrillUpg, verdict);
 }
 
+// ---------------------------------------------------------------- GUI
+// On-device front-end: running SPIPowerInstall.exe with no arguments opens this window,
+// where the very same actions are plain buttons. Drawn with GDI only - the CE build links
+// COREDLL alone, so there is no comctl32 and no dialog resources; the look follows
+// G3patch/native/vesta_install.cpp. Every action also appends its result to the log.
+#define C_INK    RGB(0x0b,0x0c,0x0e)
+#define C_PANEL  RGB(0x17,0x19,0x1c)
+#define C_LINE   RGB(0x34,0x38,0x3f)
+#define C_TEXT   RGB(0xf3,0xf1,0xec)
+#define C_MUTED  RGB(0xa3,0xa8,0xb0)
+#define C_ORANGE RGB(0xff,0x6b,0x1a)
+#define C_FACET  RGB(0xc2,0x4a,0x0b)
+
+struct Btn { RECT rc; const wchar_t* label; int id; };
+enum { B_STATUS, B_INSTALL, B_INST_LOG, B_DRILL, B_DRILLOFF, B_ROLLBACK, B_FORCE, B_EXIT };
+
+static const Btn g_btns[8] = {
+    { {  24, 380, 206, 420 }, L"СТАТУС",      B_STATUS   },
+    { { 214, 380, 396, 420 }, L"УСТАНОВИТЬ",  B_INSTALL  },
+    { { 404, 380, 586, 420 }, L"УСТ. + ЛОГ",  B_INST_LOG },
+    { { 594, 380, 776, 420 }, L"ДРИЛЛ",       B_DRILL    },
+    { {  24, 428, 206, 468 }, L"ДРИЛЛ-ОФФ",   B_DRILLOFF },
+    { { 214, 428, 396, 468 }, L"ОТКАТ",       B_ROLLBACK },
+    { { 404, 428, 586, 468 }, L"FORCE: ВЫКЛ", B_FORCE    },
+    { { 594, 428, 776, 468 }, L"ВЫХОД",       B_EXIT     },
+};
+static HFONT g_font, g_fontB, g_fontS;
+static HWND  g_hwnd  = NULL;
+static int   g_press = -1;
+static int   g_force = 0;   // "force" toggle (off by default, highlighted when on)
+static int   g_busy  = 0;   // held while an action runs, blocks a second click
+
+static HFONT MakeFont(int height, int weight)
+{
+    LOGFONT lf;
+    memset(&lf, 0, sizeof(lf));
+    lf.lfHeight = -height;
+    lf.lfWeight = weight;
+    lf.lfCharSet = DEFAULT_CHARSET;
+    lf.lfQuality = ANTIALIASED_QUALITY;
+    wcscpy(lf.lfFaceName, L"Tahoma");
+    return CreateFontIndirect(&lf);
+}
+
+static void FillC(HDC dc, RECT* r, COLORREF c)
+{
+    HBRUSH b = CreateSolidBrush(c);
+    FillRect(dc, r, b);
+    DeleteObject(b);
+}
+
+static void FrameC(HDC dc, RECT* r, COLORREF c)
+{
+    RECT t;
+    t = *r; t.bottom = t.top + 2;    FillC(dc, &t, c);
+    t = *r; t.top    = t.bottom - 2; FillC(dc, &t, c);
+    t = *r; t.right  = t.left + 2;   FillC(dc, &t, c);
+    t = *r; t.left   = t.right - 2;  FillC(dc, &t, c);
+}
+
+static void TextL(HDC dc, int x, int y, const wchar_t* s, COLORREF c, HFONT f)
+{
+    RECT rc = { x, y, 1600, y + 44 };
+    HGDIOBJ of = SelectObject(dc, f);
+    SetTextColor(dc, c);
+    SetBkMode(dc, TRANSPARENT);
+    DrawText(dc, s, -1, &rc, DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(dc, of);
+}
+
+static void TextC(HDC dc, const RECT* rc, const wchar_t* s, COLORREF c, HFONT f)
+{
+    RECT r = *rc;
+    HGDIOBJ of = SelectObject(dc, f);
+    SetTextColor(dc, c);
+    SetBkMode(dc, TRANSPARENT);
+    DrawText(dc, s, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(dc, of);
+}
+
+// The report is several lines (status line + firmware gate table). Split it on newlines
+// and word-wrap each paragraph to the box width so it fits the 480 px screen; the same
+// text is always written to the log in full by LogMsg().
+static void DrawBlock(HDC dc, int x, int y, int w, int yMax, const wchar_t* s, COLORREF c, HFONT f)
+{
+    HGDIOBJ of = SelectObject(dc, f);
+    SetTextColor(dc, c);
+    SetBkMode(dc, TRANSPARENT);
+    while (*s && y < yMax) {
+        const wchar_t* nl = s;
+        while (*nl && *nl != L'\n') nl++;
+        int len = (int)(nl - s);
+        if (len > 0 && s[len - 1] == L'\r') len--;
+        if (len > 0) {
+            RECT rc = { x, y, x + w, yMax };
+            y += DrawText(dc, s, len, &rc, DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
+        } else {
+            y += 8;   // blank line
+        }
+        if (!*nl) break;
+        s = nl + 1;
+    }
+    SelectObject(dc, of);
+}
+
+static void Paint(HDC dc)
+{
+    RECT full = { 0, 0, 800, 480 };
+    FillC(dc, &full, C_INK);
+
+    TextL(dc, 24, 12, L"SPIPowerInstall — proxy SPIPowerMgr.dll (прошивка 4120)", C_TEXT, g_fontB);
+    TextL(dc, 24, 50, L"HARD/SOFT файлы не из 4120 — установка откажет (обойти: тумблер FORCE). INFO — только справка.",
+          C_MUTED, g_fontS);
+
+    RECT box = { 20, 76, 780, 368 };
+    FillC(dc, &box, C_PANEL);
+    FrameC(dc, &box, C_LINE);
+    DrawBlock(dc, 30, 84, 740, 362, g_status[0] ? g_status : L"(нет данных)",
+              g_busy ? C_MUTED : C_TEXT, g_fontS);
+
+    if (g_busy) TextL(dc, 24, 366, L"идёт операция, подождите...", C_ORANGE, g_fontS);
+
+    for (int i = 0; i < 8; i++) {
+        RECT r = g_btns[i].rc;
+        int pressed = (g_press == i);
+        int isForce = (g_btns[i].id == B_FORCE);
+        if (isForce && g_force) {
+            FillC(dc, &r, C_FACET);
+            FrameC(dc, &r, C_ORANGE);
+            TextC(dc, &r, L"FORCE: ВКЛ", C_TEXT, g_font);
+        } else {
+            FillC(dc, &r, pressed ? C_ORANGE : C_PANEL);
+            FrameC(dc, &r, pressed ? C_FACET : C_LINE);
+            TextC(dc, &r, g_btns[i].label, C_TEXT, g_font);
+        }
+    }
+}
+
+static int HitTest(int x, int y)
+{
+    for (int i = 0; i < 8; i++) {
+        RECT r = g_btns[i].rc;
+        if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return i;
+    }
+    return -1;
+}
+
+static int Confirm(const wchar_t* msg)
+{
+    return MessageBox(g_hwnd, msg, L"SPIPower Install", MB_YESNO | MB_ICONWARNING) == IDYES;
+}
+
+// Runs one button: confirm the destructive actions, then call the very same Do* function
+// the command line uses, log the outcome and repaint. g_busy keeps a second tap out.
+static void RunAction(int id)
+{
+    if (id == B_FORCE) { g_force = !g_force; InvalidateRect(g_hwnd, NULL, TRUE); return; }
+    if (g_busy) return;
+
+    if (id == B_STATUS) {
+        DoStatus();
+        LogMsg(g_status);
+        InvalidateRect(g_hwnd, NULL, TRUE);
+        return;
+    }
+
+    if (id == B_INSTALL || id == B_INST_LOG) {
+        if (!Confirm(L"Заменить SPIPowerMgr.dll на proxy и перезапустить оболочку?\n"
+                     L"Откат — кнопкой ОТКАТ."))
+            return;
+    } else if (id == B_DRILL) {
+        if (!Confirm(L"Зарядить загрузочный апдейтер (drill)?\n"
+                     L"Потребуется ПЕРЕЗАГРУЗКА ГУ; SD не вынимать во время загрузки."))
+            return;
+    }
+
+    g_busy = 1;
+    InvalidateRect(g_hwnd, NULL, TRUE);
+
+    if      (id == B_INSTALL)  DoInstall(0, g_force);
+    else if (id == B_INST_LOG) DoInstall(1, g_force);
+    else if (id == B_DRILL)    DoDrill(g_force);
+    else if (id == B_DRILLOFF) DoDrillOff();
+    else if (id == B_ROLLBACK) {
+        Rollback();
+        wcscpy(g_status, L"Откат выполнен: оригинал восстановлен, оболочка перезапущена.");
+    }
+
+    g_busy = 0;
+    LogMsg(g_status);
+    InvalidateRect(g_hwnd, NULL, TRUE);
+}
+
+static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_CREATE:
+        g_hwnd  = hwnd;
+        g_font  = MakeFont(20, FW_NORMAL);
+        g_fontB = MakeFont(26, FW_BOLD);
+        g_fontS = MakeFont(15, FW_NORMAL);
+        DoStatus();            // show the current state + the gate report right away
+        return 0;
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_PAINT: {
+        PAINTSTRUCT ps; HDC dc = BeginPaint(hwnd, &ps);
+        Paint(dc);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_LBUTTONDOWN: {
+        int i = HitTest(LOWORD(lp), HIWORD(lp));
+        if (i >= 0) { g_press = i; InvalidateRect(hwnd, NULL, TRUE); }
+        return 0;
+    }
+    case WM_LBUTTONUP: {
+        int i = HitTest(LOWORD(lp), HIWORD(lp));
+        int was = g_press; g_press = -1;
+        if (i >= 0 && i == was) {
+            if (g_btns[i].id == B_EXIT) { DestroyWindow(hwnd); return 0; }
+            RunAction(g_btns[i].id);
+        } else {
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
+        return 0;
+    }
+    case WM_KEYDOWN:
+        if (wp == VK_ESCAPE) { DestroyWindow(hwnd); return 0; }
+        return 0;
+    case WM_DESTROY:
+        if (g_font)  { DeleteObject(g_font);  g_font  = 0; }
+        if (g_fontB) { DeleteObject(g_fontB); g_fontB = 0; }
+        if (g_fontS) { DeleteObject(g_fontS); g_fontS = 0; }
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, msg, wp, lp);
+}
+
+// A plain 800x480 popup (full screen on the HU display), dismissed with ВЫХОД or Esc.
+static void ShowGui(HINSTANCE hInst)
+{
+    WNDCLASS wc;
+    memset(&wc, 0, sizeof(wc));
+    wc.lpfnWndProc   = WndProc;
+    wc.hInstance     = hInst;
+    wc.lpszClassName = L"SPIPowerInstall_Wnd";
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+    if (!RegisterClass(&wc)) return;
+
+    HWND hwnd = CreateWindow(L"SPIPowerInstall_Wnd", L"SPIPower Install", WS_POPUP,
+        0, 0, 800, 480, NULL, NULL, hInst, NULL);
+    if (!hwnd) return;
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+}
+
 // ---------------------------------------------------------------- entry
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
 {
@@ -827,8 +1093,13 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
         DoStatus();
     } else if (wcsstr(a, L"install")) {
         DoInstall(logging, force);
-    } else {
+    } else if (a[0]) {
+        // an unknown verb: keep the one-shot help so a typo does not silently open the GUI
         wcscpy(g_status, L"Способ: SPIPowerInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off");
+    } else {
+        // no command line at all: the on-device front-end (buttons, mouse/touch)
+        ShowGui(hInst);
+        return 0;
     }
 
     LogMsg(g_status);
