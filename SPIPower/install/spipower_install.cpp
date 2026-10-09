@@ -578,7 +578,7 @@ static void DoInstall(int logging, int force)
     LogMsg(logging ? L"--- install (logging on) ---" : L"--- install (pass-through) ---");
 
     if (FlagByte() >= 0) {
-        wcscpy(g_status, L"Отказ: заряжен \\ResidentFlash\\SwUpdate.flag (загрузочное обновление) — сначала: SPIPowerInstall.exe drill-off");
+        wcscpy(g_status, L"Отказ: заряжен \\ResidentFlash\\SwUpdate.flag (загрузочное обновление) — сначала: drill-off (кнопка СНЯТЬ ПРОГОН)");
         return;
     }
     if (!FileExists(g_dll)) { wcscpy(g_status, L"Ошибка: SPIPowerMgr.dll не найден в app"); return; }
@@ -765,8 +765,8 @@ static void DoDrill(int force)
     }
     LogMsg(L"drill: armed, \\ResidentFlash\\SwUpdate.flag = 0x02");
     _snwprintf(g_status, 512,
-        L"Дрилл заряжен.\nSD: %s\nпакет: %s\ncfg: %s\nфлаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
-        L"Перезагрузите ГУ, оставив SD в слоте. После загрузки: SPIPowerInstall.exe status\n"
+        L"Прогон заряжен.\nSD: %s\nпакет: %s\ncfg: %s\nфлаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
+        L"Перезагрузите ГУ, оставив SD в слоте. После загрузки: кнопка СТАТУС (или SPIPowerInstall.exe status)\n"
         L"Ожидание: маркер \\ResidentFlash\\navigation\\app\\VestaDrill.txt есть, флаг снят.",
         sd, dstUpg, dstCfg);
 }
@@ -799,7 +799,7 @@ static void DoDrillOff()
     else
         wcscpy(verdict, L"ИТОГ: флаг не 0x02 — разбирать по debug-логу SwDnl (NKDbgPrintfW).");
 
-    _snwprintf(g_status, 512, L"drill-off: флаг был %s, маркер %s; с SD убраны %s/%s.\n%s",
+    _snwprintf(g_status, 512, L"Прогон снят: флаг был %s, маркер %s; с SD убраны %s/%s.\n%s",
                flagTxt, marker ? L"есть" : L"нет", kDrillCfg, kDrillUpg, verdict);
 }
 
@@ -823,8 +823,8 @@ static const Btn g_btns[8] = {
     { {  24, 380, 206, 420 }, L"СТАТУС",      B_STATUS   },
     { { 214, 380, 396, 420 }, L"УСТАНОВИТЬ",  B_INSTALL  },
     { { 404, 380, 586, 420 }, L"УСТ. + ЛОГ",  B_INST_LOG },
-    { { 594, 380, 776, 420 }, L"ДРИЛЛ",       B_DRILL    },
-    { {  24, 428, 206, 468 }, L"ДРИЛЛ-ОФФ",   B_DRILLOFF },
+    { { 594, 380, 776, 420 }, L"ПРОГОН",      B_DRILL    },
+    { {  24, 428, 206, 468 }, L"СНЯТЬ ПРОГОН", B_DRILLOFF },
     { { 214, 428, 396, 468 }, L"ОТКАТ",       B_ROLLBACK },
     { { 404, 428, 586, 468 }, L"FORCE: ВЫКЛ", B_FORCE    },
     { { 594, 428, 776, 468 }, L"ВЫХОД",       B_EXIT     },
@@ -974,7 +974,7 @@ static void RunAction(int id)
                      L"Откат — кнопкой ОТКАТ."))
             return;
     } else if (id == B_DRILL) {
-        if (!Confirm(L"Зарядить загрузочный апдейтер (drill)?\n"
+        if (!Confirm(L"Прогон: зарядить заводской загрузочный апдейтер (drill)?\n"
                      L"Потребуется ПЕРЕЗАГРУЗКА ГУ; SD не вынимать во время загрузки."))
             return;
     }
