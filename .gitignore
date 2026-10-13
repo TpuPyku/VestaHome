@@ -9,6 +9,10 @@ __pycache__/
 # VestaHome deploy state
 VestaHome/VestaHome/*.log
 VestaHome/VestaHome/apps.txt
+VestaHome/VestaHome/VestaHome.ini
+VestaHome/VestaHome/*.tmp
+VestaHome/VestaHome/*.nmea
+VestaHome/VestaHome/speedcam/*
 
 # G3patch generated / large
 G3patch/ghidra/
@@ -38,3 +42,14 @@ SPIPower/rescue/SwDnl.upg
 # the drill package carries no vendor bytes (one generated text marker), so it is
 # committed together with its cfg; only the ARM build output is kept out:
 SPIPower/rescue/drill/*.exe
+
+# LaunchInstall build artifacts
+LaunchInstall/native/payload.bin
+LaunchInstall/LaunchInstall/*.log
+
+# GstProbe: log and generated settings on the device
+GstProbe/GstProbe/*.log
+GstProbe/GstProbe/GstProbe.txt
+
+# VestaRescue build output
+Rescue/out/

@@ -1,5 +1,6 @@
 // DecompAt.java - decompile the function containing each provided address.
-// GhidraScript args: addresses (e.g. 0x005f7e94).
+// GhidraScript args: addresses (e.g. 0x005f7e94). An address with no function is disassembled
+// and defined as one (in memory only with -readOnly).
 import ghidra.app.script.GhidraScript;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
@@ -21,6 +22,10 @@ public class DecompAt extends GhidraScript {
                 continue;
             }
             Function f = getFunctionContaining(addr);
+            if (f == null) {   // code reached only through a pointer (thread entry, table): define it here
+                disassemble(addr);
+                f = createFunction(addr, null);
+            }
             if (f == null) {
                 println("no function containing " + a);
                 continue;

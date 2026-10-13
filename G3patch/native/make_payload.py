@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""make_payload.py - pack VestaLaunch.exe + skin-vesta into payload.bin (embedded by VestaInstall).
+"""make_payload.py - pack VestaLaunch.exe, its Skin folder and skin-vesta into payload.bin (embedded by VestaInstall).
 
 Format:  [u32 count][ per file: u16 nameLen | name UTF-8 | u32 dataLen | data ]
-Names use forward slashes. "VestaLaunch.exe" is special (the launcher on \\SDMMC);
+Names use forward slashes. "VestaLaunch.exe" and "VestaLaunch/..." go to the launcher folder on \\SDMMC;
 all other names are laid out over the VESTA skin folder (Temp/main/... etc.).
 """
 import os
@@ -11,6 +11,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))  # G3patch/native
 LAUNCH = os.path.join(ROOT, "..", "..", "VestaLaunch", "VestaLaunch", "VestaLaunch.exe")
+LAUNCH_SKIN = os.path.join(os.path.dirname(LAUNCH), "Skin")
 SKIN = os.path.join(ROOT, "..", "skin-vesta")
 
 
@@ -27,6 +28,7 @@ def rel_files(base):
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "payload.bin")
     entries = [("VestaLaunch.exe", LAUNCH)]
+    entries += [("VestaLaunch/Skin/" + n, p) for n, p in rel_files(LAUNCH_SKIN)]
     if os.path.isdir(SKIN):
         entries += rel_files(SKIN)
     entries = [(n, p) for n, p in entries if os.path.isfile(p)]

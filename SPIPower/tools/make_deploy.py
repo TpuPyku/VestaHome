@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Assemble the SPIPower files of <repo>\\Tests (test files laid out by HU volume) from the built artifacts.
+
+The result mirrors the HU mounts 1:1, so each subfolder is copied as-is:
+
+    <outdir>\\SDMMC\\SPIPower_test\\       ->  \\SDMMC\\SPIPower_test\\    Level 0 (pre-swap proxy check)
+    <outdir>\\ResidentFlash\\SPIPower\\    ->  \\ResidentFlash\\SPIPower\\ installer + proxy + drill + docs
+    <outdir>\\SDMemory\\SPIPower_rescue\\  ->  ROOT of the SD card        rescue set (staged before install)
+    <outdir>\\SDMemory\\SafeMode\\         ->  ROOT of the SD card        safe mode: Explorer + VestaRescue log
+
+Also run by VestaHome/tools/make_tests.py, which lays out the other programs.
+
+Every copy is md5-checked against the reference values (install/fingerprints.h), so the
+folder can never end up a mix of builds - the exe inside rescue/drill already went stale
+that way once (make_drill.py copies it only when it runs).
+
+Usage: python make_deploy.py [outdir]        default: <repo>\\Tests
+"""
+import hashlib
+import os
+import shutil
+import sys
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+SP   = os.path.join(ROOT, 'VestaHome', 'SPIPower')
+OUT  = os.path.join(SP, 'out')
+APP  = os.path.join(ROOT, 'MAIN', 'ResidentFlash', 'navigation', 'app')
+NKFS = os.path.join(ROOT, 'MAIN', '4120_unpacked', 'NK', 'fs', 'Windows')
+
+PROXY_MD5   = 'fa7b65e000c6f33bbd2f8be18fe85808'   # out\SPIPowerMgr.dll
+FACTORY_MD5 = '438505b76467ee393156f1aaacb9e3ab'   # factory SPIPowerMgr.dll
+DRILL_MD5   = '8800cb0ef22a13f7677cef8a9d09c5dc'   # rescue\drill\SwDnl_drill.upg
+
+# subdir (relative to outdir) -> ((source, name, expected md5 or None, note), ...)
+PLAN = (
+    (r'SDMMC\SPIPower_test', (
+        (os.path.join(OUT, 'SPIPowerMgr.dll'),    'SPIPowerMgr.dll',      PROXY_MD5,   'proxy (P1-P3)'),
+        (os.path.join(OUT, 'SPIPowerTest.exe'),   'SPIPowerTest.exe',     None,        'Level 0 harness v3'),
+        (os.path.join(APP, 'SPIPowerMgr.dll'),    'SPIPowerMgr_orig.dll', FACTORY_MD5, 'factory DLL = rollback'),
+        (os.path.join(APP, 'NCL_BaseCom.dll'),    'NCL_BaseCom.dll',      None,        'factory dependency'),
+        (os.path.join(NKFS, 'desay_sdk_api.dll'), 'desay_sdk_api.dll',    None,        'factory dependency'),
+    )),
+    (r'ResidentFlash\SPIPower', (
+        (os.path.join(SP, 'deploy', 'README.md'),  'README.md',           None,      'how to use the set'),
+        (os.path.join(SP, 'deploy', 'help.txt'),   'help.txt',            None,      'the same, step by step'),
+        (os.path.join(OUT, 'SPIPowerInstall.exe'), 'SPIPowerInstall.exe', None,      'installer'),
+        (os.path.join(OUT, 'SPIPowerMgr.dll'),     'SPIPowerMgr.dll',     PROXY_MD5, 'proxy - taken from beside the exe'),
+        (os.path.join(SP, 'rescue', 'drill', 'SwDnl_drill.upg'),
+                                                   'SwDnl_drill.upg',     DRILL_MD5, 'drill package (must sit by the exe)'),
+    )),
+    (r'SDMemory\SafeMode', (
+        (os.path.join(ROOT, 'VestaHome', 'Rescue', 'out', 'Cancle60s.exe'), 'Cancle60s.exe', None,
+                                                   'VestaRescue: log + disables our programs'),
+        (os.path.join(ROOT, 'VestaHome', 'Rescue', 'bACKuPdESAYsV201200070012.Mainflg'),
+                                                   'bACKuPdESAYsV201200070012.Mainflg', None,
+                                                   'Main.exe: run Cancle60s.exe + Explorer'),
+    )),
+    (r'SDMemory\SPIPower_rescue', (
+        (os.path.join(SP, 'rescue', 'SwDnl.upg'), 'SwDnl.upg', None, 'rescue package: factory DLL only'),
+        (os.path.join(SP, 'rescue', 'SwDnl.cfg'), 'SwDnl.cfg', None, 'rescue cfg -> SDMemory\\SwDnl.upg'),
+    )),
+)
+
+
+def md5(path):
+    h = hashlib.md5()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 16), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def main(outdir):
+    rows = []
+    for sub, files in PLAN:
+        dst_dir = os.path.join(outdir, sub)
+        if not os.path.isdir(dst_dir):
+            os.makedirs(dst_dir)
+        print('[%s]' % sub)
+        for src, name, expect, note in files:
+            if not os.path.exists(src):
+                raise SystemExit('missing source: ' + src)
+            dst = os.path.join(dst_dir, name)
+            shutil.copyfile(src, dst)
+            h = md5(dst)
+            if expect and h != expect:
+                raise SystemExit('%s: md5 %s != reference %s - rebuild the source first'
+                                 % (dst, h, expect))
+            print('  %-22s %8d  md5=%s  %s%s'
+                  % (name, os.path.getsize(dst), h, 'OK  ' if expect else '    ', note))
+            rows.append((sub + '\\' + name, os.path.getsize(dst), h, note))
+
+    files_md = os.path.join(outdir, 'ResidentFlash', 'SPIPower', 'FILES.md')
+    with open(files_md, 'w', encoding='utf-8', newline='\r\n') as f:
+        f.write('<!-- GENERATED by VestaHome/SPIPower/tools/make_deploy.py -- DO NOT EDIT. -->\n\n')
+        f.write('# Файлы набора (размеры и md5)\n\n')
+        f.write('| Файл в наборе | Размер, Б | MD5 | Что это |\n|---|---:|---|---|\n')
+        for name, size, h, note in rows:
+            f.write('| `%s` | %d | `%s` | %s |\n' % (name, size, h, note))
+    print('\nwritten: %s' % files_md)
+    print('done: %s' % outdir)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1] if len(sys.argv) > 1
+         else os.path.join(ROOT, 'Tests'))

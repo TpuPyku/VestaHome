@@ -1,5 +1,5 @@
 @echo off
-rem Builds SPIPowerInstall.exe (Windows CE, ARMv4) - safe swap/watchdog/rollback tool.
+rem Builds SPIPowerInstall.exe (Windows CE, ARMv4) - safe swap/reboot/rollback tool.
 setlocal
 if "%VS8%"=="" set VS8=C:\Program Files (x86)\Microsoft Visual Studio 8
 set VC=%VS8%\VC

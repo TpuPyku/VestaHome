@@ -17,11 +17,23 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
   декомпиляция), `Callers` (вызывающие, включая ссылки из таблиц), `DecompAt`, `DumpW`.
 - `MAIN.md` — разбор `Main.exe` (триггер сброса/отката, окно ≈6 с); `SWDNL.md` — разбор заводского
   апдейтера `SwDnl.exe` (байт `SwUpdate.flag`, ключи `SwDnl.cfg`, распаковка `.upg`).
-- `tools/make_test_dir.py` — собирает папку Уровня 0: `SPIPowerMgr.dll` (proxy) +
-  `SPIPowerMgr_orig.dll` (заводская) + `NCL_BaseCom.dll` + `desay_sdk_api.dll` + `SPIPowerTest.exe`.
+- `tools/make_test_dir.py <outdir>` — собирает папку Уровня 0 (на ПК:
+  `python tools\make_test_dir.py hu_test` → `VestaHome\SPIPower\hu_test\`, её и копировать на ГУ целиком):
+  `SPIPowerMgr.dll` (proxy) + `SPIPowerMgr_orig.dll` (заводская) + `NCL_BaseCom.dll` +
+  `desay_sdk_api.dll` + `SPIPowerTest.exe`. Сверяет md5 копий с эталоном (`fa7b65e0…` / `438505b7…`)
+  и падает, если proxy и заводская перепутаны.
+- `tools/make_deploy.py [outdir]` — собирает **весь набор для ГУ** в `<repo>\Tests\` (папки по томам;
+  его же вызывает `VestaHome\tools\make_tests.py`): `SDMMC\SPIPower_test\` (Уровень 0) → `\SDMMC\SPIPower_test\`,
+  `ResidentFlash\SPIPower\` (установщик + proxy + `SwDnl_drill.upg`, пакет обязан лежать рядом с exe,
+  + `README.md`/`help.txt` из `deploy\` + `FILES.md`) → `\ResidentFlash\SPIPower\`,
+  `SDMemory\SPIPower_rescue\` (rescue-пара `SwDnl.upg` + `SwDnl.cfg`) и `SDMemory\SafeMode\` (безопасный
+  режим) → **корень** SD-карты. Каждая копия сверяется по md5 с `fingerprints.h`, иначе набор не собирается
+  (страховка от смеси сборок). Порядок действий и предупреждения — `deploy\README.md`.
 - `test/` — `SPIPowerTest.exe` (ARM, импорт COREDLL): без G3NavHMI грузит proxy, проверяет
   `DllMain` (ищет `_orig` рядом с собой) и все 139 экспортов; лог — `\SDMMC` или
-  `\StaticStore\SPIPower_test.log`, иначе рядом с самим exe.
+  `\StaticStore\SPIPower_test.log`, иначе рядом с самим exe. **v3** печатает размер и md5 найденных
+  `SPIPowerMgr.dll`/`_orig`: `proxy=yes` сам по себе не отличает заводскую DLL
+  (111 104 Б / `438505b7…`) от proxy (22 016 Б / `fa7b65e0…`).
 - `install/spipower_install.cpp` + `install/build.bat` — `SPIPowerInstall.exe` (ARM, импорт COREDLL):
   `status | install [p2|p3] [force] | rollback | drill [force] | drill-off`; без аргументов — окно
   с теми же действиями кнопками (раздел «Установщик» ниже).
@@ -64,7 +76,9 @@ native\build.bat        # нужно, чтобы рядом был исходн�
 - P3 (перехват входящих) готов: `SPApi_SetSkelonton` подменяет vtable каждого скелетона
   (slot 1 → хук, логирует `msg`/`len`/payload и форвардит), только при флаге.
 - На ГУ **не запускался**. Уровень 0 на эмуляторе **пройден** (2026-10-09): `RESULT: OK`,
-  `exports resolved 139/139`, `orig: present`, обе зависимости подгружены.
+  `exports resolved 139/139`, `orig: present`, обе зависимости подгружены. Прогон Уровня 0 на ГУ
+  (2026-10-10) провалился не из-за proxy: папку собрали вручную, без `SPIPowerMgr_orig.dll`, а тест
+  намеренно принимает только полную папку → `FAIL: proxy not found in any known directory`.
 - Заводская `SPIPowerMgr.dll` импортирует `desay_sdk_api.dll` (ПЗУ, `\Windows`) и `NCL_BaseCom.dll`
   (`navigation\app`); proxy — только COREDLL. Поэтому для Уровня 0 обе DLL кладутся рядом с
   `SPIPowerMgr_orig.dll` (их копирует `tools/make_test_dir.py`).
@@ -74,11 +88,16 @@ native\build.bat        # нужно, чтобы рядом был исходн�
 ## Уровень 0 — проверка proxy до свопа (без Г3NavHMI)
 ```
 test\build.bat                  # пересобрать SPIPowerTest.exe (ARM)
-python tools\make_test_dir.py   # папка: proxy + orig + зависимости + тест
+python tools\make_test_dir.py hu_test   # папка: proxy + orig + зависимости + тест
 ```
 Запустить `SPIPowerTest.exe` из этой папки: на ГУ — `\SDMMC\SPIPower_test\`, в эмуляторе —
 `\StaticStore\SPIPower_test\`. Тест сам ищет proxy (`\SDMMC` → `\StaticStore` → своя папка → app),
 пришпиливает зависимости заводской DLL полным путём и пишет лог в первое доступное место.
+
+Папку для ГУ собирать на ПК (`python tools\make_test_dir.py hu_test`) и копировать **целиком**
+(`VestaHome\SPIPower\hu_test\`): в ней обязательно должна быть `SPIPowerMgr_orig.dll`, иначе тест
+отказывает (`FAIL: proxy not found in any known directory`) — `DllMain` proxy без `_orig`
+возвращает FALSE (защита от «кирпича»).
 
 Ожидаемо: `RESULT: OK`, `exports resolved 139/139, missing 0`. При провале в логе будет
 `LoadLibrary(proxy): err=N`, `orig: MISSING (DllMain will fail)` или список `MISSING: <имя>`.
@@ -93,17 +112,44 @@ SD, и на `\SDMMC`. Подкоманды:
 
 | Команда | Действие |
 |---|---|
-| `status` | состояние: `dll/orig/sd-bak/flag/shell` + `sd/swflag/drill/marker` |
-| `install` | бэкап заводской DLL в 2 места, подмена на proxy, старт оболочки, watchdog 30 с, автооткат |
+| `status` | состояние: `dll/orig/sd-bak/flag/shell/main/app/dr` + `sd/swflag/drill/marker` |
+| `install` | kill всех держателей DLL, бэкап заводской DLL в 2 места, подмена на proxy, сверка MD5 копии, флаг, запрос сброса МКУ (перезагрузка ГУ) |
 | `install p2` | то же + флаг `\SDMMC\SPIPower.on` (лог исходящих) |
 | `install p3` | то же с флагом (лог входящих через vtable скелетона) |
 | `install force` | то же, но **обойти** гейт версии прошивки (только осознанно, см. ниже) |
-| `rollback` | kill оболочки, возврат заводской DLL, снять флаг, старт |
+| `rollback` | kill тех же держателей, возврат заводской DLL, снять флаг, старт оболочки (без перезагрузки) |
 | `drill` | зарядить заводской апдейтер `SwDnl.exe` безобидным маркером (см. ниже) |
 | `drill-off` | снять `\ResidentFlash\SwUpdate.flag`, убрать drill-файлы с SD, выдать вердикт |
 
 `install*` отказывается работать, пока заряжен `\ResidentFlash\SwUpdate.flag` (иначе после следующей
 загрузки над работающим proxy отработал бы загрузочный апдейтер из того, что лежит на SD).
+
+### Почему `install` устроен именно так (и почему ГУ перезагружается)
+`\ResidentFlash\navigation\app\SPIPowerMgr.dll` держат **два** процесса: оболочка `G3NavHMI.exe`
+и `\ResidentFlash\Main.exe` — он `LoadLibrary`-ит ту же DLL при загрузке и **не выгружает** её
+(`MAIN.md` §0). Пока жив хотя бы один, файл занят, поэтому схема «kill оболочки → `Sleep(2500)` →
+`CreateFile`» не могла сработать ни разу: настоящий держатель оставался, а failure-путь оставлял ГУ
+с убитой оболочкой. Сейчас `install` (тот же код в `DoInstall`, `install/spipower_install.cpp`):
+
+1. убивает оболочку, `Main.exe` и `AppLauncher.exe` (`kKill1`) и **ждёт** реального исчезновения
+   процессов: замок снимается смертью процесса, а не возвратом `TerminateProcess`, поэтому запись
+   перепроверяется пробной `CreateFile` до 6 с; если файл всё ещё занят — добивает службы, которые
+   заводской `SwDnl.exe` останавливает перед записью в `\ResidentFlash` (`HzWD.exe`, `dr_Service.exe`,
+   `kKill2`), и ждёт ещё 4 с;
+2. бэкапит заводскую DLL в 2 места, копирует proxy и сверяет MD5 **файла на месте** с эталоном
+   `kProxyMd5` — битая копия откатывается сразу, пока файл ещё свободен (недописанный proxy хуже
+   отсутствующего: `Main.exe` его не загрузит и упадёт в заводской rescue);
+3. ставит флаг и **просит сброс МКУ** (`SPApi_SendResetEvent(1)`, id MCU `0x5403`) — тот же вызов,
+   которым `Main.exe` завершает свой провал запуска оболочки. Перезагрузка здесь неизбежна, а не
+   «страховка»: новую DLL подхватывает только свежая оболочка, а процесс, который её стартует
+   (`Main.exe`), убит по построению. Если запрос не прошёл (эмулятор, нет МКУ) — ГУ всё равно
+   перезагрузится по таймауту без heartbeat, поэтому статус сообщает об этом отдельной строкой.
+   Любой failure-путь до подмены поднимает оболочку обратно (`RestartShell`), watchdog из первой
+   версии убран: после kill'а наблюдать нечего, а лог proxy и так уходит на SD.
+`rollback` отличается только тем, что после возврата заводской DLL поднимает `Main.exe` сам — файл
+пишется, пока его никто не отобразил, и перезагрузка не нужна. Страховая сетка на случай битого
+proxy остаётся заводской (`Риск` ниже): `Main.exe` 3 раза не сможет запустить оболочку, запишет
+`SwUpdate.flag=0x02` → `SwDnl.exe` вернёт DLL из rescue-пакета на SD.
 
 ### Окно (запуск без аргументов)
 `SPIPowerInstall.exe` без параметров открывает полноэкранное окно 800×480 (чистый GDI: без `.rc`,
@@ -140,7 +186,7 @@ CLI-режим **сохранён** для тестов и автоматиза�
 |---|---|---|
 | `HARD` | `\ResidentFlash\navigation\app\SPIPowerMgr.dll` | не совпал/не читается → **install отказывает** |
 | `SOFT` | `\ResidentFlash\Main.exe`, `…\app\NCL_BaseCom.dll`, `\Windows\SPIPowerMgr_OS.dll`, `\Windows\desay_sdk_api.dll` | не совпал → отказ, обойти можно только `install force` |
-| `INFO` | `\ResidentFlash\SwDnl.exe`, `…\app\G3NavHMI.exe` | только показывается в `status` (наш `G3NavHMI` пропатчен `G3patch`, поэтому он и не может быть HARD) |
+| `INFO` | `\ResidentFlash\SwDnl.exe`, `…\app\G3NavHMI.exe` | только показывается в `status` (наш `G3NavHMI` пропатчен `G3patch`, поэтому он и не может быть HARD). На ГУ `G3NavHMI.exe` = `2eff4626…` против эталона 4120 `fb1288ff…` — это ожидаемый `MISMATCH` уровня `INFO`, `install` он не блокирует |
 
 Отдельно проверяется **самопроверка MD5 на месте**: хешируются proxy рядом с exe и `SwDnl_drill.upg`
 и сверяются с md5, записанными при генерации таблицы. Это одновременно (а) доказывает, что MD5-код
@@ -155,6 +201,7 @@ python tools\gen_fingerprints.py            # перегенерировать �
 python tools\gen_fingerprints.py --check    # проверить, что fingerprints.h актуален
 python tools\gen_fingerprints.py --simulate \ResidentFlash=..\..\MAIN\ResidentFlash   # вердикт гейта на ПК
 tools\md5_hosttest.bat                      # MD5-ядро: векторы RFC 1321 (+ файлы для сверки с hashlib)
+tools\drilltag_hosttest.bat                 # guard маркера drill-пакета (install/drilltag.h) на пакете 357 Б
 ```
 `--simulate` читает **сгенерированный** `fingerprints.h` и повторяет вердикт установщика на деревьях
 файлов ПК: на дампе ГУ (`MAIN/ResidentFlash`, `MAIN/4120_unpacked/NK/fs/Windows`) выходит
@@ -182,12 +229,19 @@ proxy; перенос на `\SDMemory` делать только после `sta
 ```
 python tools\make_drill.py rescue\drill   # SwDnl_drill.upg + SwDnl.cfg + SPIPowerInstall.exe
 ```
-1. Скопировать папку `rescue\drill\` на SD и запустить `SPIPowerInstall.exe drill`: на SD
-   раскладываются `SwDnl_drill.upg` + `SwDnl.cfg`, в `\ResidentFlash\SwUpdate.flag` пишется байт `0x02`.
+1. Положить `SwDnl_drill.upg` **рядом с exe** (exe можно запускать откуда угодно — с SD или из
+   `\ResidentFlash\SPIPower\`; пакет ищется в папке exe, не на SD) и запустить
+   `SPIPowerInstall.exe drill`: на SD раскладываются `SwDnl_drill.upg` + `SwDnl.cfg`,
+   в `\ResidentFlash\SwUpdate.flag` пишется байт `0x02`. Нет пакета рядом с exe →
+   `Ошибка: рядом с exe нет SwDnl_drill.upg`.
    `drill` отказывается, если: нет SD, рядом с exe нет пакета, md5 пакета не равен эталону
    (`8800cb0e…`, 357 Б — таблица в `fingerprints.h`; обойти: `drill force`), в пакете нет маркера
    `VestaDrill`, на SD лежит `update.pkg`/`RdDnl.upg`/`CANUpdate.s19` (это пути прошивки OS/Radio/CAN).
-   После изменения `make_drill.py` пакет нужно пересобрать **и** обновить таблицу:
+   Проверка маркера — **побайтовая** (`memcmp` по прочитанной длине), а не `strstr`: пакет бинарный, в его
+   TOC есть нули (первый — в заголовке записи `S2` на смещении 257, а имя `VestaDrill` лежит на 314 в
+   записи `S4`), поэтому `strstr` обрывался и **отвергал верный пакет с совпавшим md5** (баг найден на ГУ
+   2026-10-11, исправлен в `FileHasDrillTag()`). После изменения `make_drill.py` пакет нужно пересобрать
+   **и** обновить таблицу:
    `python tools\make_drill.py rescue\drill && python tools\gen_fingerprints.py`.
 2. Перезагрузить ГУ, **оставив SD**: `Main.exe` пропустит `G3NavHMI` и поднимет `SwDnl.exe`, тот
    распакует пакет в `\ResidentFlash` и снимет бит `0x2`.

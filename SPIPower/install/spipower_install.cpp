@@ -1,16 +1,21 @@
-﻿// SPIPowerInstall - safe swap/watchdog/rollback for the SPIPowerMgr proxy on the
+﻿// SPIPowerInstall - safe swap/rollback for the SPIPowerMgr proxy on the
 // Lada Vesta MMC (Windows CE 6.0, ARM). Follows the reversible-install pattern of
 // VestaInstall (toolhelp KillProcess, .bak-style backups, append-only log).
 //
 // Usage: SPIPowerInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off
 //        (no command line arguments -> the GUI at the bottom: the same actions as buttons)
 //   UI buttons    -> СТАТУС | УСТАНОВИТЬ | УСТ. + ЛОГ | ТЕСТ ВОССТ. | СНЯТЬ ТЕСТ | УДАЛИТЬ | FORCE | ВЫХОД
-//   status        -> report current state to \SDMMC\SPIPower_install.log + a message box
-//   install       -> backup the factory DLL, swap in the proxy, start the shell and
-//                    watch it (pure pass-through, no flag)
+//   status        -> report current state to \SDMMC\SPIPower_install.log + a message box:
+//                    which DLL is in the app folder, the factory copies, the flag, who is
+//                    up (shell / Main.exe / services) and the firmware table
+//   install       -> the swap (THE SWAP below): kill every holder of the DLL, back the
+//                    factory DLL up, copy the proxy in, verify the copy, set the flag and
+//                    let the HU reboot
 //   install p2    -> same, but create \SDMMC\SPIPower.on (outbound logging)
 //   install p3    -> same, flag on (inbound vtable wrap is also gated by the flag)
-//   rollback      -> kill the shell, restore the factory DLL, delete the flag, restart
+//   rollback      -> kill the same holders, restore the factory DLL, delete the flag and
+//                    start the shell back (no reboot: the file is written while nothing
+//                    maps it, so a fresh Main.exe/G3NavHMI loads the factory DLL)
 //   install force -> same as install, but continue (loudly) when the firmware check says
 //                    the files are not the 4120 ones - only for a known-good variant
 //   drill         -> arm the factory boot updater SwDnl.exe with the harmless marker
@@ -30,6 +35,30 @@
 // table, and the MD5 code is proven in place by hashing the proxy and the drill package
 // that are already present next to this exe.
 //
+// THE SWAP - why install is ordered the way it is (../MAIN.md, ../SWDNL.md):
+//   \ResidentFlash\navigation\app\SPIPowerMgr.dll is mapped by G3NavHMI.exe *and* by
+//   \ResidentFlash\Main.exe, the process that starts the shell: Main.exe LoadLibrary()'s
+//   the very same DLL at boot and never unloads it. The loader keeps the image open while
+//   any process maps it, so the first version - kill the shell, wait 2.5 s, CreateFile -
+//   could not work: the real holder was untouched and the failure returned with the shell
+//   still dead. install now:
+//   1. kills the shell, Main.exe and AppLauncher.exe and waits for them to be really gone
+//      (the lock is released when a process dies, not when TerminateProcess returns),
+//      retrying the CreateFile and escalating to the services SwDnl.exe stops before it
+//      touches \ResidentFlash (HzWD.exe, dr_Service.exe) only when the file is still busy;
+//   2. backs the factory DLL up, copies the proxy in and hashes the file in place against
+//      kProxyMd5 - a short or garbled copy is undone right there, while nothing holds it;
+//   3. sets the logging flag and asks the MCU for a reset, the same request Main.exe makes
+//      through SPApi_SendResetEvent(1) (SPI message id 0x5403). The reboot is unavoidable:
+//      a new DLL is only picked up by a fresh shell, and the process that could start one
+//      is dead by design. If the request does not go out, the HU still reboots on the MCU's
+//      missed heartbeat, and every failure path starts the shell back through Main.exe
+//      instead of leaving the HU headless.
+//   The live watchdog of the first version went away with the reboot - after the kill there
+//   is no shell left to watch. The safety net for a broken proxy is the factory one:
+//   Main.exe fails to start the shell 3x, writes SwUpdate.flag=0x02 and lets SwDnl.exe
+//   restore the DLL from the SD rescue package (VestaSPIP_install README, step D).
+//
 // The proxy DLL is taken from this exe's own folder, so the whole SPIPower_install
 // folder can live on the SD card as well as on \SDMMC. The factory DLL is preserved
 // in two places: SPIPowerMgr_orig.dll (app dir, survives reboot) and
@@ -44,6 +73,7 @@
 #include <stdio.h>
 #include <tlhelp32.h>
 #include "md5.h"            // portable MD5 (host-tested: tools\md5_hosttest.bat)
+#include "drilltag.h"       // drill-package tag guard kDrillTag (host-tested: tools\drilltag_hosttest.bat)
 #include "fingerprints.h"   // GENERATED firmware table (tools\gen_fingerprints.py)
 
 static const wchar_t* kAppDir    = L"\\ResidentFlash\\navigation\\app";
@@ -51,16 +81,29 @@ static const wchar_t* kDll       = L"SPIPowerMgr.dll";
 static const wchar_t* kOrig      = L"SPIPowerMgr_orig.dll";
 static const wchar_t* kBackupSub = L"SPIPower_backup";
 static const wchar_t* kFlag      = L"\\SDMMC\\SPIPower.on";     // written/read by the proxy
-static const wchar_t* kLog       = L"\\SDMMC\\SPIPower.log";    // written by the proxy
 static const wchar_t* kShell     = L"G3NavHMI.exe";
 static const wchar_t* kShellPath = L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe";
+static const wchar_t* kMain      = L"Main.exe";
+static const wchar_t* kMainPath  = L"\\ResidentFlash\\Main.exe";
+static const wchar_t* kAppLaunch = L"AppLauncher.exe";
+
+// Everything that can keep SPIPowerMgr.dll open. Round 1 is the shell and the process
+// that starts it: \ResidentFlash\Main.exe LoadLibrary()'s the very same DLL at boot and
+// never unloads it (../MAIN.md §0), which is why killing G3NavHMI alone left the file
+// locked. Round 2 is the pair of desay services the factory updater stops before it
+// touches \ResidentFlash (../SWDNL.md §7) - it is only tried when round 1 did not free
+// the file, so a normal install leaves them running.
+static const wchar_t* kKill1[]   = { L"G3NavHMI.exe", L"Main.exe", L"AppLauncher.exe" };
+static const int      kKill1N    = 3;
+static const wchar_t* kKill2[]   = { L"HzWD.exe", L"dr_Service.exe" };
+static const int      kKill2N    = 2;
 
 // drill / factory boot updater (SwDnl.exe) - see ../SWDNL.md
 static const wchar_t* kSwFlag    = L"\\ResidentFlash\\SwUpdate.flag";
 static const wchar_t* kDrillUpg  = L"SwDnl_drill.upg";
 static const wchar_t* kDrillCfg  = L"SwDnl.cfg";
 static const wchar_t* kMarker    = L"\\ResidentFlash\\navigation\\app\\VestaDrill.txt";
-static const char*    kDrillTag  = "VestaDrill";   // file name inside the drill package
+// kDrillTag ("VestaDrill") and the guard that scans a package for it live in drilltag.h
 static const wchar_t* kDanger[]  = { L"update.pkg", L"RdDnl.upg", L"CANUpdate.s19" };
 static const int      kDangerN   = 3;
 
@@ -400,24 +443,9 @@ static int InstallCheck(int verbose, wchar_t* rep, int repLen)
     }
 }
 
-// Scans the first bytes of a package for the marker name in its TOC - a cheap guard
-// against arming the boot updater with something that is not the drill package.
-static int FileHasDrillTag(const wchar_t* path, DWORD maxLen)
-{
-    HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (h == INVALID_HANDLE_VALUE) return 0;
-    char buf[4096 + 1];
-    DWORD total = 0, got = 0;
-    int found = 0;
-    while (ReadFile(h, buf, 4096, &got, NULL) && got) {
-        buf[got] = 0;
-        if (strstr(buf, kDrillTag)) { found = 1; break; }
-        total += got;
-        if (total >= maxLen) break;
-    }
-    CloseHandle(h);
-    return found;
-}
+// FileHasDrillTag() and the tag it looks for live in drilltag.h (see the comment there:
+// the package is binary, so the scan is byte-wise - strstr() stopped at the first NUL and
+// rejected a valid drill package). Host test: tools\drilltag_hosttest.bat.
 
 // ---------------------------------------------------------------- processes
 typedef HANDLE (WINAPI *SnapshotFn)(DWORD, DWORD);
@@ -447,7 +475,9 @@ static int ProcExists(const wchar_t* exeName)
     return found;
 }
 
-static int KillProcess(const wchar_t* exeName)
+// log=1 writes pid + OpenProcess/TerminateProcess results: both install attempts ended
+// "STILL THERE" with no hint whether the kill failed or the process was respawned (new pid).
+static int KillProcess(const wchar_t* exeName, int log)
 {
     HMODULE lib = LoadLibrary(L"toolhelp.dll");
     if (!lib) return 0;
@@ -463,7 +493,22 @@ static int KillProcess(const wchar_t* exeName)
             for (BOOL ok = first(snap, &pe); ok; ok = next(snap, &pe)) {
                 if (_wcsicmp(pe.szExeFile, exeName) != 0) continue;
                 HANDLE proc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
-                if (proc) { killed = TerminateProcess(proc, 0) != 0; CloseHandle(proc); }
+                DWORD oerr = proc ? 0 : GetLastError(), terr = 0;
+                BOOL tok = FALSE;
+                if (proc) {
+                    tok = TerminateProcess(proc, 0);
+                    if (!tok) terr = GetLastError();
+                    killed = tok != 0;
+                    CloseHandle(proc);
+                }
+                if (log) {
+                    wchar_t m[256];
+                    _snwprintf(m, 256, L"kill %s pid=%08X threads=%u: open %s err=%u, terminate %s err=%u",
+                               exeName, (unsigned)pe.th32ProcessID, (unsigned)pe.cntThreads,
+                               proc ? L"ok" : L"FAIL", (unsigned)oerr,
+                               tok ? L"ok" : L"FAIL", (unsigned)terr);
+                    LogMsg(m);
+                }
             }
             close(snap);
         }
@@ -483,46 +528,188 @@ static void StartShell()
     if (pi.hProcess) CloseHandle(pi.hProcess);
 }
 
-// ---------------------------------------------------------------- watchdog
-// Reads \SDMMC\SPIPower.log and reports whether the "PROXY OK" heartbeat is present.
-static int LogHasOk()
+// ---------------------------------------------------------------- DLL holders
+// StartShell() alone does not bring the session back: everything that fails after the
+// kill has to put Main.exe back too, because Main.exe is the process that starts
+// G3NavHMI (../MAIN.md).
+static void RestartShell()
 {
-    HANDLE h = CreateFile(kLog, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-    if (h == INVALID_HANDLE_VALUE) return 0;
-    DWORD size = GetFileSize(h, NULL);
-    if (size == 0xFFFFFFFF || size == 0) { CloseHandle(h); return 0; }
-    if (size > (1u << 20)) size = (1u << 20);
-    wchar_t* buf = (wchar_t*)malloc(size + 2);
-    int found = 0;
-    if (buf) {
-        DWORD got = 0;
-        if (ReadFile(h, buf, size, &got, NULL) && got >= (DWORD)(2 * sizeof(wchar_t))) {
-            buf[got / sizeof(wchar_t)] = 0;
-            found = wcsstr(buf, L"PROXY OK") != NULL;
+    if (FileExists(kMainPath)) {
+        STARTUPINFO si; PROCESS_INFORMATION pi;
+        wchar_t cmd[MAX_PATH];
+        memset(&si, 0, sizeof(si)); si.cb = sizeof(si);
+        memset(&pi, 0, sizeof(pi));
+        wcscpy(cmd, kMainPath);
+        LogMsg(L"restart: \\ResidentFlash\\Main.exe");
+        if (CreateProcess(kMainPath, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+            if (pi.hThread)  CloseHandle(pi.hThread);
+            if (pi.hProcess) CloseHandle(pi.hProcess);
+            Sleep(6000);      // Main.exe starts the shell itself
+        } else {
+            wchar_t m[192];
+            _snwprintf(m, 192, L"restart: Main.exe failed err=%u", (unsigned)GetLastError());
+            LogMsg(m);
         }
-        free(buf);
+    } else {
+        LogMsg(L"restart: no \\ResidentFlash\\Main.exe -> starting the shell only");
     }
-    CloseHandle(h);
-    return found;
+    if (ProcExists(kShell) != 1) {
+        LogMsg(L"restart: starting G3NavHMI.exe directly");
+        StartShell();
+        Sleep(2000);
+    }
 }
 
-// Returns 0 on success, 1 on failure.
-static int Watchdog(int timeoutMs, int requireHeartbeat)
+// 1 = at least one process is alive, 0 = none, -1 = toolhelp.dll unavailable.
+// "Unknown" must never be read as "gone": the snapshot is the only way to tell.
+static int AnyAlive(const wchar_t* const* names, int n)
+{
+    int i, alive = 0;
+    for (i = 0; i < n; i++) {
+        int e = ProcExists(names[i]);
+        if (e < 0) return -1;
+        if (e) alive++;
+    }
+    return alive ? 1 : 0;
+}
+
+// TerminateProcess() returns long before the process is gone and the DLL stays mapped
+// until it really died, so wait for the list to disappear instead of the old blind
+// Sleep(2500) - that pause is what made the swap a race.
+static void KillAndWait(const wchar_t* const* names, int n, const wchar_t* what)
+{
+    wchar_t m[256];
+    int i, waited, before = AnyAlive(names, n);
+
+    _snwprintf(m, 256, L"kill [%s]: before %s", what,
+               before < 0 ? L"?" : (before ? L"running" : L"not running"));
+    LogMsg(m);
+
+    for (i = 0; i < n; i++) KillProcess(names[i], 1);
+
+    // Killed again on every poll: the processes in one round may restart each other
+    // (Main.exe starts the shell), and a respawn would otherwise read as "STILL THERE".
+    for (waited = 0; waited < 10000; waited += 500) {
+        int a = AnyAlive(names, n);
+        if (a == 0) break;
+        if (a < 0) { Sleep(2500); waited = 2500; break; }   // no toolhelp: old fixed pause
+        Sleep(500);
+        for (i = 0; i < n; i++) KillProcess(names[i], 0);
+    }
+    {
+        int after = AnyAlive(names, n);
+        _snwprintf(m, 256, L"kill [%s]: after %s (waited %d ms)", what,
+                   after < 0 ? L"?" : (after ? L"STILL THERE" : L"gone"), waited);
+    }
+    LogMsg(m);
+    // Survivors: same pid = TerminateProcess did not take (thread stuck in a driver
+    // call?), new pid = respawned.
+    for (i = 0; i < n; i++) if (ProcExists(names[i]) == 1) KillProcess(names[i], 1);
+}
+
+// The shell's top-level Qt window is titled "RadioCommWindow" (string next to its slot
+// names in G3NavHMI.exe). WM_CLOSE asks it to quit on its own, which also lets it close
+// its SPI handles - tried before the hard kill, harmless if the shell ignores it.
+static void CloseShellWindow()
+{
+    wchar_t m[160];
+    HWND w = FindWindow(NULL, L"RadioCommWindow");
+    DWORD pid = 0;
+    int waited;
+    if (!w) { LogMsg(L"close: no RadioCommWindow"); return; }
+    GetWindowThreadProcessId(w, &pid);
+    PostMessage(w, WM_CLOSE, 0, 0);
+    for (waited = 0; waited < 5000 && ProcExists(kShell) == 1; waited += 250) Sleep(250);
+    _snwprintf(m, 160, L"close: WM_CLOSE -> RadioCommWindow pid=%08X, shell %s after %d ms",
+               (unsigned)pid, ProcExists(kShell) == 1 ? L"still up" : L"gone", waited);
+    LogMsg(m);
+}
+
+// One line of "who is up" for the log before/after the kill: a half-done install must
+// never leave the HU on a dead shell again, so both states are recorded.
+static const wchar_t* UpDown(const wchar_t* exe)
+{
+    int e = ProcExists(exe);
+    return e < 0 ? L"?" : (e ? L"up" : L"down");
+}
+
+static void LogHolders(const wchar_t* tag)
+{
+    wchar_t m[320];
+    _snwprintf(m, 320, L"%s shell:%s main:%s applauncher:%s hzwd:%s dr-service:%s",
+               tag, UpDown(kShell), UpDown(kMain), UpDown(kAppLaunch),
+               UpDown(kKill2[0]), UpDown(kKill2[1]));
+    LogMsg(m);
+}
+
+// CanWrite() re-tried until the dying process really let the file go; errOut gets the
+// last CreateFile error so the log says *why* the swap could not be made.
+static int CanWritePoll(const wchar_t* path, int timeoutMs, DWORD* errOut)
 {
     int waited = 0;
     for (;;) {
-        if (ProcExists(kShell) == 0)
-            return 1;   // shell died
-        if (requireHeartbeat && LogHasOk())
-            return 0;   // heartbeat seen while shell alive
-        if (waited >= timeoutMs)
-            break;
-        Sleep(500);
-        waited += 500;
+        if (CanWrite(path)) return 1;
+        if (errOut) *errOut = GetLastError();
+        if (waited >= timeoutMs) return 0;
+        Sleep(250);
+        waited += 250;
     }
-    if (requireHeartbeat)
-        return LogHasOk() ? 0 : 1;
-    return 0;
+}
+
+// ---------------------------------------------------------------- MCU reset
+// The HU is rebooted by the MCU, not by the SoC: the reset leaves as a SPI message
+// (13 bytes, MCU id 0x5403) and the only in-band caller is SPApi_SendResetEvent() of
+// SPIPowerMgr.dll - exactly the call Main.exe makes before its own rollback
+// (../MAIN.md §2). A plain process can do the same: load the DLL and call the export.
+// Two candidates are tried - the factory DLL (the real SPApi_SendResetEvent, known to load
+// in a plain process because Main.exe loads it on every boot) and the proxy now in place
+// (its DllMain is the minimal one proven to load standalone in SPIPowerTest.exe,
+// ../README.md "Уровень 0"); the proxy forwards the call to the very same export. Either
+// way the factory DLL imports NCL_BaseCom.dll from the app folder and the CE loader does
+// not reliably search a DLL's own folder, so that dependency is preloaded by full path and
+// kept resident - the trick SPIPowerTest.exe uses (../test/test.cpp). Best effort: if the
+// request does not go through, the shell is dead anyway and the MCU reboots on its
+// missed-heartbeat timeout, so the swap still takes effect.
+typedef void (WINAPI *ResetFn)(int);
+
+static int SpiResetEvent()
+{
+    wchar_t p[MAX_PATH], m[256];
+    HMODULE dep = NULL;
+    int sent = 0, i;
+
+    // pin the dependency of the factory DLL (see the note above); if it is absent the load
+    // is attempted anyway - desay_sdk_api.dll comes from ROM (\Windows) either way
+    Join(p, kAppDir, L"NCL_BaseCom.dll");
+    if (FileExists(p)) dep = LoadLibrary(p);
+
+    for (i = 0; i < 2 && !sent; i++) {
+        const wchar_t* path = i ? g_dll : g_orig;
+        const wchar_t* name = i ? L"SPIPowerMgr.dll" : L"SPIPowerMgr_orig.dll";
+        HMODULE h = LoadLibrary(path);
+        ResetFn fn;
+        if (!h) {
+            _snwprintf(m, 256, L"reset: LoadLibrary(%s) failed err=%u", name, (unsigned)GetLastError());
+            LogMsg(m);
+            continue;
+        }
+        fn = (ResetFn)GetProcAddress(h, L"SPApi_SendResetEvent");
+        if (!fn) {
+            _snwprintf(m, 256, L"reset: SPApi_SendResetEvent missing in %s", name);
+            LogMsg(m);
+        } else {
+            __try {
+                fn(1);
+                sent = 1;
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                sent = 0;
+                LogMsg(L"reset: SPApi_SendResetEvent raised an exception");
+            }
+        }
+        FreeLibrary(h);
+    }
+    if (dep) FreeLibrary(dep);
+    return sent;
 }
 
 // ---------------------------------------------------------------- actions
@@ -556,21 +743,47 @@ static int Backup()
     return 1;
 }
 
-static void Rollback()
+// Uninstall: put the factory DLL back. The kill is the same one DoInstall uses (the file
+// is mapped by the shell *and* by Main.exe), and since that kill takes the session down,
+// the shell is started back through Main.exe - the old version killed the shell, then
+// failed to write the file (Main.exe still held it) and left the HU on a dead shell.
+// Returns 1 when the factory DLL is back in place.
+static int Rollback()
 {
+    DWORD err = 0;
     LogMsg(L"--- rollback ---");
-    KillProcess(kShell);
-    Sleep(2000);
-    if (FileExists(g_orig)) {
-        if (MyCopyFile(g_orig, g_dll))
-            LogMsg(L"rollback: restored factory SPIPowerMgr.dll");
-        else
-            LogMsg(L"rollback FAILED: could not write SPIPowerMgr.dll");
-    } else {
-        LogMsg(L"rollback FAILED: SPIPowerMgr_orig.dll not found");
+    LogHolders(L"rollback: holders before");
+    CloseShellWindow();
+    KillAndWait(kKill1, kKill1N, L"shell+Main");
+    if (!CanWritePoll(g_dll, 6000, &err))
+        KillAndWait(kKill2, kKill2N, L"services");
+    if (!CanWritePoll(g_dll, 4000, &err)) {
+        wchar_t m[256];
+        LogHolders(L"rollback FAILED, holders still");
+        RestartShell();
+        _snwprintf(m, 256, L"Ошибка: SPIPowerMgr.dll занят (err=%u) — заводскую DLL вернуть не удалось, оболочка запущена.", (unsigned)err);
+        wcscpy(g_status, m);
+        return 0;
     }
+
+    if (!FileExists(g_orig)) {
+        LogMsg(L"rollback FAILED: SPIPowerMgr_orig.dll not found");
+        RestartShell();
+        wcscpy(g_status, L"Ошибка: нет копии заводской DLL (SPIPowerMgr_orig.dll) — вернуть нечего, оболочка запущена.");
+        return 0;
+    }
+
+    if (!MyCopyFile(g_orig, g_dll)) {
+        LogMsg(L"rollback FAILED: could not write SPIPowerMgr.dll");
+        RestartShell();
+        wcscpy(g_status, L"Ошибка: не удалось записать заводскую SPIPowerMgr.dll, оболочка запущена.");
+        return 0;
+    }
+
+    LogMsg(L"rollback: factory SPIPowerMgr.dll restored");
     DeleteFile(kFlag);
-    StartShell();
+    RestartShell();
+    return 1;
 }
 
 static void DoInstall(int logging, int force)
@@ -609,28 +822,89 @@ static void DoInstall(int logging, int force)
     }
     if (forced) LogMsg(L"install: FIRMWARE GATE OVERRIDDEN by force");
 
-    KillProcess(kShell);
-    Sleep(2500);
-    if (!CanWrite(g_dll)) { wcscpy(g_status, L"Ошибка: SPIPowerMgr.dll занят оболочкой"); return; }
+    // ---- free \ResidentFlash\navigation\app\SPIPowerMgr.dll -------------------
+    // The DLL is mapped by the shell *and* by \ResidentFlash\Main.exe, which
+    // LoadLibrary()'s it at boot and never unloads it (../MAIN.md §0), and the loader
+    // keeps the image open until the last process that maps it is gone. That is why the
+    // old "kill G3NavHMI -> Sleep(2500) -> CanWrite" always lost with
+    // "SPIPowerMgr.dll занят оболочкой": the holder was never touched, and a failed
+    // check returned with the shell still dead. Now both are killed and waited for, the
+    // desay services are the fallback (the same pair SwDnl.exe stops before it writes
+    // \ResidentFlash, ../SWDNL.md §7), and every failure path starts the shell back.
+    LogHolders(L"install: holders before");
+    CloseShellWindow();
+    KillAndWait(kKill1, kKill1N, L"shell+Main");
+    DWORD werr = 0;
+    if (!CanWritePoll(g_dll, 6000, &werr)) {
+        LogMsg(L"install: file still locked -> stopping the desay services");
+        KillAndWait(kKill2, kKill2N, L"services");
+    }
+    if (!CanWritePoll(g_dll, 4000, &werr)) {
+        wchar_t m[512];
+        LogHolders(L"install: FAILED, holders still");
+        _snwprintf(m, 512,
+            L"Ошибка: SPIPowerMgr.dll всё ещё занят (err=%u). Ничего не изменено, оболочка запущена обратно.",
+            (unsigned)werr);
+        RestartShell();
+        wcscpy(g_status, m);
+        return;
+    }
+    LogMsg(L"install: SPIPowerMgr.dll is free to write");
 
-    if (!Backup()) return;
+    if (!Backup()) { RestartShell(); return; }
 
-    if (!MyCopyFile(g_proxySrc, g_dll)) { wcscpy(g_status, L"Ошибка: не удалось скопировать proxy на место SPIPowerMgr.dll"); return; }
-
-    SetFlag(logging ? 1 : 0);
-
-    StartShell();
-    int fail = Watchdog(30000, logging ? 1 : 0);
-    if (fail) {
-        LogMsg(L"install: watchdog failed -> rollback");
-        Rollback();
-        wcscpy(g_status, L"ПРОВАЛ: оболочка упала или proxy не ответил; заводская DLL возвращена (откат).");
+    if (!MyCopyFile(g_proxySrc, g_dll)) {
+        wcscpy(g_status, L"Ошибка: не удалось скопировать proxy на место SPIPowerMgr.dll");
+        RestartShell();
         return;
     }
 
+    // ---- prove the copy before the HU is restarted on it ----------------------
+    // The proxy is the one file the shell cannot boot without, so the file *in place* is
+    // hashed against the same reference the self-check above used. Nothing holds it now,
+    // so a short/garbled copy can be undone on the spot (factory DLL back, no reboot).
+    {
+        char md5[33];
+        unsigned int size = 0;
+        wchar_t line[192], whex[40];
+        int ok = FileMd5(g_dll, md5, &size);
+        if (ok) HexToW(md5, whex);
+        _snwprintf(line, 192, L"install: in place %s size=%u", ok ? whex : L"?", size);
+        LogMsg(line);
+        if (!ok || !HexEq(md5, kProxyMd5)) {
+            LogMsg(L"install: copy does not match the reference -> factory DLL back");
+            MyCopyFile(g_orig, g_dll);
+            DeleteFile(kFlag);
+            RestartShell();
+            wcscpy(g_status, L"Ошибка: копия proxy не совпала с эталоном (MD5). Заводская DLL возвращена, оболочка запущена.");
+            return;
+        }
+    }
+
+    SetFlag(logging ? 1 : 0);
+
+    // ---- reboot ---------------------------------------------------------------
+    // The new DLL is only used by a restarted shell, and the process that starts the
+    // shell (Main.exe) is the very one that had to be killed to unmap the file - so the
+    // session cannot come back on its own: the HU asks the MCU for a reset, exactly like
+    // Main.exe does it when the shell fails to start (../MAIN.md §2). Everything from
+    // here is best effort: the flag is written and LogMsg() reopens the file per line, so
+    // the log is durable. If the reset request does not go through, the shell is still
+    // down and the MCU reboots on its missed heartbeat; and if the proxy itself is broken,
+    // the next boot rolls back by itself: Main.exe fails to start G3NavHMI three times,
+    // writes SwUpdate.flag=0x02 and pulls the factory DLL back from the SD rescue package
+    // (../SWDNL.md §8, VestaSPIP_install README step D).
+    LogMsg(L"install: proxy in place, flag set -> requesting the MCU reset");
+    int rst = SpiResetEvent();
+    if (rst) LogMsg(L"install: reset request sent, the HU is rebooting");
+    else     LogMsg(L"install: reset request NOT sent - MCU heartbeat timeout will reboot");
+
     wcscpy(g_status, logging
-        ? L"OK: proxy установлен, лог включён, оболочка жива."
-        : L"OK: proxy установлен (pass-through), оболочка жива.");
+        ? L"OK: proxy установлен, лог включён; оболочка остановлена, запрошен сброс ГУ."
+        : L"OK: proxy установлен (pass-through); оболочка остановлена, запрошен сброс ГУ.");
+    AppendStr(g_status, 4096, rst
+        ? L"\nсброс: запрошен (SPApi_SendResetEvent) — ГУ перезагружается, подождите и нажмите СТАТУС"
+        : L"\nсброс: не подтверждён — выключите и включите ГУ. Оболочка не запущена, поэтому МКУ перезагрузит ГУ и сам (~1 мин).");
     AppendStr(g_status, 4096, forced ? L"\nпрошивка: гейт 4120 обойдён (force)"
                                      : L"\nпрошивка: 4120, файлы совпали");
 }
@@ -655,12 +929,12 @@ static void DoStatus()
         wcscpy(sdTxt, L"none");
         wcscpy(drillTxt, L"-");
     }
-    _snwprintf(line, 512, L"dll:%s orig:%s sd-bak:%s flag:%s shell:%s | sd:%s swflag:%s drill:%s marker:%s",
+    _snwprintf(line, 512, L"dll:%s orig:%s sd-bak:%s flag:%s shell:%s main:%s app:%s dr:%s | sd:%s swflag:%s drill:%s marker:%s",
                FileExists(g_dll) ? L"y" : L"n",
                FileExists(g_orig) ? L"y" : L"n",
                FileExists(g_backup) ? L"y" : L"n",
                FileExists(kFlag) ? L"y" : L"n",
-               ProcExists(kShell) ? L"up" : L"down",
+               UpDown(kShell), UpDown(kMain), UpDown(kAppLaunch), UpDown(kKill2[1]),
                sdTxt, flagTxt, drillTxt, FileExists(kMarker) ? L"y" : L"n");
     wcscpy(g_status, line);
 
@@ -971,7 +1245,8 @@ static void RunAction(int id)
     }
 
     if (id == B_INSTALL || id == B_INST_LOG) {
-        if (!Confirm(L"Заменить SPIPowerMgr.dll на proxy и перезапустить оболочку?\n"
+        if (!Confirm(L"Заменить SPIPowerMgr.dll на proxy?\n"
+                     L"Оболочка и Main.exe будут остановлены, ГУ перезагрузится само (сброс МКУ).\n"
                      L"Вернуть заводскую DLL — кнопкой УДАЛИТЬ."))
             return;
     } else if (id == B_DRILL) {
@@ -988,8 +1263,8 @@ static void RunAction(int id)
     else if (id == B_DRILL)    DoDrill(g_force);
     else if (id == B_DRILLOFF) DoDrillOff();
     else if (id == B_ROLLBACK) {
-        Rollback();
-        wcscpy(g_status, L"Удаление выполнено: заводская DLL возвращена, оболочка перезапущена.");
+        if (Rollback())
+            wcscpy(g_status, L"Удаление выполнено: заводская DLL возвращена, оболочка перезапущена.");
     }
 
     g_busy = 0;
@@ -1088,8 +1363,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     } else if (wcsstr(a, L"drill")) {
         DoDrill(force);
     } else if (wcsstr(a, L"rollback")) {
-        Rollback();
-        wcscpy(g_status, L"Удаление выполнено: заводская DLL возвращена, оболочка перезапущена.");
+        if (Rollback())
+            wcscpy(g_status, L"Удаление выполнено: заводская DLL возвращена, оболочка перезапущена.");
     } else if (wcsstr(a, L"status")) {
         DoStatus();
     } else if (wcsstr(a, L"install")) {

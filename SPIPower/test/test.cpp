@@ -16,6 +16,7 @@
 // \StaticStore\SPIPower_test.log. Exit code 0 = OK, 1 = FAIL.
 #include <windows.h>
 #include "../native/g_proxy.h"
+#include "../install/md5.h"   // portable MD5: the very source SPIPowerInstall uses
 
 static const wchar_t* kDllName  = L"SPIPowerMgr.dll";
 static const wchar_t* kOrigName = L"SPIPowerMgr_orig.dll";
@@ -101,6 +102,43 @@ static void dumpErr(const wchar_t* what, DWORD err)
     w(what); w(L": err="); w(b); line(L"");
 }
 
+// size + lowercase md5 of a file; 1 = ok, 0 = unreadable / short read. Uses the same
+// portable MD5 as SPIPowerInstall.exe (../install/md5.h), so these numbers are directly
+// comparable with the fingerprints table and the installer's gate report.
+static int hashFile(const wchar_t* path, wchar_t hex[40], unsigned int* sizeOut)
+{
+    HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL,
+                           OPEN_EXISTING, 0, NULL);
+    md5_ctx ctx;
+    unsigned char digest[16], buf[16384];
+    char ascii[33];
+    DWORD size, got = 0;
+    unsigned int total = 0;
+    int ok = 1, i;
+
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    size = GetFileSize(h, NULL);
+    if (size == 0xFFFFFFFF) { CloseHandle(h); return 0; }
+
+    md5_init(&ctx);
+    for (;;)
+    {
+        if (!ReadFile(h, buf, sizeof(buf), &got, NULL)) { ok = 0; break; }
+        if (!got) break;
+        md5_update(&ctx, buf, (unsigned int)got);
+        total += got;
+    }
+    CloseHandle(h);
+    if (!ok || total != size) return 0;
+
+    md5_final(&ctx, digest);
+    md5_hex(digest, ascii);
+    for (i = 0; i < 32; i++) hex[i] = (wchar_t)(unsigned char)ascii[i];
+    hex[32] = 0;
+    if (sizeOut) *sizeOut = total;
+    return 1;
+}
+
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
 {
     wchar_t exe[MAX_PATH], ownDir[MAX_PATH], b[512];
@@ -108,7 +146,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     dirOf(exe, ownDir);
     pickLog(ownDir);
 
-    line(L"SPIPowerTest v2 (2026-10-09): proxy load check");
+    line(L"SPIPowerTest v3 (2026-10-11): proxy load check (dll size+md5 shown)");
     w(L"log:     "); line(g_log);
     w(L"exe dir: "); line(ownDir);
     wsprintfW(b, L"exports in proxy: %d", (int)PROXY_COUNT);
@@ -130,16 +168,23 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     int found = 0, i;
     for (i = 0; i < 4 && !found; i++)
     {
-        wchar_t p[MAX_PATH], o[MAX_PATH];
+        wchar_t p[MAX_PATH], o[MAX_PATH], hx[40];
+        unsigned int sz = 0;
         int hp, ho;
         if (!cands[i][0]) continue;
         join(p, cands[i], kDllName);
         join(o, cands[i], kOrigName);
         hp = exists(p);
         ho = exists(o);
+        // Print size + md5 of what is actually there: "proxy=yes" only means a file named
+        // SPIPowerMgr.dll exists, so without the hash a still-factory DLL (111 KB) reads
+        // exactly like our 22 KB proxy - that ambiguity cost a HU run on 2026-10-10.
         w(L"  check "); w(cands[i]);
         w(L"proxy="); w(hp ? L"yes" : L"no");
-        w(L" orig="); w(ho ? L"yes" : L"no"); line(L"");
+        if (hp && hashFile(p, hx, &sz)) { w(L" ("); w(hx); wsprintfW(b, L" %u B)", sz); w(b); }
+        w(L" orig="); w(ho ? L"yes" : L"no");
+        if (ho && hashFile(o, hx, &sz)) { w(L" ("); w(hx); wsprintfW(b, L" %u B)", sz); w(b); }
+        line(L"");
         if (!hp) { line(L"    -> no proxy here"); continue; }
         if (!ho) { line(L"    -> incomplete: no _orig beside it, skipped"); continue; }
         wcscpy(proxy, p);

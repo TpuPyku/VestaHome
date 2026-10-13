@@ -357,8 +357,8 @@ static void RewriteCfg()
     free(buf);
 }
 
-// Write the embedded launcher + skin art out of the RCDATA payload. Names other than
-// "VestaLaunch.exe" are skin files laid out over the VESTA folder (Temp\main\... etc.).
+// Write the embedded launcher + skin art out of the RCDATA payload. "VestaLaunch.exe" and "VestaLaunch/..."
+// (its Skin folder) go to kLaunchDir; other names are skin files laid out over the VESTA folder (Temp\main\... etc.).
 static int ExtractPayload()
 {
     HRSRC r = FindResource(NULL, MAKEINTRESOURCE(IDR_PAYLOAD), RT_RCDATA);
@@ -382,6 +382,15 @@ static int ExtractPayload()
         const unsigned char* data = p; p += dl;
         if (!strcmp(name, "VestaLaunch.exe")) {
             WriteFileBytes(kLaunchExe, data, dl);
+        } else if (!strncmp(name, "VestaLaunch/", 12)) {
+            wchar_t wname[256];
+            MultiByteToWideChar(CP_UTF8, 0, name + 12, -1, wname, 256);
+            for (wchar_t* s = wname; *s; s++)
+                if (*s == L'/')
+                    *s = L'\\';
+            wchar_t dst[MAX_PATH];
+            Join(dst, kLaunchDir, wname);
+            WriteFileBytes(dst, data, dl);
         } else {
             wchar_t wname[256];
             MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, 256);

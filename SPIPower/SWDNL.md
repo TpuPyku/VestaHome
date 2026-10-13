@@ -204,6 +204,9 @@ ExtractFiles(<SRC_NV_FILE>, delDirs, delFiles)      // FUN_00021d44
    сгенерированный `SwDnl.cfg` (`SWDNL_DST_DIR` + `SWDNL_SRC_NV_FILE`, ANSI-токены в кавычках — как в
    заводском файле) и пишет в `\ResidentFlash\SwUpdate.flag` один байт `0x02`. Отказы: нет SD; на SD
    лежит `update.pkg`/`RdDnl.upg`/`CANUpdate.s19` (пути OS/Radio/CAN); в пакете нет маркера `VestaDrill`.
+   Маркер ищется **побайтово** (`memcmp`), а не `strstr`: `.upg` бинарный, первый `0x00` — в заголовке
+   записи `S2` (смещение 257), а `VestaDrill` — в записи `S4` (смещение 314), так что поиск подстроки в
+   стиле C-строки ложно отвергал корректный пакет (исправлено 2026-10-11).
 2. Ребут: `Main.exe` (флаг есть и `(b & 0x0F) != 0`) пропускает `G3NavHMI` и поднимает `SwDnl.exe` —
    тот снимает бит `0x2` (`CompleteUpdate(2)`) и удаляет файл, когда маска обнулится.
 3. Вердикт: `SPIPowerInstall.exe status` → `swflag:none drill:staged marker:y` = PASS (маркер появился
