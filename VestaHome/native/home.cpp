@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <shellapi.h>
 #include "https.h"
+#include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_STDIO
@@ -56,7 +57,7 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_BT, IC_USB, IC_LIST, IC_VOL, IC_SEARCH, IC_SHUFFLE, IC_REPEAT, IC_CALL, IC_HANGUP, IC_WIFI,
             IC_STAR, IC_STAR_F, IC_USER, IC_USERS, IC_CLOCK, IC_KEYPAD, IC_MIC_OFF, IC_HANDOVER, IC_PLAY,
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
-            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_COUNT };
+            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_COUNT };
 
 // Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing.
 static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music", L"phone", L"settings", L"home",
@@ -72,11 +73,13 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_REGPAGE, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
               A_BAL, A_FADE, A_BALCENTER, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MPAGE, A_MVOL };
+              A_MFILE, A_MUP, A_MPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
+              A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME and S_EXIT (closing VestaHome) are windows over the previous screen.
-// S_APPS: the programs; S_EDIT, S_KEYS, S_FILES: their shortcut editor, keyboard and file browser.
+// S_APPS: the programs; S_EDIT, S_KEYS, S_FILES: their shortcut editor, keyboard and file browser; S_TASKS: the
+// task manager (processes, windows, CPU and memory).
 // S_SET_CAR: the car section of the settings (the data port, CAN). S_DIAG: diagnostics, opened from "About the
 // system" (as the stock shell's engineering menu from its "Info"), S_TEST_*: its tests. S_WSET_*: widgets' settings.
 enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST, S_AUDIO_BT, S_AUX,
@@ -86,14 +89,15 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_SET_VOLUME, S_NONE };
+              S_INFO_MORE, S_SET_VOLUME, S_TASKS, S_NONE };
 
 struct Btn {
     RECT        rc;
     Action      action;
     int         arg;       // A_NAV, A_SCREEN, A_TAB: Screen; A_TOGGLE: T_*; A_SEG: G_* * 16 + option;
                            // A_KEY: K_* * 65536 + character; A_DEL: K_*; A_RUN: index in s_apps; A_FIELD: F_*;
-                           // A_CHAR: character; A_FILE: index in s_files
+                           // A_CHAR: character; A_FILE: index in s_files; A_TASKKILL: process id;
+                       // A_TASKSWITCH, A_TASKCLOSE: the window (HWND)
 };
 
 // Values of the screens' switches, segmented choices and two text fields: demo ones, except the settings kept
@@ -136,7 +140,8 @@ static int     s_pressed = -1;
 static bool    s_night;
 static wchar_t s_dir[MAX_PATH];
 
-// Events log, VestaHome.log next to the exe: what happened just before a hang of the unit. Opened and closed
+// Events log VestaHome.log - on the unit only on the SD card / USB disk (VestaCore LogDir: VestaLogs folder), never
+// the built-in flash; without a card no log. What happened just before a hang of the unit. Opened and closed
 // for every line, so a reset keeps it; started again past 256 KB. Uptime first - the clock may jump.
 static CRITICAL_SECTION s_logLock;
 
@@ -159,8 +164,12 @@ static void VLog(const wchar_t* fmt, ...)
     if (n <= 0)
         return;
     wchar_t path[MAX_PATH];
-    _snwprintf(path, MAX_PATH, L"%sVestaHome.log", s_dir);
     EnterCriticalSection(&s_logLock);
+    if (!LogDir(path, s_dir)) {
+        LeaveCriticalSection(&s_logLock);
+        return;
+    }
+    wcscat(path, L"VestaHome.log");
     HANDLE h = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, 0, NULL);
     if (h != INVALID_HANDLE_VALUE) {
         if (GetFileSize(h, NULL) > 256 * 1024)
@@ -728,6 +737,12 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.ArcP(34, 30, 7, 250, 450);
         p.L2(15, 37, 34, 37);
         break;
+    case IC_TASKS: {   // task manager: a screen with the load's pulse
+        double v[] = { 10, 26, 17, 26, 21, 17, 27, 33, 31, 23, 38, 23 };
+        p.Box(5, 9, 43, 39, 4);
+        p.Line(v, 6);
+        break;
+    }
     default:
         break;
     }
@@ -1413,7 +1428,7 @@ static bool HvacChip(wchar_t* s, int n);
 static DWORD s_hvacShowTick;   // a climate change came: its plate shows in the top bar for 4 s
 
 static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act = IC_NONE, Action a = A_NONE,
-                  bool sel = false)
+                  bool sel = false, Icon act2 = IC_NONE, Action a2 = A_NONE, int arg2 = 0)
 {
     Sep(dc, 0, 54, 800);
     Ico(dc, IC_NAV, 546, 16, 24, kMuted);
@@ -1436,6 +1451,10 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
     int x = 20, right = act != IC_NONE ? 470 : 530;
     if (act != IC_NONE)
         Button(dc, 478, 6, 56, 44, NULL, sel ? B_SEL : B_N, act, 18, 28, a);
+    if (act2 != IC_NONE) {   // a second one to its left
+        Button(dc, 418, 6, 56, 44, NULL, B_N, act2, 18, 28, a2, arg2);
+        right = 410;
+    }
     if (CamChip(s, 40)) {   // a speed camera ahead, on every screen
         int cx = right - 156;
         R(dc, cx, 8, 152, 40, 10, kOrange);
@@ -2640,12 +2659,12 @@ static void Trim(wchar_t* s);
 
 // ---- settings: VestaHome.ini next to the exe (UTF-8, key=value). The unit resets its registry on every boot;
 // only the card keeps them.
-enum { W_WTTR, W_OWM, W_GISMETEO, W_COUNT };
-static const char* kProvKey[W_COUNT] = { "wttr", "owm", "gismeteo" };
+enum { W_OMETEO, W_OWM, W_YANDEX, W_COUNT };
+static const char* kProvKey[W_COUNT] = { "openmeteo", "owm", "yandex" };   // anything else (old wttr, gismeteo): Open-Meteo
 
 struct Cfg {
     int     weatherProv;
-    wchar_t weatherKey[W_COUNT][64];   // API key per provider (wttr.in needs none)
+    wchar_t weatherKey[W_COUNT][64];   // API key per provider (Open-Meteo needs none)
     bool    weatherGps;                // the place where the car is; without a fix the home point
     wchar_t homeName[48];
     double  homeLat, homeLon;          // both 0 = not set
@@ -2661,6 +2680,7 @@ struct Cfg {
     wchar_t camKinds[100];             // its camera kinds (the site's filter numbers)
     bool    camWeekly;                 // download them again once a week
     int     camUpdated;                // yyyymmdd of the last download, 0 = never
+    int     yaDay, yaCount;            // Yandex weather requests made on that day (yyyymmdd): its limit, see YaTake
     int     eq[3];                     // equalizer low, mid, high: -6..6 (what was last sent to the MCU)
     int     balance, fader;            // -8..8, 0 = centre (CAudioFieldDlg)
     wchar_t musicDir[MAX_PATH];        // the player's folder and track, to come back to
@@ -2676,7 +2696,7 @@ static const wchar_t* kCamDefault = L"speedcam\\speedcam.txt";
 static void CfgDefaults()
 {
     memset(&s_cfg, 0, sizeof(s_cfg));
-    s_cfg.weatherProv = W_WTTR;
+    s_cfg.weatherProv = W_OMETEO;
     s_cfg.weatherGps = true;
     wcscpy(s_cfg.gpsPort, L"COM5:");
     s_cfg.gpsTime = true;
@@ -2776,6 +2796,10 @@ static void LoadCfg()
             s_cfg.camWeekly = CfgBool(v);
         } else if (!wcscmp(k, L"cam.updated")) {
             s_cfg.camUpdated = _wtoi(v);
+        } else if (!wcscmp(k, L"weather.yandex.day")) {
+            s_cfg.yaDay = _wtoi(v);
+        } else if (!wcscmp(k, L"weather.yandex.count")) {
+            s_cfg.yaCount = _wtoi(v);
         } else if (!wcscmp(k, L"cam.file")) {
             wcsncpy(s_cfg.camFile, v, MAX_PATH - 1);
             s_cfg.camFile[MAX_PATH - 1] = 0;
@@ -2820,7 +2844,8 @@ static void SaveCfg()
     wchar_t text[4000];
     int n = _snwprintf(text, 4000,
         L"# VestaHome settings (changed from its screens; the file is rewritten whole).\r\n"
-        L"weather.provider=%S\r\nweather.key.owm=%s\r\nweather.key.gismeteo=%s\r\n"
+        L"weather.provider=%S\r\nweather.key.owm=%s\r\nweather.key.yandex=%s\r\n"
+        L"# Yandex requests made that day (its free tariff: 30 a day)\r\nweather.yandex.day=%d\r\nweather.yandex.count=%d\r\n"
         L"weather.gps=%d\r\nhome.name=%s\r\nhome.lat=%.5f\r\nhome.lon=%.5f\r\n"
         L"# gps.baud: 0 = leave the port's speed as the shell set it\r\n"
         L"gps.port=%s\r\ngps.baud=%u\r\ngps.time=%d\r\n"
@@ -2833,7 +2858,8 @@ static void SaveCfg()
         L"# audio: equalizer low,mid,high -6..6; balance/fader -8..8 (sent to the MCU when changed)\r\n"
         L"audio.eq=%d,%d,%d\r\naudio.balance=%d\r\naudio.fader=%d\r\n"
         L"music.dir=%s\r\nmusic.file=%s\r\nmusic.shuffle=%d\r\nmusic.repeat=%d\r\n",
-        kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_GISMETEO], s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon,
+        kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
+        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.climate, s_cfg.camAlert, s_cfg.camSound,
         s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
@@ -2865,6 +2891,7 @@ static void SaveCfg()
 // the module's taps. The clock, the weather's place, the speed widget and the cameras use the state.
 // PC test: gps.port=track.nmea plays a recording from the exe folder.
 #include "vgps.h"
+#include "vtask.h"   // VestaCore: the task manager's processes, windows and load
 #define WM_APP_GPS (WM_APP + 10)
 #define WM_APP_WX  (WM_APP + 11)
 typedef GpsState Gps;
@@ -2950,7 +2977,12 @@ static void CanLogToggle()
         _snwprintf(s_status, 96, L"запись остановлена: can.log, %u КБ", (unsigned)(s_canLogBytes / 1024));
     } else {
         wchar_t path[MAX_PATH];
-        _snwprintf(path, MAX_PATH, L"%scan.log", s_dir);
+        if (!LogDir(path, s_dir)) {   // records go only to the SD card / USB disk
+            wcscpy(s_status, L"нет SD-карты или USB-диска для записи");
+            LeaveCriticalSection(&s_gpsCs);
+            return;
+        }
+        wcscat(path, L"can.log");
         s_canLog = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         s_canLogBytes = 0;
         s_canMarks = 0;
@@ -3382,7 +3414,12 @@ static void McuLogToggle()
         _snwprintf(s_status, 96, L"запись остановлена: mcu.log, %u КБ", (unsigned)(s_mcuLogBytes / 1024));
     } else {
         wchar_t path[MAX_PATH];
-        _snwprintf(path, MAX_PATH, L"%smcu.log", s_dir);
+        if (!LogDir(path, s_dir)) {   // records go only to the SD card / USB disk
+            wcscpy(s_status, L"нет SD-карты или USB-диска для записи");
+            LeaveCriticalSection(&s_mcuCs);
+            return;
+        }
+        wcscat(path, L"mcu.log");
         s_mcuLog = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         s_mcuLogBytes = 0;
         if (s_mcuLog != INVALID_HANDLE_VALUE) {
@@ -4092,9 +4129,10 @@ static bool JsonStr(const char* p, const char* key, wchar_t* out, int cap)
     return MultiByteToWideChar(CP_UTF8, 0, tmp, -1, out, cap) > 0;
 }
 
-// ---- weather: wttr.in (open, no key) or OpenWeatherMap (free key) over HTTP; Gismeteo over HTTPS with a token
-// (Yandex dropped: paid only). Open-Meteo did not answer from the user's network (2026-10-12). Refreshed every 30 minutes, on
-// a tap on the widget and after a change of the settings.
+// ---- weather: Open-Meteo (open, no key) or OpenWeatherMap (free key), both over HTTP; Yandex over HTTPS with the
+// user's own key of "Yandex Weather for smart home" (free, personal use only; its key opens REST /v2/forecast, not
+// GraphQL). wttr.in and Gismeteo dropped by the user's decision 2026-10-15. Needs a place: GPS or the home point.
+// Refreshed every 30 minutes, on a tap on the widget and after a change of the settings.
 enum { WX_SUN, WX_PART, WX_CLOUD, WX_RAIN, WX_SNOW, WX_STORM, WX_FOG };
 struct Weather {
     int     ok;                    // 1 data, 0 none yet, -1 the last try failed (old data may stay)
@@ -4108,19 +4146,64 @@ static CRITICAL_SECTION s_wxCs;
 static Weather          s_wx;
 static volatile LONG    s_wxBusy;
 static DWORD            s_wxTry;      // tick of the last attempt
+static int              s_wxProv;     // the request's source: the chosen one, Open-Meteo when Yandex's are used up
+// Yandex "weather for smart home": 30 requests a day, 1000 a month (the user's tariff, 2026-10-15); 30 x 31 = 930,
+// so the daily limit keeps the monthly one. Used up: Open-Meteo until the next day.
+enum { kYaPerDay = 30 };
 
-static int WttrKind(int code)
+// WMO weather code (Open-Meteo): its picture, and its text into desc (48).
+static int OmKind(int code, wchar_t* desc)
 {
-    switch (code) {
-    case 113: return WX_SUN;
-    case 116: return WX_PART;
-    case 119: case 122: return WX_CLOUD;
-    case 143: case 248: case 260: return WX_FOG;
-    case 200: case 386: case 389: case 392: case 395: return WX_STORM;
-    case 179: case 227: case 230: case 323: case 326: case 329: case 332: case 335: case 338: case 368: case 371:
-        return WX_SNOW;
-    default: return WX_RAIN;
-    }
+    static const struct { int upTo, kind; const wchar_t* text; } k[] = {
+        { 0, WX_SUN, L"ясно" }, { 1, WX_PART, L"преимущественно ясно" }, { 2, WX_PART, L"переменная облачность" },
+        { 3, WX_CLOUD, L"пасмурно" }, { 48, WX_FOG, L"туман" }, { 57, WX_RAIN, L"морось" }, { 67, WX_RAIN, L"дождь" },
+        { 77, WX_SNOW, L"снег" }, { 82, WX_RAIN, L"ливень" }, { 86, WX_SNOW, L"снегопад" }, { 99, WX_STORM, L"гроза" } };
+    for (int i = 0; i < (int)(sizeof(k) / sizeof(k[0])); i++)
+        if (code <= k[i].upTo) {
+            wcscpy(desc, k[i].text);
+            return k[i].kind;
+        }
+    desc[0] = 0;
+    return WX_CLOUD;
+}
+
+// Yandex's condition ("partly-cloudy"): its picture, and its text into desc (48).
+static int YaKind(const wchar_t* cond, wchar_t* desc)
+{
+    static const struct { const wchar_t* key; int kind; const wchar_t* text; } k[] = {
+        { L"clear", WX_SUN, L"ясно" }, { L"partly-cloudy", WX_PART, L"малооблачно" },
+        { L"cloudy", WX_CLOUD, L"облачно с прояснениями" }, { L"overcast", WX_CLOUD, L"пасмурно" },
+        { L"fog", WX_FOG, L"туман" }, { L"drizzle", WX_RAIN, L"морось" }, { L"light-rain", WX_RAIN, L"небольшой дождь" },
+        { L"rain", WX_RAIN, L"дождь" }, { L"moderate-rain", WX_RAIN, L"умеренный дождь" },
+        { L"heavy-rain", WX_RAIN, L"сильный дождь" }, { L"continuous-heavy-rain", WX_RAIN, L"затяжной дождь" },
+        { L"showers", WX_RAIN, L"ливень" }, { L"wet-snow", WX_SNOW, L"дождь со снегом" },
+        { L"light-snow", WX_SNOW, L"небольшой снег" }, { L"snow", WX_SNOW, L"снег" },
+        { L"snow-showers", WX_SNOW, L"снегопад" }, { L"hail", WX_STORM, L"град" },
+        { L"thunderstorm", WX_STORM, L"гроза" }, { L"thunderstorm-with-rain", WX_STORM, L"дождь с грозой" },
+        { L"thunderstorm-with-hail", WX_STORM, L"гроза с градом" } };
+    for (int i = 0; i < (int)(sizeof(k) / sizeof(k[0])); i++)
+        if (!wcscmp(cond, k[i].key)) {
+            wcscpy(desc, k[i].text);
+            return k[i].kind;
+        }
+    desc[0] = 0;
+    return WX_CLOUD;
+}
+
+// The first number of an array value ("key":[21.7]).
+static double JsonFirst(const char* p, const char* key, double def)
+{
+    p = JsonAt(p, key);
+    return p && *p == '[' ? atof(p + 1) : def;
+}
+
+// The first time of an array value ("key":["2026-10-15T07:05"]) -> "7:05".
+static void IsoClock(const char* p, const char* key, wchar_t* out)
+{
+    p = JsonAt(p, key);
+    const char* t = p && *p == '[' ? strchr(p, 'T') : NULL;
+    if (t && t - p < 16)
+        _snwprintf(out, 8, L"%d:%02d", atoi(t + 1), atoi(t + 4));
 }
 
 static int OwmKind(int id)
@@ -4134,17 +4217,6 @@ static int OwmKind(int id)
     return WX_RAIN;
 }
 
-// "07:04 AM" -> "7:04"; "05:53 PM" -> "17:53"
-static void Clock12(const wchar_t* s, wchar_t* out)
-{
-    int h = _wtoi(s), m = s[0] && s[1] && s[2] ? _wtoi(s + 3) : 0;
-    if (wcsstr(s, L"PM") && h < 12)
-        h += 12;
-    if (wcsstr(s, L"AM") && h == 12)
-        h = 0;
-    _snwprintf(out, 8, L"%d:%02d", h, m);
-}
-
 static void UnixClock(double t, double tz, wchar_t* out)
 {
     long s = (long)fmod(t + tz, 86400.0);
@@ -4155,7 +4227,7 @@ static DWORD WINAPI WeatherThread(LPVOID)
 {
     Weather w;
     memset(&w, 0, sizeof(w));
-    int prov = s_cfg.weatherProv;
+    int prov = s_wxProv;
     Gps g;
     GpsGet(&g);
     bool here = s_cfg.weatherGps && GpsFresh(g, 600000);
@@ -4166,29 +4238,38 @@ static DWORD WINAPI WeatherThread(LPVOID)
     WideCharToMultiByte(CP_UTF8, 0, s_cfg.weatherKey[prov], -1, key, sizeof(key), NULL, NULL);
     char path[300];
     char* body = NULL;
-    if (prov == W_WTTR) {
-        if (here || home)
-            _snprintf(path, sizeof(path), "/%.3f,%.3f?format=j1&lang=ru", lat, lon);
-        else
-            strcpy(path, "/?format=j1&lang=ru");   // wttr.in finds the place by the address we come from
-        body = Fetch("wttr.in", false, path, NULL, w.err, 80);
-        if (body) {
-            const char* cur = JsonAt(body, "current_condition");
-            w.temp = (int)JsonNum(cur, "temp_C", 0);
-            w.wind = (int)(JsonNum(cur, "windspeedKmph", 0) / 3.6 + 0.5);
-            w.kind = WttrKind((int)JsonNum(cur, "weatherCode", 113));
-            if (!JsonStr(JsonAt(cur, "lang_ru"), "value", w.desc, 48))
-                JsonStr(JsonAt(cur, "weatherDesc"), "value", w.desc, 48);
-            const char* day = JsonAt(body, "weather");
-            w.tmax = (int)JsonNum(day, "maxtempC", w.temp);
-            w.tmin = (int)JsonNum(day, "mintempC", w.temp);
-            wchar_t t[16];
-            if (JsonStr(day, "sunrise", t, 16))
-                Clock12(t, w.rise);
-            if (JsonStr(day, "sunset", t, 16))
-                Clock12(t, w.set);
-            JsonStr(JsonAt(body, "areaName"), "value", w.place, 48);
-            w.ok = 1;
+    if (prov == W_OMETEO) {
+        // api.open-meteo.com does not answer from some Russian networks (2026-10-15: a timeout by HTTP and HTTPS,
+        // its site works); the same service under historical-forecast-api.open-meteo.com does. The host that
+        // answered last is tried first.
+        static const char* hosts[2] = { "api.open-meteo.com", "historical-forecast-api.open-meteo.com" };
+        static int s_omHost;
+        if (!here && !home) {
+            wcscpy(w.err, L"нет места: GPS или домашняя точка");
+        } else {
+            _snprintf(path, sizeof(path), "/v1/forecast?latitude=%.3f&longitude=%.3f&current=temperature_2m,"
+                      "weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset"
+                      "&wind_speed_unit=ms&timezone=auto&forecast_days=1", lat, lon);
+            for (int i = 0; i < 2 && !body; i++) {
+                int h = (s_omHost + i) % 2;
+                body = Fetch(hosts[h], false, path, NULL, w.err, 80);
+                if (body)
+                    s_omHost = h;
+            }
+            if (body) {
+                const char* cur = JsonAt(body, "current");   // after "current_units", which has the same keys
+                const char* day = JsonAt(body, "daily");
+                w.temp = (int)floor(JsonNum(cur, "temperature_2m", 0) + 0.5);
+                w.wind = (int)(JsonNum(cur, "wind_speed_10m", 0) + 0.5);
+                w.kind = OmKind((int)JsonNum(cur, "weather_code", 0), w.desc);
+                w.tmax = (int)floor(JsonFirst(day, "temperature_2m_max", w.temp) + 0.5);
+                w.tmin = (int)floor(JsonFirst(day, "temperature_2m_min", w.temp) + 0.5);
+                IsoClock(day, "sunrise", w.rise);
+                IsoClock(day, "sunset", w.set);
+                if (here)
+                    wcscpy(w.place, L"по GPS");   // Open-Meteo gives no place name
+                w.ok = 1;
+            }
         }
     } else if (prov == W_OWM) {
         if (!key[0]) {
@@ -4213,25 +4294,34 @@ static DWORD WINAPI WeatherThread(LPVOID)
                 w.ok = 1;
             }
         }
-    } else if (!key[0]) {   // Gismeteo: HTTPS with the token its b2b office gives (not tried without one)
-        wcscpy(w.err, L"нужен токен Gismeteo");
+    } else if (!key[0]) {
+        wcscpy(w.err, L"нужен ключ Яндекс Погоды");
     } else if (!here && !home) {
         wcscpy(w.err, L"нет места: GPS или домашняя точка");
     } else {
         char hdr[120];
-        _snprintf(hdr, sizeof(hdr), "X-Gismeteo-Token: %s\r\n", key);
-        _snprintf(path, sizeof(path), "/v2/weather/current/?latitude=%.3f&longitude=%.3f&lang=ru", lat, lon);
-        body = Fetch("api.gismeteo.net", true, path, hdr, w.err, 80);
+        _snprintf(hdr, sizeof(hdr), "X-Yandex-Weather-Key: %s\r\n", key);
+        _snprintf(path, sizeof(path), "/v2/forecast?lat=%.3f&lon=%.3f&limit=1&hours=false&extra=false", lat, lon);
+        body = Fetch("api.weather.yandex.ru", true, path, hdr, w.err, 80);
         if (body) {
-            const char* r = JsonAt(body, "response");
-            w.temp = (int)floor(JsonNum(JsonAt(JsonAt(r, "temperature"), "air"), "C", 0) + 0.5);
-            w.tmax = w.tmin = w.temp;
-            w.wind = (int)(JsonNum(JsonAt(JsonAt(r, "wind"), "speed"), "m_s", 0) + 0.5);
-            JsonStr(JsonAt(r, "description"), "full", w.desc, 48);
-            int pr = (int)JsonNum(JsonAt(r, "precipitation"), "type", 0), cl = (int)JsonNum(JsonAt(r, "cloudiness"), "type", 0);
-            const char* st = JsonAt(r, "storm");
-            w.kind = st && !strncmp(st, "true", 4) ? WX_STORM : pr == 2 ? WX_SNOW : pr ? WX_RAIN
-                     : cl == 0 ? WX_SUN : cl == 1 ? WX_PART : WX_CLOUD;
+            const char* fact = JsonAt(body, "fact");
+            const char* fc = JsonAt(body, "forecasts");
+            const char* ds = JsonAt(fc, "day_short");
+            w.temp = (int)floor(JsonNum(fact, "temp", 0) + 0.5);
+            w.wind = (int)(JsonNum(fact, "wind_speed", 0) + 0.5);
+            wchar_t cond[32] = L"";
+            JsonStr(fact, "condition", cond, 32);
+            w.kind = YaKind(cond, w.desc);
+            w.tmax = (int)floor(JsonNum(ds, "temp", w.temp) + 0.5);
+            w.tmin = (int)floor(JsonNum(ds, "temp_min", w.temp) + 0.5);
+            JsonStr(fc, "sunrise", w.rise, 8);
+            JsonStr(fc, "sunset", w.set, 8);
+            if (w.rise[0] == L'0')   // "07:05" -> "7:05", like the other sources
+                memmove(w.rise, w.rise + 1, 7 * sizeof(wchar_t));
+            if (w.set[0] == L'0')
+                memmove(w.set, w.set + 1, 7 * sizeof(wchar_t));
+            if (here)
+                wcscpy(w.place, L"по GPS");   // no place name without the paid "extra" data
             w.ok = 1;
         }
     }
@@ -4255,11 +4345,37 @@ static DWORD WINAPI WeatherThread(LPVOID)
     return 0;
 }
 
+// One of today's Yandex requests, counted in the ini (a restart doesn't reset it); false = today's are used up,
+// or the clock is not set yet (it resets on boot until GPS sets it: the count's day is unknown).
+static bool YaTake()
+{
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    if (t.wYear < 2025)
+        return false;
+    int day = t.wYear * 10000 + t.wMonth * 100 + t.wDay;
+    if (s_cfg.yaDay != day) {
+        s_cfg.yaDay = day;
+        s_cfg.yaCount = 0;
+    }
+    if (s_cfg.yaCount >= kYaPerDay)
+        return false;
+    s_cfg.yaCount++;
+    SaveCfg();
+    return true;
+}
+
 static void WeatherRefresh()
 {
     if (InterlockedExchange((LONG*)&s_wxBusy, 1))
         return;
     s_wxTry = GetTickCount();
+    s_wxProv = s_cfg.weatherProv;
+    if (s_wxProv == W_YANDEX && s_cfg.weatherKey[W_YANDEX][0] && !YaTake()) {
+        VLog(L"погода: запросы Яндекса на сегодня кончились (%d из %d) или часы не выставлены — Open-Meteo",
+             s_cfg.yaCount, kYaPerDay);
+        s_wxProv = W_OMETEO;
+    }
     HANDLE h = CreateThread(NULL, 0, WeatherThread, NULL, 0, NULL);
     if (h)
         CloseHandle(h);
@@ -4600,6 +4716,7 @@ struct App {
 // runs, every window of its process is kept topmost (a dialog it opens is a normal window and would land under
 // VestaHome, and the program with it); when it closes, VestaHome is in front again.
 enum { TIMER_WAIT = 3, TIMER_GUARD = 4, kWaitMs = 20000, kGuardMs = 500, kMaxRaised = 16 };
+enum { TIMER_LONG = 6, kLongMs = 600 };   // a long press (the keyboard's text field)
 static DWORD s_waitPid;
 static int   s_waitApp = -1;
 static DWORD s_waitTick;
@@ -4632,6 +4749,7 @@ static const wchar_t* s_keysTitle;
 static Screen         s_keysBack;     // where "Done" and "Cancel" return to
 static wchar_t s_keysText[200];
 static bool    s_keysEn, s_keysShift;
+static bool    s_clipMenu;     // "Copy" / "Paste" shown in place of the text field
 
 // File browser for the program path: folders and .exe files of s_fdir.
 struct FileEnt { wchar_t name[100]; bool dir; };
@@ -5060,6 +5178,18 @@ static void OnGuardTimer()
     }
 }
 
+// A program's window on top of everything, guarded while its program runs.
+static void RaiseWindow(HWND h)
+{
+    SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetForegroundWindow(h);
+    if (s_raisedCount < kMaxRaised)
+        s_raised[s_raisedCount++] = h;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    StartGuard(pid);
+}
+
 static void OnWaitTimer()
 {
     if (s_waitApp < 0) {
@@ -5070,13 +5200,7 @@ static void OnWaitTimer()
     EnumWindows(EnumApp, (LPARAM)&f);
     if (f.found) {
         KillTimer(s_wnd, TIMER_WAIT);
-        SetWindowPos(f.found, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        SetForegroundWindow(f.found);
-        if (s_raisedCount < kMaxRaised)
-            s_raised[s_raisedCount++] = f.found;
-        DWORD pid = 0;
-        GetWindowThreadProcessId(f.found, &pid);
-        StartGuard(pid);
+        RaiseWindow(f.found);
         s_status[0] = 0;
         s_waitApp = -1;
     } else if (GetTickCount() - s_waitTick > kWaitMs) {
@@ -5153,6 +5277,7 @@ static void OpenKeysFor(wchar_t* target, int cap, const wchar_t* title, Screen b
     wcsncpy(s_keysText, target, 199);
     s_keysText[199] = 0;
     s_keysShift = false;
+    s_clipMenu = false;
     s_screen = S_KEYS;
 }
 
@@ -5182,6 +5307,59 @@ static void KeyBack()
     int n = (int)wcslen(s_keysText);
     if (n > 0)
         s_keysText[n - 1] = 0;
+}
+
+// ---- the clipboard on the keyboard screen: a long press on the text field (TIMER_LONG) shows "Copy",
+// "Paste" and "Clear" in its place. The text is copied whole; pasting adds to its end (the cursor is always there),
+// without line breaks and tabs, up to the field's length.
+
+static void ClipCopy()
+{
+    int n = (int)wcslen(s_keysText) + 1;
+    bool ok = false;
+    if (OpenClipboard(s_wnd)) {
+        EmptyClipboard();
+#ifdef UNDER_CE
+        HANDLE h = LocalAlloc(LMEM_FIXED, n * sizeof(wchar_t));   // CE: the clipboard takes local memory as is
+        if (h)
+            memcpy(h, s_keysText, n * sizeof(wchar_t));
+#else
+        HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, n * sizeof(wchar_t));
+        if (h) {
+            memcpy(GlobalLock(h), s_keysText, n * sizeof(wchar_t));
+            GlobalUnlock(h);
+        }
+#endif
+        ok = h && SetClipboardData(CF_UNICODETEXT, h);
+        CloseClipboard();
+    }
+    wcscpy(s_status, ok ? L"скопировано" : L"не скопировано");
+}
+
+static void ClipPaste()
+{
+    int n = (int)wcslen(s_keysText), cap = s_keysCap;
+    bool got = false;
+    if (OpenClipboard(s_wnd)) {
+        HANDLE h = GetClipboardData(CF_UNICODETEXT);
+#ifdef UNDER_CE
+        const wchar_t* p = (const wchar_t*)h;
+#else
+        const wchar_t* p = h ? (const wchar_t*)GlobalLock(h) : NULL;
+#endif
+        for (; p && *p && n < cap; p++)
+            if (*p >= L' ') {
+                s_keysText[n++] = *p;
+                got = true;
+            }
+        s_keysText[n] = 0;
+#ifndef UNDER_CE
+        if (h)
+            GlobalUnlock(h);
+#endif
+        CloseClipboard();
+    }
+    wcscpy(s_status, got ? L"вставлено" : L"в буфере нет текста");
 }
 
 static void CfgKeysDone();
@@ -5366,7 +5544,8 @@ static void AppIcon(HDC dc, const App& a, int x, int y, int size, bool d)
 // mode (the pencil in the top bar) the tiles are framed orange and open the editor. Page dots under the tiles.
 static void DrawApps(HDC dc)
 {
-    Frame(dc, s_editMode ? L"ПРИЛОЖЕНИЯ · ИЗМЕНЕНИЕ" : L"ПРИЛОЖЕНИЯ", A_BACK, IC_EDIT, A_EDITMODE, s_editMode);
+    Frame(dc, s_editMode ? L"ПРИЛОЖЕНИЯ · ИЗМЕНЕНИЕ" : L"ПРИЛОЖЕНИЯ", A_BACK, IC_EDIT, A_EDITMODE, s_editMode,
+          IC_TASKS, A_SCREEN, S_TASKS);
     int first = s_page * kAppsPerPage;
     int tiles = s_appCount + (s_appCount < kMaxApps ? 1 : 0);
     for (int k = 0; k < kAppsPerPage && first + k < tiles; k++) {
@@ -5446,9 +5625,18 @@ static void DrawEdit(HDC dc)
 static void DrawKeys(HDC dc)
 {
     Frame(dc, s_keysTitle, A_CANCEL);
-    R(dc, 16, 68, 600, 60, 10, kPanel, kLine);
-    int end = TTail(dc, 32, 106, s_keysText, 26, kText, 700, 560);
-    R(dc, end + 4, 84, 3, 28, 0, kOrange);
+    if (s_clipMenu) {   // after a long press on the field, in its place; any other tap closes it
+        Button(dc, 16, 68, 194, 60, L"КОПИРОВАТЬ", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
+               s_keysText[0] ? A_CLIPCOPY : A_NONE);
+        Button(dc, 219, 68, 194, 60, L"ВСТАВИТЬ", B_FILL, IC_NONE, 17, 0, A_CLIPPASTE);
+        Button(dc, 422, 68, 194, 60, L"ОЧИСТИТЬ", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
+               s_keysText[0] ? A_CLIPCLEAR : A_NONE);
+    } else {
+        Zone(16, 68, 600, 60, A_KEYFIELD);   // a long press: copy / paste (TIMER_LONG)
+        R(dc, 16, 68, 600, 60, 10, kPanel, kLine);
+        int end = TTail(dc, 32, 106, s_keysText, 26, kText, 700, 560);
+        R(dc, end + 4, 84, 3, 28, 0, kOrange);
+    }
     Button(dc, 628, 68, 156, 60, L"ГОТОВО", B_PRI, IC_NONE, 18, 0, A_OK);
     const wchar_t** rows = s_keysEn ? kKeysEn : kKeysRu;
     for (int r = 0; r < 4; r++)
@@ -5502,6 +5690,213 @@ static void DrawFiles(HDC dc)
 // turned with the dots. A widget opens its screen; small buttons inside it act on their own; a caption with a gear
 // opens the widget's settings. Real: the date, the programs, the weather, the speed (GPS) and the cameras; the
 // rest are demo values until the car's bus through the MCU is known.
+
+// ---- task manager (Apps -> the button in the top bar): processes and windows (VestaCore vtask), the CPU
+// and memory graphs over the last 2 minutes. Sampled every 2 s while the screen is in front, never in the
+// background. A process ends on the second press of its button; system ones and VestaHome itself can't.
+
+enum { kTaskRows = 5 };
+static TaskInfo s_task;
+static int      s_taskTab;       // 0 processes, 1 windows
+static int      s_taskPage;
+static DWORD    s_taskArm;       // the process whose "End" was pressed once
+static int      s_taskTicks;
+
+static void TasksOpen()
+{
+    if (!s_task.procCount && !s_task.histCount) {   // the first time: the busiest first
+        s_task.sortKey = TS_CPU;
+        s_task.sortDesc = true;
+    }
+    s_taskPage = 0;
+    s_taskArm = 0;
+    TaskSample(&s_task, s_wnd);
+}
+
+static int TaskPages()
+{
+    int n = s_taskTab ? s_task.winCount : s_task.procCount;
+    return n ? (n + kTaskRows - 1) / kTaskRows : 1;
+}
+
+static void MemText(wchar_t* s, int n, DWORD kb)
+{
+    if (kb < 1024)
+        _snwprintf(s, n, L"%u КБ", (unsigned)kb);
+    else
+        _snwprintf(s, n, L"%u,%u МБ", (unsigned)(kb / 1024), (unsigned)(kb % 1024 * 10 / 1024));
+    s[n - 1] = 0;
+}
+
+static void TaskEnd(DWORD pid)
+{
+    int i = 0;
+    while (i < s_task.procCount && s_task.proc[i].pid != pid)
+        i++;
+    if (i == s_task.procCount)
+        return;
+    wchar_t name[40];
+    wcscpy(name, s_task.proc[i].name);
+    if (s_taskArm != pid) {
+        s_taskArm = pid;
+        _snwprintf(s_status, 96, L"ещё раз, чтобы завершить %s", name);
+        return;
+    }
+    s_taskArm = 0;
+    if (TaskKill(pid, name)) {
+        _snwprintf(s_status, 96, L"завершён: %s", name);
+        memmove(&s_task.proc[i], &s_task.proc[i + 1], (s_task.procCount - i - 1) * sizeof(TaskProc));
+        s_task.procCount--;
+    } else {
+        _snwprintf(s_status, 96, L"не завершается: %s", name);
+    }
+}
+
+static int TaskWinIndex(HWND h)
+{
+    for (int i = 0; i < s_task.winCount; i++)
+        if (s_task.win[i].h == h)
+            return i;
+    return -1;
+}
+
+static void TaskSwitch(HWND h)
+{
+    int i = TaskWinIndex(h);
+    if (i < 0 || !IsWindow(h)) {
+        wcscpy(s_status, L"окна уже нет");
+        return;
+    }
+    s_status[0] = 0;
+    RaiseWindow(h);
+}
+
+static void TaskClose(HWND h)
+{
+    int i = TaskWinIndex(h);
+    if (i < 0 || !IsWindow(h)) {
+        wcscpy(s_status, L"окна уже нет");
+        return;
+    }
+    PostMessage(h, WM_CLOSE, 0, 0);
+    _snwprintf(s_status, 96, L"закрывается: %s", s_task.win[i].title);
+    memmove(&s_task.win[i], &s_task.win[i + 1], (s_task.winCount - i - 1) * sizeof(TaskWin));
+    s_task.winCount--;
+}
+
+// A graph panel: caption, value, the history (percent, newest at the right edge), a line at 50 %.
+static void TaskGraph(HDC dc, int x, int y, int w, const wchar_t* caption, const wchar_t* value,
+                      const unsigned char* hist, COLORREF c)
+{
+    R(dc, x, y, w, 104, 14, kPanel, kLine);
+    T(dc, x + 14, y + 26, caption, 15, kMuted, 700);
+    T(dc, x + w - 14, y + 26, value, 15, kText, 700, AL_END, w - 120);
+    int gx = x + 14, gy = y + 36, gw = w - 28, gh = 56;
+    Fill(dc, gx, gy + gh / 2, gx + gw, gy + gh / 2 + 1, kLine);
+    Fill(dc, gx, gy + gh, gx + gw, gy + gh + 2, kLine);
+    int n = s_task.histCount;
+    if (n < 2)
+        return;
+    POINT p[TASK_HIST];
+    for (int i = 0; i < n; i++) {
+        p[i].x = gx + (TASK_HIST - n + i) * gw / (TASK_HIST - 1);
+        p[i].y = gy + gh - hist[i] * gh / 100;
+    }
+    HPEN pen = CreatePen(PS_SOLID, 2, C(c));
+    HGDIOBJ old = SelectObject(dc, pen);
+    Polyline(dc, p, n);
+    SelectObject(dc, old);
+    DeleteObject(pen);
+}
+
+// A sort button; the current one is orange with a small triangle: down = the biggest first.
+static void TaskSortBtn(HDC dc, int x, const wchar_t* label, int key)
+{
+    bool cur = s_task.sortKey == key;
+    Button(dc, x, 176, 104, 48, label, cur ? B_SEL : B_N, IC_NONE, 16, 0, A_TASKSORT, key);
+    if (!cur)
+        return;
+    int cx = x + 92, cy = 200, d = s_task.sortDesc ? 1 : -1;
+    POINT t[3] = { { cx - 5, cy - 3 * d }, { cx + 5, cy - 3 * d }, { cx, cy + 3 * d } };
+    Poly(dc, t, 3, kInk);
+}
+
+static void DrawTasks(HDC dc)
+{
+    wchar_t s[96], a[24], b[24];
+    Frame(dc, L"ДИСПЕТЧЕР ЗАДАЧ");
+    if (s_task.cpu10 >= 0)
+        _snwprintf(s, 96, L"%d %%", (s_task.cpu10 + 5) / 10);
+    else
+        wcscpy(s, L"...");
+    TaskGraph(dc, 16, 64, 380, L"ПРОЦЕССОР", s, s_task.cpuHist, kOrange);
+    DWORD total = s_task.memTotalKB, used = total - s_task.memAvailKB;
+    MemText(a, 24, used);
+    MemText(b, 24, total);
+    _snwprintf(s, 96, L"%s из %s · %u %%", a, b, total ? (unsigned)(used * 100 / total) : 0);
+    TaskGraph(dc, 404, 64, 380, L"ПАМЯТЬ", s, s_task.memHist, kText);
+
+    _snwprintf(s, 96, L"ПРОЦЕССЫ %d", s_task.procCount);
+    Button(dc, 16, 176, 172, 48, s, s_taskTab == 0 ? B_SEL : B_N, IC_NONE, 16, 0, A_TASKTAB, 0);
+    _snwprintf(s, 96, L"ОКНА %d", s_task.winCount);
+    Button(dc, 196, 176, 128, 48, s, s_taskTab == 1 ? B_SEL : B_N, IC_NONE, 16, 0, A_TASKTAB, 1);
+    if (s_taskTab == 0) {
+        TaskSortBtn(dc, 336, L"ИМЯ", TS_NAME);
+        TaskSortBtn(dc, 446, L"ЦП", TS_CPU);
+        TaskSortBtn(dc, 556, L"ПАМЯТЬ", TS_MEM);
+    }
+    int pages = TaskPages();
+    if (s_taskPage >= pages)
+        s_taskPage = pages - 1;
+    Button(dc, 668, 176, 40, 48, NULL, B_N, IC_BACK, 18, 24, A_TASKPAGE, -1);
+    _snwprintf(s, 96, L"%d/%d", s_taskPage + 1, pages);
+    T(dc, 726, 207, s, 15, kMuted, 600, AL_MID);
+    Button(dc, 744, 176, 40, 48, NULL, B_N, IC_NEXT, 18, 24, A_TASKPAGE, 1);
+
+    if (s_taskTab == 0 && !s_task.procOk) {
+        T(dc, 400, 350, L"Список процессов недоступен: нет toolhelp.dll", 18, kMuted, 600, AL_MID, 760);
+        return;
+    }
+    for (int k = 0; k < kTaskRows; k++) {
+        int i = s_taskPage * kTaskRows + k, y = 232 + k * 48;
+        if (s_taskTab == 0) {
+            if (i >= s_task.procCount)
+                break;
+            const TaskProc& p = s_task.proc[i];
+            bool self = p.pid == GetCurrentProcessId(), sys = TaskIsSystem(p.name);
+            R(dc, 16, y, 768, 44, 10, kPanel);
+            T(dc, 32, y + 29, p.name, 18, self ? kOrange : kText, 700, AL_START, 250);
+            _snwprintf(s, 96, L"%d пот.", p.threads);
+            T(dc, 296, y + 28, s, 15, kMuted, 400);
+            if (p.cpu10 >= 0)
+                _snwprintf(s, 96, L"%d,%d %%", p.cpu10 / 10, p.cpu10 % 10);
+            else
+                wcscpy(s, L"...");
+            T(dc, 470, y + 29, s, 17, p.cpu10 >= 200 ? kOrange : kText, 700, AL_END);
+            if (p.memKB)
+                MemText(s, 96, p.memKB);
+            else
+                wcscpy(s, L"-");
+            T(dc, 604, y + 29, s, 17, kText, 700, AL_END);
+            if (sys || self)
+                T(dc, 700, y + 28, sys ? L"система" : L"эта программа", 14, kDim, 600, AL_MID);
+            else
+                Button(dc, 624, y + 4, 152, 36, s_taskArm == p.pid ? L"ТОЧНО?" : L"ЗАВЕРШИТЬ",
+                       s_taskArm == p.pid ? B_PRI : B_N, IC_NONE, 15, 0, A_TASKKILL, (int)p.pid);
+        } else {
+            if (i >= s_task.winCount)
+                break;
+            const TaskWin& w = s_task.win[i];
+            R(dc, 16, y, 768, 44, 10, kPanel);
+            T(dc, 32, y + 29, w.title, 18, kText, 700, AL_START, 300);
+            T(dc, 346, y + 28, w.proc, 15, kMuted, 400, AL_START, 190);
+            Button(dc, 544, y + 4, 112, 36, L"ПЕРЕЙТИ", B_N, IC_NONE, 15, 0, A_TASKSWITCH, (int)(INT_PTR)w.h);
+            Button(dc, 664, y + 4, 112, 36, L"ЗАКРЫТЬ", B_N, IC_NONE, 15, 0, A_TASKCLOSE, (int)(INT_PTR)w.h);
+        }
+    }
+    if (s_taskTab == 1 && !s_task.winCount)
+        T(dc, 400, 350, L"Других окон нет", 18, kMuted, 600, AL_MID);
+}
 
 static int s_homePage;
 enum { kHomePages = 2 };
@@ -5884,17 +6279,17 @@ static void WRow(HDC dc, int y, const wchar_t* label, const wchar_t* sub, Action
 
 static void ScrWSetWeather(HDC dc)
 {
-    static const wchar_t* prov[3] = { L"WTTR.IN", L"OPENWEATHER", L"GISMETEO" };
+    static const wchar_t* prov[W_COUNT] = { L"OPEN-METEO", L"OPENWEATHER", L"ЯНДЕКС" };
     Frame(dc, L"ПОГОДА · НАСТРОЙКИ");
     Panel(dc, 16, 64, 768, 400);
     wchar_t s[120];
     int p = s_cfg.weatherProv;
-    WRow(dc, 68, L"Источник", p == W_WTTR ? L"открытый, без ключа" : p == W_OWM ? L"бесплатный ключ на openweathermap.org"
-         : L"токен — по запросу на gismeteo.ru/b2b", A_NONE, 0, 300);
-    Seg(dc, 300, 74, 468, 44, prov, 3, G_WPROV, 14);
+    WRow(dc, 68, L"Источник", p == W_OMETEO ? L"открытый, без ключа" : p == W_OWM ? L"бесплатный ключ на openweathermap.org"
+         : L"свой ключ «Погоды для умного дома»", A_NONE, 0, 300);
+    Seg(dc, 300, 74, 468, 44, prov, W_COUNT, G_WPROV, 14);
     const wchar_t* key = s_cfg.weatherKey[p];
-    WRow(dc, 124, p == W_GISMETEO ? L"Токен" : L"Ключ API", p == W_WTTR ? L"не нужен" : key[0] ? key : L"не задан — нажмите, чтобы ввести",
-         p == W_WTTR ? A_NONE : A_KEYS, K_WKEY, 776);
+    WRow(dc, 124, L"Ключ API", p == W_OMETEO ? L"не нужен" : key[0] ? key : L"не задан — нажмите, чтобы ввести",
+         p == W_OMETEO ? A_NONE : A_KEYS, K_WKEY, 776);
     WRow(dc, 180, L"Место по GPS", L"основное; без фикса — домашняя точка", A_NONE, 0, 640);
     Toggle(dc, 688, 190, T_W_GPS);
     WRow(dc, 236, L"Домашняя точка", s_cfg.homeName[0] ? s_cfg.homeName : L"название — нажмите, чтобы ввести", A_KEYS,
@@ -6896,6 +7291,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_SET_VOLUME:  ScrSetVolume(dc); break;
     case S_CAMDL:       ScrCamDl(dc); break;
     case S_CAMREG:      ScrCamReg(dc); break;
+    case S_TASKS:       DrawTasks(dc); break;
     default:            break;
     }
 }
@@ -7006,6 +7402,8 @@ static void BuildButtons()
 static void Go(Screen s, bool push)
 {
     s_status[0] = 0;
+    if (s == S_TASKS)
+        TasksOpen();
     for (int k = 0; k < s_histLen; k++)
         if (s_hist[k] == s) {
             s_histLen = k;
@@ -7068,7 +7466,22 @@ static void DoAction(const Btn& b)
 {
     if (b.action != A_DELETE)
         s_delArmed = false;
+    if (b.action != A_TASKKILL)
+        s_taskArm = 0;
+    s_clipMenu = false;
     switch (b.action) {
+    case A_TASKTAB:    s_taskTab = b.arg; s_taskPage = 0; s_status[0] = 0; break;
+    case A_TASKSORT:   TaskSort(&s_task, b.arg); s_taskPage = 0; break;
+    case A_TASKPAGE:
+        s_taskPage += b.arg;
+        s_taskPage = s_taskPage < 0 ? 0 : s_taskPage >= TaskPages() ? TaskPages() - 1 : s_taskPage;
+        break;
+    case A_TASKKILL:   TaskEnd((DWORD)b.arg); break;
+    case A_TASKSWITCH: TaskSwitch((HWND)(INT_PTR)b.arg); break;
+    case A_TASKCLOSE:  TaskClose((HWND)(INT_PTR)b.arg); break;
+    case A_CLIPCOPY:   ClipCopy(); break;
+    case A_CLIPPASTE:  ClipPaste(); break;
+    case A_CLIPCLEAR:  s_keysText[0] = 0; break;
     case A_NAV:      Nav((Screen)b.arg); break;
     case A_NIGHT:    s_night = !s_night; break;
     case A_SCREEN:   Go((Screen)b.arg, true); break;
@@ -7495,6 +7908,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_TIMER: {
+        if (wp == TIMER_LONG) {   // held on the keyboard's text field: copy / paste
+            KillTimer(hwnd, TIMER_LONG);
+            if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD) {
+                s_pressed = -1;   // the release does nothing
+                s_clipMenu = true;
+                Redraw();
+            }
+            return 0;
+        }
         if (wp == TIMER_GUARD) {
             OnGuardTimer();
             return 0;
@@ -7526,10 +7948,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
                 Redraw();
         }
+        // the task manager: a new sample every 2 s, only while it is in front
+        bool tasks = s_screen == S_TASKS && (++s_taskTicks & 1) == 0 && IsWindowVisible(hwnd) &&
+                     GetForegroundWindow() == hwnd;
+        if (tasks)
+            TaskSample(&s_task, hwnd);
         // a whole frame costs: redraw only for a new minute (or the call timer), and only when in front
         SYSTEMTIME t;
         GetLocalTime(&t);
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd && (t.wMinute != s_drawnMinute || s_screen == S_CALL ||
+        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd && (t.wMinute != s_drawnMinute || tasks ||
+                                                                  s_screen == S_CALL ||
                                                                   s_screen == S_TEST_CAN || s_screen == S_TEST_MCU ||
                                                                   (s_screen == S_AUDIO && PlayerPlaying())))
             Redraw();
@@ -7618,6 +8046,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         s_pressed = HitTest((short)LOWORD(lp), (short)HIWORD(lp));
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
+        if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD)
+            SetTimer(hwnd, TIMER_LONG, kLongMs, NULL);
         SetCapture(hwnd);
         Redraw();
         return 0;
@@ -7637,6 +8067,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #endif
         return 0;
     case WM_LBUTTONUP: {
+        KillTimer(hwnd, TIMER_LONG);
         ReleaseCapture();
         int x = (short)LOWORD(lp), dx = x - s_downX;
         int i = HitTest(x, (short)HIWORD(lp));

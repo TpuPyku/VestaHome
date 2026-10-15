@@ -10,11 +10,13 @@ set PATH=%VS8%\Common7\IDE;%VC%\bin;%PATH%
 set SRC=home.cpp https.cpp
 set OUT=..\VestaHome
 set BRINC=/I"..\..\third_party\bearssl-0.6\inc" /I"..\..\third_party\compat"
-rem VestaCore (GPS shared with OSMapsCE): the submodule core\ of this repo, else the sibling repo
-set CORE=%~dp0..\..\core
-if not exist "%CORE%\vgps.cpp" set CORE=%~dp0..\..\..\VestaCore
+rem VestaCore (shared with OSMapsCE): a working copy of the VestaCore repo next to this repo if there is one
+rem (development: its latest code), otherwise the submodule core\ (a clone from GitHub)
+set CORE=%~dp0..\..\..\VestaCore
+if not exist "%CORE%\vgps.cpp" set CORE=%~dp0..\..\core
 if not exist "%CORE%\vgps.cpp" goto nocore
-set SRC=%SRC% "%CORE%\vgps.cpp"
+echo === VestaCore: %CORE%
+set SRC=%SRC% "%CORE%\vgps.cpp" "%CORE%\vlogdir.cpp" "%CORE%\vtask.cpp"
 set BRINC=%BRINC% /I"%CORE%"
 
 cd /d "%~dp0"
