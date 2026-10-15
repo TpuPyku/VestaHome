@@ -14,9 +14,9 @@ python VestaHome\SPIPower\tools\make_deploy.py     :: по умолчанию п
 
 | Артефакт | Размер | MD5 (первые 8) |
 |---|---:|---|
-| proxy `SPIPowerMgr.dll` | 22 016 | `fa7b65e0…` |
+| proxy `SPIPowerMgr.dll` | 22 528 | `0e0a1169…` |
 | заводская `SPIPowerMgr.dll` | 111 104 | `438505b7…` |
-| `SPIPowerInstall.exe` | 37 376 | `4e507e88…` |
+| `SPIPowerInstall.exe` | 50 176 | `b220bc8b…` |
 | `SwDnl_drill.upg` | 357 | `8800cb0e…` |
 
 ## Иерархия = монтирования ГУ
@@ -46,7 +46,7 @@ Tests\
 3. Успех = `exit code 0` и в MessageBox / в `\SDMMC\SPIPower_test\SPIPower_test.log`:
 
 ```
-  check \SDMMC\SPIPower_test\proxy=yes (fa7b65e0… 22016 B) orig=yes (438505b7… 111104 B)
+  check \SDMMC\SPIPower_test\proxy=yes (0e0a1169… 22528 B) orig=yes (438505b7… 111104 B)
   exports resolved 139/139, missing 0
   RESULT: OK
 ```
@@ -74,7 +74,7 @@ Tests\
 4. `SPIPowerInstall.exe status` (кнопка «СТАТУС»). PASS = появился
    `\ResidentFlash\navigation\app\VestaDrill.txt` и в `status` видно `swflag:none`
    (флаг снят самим апдейтером).
-5. `SPIPowerInstall.exe drill-off` (кнопка «СНЯТЬ ТЕСТ») — снять флаг и убрать drill-файлы с SD.
+5. `SPIPowerInstall.exe drill-off` (кнопка «СНЯТЬ ФЛАГ») — снять флаг и убрать drill-файлы с SD.
 
 ## C. Rescue-набор на SD — обязательная страховка ПЕРЕД установкой
 
@@ -87,31 +87,58 @@ Tests\
 4. Проверить, что файлов ровно два и что в `SwDnl.cfg` источник — `SWDNL_SRC_NV_FILE "SDMemory\SwDnl.upg"`,
    цель — `SWDNL_DST_DIR ResidentFlash`. Флаг `\ResidentFlash\SwUpdate.flag` должен **отсутствовать**.
 
-## D. Установка proxy
+## D0. Обновление proxy (2026-10-15)
 
-1. `SPIPowerInstall.exe status` — убедиться, что гейт версии зелёный: строка `fw:4120 … HARD … ok`
-   и `самопроверка MD5: ok`. Отказ гейта («не из прошивки 4120») — стоп, разбираться по строкам
-   отчёта; `force` не использовать.
-2. `SPIPowerInstall.exe install` (кнопка «УСТАНОВИТЬ», с подтверждением). Что делает: бэкап
-   заводской DLL в 2 места → `\ResidentFlash\navigation\app\SPIPowerMgr_orig.dll` и
-   `\SDMemory\SPIPower_backup\SPIPowerMgr.dll` (на SD, если она смонтирована, иначе `\SDMMC\`),
-   `WM_CLOSE` окну оболочки «RadioCommWindow» (ждёт 5 с), затем
-   kill **всех** держателей DLL (оболочка + `\ResidentFlash\Main.exe` + `AppLauncher.exe` —
-   `Main.exe` тоже `LoadLibrary`-ит `SPIPowerMgr.dll`, без его остановки файл не освобождается),
-   ожидание реальной смерти процессов и повторные попытки записи, подмена, сверка md5 **файла на
-   месте** и **запрос сброса МКУ** (`SPApi_SendResetEvent`) — ГУ перезагружается, оболочка
-   поднимается уже с proxy. Любой провал **до** подмены поднимает оболочку обратно.
-   При «всё ещё занят (err=32)» прислать `\SDMMC\SPIPower_install.log`: строки
-   `close: …` и `kill <exe> pid=… threads=…: open …, terminate … err=…` покажут, вышла ли оболочка
-   сама, сработал ли `TerminateProcess` и не поднялся ли процесс заново (новый pid).
-   Вариант с логом proxy: `install p2` / `install p3` (кнопка «УСТ. + ЛОГ») — включают флаг
-   `\SDMMC\SPIPower.on` и лог `\SDMMC\SPIPower.log`.
-3. Признак успеха — ГУ **сам перезагрузился** сразу после `install` (в отчёте `сброс: запрошен`);
-   если сброс не прошёл, в отчёте будет `сброс: не подтверждён` и ГУ перезагрузится по таймауту
-   МКУ (~1 мин). После загрузки: `SPIPowerInstall.exe status` → `dll` = proxy (22 016 Б,
-   `fa7b65e0…`), оболочка жива, в `\SDMMC\SPIPower.log` есть `PROXY OK`.
-4. Ручной откат в любой момент: `SPIPowerInstall.exe rollback` (кнопка «УДАЛИТЬ») — kill тех же
-   держателей, возврат заводской DLL, старт оболочки (обязательно **без** перезагрузки).
+Новый proxy (22 528 Б) складывает каждое сообщение MCU в общую память `VestaMCU` — её читает VestaHome
+(«Настройки → Автомобиль → Данные MCU», климат, «О системе → Подробнее»). Старый (22 016 Б, `fa7b65e0…`) этого
+не умеет. Обновление — так же, как установка: новый `ResidentFlash\SPIPower\` → `\ResidentFlash\SPIPower\`,
+«СТАТУС» (в отчёте: «стоит прежний proxy — установка его обновит», `SPIPowerMgr_orig.dll` = заводская ok) →
+«УСТ. + ЛОГ» → перезагрузка с SD (шаг D ниже). Удалять старый не нужно.
+
+Журнал proxy — `\SDMMC\SPIPower.log` (рядом с `SPIPower.on`, пишется сам, ничего запускать не надо; «СТАТУС» печатает
+его размер). Обёртка обработчиков MCU теперь работает всегда (общая память), файл — только при `SPIPower.on`.
+
+## D. Установка proxy — при загрузке (boot)
+
+Живая установка (`install` из CLI) не работает: запущенную `G3NavHMI` не убить (`TerminateProcess`
+err=170), а ГУ сбрасывается посреди ожидания (2026-10-13). Заводской апдейтер с `.upg`-пакетом тоже не
+годится: `SwDnl.exe` не останавливает `Main.exe`, а тот держит `SPIPowerMgr.dll` с самого начала
+загрузки. Поэтому кнопки «УСТАНОВИТЬ» / «УСТ. + ЛОГ» / «УДАЛИТЬ» теперь только **заряжают** операцию,
+а выполняет её сам установщик при следующей загрузке — `Main.exe` при заряженном флаге запускает
+`\SDMemory\SwDnl.exe` **вместо** оболочки, и этим `SwDnl.exe` будет наш установщик.
+
+1. SD-карта вставлена (нужен именно `\SDMemory`), в корне нет чужого `SwDnl.exe`, `update.pkg`,
+   `RdDnl.upg`, `CANUpdate.s19`.
+2. `SPIPowerInstall.exe status` — гейт версии зелёный: строка `fw:4120 … HARD … ok` и
+   `самопроверка MD5: ok`. Отказ гейта — стоп; `force` не использовать.
+3. Кнопка «УСТ. + ЛОГ» (CLI `boot install p2`; без лога proxy — «УСТАНОВИТЬ» / `boot install`).
+   Программа кладёт на SD: `\SDMemory\SwDnl.exe` (копия самой себя), `\SDMemory\SPIPower_boot\SPIPowerMgr.dll`
+   (proxy, md5 сверен) и `\SDMemory\SPIPower_boot\job.txt` (задание), пишет `\ResidentFlash\SwUpdate.flag` = `0x02`.
+   В `status` видно `swflag:0x02 boot:armed`. Передумали — «СНЯТЬ ФЛАГ» (`boot-off`).
+4. Перезагрузить ГУ, **не вынимая SD**. Вместо оболочки стартует наш `SwDnl.exe` (экран может
+   несколько секунд показывать только логотип) и делает по порядку:
+   - сразу **удаляет флаг и задание** — что бы ни случилось дальше, следующая загрузка обычная;
+   - повторяет гейт версии и md5 proxy;
+   - останавливает `Main.exe` (+ `AppLauncher.exe`; оболочки ещё нет), ждёт освобождения файла
+     (при необходимости — и `HzWD.exe`/`dr_Service.exe`);
+   - бэкап заводской DLL → `SPIPowerMgr_orig.dll` + `\SDMemory\SPIPower_backup\`, подмена, md5 файла на месте;
+   - флаг лога `\SDMMC\SPIPower.on` (для «УСТ. + ЛОГ») и **сброс МКУ** → ГУ перезагружается уже с proxy.
+     Если сброс не прошёл — сам запускает `Main.exe`, и оболочка поднимается с proxy без перезагрузки.
+   Любой провал до подмены (файл занят, гейт, md5) — ничего не меняется, оболочка запускается как обычно.
+5. Проверка: `status` → `dll` = proxy (22 528 Б, `0e0a1169…`), `swflag:none`, оболочка жива,
+   в `\SDMMC\SPIPower.log` есть `PROXY OK`. Журнал загрузочного этапа — в двух местах:
+   `\SDMMC\SPIPower_install.log` и `\SDMemory\SPIPower_boot\boot.log` (строки `=== boot: …`,
+   `kill …`, `install: …`).
+6. Откат: кнопка «УДАЛИТЬ» (`boot rollback`) — так же через загрузку: заряжает задание, после
+   перезагрузки наш `SwDnl.exe` останавливает `Main.exe`, возвращает `SPIPowerMgr_orig.dll` на место
+   и запускает `Main.exe` (оболочка поднимается без ещё одной перезагрузки). CLI `install` / `rollback`
+   (живой своп) оставлены только для экспериментов.
+
+`\SDMemory\SwDnl.exe` после установки **лучше оставить на SD** — это страховка: если оболочка с proxy
+не запустится, `Main.exe` после трёх провалов сам зарядит флаг и запустит его, а он без задания увидит
+proxy на месте и вернёт заводскую DLL. Если же флаг зарядил кто-то другой (proxy не стоит), он
+передаёт управление заводскому `SwDnl.exe` (`\ResidentFlash`, затем `\Windows`), и rescue-пара из
+шага C работает как раньше.
 
 ## Если ГУ «окирпичился» (оболочка не стартует, циклическая перезагрузка)
 
@@ -128,11 +155,12 @@ SD-карты** (на ГУ это `\SDMemory\`; не `\SDMMC` — это вст�
 
 Заводской откат DLL (ниже) срабатывает **только** если `Main.exe` не смог запустить `G3NavHMI.exe`
 (файла нет / не грузится); если оболочка запускается и виснет — не сработает. И он нужен, только если
-DLL действительно подменена (`status`: `dll` = proxy 22 016 Б).
+DLL действительно подменена (`status`: `dll` = proxy 22 528 Б).
 
-1. Оставить вставленной SD с rescue-парой из шага C. При повторном провале запуска `G3NavHMI`
-   `Main.exe` сам пишет байт `0x02` в `\ResidentFlash\SwUpdate.flag` и поднимает `SwDnl.exe` с SD,
-   который вернёт заводскую DLL в `\ResidentFlash\navigation\app\SPIPowerMgr.dll`.
+1. Оставить вставленной SD с нашим `SwDnl.exe` (шаг D) и rescue-парой из шага C. При повторном провале
+   запуска `G3NavHMI` `Main.exe` сам пишет байт `0x02` в `\ResidentFlash\SwUpdate.flag` и поднимает
+   `SwDnl.exe` с SD: наш вернёт `SPIPowerMgr_orig.dll` сам (журнал — `\SDMemory\SPIPower_boot\boot.log`);
+   без нашего заводской распакует rescue-пару в `\ResidentFlash\navigation\app\SPIPowerMgr.dll`.
 2. Если появится диалог — нажать `Update Start!`/OK. Успех в отладочном логе: `SWDNL: Copy … completed!`,
    `SWDNL: Exract … Successed!`, флаг `0x02` снят.
 3. SD затем извлечь, чтобы откат не срабатывал повторно. Детали — `VestaHome\SPIPower\rescue\README.md`.
@@ -143,7 +171,8 @@ DLL действительно подменена (`status`: `dll` = proxy 22 01
   proxy) ловится самопроверкой md5 — при отказе пересобрать набор (`python tools\make_deploy.py`)
   и скопировать заново.
 - Не копировать `\SDMMC\` и `ResidentFlash\` на SD-карту как есть: это разные тома ГУ.
-- Не запускать `install`, не выполнив A (Уровень 0) и B (drill).
+- Не заряжать установку, не выполнив A (Уровень 0) и B (drill).
+- Не класть на SD чужой `SwDnl.exe` поверх нашего, пока proxy установлен.
 
 ## Источники (для деталей)
 

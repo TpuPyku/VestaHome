@@ -3,6 +3,9 @@
 // original function via g_real[].
 #include <windows.h>
 #include "g_proxy.h"
+#include "mcushm.h"
+
+extern McuShm* g_shm;   // spipower_proxy.cpp: the shared ring, NULL if the mapping failed
 
 static void logLine(const wchar_t* s)
 {
@@ -41,14 +44,28 @@ static void hookSkelHandler(void* self, unsigned char* data)
         return;
     unsigned short msg = ((unsigned short)data[0] << 8) | data[1];
     unsigned char len = data[2];
-    unsigned char p[4] = { 0, 0, 0, 0 };
-    for (int k = 0; k < 4 && k < (int)len; k++)
-        p[k] = data[3 + k];
-    wchar_t buf[160];
-    wsprintfW(buf, L"SKEL id=%d msg=0x%04X len=%u p=%02X %02X %02X %02X",
-              s_wraps[i].id, (unsigned)msg, (unsigned)len,
-              (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3]);
-    logLine(buf);
+    if (g_shm) {   // into the shared ring for VestaHome (always, the flag only gates the file log)
+        LONG n = InterlockedIncrement((LONG*)&g_shm->seq);
+        McuMsg* m = &g_shm->msg[(n - 1) & (MCU_SHM_SLOTS - 1)];
+        m->seq = 0;
+        m->tick = GetTickCount();
+        m->id = msg;
+        m->len = len;
+        m->skel = (unsigned char)s_wraps[i].id;
+        for (int k = 0; k < MCU_SHM_DATA; k++)
+            m->data[k] = k < (int)len ? data[3 + k] : 0;
+        m->seq = n;
+    }
+    if (g_logging) {
+        unsigned char p[4] = { 0, 0, 0, 0 };
+        for (int k = 0; k < 4 && k < (int)len; k++)
+            p[k] = data[3 + k];
+        wchar_t buf[160];
+        wsprintfW(buf, L"SKEL id=%d msg=0x%04X len=%u p=%02X %02X %02X %02X",
+                  s_wraps[i].id, (unsigned)msg, (unsigned)len,
+                  (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3]);
+        logLine(buf);
+    }
     s_wraps[i].orig(self, data);
 }
 
@@ -94,8 +111,12 @@ extern "C" void proxy_SPApi_SendRotaryEvent(unsigned char a, unsigned char b, un
 
 extern "C" void proxy_SPApi_SetSkelonton(int id, void* skeleton)
 {
-    if (g_logging && skeleton && s_nwraps < MAX_WRAPS)
+    // wrapped always (2026-10-15): the shared ring feeds VestaHome's MCU monitor and live data; the
+    // wrap itself was proven on the unit with the flag on (install p2, no crashes)
+    if (skeleton && s_nwraps < MAX_WRAPS)
     {
+        if (g_shm)
+            InterlockedIncrement((LONG*)&g_shm->wraps);
         void** vtbl = *(void***)skeleton;            // original vtable
         s_wraps[s_nwraps].self = skeleton;
         s_wraps[s_nwraps].orig = (SkelHandler)vtbl[1];

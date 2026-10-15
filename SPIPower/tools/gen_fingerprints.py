@@ -29,9 +29,9 @@ FW_NAME = '4120'
 PKG_PATH = os.path.join(ROOT, 'MAIN', '4120', 'SwDnl.upg')
 PKG_TOC = 0x03276D3F
 NK_FS = os.path.join(ROOT, 'MAIN', '4120_unpacked', 'NK', 'fs')
-OUT_H = os.path.join(ROOT, 'Vesta', 'SPIPower', 'install', 'fingerprints.h')
-PROXY = os.path.join(ROOT, 'Vesta', 'SPIPower', 'out', 'SPIPowerMgr.dll')
-DRILL = os.path.join(ROOT, 'Vesta', 'SPIPower', 'rescue', 'drill', 'SwDnl_drill.upg')
+OUT_H = os.path.join(ROOT, 'VestaHome', 'SPIPower', 'install', 'fingerprints.h')
+PROXY = os.path.join(ROOT, 'VestaHome', 'SPIPower', 'out', 'SPIPowerMgr.dll')
+DRILL = os.path.join(ROOT, 'VestaHome', 'SPIPower', 'rescue', 'drill', 'SwDnl_drill.upg')
 
 # device path -> where the reference bytes come from
 #   ('pkg', dir, name) - inside the official update package

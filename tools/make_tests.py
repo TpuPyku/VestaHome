@@ -40,6 +40,10 @@ PLAN = (
         ('VestaLaunch.exe', 'Skin')),
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDMemory\VestaHome',
         ('VestaHome.exe', 'Skin')),
+    # the player's audio library: BASS 2.4.12 for CE/ARM + its plugins, third-party (un4seen, free for
+    # non-commercial use), taken from the SinglePlayer package in MAIN; VestaHome loads it from bass\
+    (os.path.join(ROOT, 'MAIN', 'SinglePlayer'), r'SDMemory\VestaHome\bass',
+        ('bass.dll', 'bass_aac.dll', 'bassflac.dll', 'bassalac.dll', 'bass_mpc.dll', 'tags.dll')),
     (os.path.join(V, 'GstProbe', 'GstProbe'), r'SDMemory\GstProbe',
         ('GstProbe.exe',)),
     (os.path.join(V, 'G3patch', 'VestaInstall'), r'SDMemory\VestaInstall',

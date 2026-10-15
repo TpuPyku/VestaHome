@@ -10,8 +10,10 @@ import os
 
 import fitz
 
-AI = r"e:\GitHub\YaMaps\MAIN\VestaMMCskin.ai"
-MMC27 = r"e:\GitHub\YaMaps\MAIN\MMC27"
+# MAIN/ (the study material) sits next to this repo: <root>/VestaHome/skin -> <root>/MAIN
+MAIN = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "MAIN"))
+AI = os.path.join(MAIN, "VestaMMCskin.ai")
+MMC27 = os.path.join(MAIN, "MMC27")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_ai")
 SCREENS = os.path.join(OUT, "screens")
 ASSETS = os.path.join(OUT, "assets")

@@ -40,7 +40,7 @@ static const int kFwN = (int)(sizeof(kFw) / sizeof(kFw[0]));
 
 // our own artifacts: hashed from the installer folder to prove on the device that
 // the MD5 code works and that the folder is not a mix of different builds
-static const char* kProxyMd5 = "fa7b65e000c6f33bbd2f8be18fe85808";   // out\SPIPowerMgr.dll (proxy next to the exe)
+static const char* kProxyMd5 = "0e0a11692af2409dcca273625078222f";   // out\SPIPowerMgr.dll (proxy next to the exe)
 static const char* kDrillMd5 = "8800cb0ef22a13f7677cef8a9d09c5dc";   // rescue\drill\SwDnl_drill.upg
 static const unsigned int kDrillSize = 357u;
 

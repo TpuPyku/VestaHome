@@ -27,7 +27,17 @@ OUT  = os.path.join(SP, 'out')
 APP  = os.path.join(ROOT, 'MAIN', 'ResidentFlash', 'navigation', 'app')
 NKFS = os.path.join(ROOT, 'MAIN', '4120_unpacked', 'NK', 'fs', 'Windows')
 
-PROXY_MD5   = 'fa7b65e000c6f33bbd2f8be18fe85808'   # out\SPIPowerMgr.dll
+def _fingerprint(name):
+    """A constant of install/fingerprints.h (the installer's own references), so the two never drift apart."""
+    import re
+    text = open(os.path.join(SP, 'install', 'fingerprints.h'), encoding='utf-8', errors='replace').read()
+    m = re.search(r'%s\s*=\s*"([0-9a-f]{32})"' % name, text)
+    if not m:
+        raise SystemExit('fingerprints.h has no %s - run tools\\gen_fingerprints.py' % name)
+    return m.group(1)
+
+
+PROXY_MD5   = _fingerprint('kProxyMd5')                # out\SPIPowerMgr.dll (2026-10-15: + MCU shared ring)
 FACTORY_MD5 = '438505b76467ee393156f1aaacb9e3ab'   # factory SPIPowerMgr.dll
 DRILL_MD5   = '8800cb0ef22a13f7677cef8a9d09c5dc'   # rescue\drill\SwDnl_drill.upg
 

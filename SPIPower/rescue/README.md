@@ -61,6 +61,12 @@ python tools\make_rescue.py <SwDnl.upg> <outdir>
 - распаковка идёт в `SWDNL_DST_DIR` (`ResidentFlash`), пути внутри `.upg` начинаются с `\`;
 - том SD монтируется как `\SDMemory` (профиль StorageManager `SDMemory` в реестре ROM).
 
+**Риск (2026-10-14, `../SWDNL.md` §7):** `SwDnl.exe` не останавливает `Main.exe`, а тот к моменту
+запуска апдейтера уже загрузил `SPIPowerMgr.dll`; распаковщик пишет `_wfopen("wb")` и при занятом файле
+прерывает весь пакет, оставляя флаг. Поэтому основной откат теперь — наш `\SDMemory\SwDnl.exe`
+(режим `boot` установщика: сам останавливает `Main.exe`), а эта пара — запасной путь, на который он
+передаёт управление, если proxy не стоит.
+
 **Не проверено на железе:**
 - стартует ли распаковка автоматически или после нажатия `Update Start!` в диалоге
   `CAutoUpdateDlg` (в UI есть строки `Press 'OK' to start upgrade.`, `Update Start!`);

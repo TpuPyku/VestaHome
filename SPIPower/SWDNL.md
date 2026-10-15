@@ -159,9 +159,21 @@ ExtractFiles(<SRC_NV_FILE>, delDirs, delFiles)      // FUN_00021d44
   `KillTimer`), статусы `SWDNL_CAN Update---------------*`; по успеху `CompleteUpdate(type=4)`.
 * **Radio**: `ReadFileThred` + `RdDnl.upg` (`SWDNL_SRC_RD_FILE`), `Update radio progress: %d%%`,
   `SWDNL: Send Read File End To Radio`.
-* Общее для всех путей: апдейтер сначала убивает оболочку и сервисы (`main.exe`, `HzWD.exe`,
-  `dr_Service.exe` через `CreateToolhelp32Snapshot`/`TerminateProcess`), в конце —
+* Общее для всех путей: апдейтер убивает сервисы `HzWD.exe` и `dr_Service.exe`
+  (`CreateToolhelp32Snapshot`/`TerminateProcess`), в конце —
   `SWDNL Update Finished---------------Auto Restart` и `SPApi_SendResetToRadio()`.
+  **`Main.exe` он не трогает** (поправка 2026-10-14: в строках `SwDnl.exe` есть только `HzWD.exe` и
+  `dr_Service.exe`; прежняя запись «убивает main.exe» была ошибкой), а `Main.exe` к этому моменту уже
+  загрузил `SPIPowerMgr.dll` (`FUN_00016e28`: `FUN_000115d8` → `LoadLibrary` идёт **до** потока
+  `FUN_00016a30` с проверкой флага) и остаётся жив.
+* Распаковщик (2026-10-14, `FUN_0002012c`): записи `.upg` идут **по порядку TOC**, каждый файл
+  открывается `_wfopen(путь, "wb")` (ординал 1145); при ошибке — `SWDNL: ERR Create file %s fail %d` и
+  **вся распаковка прерывается** (`ExtractFiles` → статус 9, бит `0x2` остаётся). Обхода занятых файлов
+  (переименование, отложенная запись) нет; исключение — шрифты (`Simsun.ttc`, `Microhei.ttf` и др.),
+  которые пропускаются, если уже есть. Отсюда: пакет с `SPIPowerMgr.dll` через заводской апдейтер,
+  скорее всего, упрётся в DLL, загруженную `Main.exe`, и оставит флаг заряженным (каждая загрузка — снова
+  в апдейтер). Поэтому установка proxy идёт через **свой** `\SDMemory\SwDnl.exe` (`Main.exe` ищет апдейтер
+  сначала на SD) — режим `boot` в `install/spipower_install.cpp`.
 
 ## 8. Что это даёт rescue
 

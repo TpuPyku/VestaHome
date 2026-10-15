@@ -13,7 +13,7 @@ public class DecompAll extends GhidraScript {
     public void run() throws Exception {
         String outPath = getScriptArgs().length > 0
                 ? getScriptArgs()[0]
-                : "E:\\GitHub\\VestaMMC\\Vesta\\SPIPower\\ghidra\\decomp.txt";
+                : "decomp.txt";   // in the current folder unless a path is given
         DecompInterface di = new DecompInterface();
         di.setOptions(new DecompileOptions());
         di.openProgram(currentProgram);

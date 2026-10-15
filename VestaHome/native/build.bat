@@ -10,6 +10,12 @@ set PATH=%VS8%\Common7\IDE;%VC%\bin;%PATH%
 set SRC=home.cpp https.cpp
 set OUT=..\VestaHome
 set BRINC=/I"..\..\third_party\bearssl-0.6\inc" /I"..\..\third_party\compat"
+rem VestaCore (GPS shared with OSMapsCE): the submodule core\ of this repo, else the sibling repo
+set CORE=%~dp0..\..\core
+if not exist "%CORE%\vgps.cpp" set CORE=%~dp0..\..\..\VestaCore
+if not exist "%CORE%\vgps.cpp" goto nocore
+set SRC=%SRC% "%CORE%\vgps.cpp"
+set BRINC=%BRINC% /I"%CORE%"
 
 cd /d "%~dp0"
 if not exist obj\arm mkdir obj\arm
@@ -45,6 +51,9 @@ if errorlevel 1 goto fail
 
 echo === OK
 exit /b 0
+:nocore
+echo === VestaCore not found: git submodule update --init (core\) or the sibling repo ..\..\..\VestaCore
+exit /b 1
 :fail
 echo === BUILD FAILED
 exit /b 1
