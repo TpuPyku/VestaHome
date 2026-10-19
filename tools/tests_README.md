@@ -23,6 +23,6 @@
 
 Где что:
 
-- `SDMemory\VestaHome`, `GstProbe`, `VestaInstall`, `LaunchInstall`, `navit` (+ `GpsGate 2.0` для теста GPS);
+- `TestMedia` (короткие аудио/видео для «Диагностика → Звук и видео»), `LaunchInstall`, `GpsGate 2.0` (тест GPS);
 - `SDMMC\VestaLaunch` (на него указывает `ExternNavi.cfg`: без SD оболочка его не потеряет), `YaMapsCE`, `OSMapsCE`;
-- `SDMMC\SPIPower_test`, `ResidentFlash\SPIPower` — набор SPIPower, инструкция в `ResidentFlash\SPIPower\README.md`.
+- `SDMemory\VestaHomeInstall` — установщик VestaHome + proxy MCU: один файл `VestaHomeInstall.exe` (запускать откуда угодно) + `help.txt`.

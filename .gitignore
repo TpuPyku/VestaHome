@@ -36,6 +36,9 @@ skin/_ai/
 SPIPower/native/thunks.s
 SPIPower/native/spipower.def
 SPIPower/native/g_proxy.h
+SPIPower/bt/thunks.s
+SPIPower/bt/flc.def
+SPIPower/bt/g_btproxy.h
 SPIPower/out/
 SPIPower/ghidra/
 
@@ -56,3 +59,7 @@ GstProbe/GstProbe/GstProbe.txt
 
 # VestaRescue build output
 Rescue/out/
+SPIPower/install/vh_payload.bin
+VestaHome/VestaHome/TestMedia/
+# G3patch was moved out of the repo 2026-10-17 (G3Skin\G3patch, MAIN\G3NavHMI_ghidra): never add it back
+G3patch/

@@ -7,7 +7,7 @@ if "%VS8%"=="" set VS8=C:\Program Files (x86)\Microsoft Visual Studio 8
 set VC=%VS8%\VC
 set SDK=%VS8%\SmartDevices\SDK\PocketPC2003
 set PATH=%VS8%\Common7\IDE;%VC%\bin;%PATH%
-set SRC=home.cpp https.cpp
+set SRC=home.cpp https.cpp video.cpp wifi.cpp secret.cpp rvc.cpp
 set OUT=..\VestaHome
 set BRINC=/I"..\..\third_party\bearssl-0.6\inc" /I"..\..\third_party\compat"
 rem VestaCore (shared with OSMapsCE): a working copy of the VestaCore repo next to this repo if there is one
@@ -16,7 +16,7 @@ set CORE=%~dp0..\..\..\VestaCore
 if not exist "%CORE%\vgps.cpp" set CORE=%~dp0..\..\core
 if not exist "%CORE%\vgps.cpp" goto nocore
 echo === VestaCore: %CORE%
-set SRC=%SRC% "%CORE%\vgps.cpp" "%CORE%\vlogdir.cpp" "%CORE%\vtask.cpp"
+set SRC=%SRC% "%CORE%\vgps.cpp" "%CORE%\vlogdir.cpp" "%CORE%\vtask.cpp" "%CORE%\vnight.cpp"
 set BRINC=%BRINC% /I"%CORE%"
 
 cd /d "%~dp0"

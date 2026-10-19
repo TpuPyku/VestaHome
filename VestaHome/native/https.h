@@ -14,4 +14,12 @@ void HttpSetGpsDate(int yyyymmdd);   // the unit's clock is reset on boot: certi
 void HttpCloseAll();
 const wchar_t* NetErrorText(int err);
 
+// An endless body (internet radio): http:// or https://, any port, redirects followed, ICY metadata asked for.
+// *metaint = icy-metaint (0: none); name = icy-name, type = Content-Type (may be empty). NULL with *err.
+struct HttpStream;
+HttpStream* HttpStreamOpen(const char* url, int* err, int* metaint, char* name, int nameCap, char* type, int typeCap);
+int  HttpStreamRead(HttpStream* s, char* buf, int len);   // the body's bytes; <= 0: closed, broken or aborted
+void HttpStreamAbort(HttpStream* s);                       // from another thread: the blocked read returns
+void HttpStreamClose(HttpStream* s);
+
 #endif

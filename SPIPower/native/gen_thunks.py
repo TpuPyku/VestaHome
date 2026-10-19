@@ -22,6 +22,17 @@ INTERCEPT = {
     'SPApi_SendRotaryEvent',
     'SPApi_SetSkelonton',
     'SPApi_LoadByMain',
+    # sound and source (2026-10-17): what the shell and VestaHome send, with the caller's process
+    'SPApi_SendRadioAudioHMLData',
+    'SPApi_SendRadioAudioBalanceFaderData',
+    'SPApi_SendRadioAudioVolData',
+    'SPApi_SendMediaSourceSelect',
+    'SPApi_SendRadioNaviVoiceGuidance',
+    'SPApi_SendRadioIsNaviSourceCouldIn',
+    'SPApi_SendRadioNaviMediaMuteStatus',
+    'SPApi_SendRadioChangeSource',
+    # the radio's lists (2026-10-18): the presets - how the shell saves one is not known yet
+    'SPApi_SendListItemControl',
 }
 
 

@@ -11,9 +11,9 @@
 #
 # Output (written to <outdir>/):
 #   SwDnl_drill.upg     - one file: \navigation\app\VestaDrill.txt (generated text)
-#   SwDnl.cfg           - cfg for this package; "SPIPowerInstall.exe drill" writes
+#   SwDnl.cfg           - cfg for this package; "VestaHomeInstall.exe drill" writes
 #                         its own copy onto the SD, this one is for manual staging
-#   SPIPowerInstall.exe - copied from ../out/ when present, so <outdir> can be
+#   VestaHomeInstall.exe - copied from ../out/ when present, so <outdir> can be
 #                         dropped onto the HU/SD as a single folder
 #
 # Format verified against upg_build.py: unk = 0 in all 2023 records of the factory
@@ -31,7 +31,7 @@ MARKER = (
     '------------------------------------\r\n'
     'SwDnl.exe read \\SDMemory\\SwDnl.cfg, took SwDnl_drill.upg from the SD card\r\n'
     'and unpacked it into \\ResidentFlash. Nothing else was touched.\r\n'
-    'Clean up: SPIPowerInstall.exe drill-off\r\n'
+    'Clean up: VestaHomeInstall.exe drill-off\r\n'
 )
 
 def build_pkg(data):
@@ -52,10 +52,10 @@ def main(outdir):
         'SWDNL_SRC_NV_FILE\t"SDMemory\\SwDnl_drill.upg"\r\n'
     ).encode('latin1'))
 
-    exe = os.path.join(os.path.dirname(__file__), '..', 'out', 'SPIPowerInstall.exe')
+    exe = os.path.join(os.path.dirname(__file__), '..', 'out', 'VestaHomeInstall.exe')
     if os.path.exists(exe):
-        shutil.copy2(exe, os.path.join(outdir, 'SPIPowerInstall.exe'))
-        print('copied SPIPowerInstall.exe into %s' % outdir)
+        shutil.copy2(exe, os.path.join(outdir, 'VestaHomeInstall.exe'))
+        print('copied VestaHomeInstall.exe into %s' % outdir)
     else:
         print('NOTE: %s not built yet - run install\\build.bat first' % exe)
 
@@ -67,7 +67,7 @@ def main(outdir):
     assert recs[0]['unk'] == 0
     assert pkg[:len(data)] == data and MARK in pkg
     print('wrote %s (%d bytes) + %s -- self-check OK' % (upg, len(pkg), cfg))
-    print('verdict after a reboot (SPIPowerInstall.exe status / drill-off):')
+    print('verdict after a reboot (VestaHomeInstall.exe status / drill-off):')
     print('  flag gone + \\ResidentFlash\\navigation\\app\\VestaDrill.txt present = PASS')
 
 if __name__ == '__main__':

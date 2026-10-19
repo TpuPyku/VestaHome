@@ -15,8 +15,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <shellapi.h>
+#include <tlhelp32.h>   // our threads' load (OwnThreadsLoad); toolhelp.dll itself is loaded at run time
 #include "https.h"
+#include "video.h"
+#include "wifi.h"
+#include "secret.h"
+#include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
+#include "vnight.h"    // VestaCore: the night mode shared with OSMapsCE
+#include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_STDIO
@@ -57,11 +64,11 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_BT, IC_USB, IC_LIST, IC_VOL, IC_SEARCH, IC_SHUFFLE, IC_REPEAT, IC_CALL, IC_HANGUP, IC_WIFI,
             IC_STAR, IC_STAR_F, IC_USER, IC_USERS, IC_CLOCK, IC_KEYPAD, IC_MIC_OFF, IC_HANDOVER, IC_PLAY,
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
-            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_COUNT };
+            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_COUNT };
 
 // Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing.
 static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music", L"phone", L"settings", L"home",
-    L"night", L"prev", L"day", L"apps", L"video", L"next", L"exit", L"folder", L"shift", L"backspace", L"aux",
+    L"night", L"prev", L"day", L"apps", L"video", L"next", L"exit", L"folder", L"shift", L"backspace", L"aux_ico",
     L"photo", L"info", L"rew", L"fwd", L"pause" };
 
 // A_NAV opens a main screen from the bottom bar (no history), A_SCREEN opens a screen over the current one,
@@ -72,12 +79,14 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_BKSP, A_FILE, A_UP, A_FPREV, A_FNEXT, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_SOON, A_TEST,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_REGPAGE, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
-              A_BAL, A_FADE, A_BALCENTER, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
-              A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR };
+              A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RBAND, A_RPAGE, A_RLIST, A_RLISTPAGE, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
+              A_MFILE, A_MUP, A_MPAGE, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_THEME, A_LIGHT, A_BRIGHT, A_WGVIS, A_WGMOVE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
+              A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
+              A_VFILE, A_VUP, A_VPAGE, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
+              A_NRPLAY, A_NRSTEP, A_NRPICK, A_NRPAGE, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIPAGE, A_WIFIAP };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
-// S_INCOMING, S_VOLUME and S_EXIT (closing VestaHome) are windows over the previous screen.
+// S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
 // S_APPS: the programs; S_EDIT, S_KEYS, S_FILES: their shortcut editor, keyboard and file browser; S_TASKS: the
 // task manager (processes, windows, CPU and memory).
 // S_SET_CAR: the car section of the settings (the data port, CAN). S_DIAG: diagnostics, opened from "About the
@@ -86,10 +95,10 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_VIDEO, S_VIDEO_PLAY, S_PHOTO, S_PHOTO_VIEW, S_PHOTO_BAD,
               S_PHONE, S_CONTACTS, S_CONTACT, S_CALLS, S_CALL, S_INCOMING, S_PHONE_OFF,
               S_SETTINGS, S_SET_SOUND, S_SET_BALANCE, S_SET_SCREEN, S_SET_RADIO, S_SET_BT, S_SET_WIFI, S_WIFI_KEYS,
-              S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT,
+              S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
-              S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_SET_VOLUME, S_TASKS, S_NONE };
+              S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
+              S_INFO_MORE, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -101,18 +110,19 @@ struct Btn {
 };
 
 // Values of the screens' switches, segmented choices and two text fields: demo ones, except the settings kept
-// in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_SOUND, G_WPROV, G_CAMDIST: see CfgToControls).
+// in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_SAVER, T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SUBTITLES, T_SLIDES_OPEN, T_AUTOROTATE, T_MUTED,
-       T_W_GPS, T_CLIMATE, T_CAM_ALERT, T_CAM_SOUND, T_CAM_WEEKLY, T_COUNT };
+       T_W_GPS, T_CLIMATE, T_CAM_ALERT, T_CAM_WEEKLY, T_RVC_OWN, T_WIFI_AP_AUTO, T_MS, T_WIFI_HOLD, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, true, false, true, false, true, true, true, true, false,
                               true, false, true, false, true, true };
 enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_FMT, G_PHOTO_SCALE, G_CALLS,
-       G_WPROV, G_CAMDIST, G_COUNT };
+       G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 2, 0, 1, 2, 2, 1, 0, 0, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
 enum { K_WKEY, K_HOMENAME, K_HOMECOORD };   // settings typed on the keyboard (A_KEYS)
-static wchar_t s_dial[20] = L"+7 912 345-67-8";
+static wchar_t s_dial[20];          // the number typed on the phone's keypad
+static wchar_t s_callOut[20];       // the number dialled from VestaHome (the stack does not tell it back)
 static wchar_t s_pass[24] = L"vesta2026";
 
 static Screen s_screen = S_HOME;
@@ -129,15 +139,24 @@ static int   kBtnCount;
 struct Img { int w, h; unsigned char* px; };
 static Img     s_icons[IC_COUNT][2];   // [1] = pressed variant
 static wchar_t s_skinBg[MAX_PATH];     // main menu background picture, optional
+static wchar_t s_skinSaver[MAX_PATH];  // the screen saver's picture, optional
 
 static HWND    s_wnd;
 static HBITMAP s_back;          // whole frame, drawn off-screen
 static HBITMAP s_bg;            // the skin's main menu background picture, only if it gives one (750 KB)
 static unsigned short* s_backBits;   // their pixels: RGB565, bottom-up, 800 per row
 static unsigned short* s_bgBits;
+static HBITMAP s_saverBg;       // the screen saver's picture: loaded while it shows (750 KB)
+static unsigned short* s_saverBits;
 static unsigned short* s_tile[2];    // one period of the triangle mosaic (kTileW x kTileH, top-down), day / night
 static int     s_pressed = -1;
 static bool    s_night;
+static int     s_mcuNight = -1, s_bright = -1;   // the backlight: 0x4105 day / night, 0x4107 level
+// A partial frame (RedrawArea): everything is drawn clipped to s_clip, the buttons are not registered again
+// (the layout is the same), only the area goes to the screen and only when its pixels changed.
+static RECT    s_clip = { 0, 0, 800, 480 };
+static bool    s_partial;
+static int     s_zoneIdx;   // the buttons counted during a partial frame (for the pressed look)
 static wchar_t s_dir[MAX_PATH];
 
 // Events log VestaHome.log - on the unit only on the SD card / USB disk (VestaCore LogDir: VestaLogs folder), never
@@ -507,6 +526,14 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.Line(d, 3);
         break;
     }
+    case IC_SD: {   // a memory card: the cut corner, the contacts
+        double v[] = { 18, 6, 38, 6, 38, 42, 10, 42, 10, 14, 18, 6 };
+        p.Line(v, 6);
+        p.L2(19, 12, 19, 19);
+        p.L2(25, 12, 25, 19);
+        p.L2(31, 12, 31, 19);
+        break;
+    }
     case IC_LIST:
         p.L2(16, 12, 42, 12);
         p.L2(16, 24, 42, 24);
@@ -722,6 +749,11 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.Line(v, 3);
         break;
     }
+    case IC_DOWN: {
+        double v[] = { 9, 17, 24, 32, 39, 17 };
+        p.Line(v, 3);
+        break;
+    }
     case IC_CAR: {   // side view: roof and bonnet, two wheels
         double v[] = { 8.5, 33, 4, 33, 4, 25, 10, 23, 16, 13, 32, 13, 39, 23, 44, 25, 44, 33, 39.5, 33 };
         p.Line(v, 10);
@@ -781,7 +813,7 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
 #endif
     for (int dy = 0; dy < h; dy++) {
         int py = y + dy;
-        if (py < 0 || py >= 480)
+        if (py < s_clip.top || py >= s_clip.bottom)
             continue;
         int fy = (2 * dy + 1) * im.h * 128 / h - 128;   // source position, 8-bit fraction
         if (fy < 0)
@@ -792,7 +824,7 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
         unsigned short* dst = s_backBits + (479 - py) * 800;
         for (int dx = 0; dx < w; dx++) {
             int px = x + dx;
-            if (px < 0 || px >= 800)
+            if (px < s_clip.left || px >= s_clip.right)
                 continue;
             int fx = (2 * dx + 1) * im.w * 128 / w - 128;
             if (fx < 0)
@@ -859,11 +891,11 @@ static char* ReadAll(const wchar_t* path, DWORD* size)
     return buf;
 }
 
-// The skin's 800 x 480 background picture (as is: night dims it when a frame is drawn).
-static bool LoadBackground()
+// A skin's 800 x 480 picture into bits (as is: night dims it when a frame is drawn).
+static bool LoadBackground(const wchar_t* path, unsigned short* bits)
 {
     DWORD size;
-    char* data = ReadAll(s_skinBg, &size);
+    char* data = ReadAll(path, &size);
     if (!data)
         return false;
     int w, h, comp;
@@ -872,7 +904,7 @@ static bool LoadBackground()
     if (!rgb)
         return false;
     for (int y = 0; y < 480; y++) {
-        unsigned short* dst = s_bgBits + (479 - y) * 800;
+        unsigned short* dst = bits + (479 - y) * 800;
         for (int x = 0; x < 800; x++) {
             COLORREF c = kInk;
             if (x < w && y < h) {
@@ -923,7 +955,7 @@ static void BuildBackground()
     }
     if (s_skinBg[0]) {
         s_bg = MakeDib(800, 480, &s_bgBits);
-        if (s_bg && !LoadBackground()) {
+        if (s_bg && !LoadBackground(s_skinBg, s_bgBits)) {
             DeleteObject(s_bg);
             s_bg = NULL;
         }
@@ -939,11 +971,18 @@ static void Pattern(int top, int bottom, int anchor)
 #ifndef UNDER_CE
     GdiFlush();
 #endif
+    if (top < s_clip.top)
+        top = s_clip.top;
+    if (bottom > s_clip.bottom)
+        bottom = s_clip.bottom;
     for (int y = top; y < bottom; y++) {
         const unsigned short* src = t + ((y - anchor) % kTileH) * kTileW;
         unsigned short* dst = s_backBits + (479 - y) * 800;
-        for (int x = 0; x < 800; x += kTileW)
-            memcpy(dst + x, src, (x + kTileW <= 800 ? kTileW : 800 - x) * 2);
+        for (int x = s_clip.left; x < s_clip.right;) {
+            int o = x % kTileW, n = kTileW - o < s_clip.right - x ? kTileW - o : s_clip.right - x;
+            memcpy(dst + x, src + o, n * 2);
+            x += n;
+        }
     }
 }
 
@@ -968,6 +1007,22 @@ static void SubBackground(HDC dc)
     Pattern(56, 480, 56);
 }
 
+// A full-screen picture into the frame, a third darker with the night theme (as C()).
+static void BlitNight(HDC dc, HBITMAP bmp)
+{
+    Blit(dc, bmp);
+    if (s_night) {
+#ifndef UNDER_CE
+        GdiFlush();
+#endif
+        for (int y = s_clip.top; y < s_clip.bottom; y++) {
+            unsigned short* row = s_backBits + (479 - y) * 800;
+            for (int x = s_clip.left; x < s_clip.right; x++)
+                row[x] = Dim565(row[x]);
+        }
+    }
+}
+
 // The main screen: the skin's background picture (dimmed per frame at night), otherwise the same as the others.
 static void MainBackground(HDC dc)
 {
@@ -975,13 +1030,31 @@ static void MainBackground(HDC dc)
         SubBackground(dc);
         return;
     }
-    Blit(dc, s_bg);
-    if (s_night) {
-#ifndef UNDER_CE
-        GdiFlush();
-#endif
-        for (int i = 0; i < 800 * 480; i++)
-            s_backBits[i] = Dim565(s_backBits[i]);
+    BlitNight(dc, s_bg);
+}
+
+// The screen saver's picture: loaded on its first frame, freed when it closes (SaverFree); none - plain dark.
+static void SaverBackground(HDC dc)
+{
+    if (!s_saverBg && s_skinSaver[0]) {
+        s_saverBg = MakeDib(800, 480, &s_saverBits);
+        if (s_saverBg && !LoadBackground(s_skinSaver, s_saverBits)) {
+            DeleteObject(s_saverBg);
+            s_saverBg = NULL;
+            s_skinSaver[0] = 0;   // not again
+        }
+    }
+    if (s_saverBg)
+        BlitNight(dc, s_saverBg);
+    else
+        Fill(dc, 0, 0, 800, 480, kInk);
+}
+
+static void SaverFree()
+{
+    if (s_saverBg) {
+        DeleteObject(s_saverBg);
+        s_saverBg = NULL;
     }
 }
 
@@ -1023,14 +1096,40 @@ static int TextWidth(HDC dc, const wchar_t* s, int size, int weight)
 
 enum { AL_START, AL_MID, AL_END };
 
+// s cut to fit maxw with an ellipsis at its end (into out, cap characters); returns its width.
+static int Ellipsize(HDC dc, const wchar_t* s, int size, int weight, int maxw, wchar_t* out, int cap)
+{
+    int n = (int)wcslen(s);
+    if (n > cap - 2)
+        n = cap - 2;
+    for (;;) {
+        wcsncpy(out, s, n);
+        out[n] = 0;
+        while (n > 0 && out[n - 1] == L' ')
+            out[--n] = 0;
+        if (n < (int)wcslen(s))
+            wcscat(out, L"…");
+        int w = TextWidth(dc, out, size, weight);
+        if (w <= maxw || n == 0)
+            return w;
+        n--;
+    }
+}
+
 // Text like SVG <text>: baseline at y, anchored at its start, middle or end. A line wider than maxw
-// (0 = no limit) is set smaller until it fits: Tahoma is wider than the mockups' font. Returns its right edge.
+// (0 = no limit) is set smaller until it fits: Tahoma is wider than the mockups' font; still too wide at 10 px,
+// it is cut with an ellipsis. Returns its right edge.
 static int T(HDC dc, int x, int y, const wchar_t* s, int size, COLORREF c, int weight = 600, int anchor = AL_START,
              int maxw = 0)
 {
     int w = TextWidth(dc, s, size, weight);
     while (maxw > 0 && w > maxw && size > 10)
         w = TextWidth(dc, s, --size, weight);
+    wchar_t cut[256];
+    if (maxw > 0 && w > maxw) {
+        w = Ellipsize(dc, s, size, weight, maxw, cut, 256);
+        s = cut;
+    }
     int left = anchor == AL_MID ? x - w / 2 : anchor == AL_END ? x - w : x;
     HGDIOBJ of = SelectObject(dc, Font(size, weight));
     SetTextAlign(dc, TA_LEFT | TA_BASELINE);
@@ -1040,6 +1139,76 @@ static int T(HDC dc, int x, int y, const wchar_t* s, int size, COLORREF c, int w
     SetTextAlign(dc, TA_LEFT | TA_TOP);
     SelectObject(dc, of);
     return left + w;
+}
+
+// A widget's status or error: words wrapped into up to `lines` lines of maxw (the size kept), the last one cut
+// with an ellipsis; baselines y, y + lineH, ... Returns the lines used.
+static int TWrap(HDC dc, int x, int y, const wchar_t* s, int size, COLORREF c, int weight, int maxw, int lines,
+                 int lineH)
+{
+    wchar_t line[256];
+    int used = 0;
+    while (*s && used < lines) {
+        while (*s == L' ')
+            s++;
+        int n = (int)wcslen(s), take = n;
+        if (used < lines - 1 && TextWidth(dc, s, size, weight) > maxw) {   // the longest start up to a space
+            take = 0;
+            for (int i = 1; i <= n && i < 255; i++) {
+                if (i < n && s[i] != L' ')
+                    continue;
+                wcsncpy(line, s, i);
+                line[i] = 0;
+                if (TextWidth(dc, line, size, weight) > maxw)
+                    break;
+                take = i;
+            }
+            if (!take)   // one long word: cut it on the last line's terms
+                take = n;
+        }
+        if (take > 255)
+            take = 255;
+        wcsncpy(line, s, take);
+        line[take] = 0;
+        wchar_t cut[256];
+        const wchar_t* out = line;
+        if (TextWidth(dc, line, size, weight) > maxw) {   // the last line (or one long word): cut, same size
+            Ellipsize(dc, line, size, weight, maxw, cut, 256);
+            out = cut;
+        }
+        T(dc, x, y + used * lineH, out, size, c, weight);
+        s += take;
+        used++;
+        if (used == lines)
+            break;
+    }
+    return used;
+}
+
+// A running line (as the stock shell shows the station and the song): a text wider than w goes round inside
+// x..x+w, s_marq px along (TIMER_MARQ moves it while the radio screen is in front); a shorter one stands still.
+enum { TIMER_MARQ = 10, kMarqMs = 300, kMarqStep = 16, kMarqGap = 60 };
+static int  s_marq;          // how far the running lines have gone
+static bool s_marqOn;        // a line of this frame did not fit: keep the timer going
+
+static void Marquee(HDC dc, int x, int y, int w, const wchar_t* s, int size, COLORREF c, int weight)
+{
+    int tw = TextWidth(dc, s, size, weight);
+    if (tw <= w) {
+        T(dc, x, y, s, size, c, weight);
+        return;
+    }
+    s_marqOn = true;
+    int off = s_marq % (tw + kMarqGap);
+    RECT r = { x, y - size * 5 / 4, x + w, y + size / 2 };
+    HGDIOBJ of = SelectObject(dc, Font(size, weight));
+    SetTextAlign(dc, TA_LEFT | TA_BASELINE);
+    SetTextColor(dc, C(c));
+    SetBkMode(dc, TRANSPARENT);
+    ExtTextOut(dc, x - off, y, ETO_CLIPPED, &r, s, (int)wcslen(s), NULL);
+    ExtTextOut(dc, x - off + tw + kMarqGap, y, ETO_CLIPPED, &r, s, (int)wcslen(s), NULL);
+    SetTextAlign(dc, TA_LEFT | TA_TOP);
+    SelectObject(dc, of);
 }
 
 // Rounded rectangle like SVG <rect rx>: fill and 2 px stroke, CLR_INVALID = none.
@@ -1160,12 +1329,12 @@ static void TriFill(int x, int y, int w, int h, int rx)
     for (int k = 0; k < 4; k++)
         sh[k] = Px(kTriOr[k]);
     for (int py = y; py < y + h; py++) {
-        if (py < 0 || py >= 480)
+        if (py < s_clip.top || py >= s_clip.bottom)
             continue;
         unsigned short* row = s_backBits + (479 - py) * 800;
         int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
         for (int px = x; px < x + w; px++) {
-            if (px < 0 || px >= 800)
+            if (px < s_clip.left || px >= s_clip.right)
                 continue;
             int dx = px < x + rx ? x + rx - px : px >= x + w - rx ? px - (x + w - rx - 1) : 0;
             if (dx && dy && dx * dx + dy * dy > rx * rx)
@@ -1182,11 +1351,13 @@ static void Shade(int x, int y, int w, int h, int a0, int a1)
     GdiFlush();
 #endif
     COLORREF ink = C(kInk);
-    for (int py = y; py < y + h && py < 480; py++) {
+    for (int py = y; py < y + h && py < s_clip.bottom; py++) {
+        if (py < s_clip.top)
+            continue;
         int a = a0 + (a1 - a0) * (py - y) / (h > 1 ? h - 1 : 1);
         int ir = GetRValue(ink) * a, ig = GetGValue(ink) * a, ib = GetBValue(ink) * a;
         unsigned short* row = s_backBits + (479 - py) * 800;
-        for (int px = x; px < x + w && px < 800; px++) {
+        for (int px = x > s_clip.left ? x : s_clip.left; px < x + w && px < s_clip.right; px++) {
             unsigned p = row[px];
             int r = (((p >> 8) & 0xF8) * (255 - a) + ir) / 255;
             int g = (((p >> 3) & 0xFC) * (255 - a) + ig) / 255;
@@ -1201,6 +1372,8 @@ static void Shade(int x, int y, int w, int h, int a0, int a1)
 // Registers a button of the current screen; true while it is pressed.
 static bool Zone(int x, int y, int w, int h, Action a, int arg = 0)
 {
+    if (s_partial)   // the buttons of the full frame stay; only the pressed look is told
+        return s_zoneIdx++ == s_pressed;
     if (kBtnCount >= kMaxBtns)
         return false;
     Btn& b = s_btns[kBtnCount];
@@ -1419,36 +1592,101 @@ static void Now(wchar_t* s, int n)
 }
 
 // Top bar of every screen: back button (when there is a screen to go back to, or a given action) and title,
-// the last action's result, then the status marks (GPS, Bluetooth, USB), the outside temperature and the clock.
+// the last action's result, then the status marks (GPS, Bluetooth, USB), the volume (MCU) and the clock.
 // A main screen may put one action button of its own before the marks (act). Demo: the Bluetooth mark opens
 // the incoming call window, the clock the volume window. VestaHome is closed from the settings' diagnostics.
 static bool OutsideTemp(int* t);
+static bool VolGet(int* vol, int* mute, int* src);
 static bool CamChip(wchar_t* s, int n);
 static bool HvacChip(wchar_t* s, int n);
 static DWORD s_hvacShowTick;   // a climate change came: its plate shows in the top bar for 4 s
+
+static bool GpsHasFix();
+static int  s_mediaMask;   // 1: an SD card in its slot, 2: a USB disk (MediaCheck, once a second)
+
+static int MediaMask()
+{
+    int m = 0;
+    DWORD a = GetFileAttributes(L"\\SDMemory");
+    if (a != 0xFFFFFFFF && (a & FILE_ATTRIBUTE_DIRECTORY))
+        m |= 1;
+    static const wchar_t* usb[3] = { L"\\USBDisk", L"\\USBDevice", L"\\USB Disk" };
+    for (int i = 0; i < 3; i++) {
+        a = GetFileAttributes(usb[i]);
+        if (a != 0xFFFFFFFF && (a & FILE_ATTRIBUTE_DIRECTORY))
+            m |= 2;
+    }
+    return m;
+}
+
+// The status marks of the top bar, right to left from `end`: the USB disk and the SD card (only when there),
+// Wi-Fi (orange when connected, dim when not; Settings -> Wi-Fi), Bluetooth (orange with a phone connected), GPS (orange
+// with a fix). The ones that would reach left of minLeft are left out. Returns the left edge.
+struct BtState;
+static bool BtGet(BtState* st, LONG* seq);
+
+static int StatusMarks(HDC dc, int end, int minLeft)
+{
+    BtState bt;
+    bool btOn = BtGet(&bt, NULL) && (bt.hf == 2 || bt.av >= 1);   // a phone connected (proxy Bluetooth)
+    WifiInfo w;
+    WifiGet(&w);
+    struct Mark { Icon ic; COLORREF c; bool shown; Action a; int arg; };
+    Mark m[5] = {
+        { IC_USB, kOrange, (s_mediaMask & 2) != 0, A_NONE, 0 },
+        { IC_SD, kOrange, (s_mediaMask & 1) != 0, A_NONE, 0 },
+        { IC_WIFI, w.state == WIFI_CONNECTED ? kOrange : kDim, w.state >= WIFI_DISCONNECTED, A_NAV, S_SET_WIFI },
+        { IC_BT, btOn ? kOrange : kDim, true, A_NAV, S_PHONE },
+        { IC_NAV, GpsHasFix() ? kOrange : kMuted, true, A_NONE, 0 } };
+    int x = end;
+    for (int i = 0; i < 5; i++) {
+        if (!m[i].shown)
+            continue;
+        if (x - 36 < minLeft)
+            break;
+        x -= 36;
+        bool d = m[i].a != A_NONE && Zone(x - 4, 4, 38, 48, m[i].a, m[i].arg);
+        if (d)
+            R(dc, x - 4, 4, 38, 48, 10, kOrange);
+        Ico(dc, m[i].ic, x + 1, 14, 28, d ? kInk : m[i].c);
+    }
+    return x;
+}
 
 static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act = IC_NONE, Action a = A_NONE,
                   bool sel = false, Icon act2 = IC_NONE, Action a2 = A_NONE, int arg2 = 0)
 {
     Sep(dc, 0, 54, 800);
-    Ico(dc, IC_NAV, 546, 16, 24, kMuted);
-    bool d = Zone(576, 4, 44, 48, A_SCREEN, S_INCOMING);
-    if (d)
-        R(dc, 576, 4, 44, 48, 10, kOrange);
-    Ico(dc, IC_BT, 584, 14, 28, d ? kInk : kMuted);
-    Ico(dc, IC_USB, 622, 14, 28, kMuted);
-    int temp;
+    int vol, mute, src, marksEnd;
     wchar_t s[40];
-    if (OutsideTemp(&temp)) {   // the car's sensor (MCU, through the proxy), otherwise the weather
-        _snwprintf(s, 8, L"%+d°", temp);
-        T(dc, 700, 36, s, 18, kMuted, 600, AL_END);
+    {   // the volume (MCU, through the proxy): a speaker and the level, "–" before the first value; opens its window
+        bool have = VolGet(&vol, &mute, &src);
+        if (!have)
+            wcscpy(s, L"–");
+        else if (mute)
+            wcscpy(s, L"×");
+        else
+            _snwprintf(s, 8, L"%d", vol);
+        int w = TextWidth(dc, s, 18, 600);
+        int x0 = 700 - w - 30;
+        bool dv = Zone(x0 - 4, 4, w + 38, 48, A_SCREEN, S_VOLUME);
+        if (dv)
+            R(dc, x0 - 4, 4, w + 38, 48, 10, kOrange);
+        COLORREF c = dv ? kInk : have && !mute ? kMuted : kDim;
+        Ico(dc, IC_VOL, x0, 16, 24, c);
+        T(dc, 700, 36, s, 18, c, 600, AL_END);
+        marksEnd = x0 - 8;
     }
+    int marksLeft = StatusMarks(dc, marksEnd, act != IC_NONE ? 540 : 0);
+    bool d;
     Now(s, 8);
     d = Zone(706, 4, 90, 48, A_SCREEN, S_VOLUME);
     if (d)
         R(dc, 706, 4, 90, 48, 10, kOrange);
     T(dc, 784, 38, s, 26, d ? kInk : kText, 600, AL_END);
     int x = 20, right = act != IC_NONE ? 470 : 530;
+    if (right > marksLeft - 12)
+        right = marksLeft - 12;
     if (act != IC_NONE)
         Button(dc, 478, 6, 56, 44, NULL, sel ? B_SEL : B_N, act, 18, 28, a);
     if (act2 != IC_NONE) {   // a second one to its left
@@ -1492,7 +1730,7 @@ static int Section(Screen s)
         return 0;
     case S_RADIO:
         return 1;
-    case S_AUDIO: case S_AUDIO_BT: case S_AUX: case S_VIDEO: case S_PHOTO:
+    case S_AUDIO: case S_NETRADIO: case S_AUDIO_BT: case S_AUX: case S_VIDEO: case S_PHOTO:
         return 2;
     case S_PHONE:
         return 3;
@@ -1660,16 +1898,16 @@ static void Cover(HDC dc, Icon ic, int x, int y, int s)
     Ico(dc, ic, x + (s - isz) / 2, y + (s - isz) / 2, isz, Mix(kInk, kTriOr[1], 140));
 }
 
-// Sources of the media main screens as tabs on top (music from USB, Bluetooth, AUX, video, photo), then up to
-// two buttons of the source: its own (list, player, slides) and its settings.
+// Sources of the media main screens as tabs on top (music from USB, internet radio, Bluetooth, AUX, video,
+// photo), then up to two buttons of the source: its own (list, player, slides) and its settings.
 static void MediaTabs(HDC dc, Screen active, Icon ic, Action a, int arg, Screen settings)
 {
-    static const Tab tabs[5] = { { IC_MUSIC, L"МУЗЫКА", S_AUDIO }, { IC_BT, L"BLUETOOTH", S_AUDIO_BT },
-                                 { IC_AUX, L"AUX", S_AUX }, { IC_VIDEO, L"ВИДЕО", S_VIDEO },
-                                 { IC_PHOTO, L"ФОТО", S_PHOTO } };
-    for (int i = 0; i < 5; i++) {
+    static const Tab tabs[6] = { { IC_MUSIC, L"МУЗЫКА", S_AUDIO }, { IC_RADIO, L"ИНТЕРНЕТ", S_NETRADIO },
+                                 { IC_BT, L"BLUETOOTH", S_AUDIO_BT }, { IC_AUX, L"AUX", S_AUX },
+                                 { IC_VIDEO, L"ВИДЕО", S_VIDEO }, { IC_PHOTO, L"ФОТО", S_PHOTO } };
+    for (int i = 0; i < 6; i++) {
         bool on = tabs[i].to == active;
-        Button(dc, 16 + i * 118, 64, 112, 48, tabs[i].label, on ? B_SEL : B_N, IC_NONE, 15, 0, on ? A_NONE : A_TAB,
+        Button(dc, 16 + i * 99, 64, 95, 48, tabs[i].label, on ? B_SEL : B_N, IC_NONE, 14, 0, on ? A_NONE : A_TAB,
                tabs[i].to);
     }
     if (ic != IC_NONE)
@@ -1677,24 +1915,113 @@ static void MediaTabs(HDC dc, Screen active, Icon ic, Action a, int arg, Screen 
     Button(dc, 704, 64, 80, 48, NULL, B_N, IC_GEAR, 18, 30, A_SCREEN, settings);
 }
 
+// ---- the shell's Bluetooth through our proxy of FLC_BLUETOOTH_SDK.dll (SPIPower/bt, btshm.h): its state as the
+// stack reports it, and commands the proxy carries out in the shell's process. Without the proxy the mapping is
+// ours and empty (magic 0): the screens say so.
+static BtShm* s_bt;
+
+static BtShm* BtShmGet()
+{
+    if (!s_bt) {
+        HANDLE m = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(BtShm), BT_SHM_NAME);
+        if (m)
+            s_bt = (BtShm*)MapViewOfFile(m, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(BtShm));
+    }
+    return s_bt;
+}
+
+// The state; false = no proxy (or its original SDK did not load). seq: the state's version, for "changed?".
+static bool BtGet(BtState* st, LONG* seq)
+{
+    BtShm* b = BtShmGet();
+    memset(st, 0, sizeof(*st));
+    st->av = st->avrcp = st->hf = st->hfAudio = st->battery = st->signal = -1;
+    if (!b || b->magic != BT_SHM_MAGIC || !b->origOk)
+        return false;
+    for (int tries = 0; tries < 10; tries++) {
+        LONG a = b->seq;
+        if (a & 1) {
+            Sleep(1);
+            continue;
+        }
+        *st = b->st;
+        if (b->seq == a) {
+            if (seq)
+                *seq = a + b->evSeq;
+            return true;
+        }
+    }
+    return true;   // a copy taken while it changed: good enough for a screen
+}
+
+static void BtCmd(int cmd)
+{
+    BtShm* b = BtShmGet();
+    if (!b || b->magic != BT_SHM_MAGIC)
+        return;
+    b->cmd = cmd;
+    InterlockedIncrement((LONG*)&b->cmdSeq);
+    static HANDLE s_ev;
+    if (!s_ev)
+        s_ev = CreateEvent(NULL, FALSE, FALSE, BT_CMD_EVENT);
+    if (s_ev)
+        SetEvent(s_ev);
+}
+
+static void BtText(const char* u8, wchar_t* w, int cap)   // the stack's texts are UTF-8
+{
+    if (!MultiByteToWideChar(CP_UTF8, 0, u8, -1, w, cap))
+        MultiByteToWideChar(CP_ACP, 0, u8, -1, w, cap);
+    w[cap - 1] = 0;
+}
+
 // ---- screens
 
-struct Station { int f10; const wchar_t* freq; const wchar_t* shortName; const wchar_t* name; };
-static const Station kPresets[7] = {
-    { 1017, L"101.7", L"Хит FM", L"Хит FM" }, { 1025, L"102.5", L"Маяк", L"Маяк" },
-    { 1062, L"106.2", L"Европа+", L"Европа Плюс" },
-    { 1043, L"104.3", L"Авторадио", L"Авторадио" }, { 1074, L"107.4", L"Рок", L"Радио Рок" },
-    { 883, L"88.3", L"Ретро", L"Ретро FM" },
-    { 992, L"99.2", L"Вести FM", L"Вести FM" } };
+enum { RSET_NOISE, RSET_MW, RSET_RDS, RSET_AF, RSET_CT, RSET_TA, RSET_MS, RSET_COUNT };
+
+// The tuner as the MCU reports it (mcu.log 2026-10-16/17, PROJECT.md): 0x0901 00 00 <freq BE, 10 kHz>; 0x0908 00 01
+// <from> <to> <count> + 8 frequencies (presets in blocks of 8: FM1..FM3 = 24, the low band "УКВ" from 65 MHz = 8);
+// 0x0907 00 01 <the preset playing, FF none>; 0x090B 00 00 00 + RDS PS (8 chars); 0x0931 00 00 00 <part> + RadioText.
+// More (SPIPower.log 2026-10-18-2): 0x0901 00 <band: 0 FM, 1 УКВ> <freq>; the station list after the list key 0x3C -
+// 0x0908 00 00 <from> <to> <count> + frequencies (up to 30) and 0x0930 00 <from> <to> <count> + 4 names x 8 chars;
+// 0x0904 00 <flag> <0/1> (all of them after 0x30; flag 01 is set when a search starts).
+enum { kTunList = 30 };
+struct Tuner {
+    int     f10;              // MHz * 100, 0 = not seen yet
+    int     band;             // 0 FM, 1 УКВ, -1 not seen
+    DWORD   fTick;            // when the frequency last changed (a search runs while it keeps changing)
+    int     list[kTunList], listCount;   // the station list (after 0x3C), MHz * 100
+    wchar_t listName[kTunList][9];
+    int     flags[8];         // 0x0904
+    int     preset[24];       // the same units, 0 = empty
+    int     presets;          // how many the band has (24 FM, 8 УКВ), 0 = not seen
+    int     cur;              // the preset playing, -1 none
+    wchar_t ps[9], rt[2][33];
+    int     set[7];           // the radio's settings (RSET_*): 0 / 1, as the MCU reports them
+    int     setKnown;         // which of them came (bit 1 << RSET_*)
+};
+static void TunerGet(Tuner* t);
+static const wchar_t* RadioName(const Tuner& t, int f10);   // a station's name, "" when not known
+static void McuKey(int code, bool ext);
+static void RadioPreset(int i);
+static bool McuSend3(const char* name, int a, int b, int c);
+static bool VolGet(int* vol, int* mute, int* src);
+
+static void FreqText(int f10, wchar_t* s, int n)   // 9840 -> "98.4", 10625 -> "106.25"
+{
+    if (f10 <= 0)
+        wcscpy(s, L"—");
+    else if (f10 % 10)
+        _snwprintf(s, n, L"%d.%02d", f10 / 100, f10 % 100);
+    else
+        _snwprintf(s, n, L"%d.%d", f10 / 100, f10 % 100 / 10);
+}
 
 static void RadioDock(HDC dc, bool listOn)
 {
     Dock(dc);
-    Button(dc, 16, 410, 96, 58, L"FM", B_SEL);
-    Button(dc, 120, 410, 96, 58, L"AM", B_N);
-    IconBtn(dc, IC_PREV, 268, 417, 44, kText);
-    Button(dc, 344, 410, 112, 58, L"ПОИСК", B_N);
-    IconBtn(dc, IC_FWD, 488, 417, 44, kText);
+    IconBtn(dc, IC_PREV, 268, 417, 44, kText, A_RKEY, 0x13B);
+    IconBtn(dc, IC_FWD, 488, 417, 44, kText, A_RKEY, 0x13C);
     if (listOn) {   // the list is open: its button is selected and closes it
         bool d = Zone(590, 410, 64, 58, A_BACK);
         R(dc, 590, 410, 64, 58, 10, d ? kOrange : kPanel2);
@@ -1705,76 +2032,233 @@ static void RadioDock(HDC dc, bool listOn)
     IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_RADIO);
 }
 
-// Radio, a main screen: the station panel, its controls in a row, eight presets.
+// Radio, a main screen, on the MCU's tuner (s_tun): the frequency, RDS name and text, the presets. FM's 24 presets
+// are three local pages (FM1..FM3: tabs and a swipe, the MCU sends all 24 at once and does not care); УКВ has one.
+// A preset tap tunes it (SPApi_SendListItemControl(1, n)), a long press saves the station there ((1, n, 1), the
+// shell's own, MCU 0x0909); seek - the extended keys; the band button toggles FM / УКВ (RadioBand). Opening the
+// screen with nothing known asks the MCU (0x30, as the shell's screen does).
+static int s_radioPage;          // FM's page 0..2
+static int s_bandWant = -1;      // RadioBand: the band asked for, -1 none
+static int s_bandPresses;
+static DWORD s_bandTick;
+
 static void ScrRadio(HDC dc)
 {
-    const Station& st = kPresets[s_seg[G_PRESET] < 7 ? s_seg[G_PRESET] : 2];
+    Tuner t;
+    TunerGet(&t);
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {   // opened: the page of the preset playing; nothing known - ask
+        s_seen = s_screenTick;
+        if (t.cur >= 0 && t.cur < 24 && t.band != 1)
+            s_radioPage = t.cur / 8;
+        if (!t.f10 || !t.presets)
+            McuKey(0x30, false);
+    }
+    wchar_t f[16], band[8];
+    FreqText(t.f10, f, 16);
+    bool low = t.band == 1 || (t.band < 0 && t.f10 > 0 && t.f10 < 8750);   // the OIRT band, 65..74 MHz
+    int page = low ? 0 : s_radioPage;
+    if (low)
+        wcscpy(band, L"УКВ");
+    else
+        _snwprintf(band, 8, L"FM %d", page + 1);
+    const wchar_t* name = t.ps[0] ? t.ps : RadioName(t, t.f10);
     Frame(dc, L"РАДИО");
     Panel(dc, 16, 64, 768, 128);
-    T(dc, 40, 146, st.freq, 80, kText, 700, AL_START, 250);
-    T(dc, 300, 100, L"FM 1", 20, kOrange, 700);
-    T(dc, 300, 130, st.name, 28, kText, 600, AL_START, 340);
-    T(dc, 300, 156, L"RDS · Хиты нон-стоп", 17, kMuted, 400);
-    R(dc, 660, 82, 104, 30, 15, CLR_INVALID, kMuted);
-    T(dc, 712, 103, L"СТЕРЕО", 15, kMuted, 600, AL_MID);
-    for (int i = 0; i <= 20; i++) {   // tuning scale 87.5..108 over x 40..740
+    T(dc, 40, 146, f, 80, t.f10 ? kText : kDim, 700, AL_START, 250);
+    T(dc, 300, 100, t.f10 ? band : L"нет данных — включаю радио…", 20, t.f10 ? kOrange : kDim, 700, AL_START, 460);
+    Marquee(dc, 300, 130, 460, name, 28, kText, 600);
+    wchar_t rt[68];
+    _snwprintf(rt, 68, L"%s%s", t.rt[0], t.rt[1]);
+    rt[67] = 0;
+    Marquee(dc, 300, 156, 460, rt, 17, kMuted, 400);
+    if (s_marqOn)
+        SetTimer(s_wnd, TIMER_MARQ, kMarqMs, NULL);   // (again: the same timer, restarted)
+    int lo = low ? 6500 : 8750, hi = low ? 7400 : 10800;
+    for (int i = 0; i <= 20; i++) {   // tuning scale over x 40..740
         int x = 40 + i * 35, h = i % 2 ? 5 : 8;
         Fill(dc, x - 1, 182 - h, x + 1, 182, kDim);
     }
-    int mark = 40 + (st.f10 - 875) * 700 / 205;
-    R(dc, mark - 2, 168, 4, 18, 2, kOrange);
-    Button(dc, 16, 200, 96, 52, L"FM", B_SEL);
-    Button(dc, 120, 200, 96, 52, L"AM", B_N);
-    Button(dc, 232, 200, 80, 52, NULL, B_N, IC_PREV, 18, 30);
-    Button(dc, 320, 200, 144, 52, L"ПОИСК", B_N, IC_SEARCH, 17);
-    Button(dc, 472, 200, 80, 52, NULL, B_N, IC_FWD, 18, 30);
+    if (t.f10 >= lo && t.f10 <= hi) {
+        int mark = 40 + (t.f10 - lo) * 700 / (hi - lo);
+        R(dc, mark - 2, 168, 4, 18, 2, kOrange);
+    }
+    Button(dc, 16, 200, 80, 52, NULL, B_N, IC_PREV, 18, 30, A_RKEY, 0x13B);    // seek down
+    Button(dc, 104, 200, 80, 52, NULL, B_N, IC_FWD, 18, 30, A_RKEY, 0x13C);    // seek up
+    Button(dc, 200, 200, 104, 52, s_bandWant >= 0 ? L"…" : low ? L"УКВ" : L"FM", B_N, IC_NONE, 18, 0, A_RBAND);
+    if (!low)   // FM's pages
+        for (int i = 0; i < 3; i++) {
+            wchar_t tab[8];
+            _snwprintf(tab, 8, L"FM%d", i + 1);
+            Button(dc, 320 + i * 88, 200, 80, 52, tab, i == page ? B_ACT : B_N, IC_NONE, 16, 0, A_RPAGE, i);
+        }
     Button(dc, 600, 200, 88, 52, NULL, B_N, IC_LIST, 18, 32, A_SCREEN, S_RADIO_LIST);
     Button(dc, 696, 200, 88, 52, NULL, B_N, IC_GEAR, 18, 32, A_SCREEN, S_SET_RADIO);
-    for (int i = 0; i < 8; i++) {   // presets 4 x 2; the last slot is empty
-        int x = 16 + (i % 4) * 194, y = 264 + (i / 4) * 72;
-        bool down = Zone(x, y, 182, 64, i < 7 ? A_SEG : A_NONE, G_PRESET * 16 + i);
-        if (i == 7) {
-            if (down)
-                R(dc, x, y, 182, 64, 12, kOrange);
-            else
-                DashRect(dc, x, y, 182, 64, 12, kLine);
-            T(dc, x + 91, y + 40, L"ЗАПОМНИТЬ", 16, down ? kInk : kDim, 600, AL_MID);
-            continue;
-        }
-        bool cur = down || s_seg[G_PRESET] == i;
-        wchar_t n[4];
-        _snwprintf(n, 4, L"%d", i + 1);
+    for (int i = 0; i < 8; i++) {   // the page's presets, 4 x 2: the frequency and the name
+        int x = 16 + (i % 4) * 194, y = 264 + (i / 4) * 72, n = page * 8 + i;
+        int pf = n < 24 ? t.preset[n] : 0;
+        bool have = t.presets > 0 && pf > 0;
+        bool down = Zone(x, y, 182, 64, t.presets > 0 ? A_PRESET : A_NONE, n);
+        bool cur = down || (have && n == t.cur);
+        wchar_t num[4], pfs[16];
+        _snwprintf(num, 4, L"%d", i + 1);
+        FreqText(pf, pfs, 16);
         R(dc, x, y, 182, 64, 12, cur ? kOrange : kPanel, cur ? CLR_INVALID : kLine);
-        T(dc, x + 16, y + 24, n, 14, cur ? kInk : kDim, cur ? 700 : 600);
-        T(dc, x + 16, y + 52, kPresets[i].freq, 24, cur ? kInk : kText, 700);
-        T(dc, x + 166, y + 52, kPresets[i].shortName, 14, cur ? kInk : kMuted, cur ? 700 : 400, AL_END, 80);
+        T(dc, x + 166, y + 22, num, 13, cur ? kInk : kDim, cur ? 700 : 600, AL_END);
+        T(dc, x + 14, y + 30, have ? pfs : L"—", 22, cur ? kInk : have ? kText : kDim, 700);
+        const wchar_t* nm = have ? RadioName(t, pf) : L"";
+        T(dc, x + 14, y + 54, nm[0] ? nm : have ? L"" : L"удерживать — сохранить", 14, cur ? kInk : kMuted, 600,
+          AL_START, 156);
     }
 }
 
+// The band: the MCU's band key steps FM1 -> FM2 -> FM3 -> УКВ, and only FM <-> УКВ shows in its replies
+// (0x0901's band): pressed again on each reply until the band is the other one, at most 4 times.
+static void RadioBand()
+{
+    Tuner t;
+    TunerGet(&t);
+    s_bandWant = t.band == 1 ? 0 : 1;
+    s_bandPresses = 1;
+    s_bandTick = GetTickCount();
+    McuKey(0x3B, false);
+}
+
+static void RadioBandStep(const Tuner& t)   // a tuner reply came
+{
+    if (s_bandWant < 0)
+        return;
+    if (t.band == s_bandWant || s_bandPresses >= 4 || GetTickCount() - s_bandTick > 8000) {
+        s_bandWant = -1;
+        return;
+    }
+    if (GetTickCount() - s_bandTick < 250)
+        return;   // the same press's replies
+    s_bandPresses++;
+    s_bandTick = GetTickCount();
+    McuKey(0x3B, false);
+}
+
+static void RadioPresetSave(int i)   // a long press: the station playing goes to preset i (the shell's (1, n, 1))
+{
+    if (McuSend3("SPApi_SendListItemControl", 1, i, 1))
+        _snwprintf(s_status, 96, L"сохранено в пресет %d", i % 8 + 1);
+}
+
+// A preset of the radio screen or the widget: as CRadioMainDlg::SlotListItemSelect (Ghidra 2026-10-18).
+static void RadioPreset(int i)
+{
+    McuSend3("SPApi_SendListItemControl", 1, i, 0);
+}
+
+// A key to the MCU as the stock shell sends it: pressed, released; ext = SPApi_SendExtendKeyEvent.
+static void McuKey(int code, bool ext)
+{
+    const char* fn = ext ? "SPApi_SendExtendKeyEvent" : "SPApi_SendKeyEvent";
+    if (McuSend3(fn, code, 0, 0))
+        McuSend3(fn, code, 1, 1);
+}
+
+// The radio as the MCU's source: the stock shell's main menu "Radio" is key 0x7F. The shell sends 0x30 before
+// every source change (SPIPower.log 2026-10-18); without it our 0x7F was ignored at first - so the same.
+static void RadioOn()
+{
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    if (src == 0)
+        return;   // already the radio
+    McuKey(0x30, false);
+    McuKey(0x7F, false);
+}
+
+// The radio screen's keys as the shell's (SPIPower.log 2026-10-18): seek down / up = extended 0x3B / 0x3C,
+// the band FM1 -> FM2 -> FM3 -> УКВ = 0x3B, the search (scan; again = stop) = 0x3F. arg: code | 0x100 = extended.
+static void RadioKey(int arg)
+{
+    McuKey(arg & 0xFF, (arg & 0x100) != 0);
+}
+
+// Radio -> list: the MCU's station list. Opening it is the shell's list key 0x3C - the MCU then sends the stations
+// with their names, and only in this mode does the search key 0x3F work (HU 2026-10-18-2). A tap tunes the row
+// (SPApi_SendListItemControl(0, row)); "Автопоиск" sweeps the band, then the list is asked for again.
+static int   s_rlistPage;
+static DWORD s_scanStart;   // the search started (0 = none)
+
 static void ScrRadioList(HDC dc)
 {
-    static const wchar_t* st[5][3] = { { L"87.9", L"Радио Шансон", L"RDS" }, { L"88.3", L"Ретро FM", NULL },
-                                       { L"99.2", L"Вести FM", L"RDS" }, { L"101.7", L"Хит FM", L"RDS" },
-                                       { L"106.2", L"Европа Плюс", L"RDS" } };
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {
+        s_seen = s_screenTick;
+        McuKey(0x3C, false);
+    }
+    Tuner t;
+    TunerGet(&t);
     Frame(dc, L"РАДИО · СПИСОК");
     Panel(dc, 16, 68, 600, 322);
-    for (int i = 0; i < 5; i++) {   // a station is chosen: back to the radio
-        int y = 76 + i * 62;
-        bool cur = Zone(24, y, 568, 56, A_BACK) || i == 4;
-        R(dc, 24, y, 568, 56, 10, cur ? kOrange : kPanel);
-        T(dc, 40, y + 38, st[i][0], 26, cur ? kInk : kText, 700);
-        T(dc, 148, y + 36, st[i][1], 19, cur ? kInk : kMuted, 700);
-        if (st[i][2])
-            T(dc, 576, y + 34, st[i][2], 16, cur ? kInk : kMuted, 600, AL_END);
+    int n = t.listCount < kTunList ? t.listCount : kTunList, pages = (n + 4) / 5;
+    if (s_rlistPage >= pages)
+        s_rlistPage = pages ? pages - 1 : 0;
+    bool scanning = s_scanStart != 0;
+    if (scanning) {   // the search: the frequency running, dots moving
+        wchar_t f[16], s[40];
+        FreqText(t.f10, f, 16);
+        static const wchar_t* dots[4] = { L"", L".", L"..", L"..." };
+        _snwprintf(s, 40, L"Ищу станции%s", dots[GetTickCount() / 400 % 4]);
+        T(dc, 40, 180, s, 26, kText, 700);
+        T(dc, 40, 250, f, 60, kOrange, 700);
+        int x = 40 + (t.f10 > 8750 && t.f10 <= 10800 ? (t.f10 - 8750) * 540 / 2050 : 0);
+        R(dc, 40, 290, 540, 6, 3, kLine);
+        R(dc, x, 286, 14, 14, 7, kOrange);
+    } else if (!n) {
+        T(dc, 40, 180, L"Список пуст или ещё не пришёл.", 20, kMuted, 600, AL_START, 560);
+        T(dc, 40, 214, L"«АВТОПОИСК» найдёт станции заново.", 17, kDim, 400, AL_START, 560);
     }
-    Scrollbar(dc, 600, 80, 296, 10, 55);
-    Button(dc, 632, 68, 152, 72, L"АВТО", B_N, IC_SEARCH, 17);
-    Button(dc, 632, 150, 152, 72, L"PTY", B_N, IC_NONE, 18, 0, A_SCREEN, S_RADIO_PTY);
-    R(dc, 632, 232, 152, 158, 12, kPanel);
-    T(dc, 708, 280, L"НАЙДЕНО", 13, kMuted, 600, AL_MID);
-    T(dc, 708, 330, L"18", 44, kText, 700, AL_MID);
-    T(dc, 708, 362, L"СТАНЦИЙ", 13, kMuted, 600, AL_MID);
+    for (int r = 0; r < 5 && !scanning; r++) {
+        int i = s_rlistPage * 5 + r;
+        if (i >= n)
+            break;
+        int y = 76 + r * 62;
+        bool cur = t.list[i] == t.f10;
+        bool d = Zone(24, y, 568, 56, A_RLIST, i);
+        R(dc, 24, y, 568, 56, 10, d || cur ? kOrange : kPanel);
+        wchar_t f[16];
+        FreqText(t.list[i], f, 16);
+        T(dc, 40, y + 38, f, 26, d || cur ? kInk : kText, 700);
+        const wchar_t* nm = t.listName[i][0] ? t.listName[i] : RadioName(t, t.list[i]);
+        T(dc, 180, y + 36, nm, 19, d || cur ? kInk : kMuted, 700, AL_START, 400);
+    }
+    if (pages > 1 && !scanning) {
+        Button(dc, 632, 232, 72, 48, NULL, s_rlistPage ? B_N : B_DIS, IC_BACK, 18, 28, A_RLISTPAGE, -1);
+        Button(dc, 712, 232, 72, 48, NULL, s_rlistPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 28, A_RLISTPAGE, 1);
+    }
+    Button(dc, 632, 68, 152, 72, scanning ? L"СТОП" : L"АВТОПОИСК", scanning ? B_SEL : B_N, IC_SEARCH, 15, 0, A_RSCAN);
+    R(dc, 632, 292, 152, 98, 12, kPanel);
+    wchar_t c[8];
+    _snwprintf(c, 8, L"%d", n);
+    T(dc, 708, 322, L"НАЙДЕНО", 13, kMuted, 600, AL_MID);
+    T(dc, 708, 362, c, 36, kText, 700, AL_MID);
     RadioDock(dc, true);
+}
+
+static void RadioScan()   // the list's "Автопоиск" (again = stop, the same key)
+{
+    s_scanStart = s_scanStart ? 0 : GetTickCount();
+    McuKey(0x3F, false);
+}
+
+// Every second on the list: the search is over once the frequency stood still 2 s (and 3 s passed) - the list again.
+static void RadioScanTick()
+{
+    if (!s_scanStart)
+        return;
+    Tuner t;
+    TunerGet(&t);
+    DWORD now = GetTickCount();
+    if (now - s_scanStart > 3000 && now - t.fTick > 2000) {
+        s_scanStart = 0;
+        s_rlistPage = 0;
+        McuKey(0x3C, false);
+    }
 }
 
 static void ScrRadioPty(HDC dc)
@@ -1795,22 +2279,94 @@ static void ScrRadioPty(HDC dc)
 static void ScrAudio(HDC dc);
 static void ScrAudioList(HDC dc);
 
+// Bluetooth music: the stock shell's Bluetooth stack plays it (FLC SDK in G3NavHMI). The MCU's source (0x4904 =
+// 09) and switching to it with the shell's key 0x54 (after 0x30, SPIPower.log 2026-10-18); with our proxy of the
+// SDK (btshm.h) also the phone, the track (AVRCP) and the buttons (the SDK's own Av_* calls, in the shell).
+enum { TIMER_BTSRC = 12 };
+static int s_btHold;   // ⏮ / ⏭ held: the release command to send when the finger goes up
+
+static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x8905), then its BT music key 0x54
+{                         // (HU 2026-10-18-2: 0x54 alone did nothing; after 0x84 the source turned 09)
+    McuKey(0x84, false);
+    SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);
+}
+
 static void ScrAudioBt(HDC dc)
 {
     Frame(dc, L"МЕДИА · BLUETOOTH");
     MediaTabs(dc, S_AUDIO_BT, IC_PHONE, A_SCREEN, S_PHONE, S_SET_BT);
     Cover(dc, IC_BT, 16, 124, 232);
-    T(dc, 272, 150, L"BLUETOOTH · REDMI NOTE", 14, kMuted, 600);
-    T(dc, 272, 192, L"Звезда по имени Солнце", 34, kText, 700, AL_START, 512);
-    T(dc, 272, 222, L"Кино · «Звезда по имени Солнце»", 20, kMuted, 400, AL_START, 512);
-    R(dc, 272, 248, 512, 8, 4, kLine);
-    R(dc, 272, 248, 128, 8, 4, kOrange);
-    Disc(dc, 400, 252, 11, kText);
-    T(dc, 272, 282, L"1:05", 17, kMuted);
-    T(dc, 784, 282, L"3:45", 17, kMuted, 600, AL_END);
-    IconBtn(dc, IC_PREV, 392, 312, 48, kText);
-    PauseBtn(dc, 528, 336, 42, 48);
-    IconBtn(dc, IC_FWD, 616, 312, 48, kText);
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    bool on = src == 9;
+    BtState bt;
+    bool proxy = BtGet(&bt, NULL);
+    static DWORD s_asked;   // the track and the play state, asked for on opening (the shell does the same)
+    if (proxy && bt.av >= 1 && (!s_asked || GetTickCount() - s_asked > 10000)) {
+        s_asked = GetTickCount();
+        BtCmd(BT_CMD_MEDIAINFO);
+    }
+    static DWORD s_seen;   // opened with the phone connected: its music becomes the source at once
+    if (s_seen != s_screenTick) {
+        s_seen = s_screenTick;
+        if (proxy && bt.av >= 1 && !on)
+            BtMusicOn();
+    }
+    wchar_t cap[160], title[BT_TEXT], artist[BT_TEXT], album[BT_TEXT], line[300];
+    if (proxy && bt.devName[0]) {
+        BtText(bt.devName, title, BT_TEXT);
+        _snwprintf(cap, 160, L"BLUETOOTH · %s", title);
+        CharUpperBuff(cap, (DWORD)wcslen(cap));
+    } else {
+        wcscpy(cap, L"BLUETOOTH-МУЗЫКА");
+    }
+    T(dc, 272, 150, cap, 14, kMuted, 600, AL_START, 512);
+    if (proxy && bt.title[0]) {   // the track, as the phone tells it (AVRCP)
+        BtText(bt.title, title, BT_TEXT);
+        BtText(bt.artist, artist, BT_TEXT);
+        BtText(bt.album, album, BT_TEXT);
+        T(dc, 272, 192, title, 30, kText, 700, AL_START, 512);
+        if (artist[0] && album[0])
+            _snwprintf(line, 300, L"%s · %s", artist, album);
+        else
+            wcscpy(line, artist[0] ? artist : album);
+        T(dc, 272, 222, line, 18, kMuted, 400, AL_START, 512);
+        int len = bt.lengthMs > 0 ? bt.lengthMs : bt.durationMs;
+        if (len > 0) {   // the bar: the position the stack reports every 2 s while playing, moved on in between
+            int pos = bt.posMs;
+            if (bt.playing == 1 && bt.playTick)
+                pos += (int)(GetTickCount() - bt.playTick);
+            pos = pos < 0 ? 0 : pos > len ? len : pos;
+            int px = 512 * (pos / 1000) / (len / 1000 > 0 ? len / 1000 : 1);
+            R(dc, 272, 252, 512, 8, 4, kLine);
+            R(dc, 272, 252, px, 8, 4, kOrange);
+            Disc(dc, 272 + px, 256, 10, kText);   // the knob; ⏮ / ⏭ held - rewind / fast forward
+            _snwprintf(line, 32, L"%d:%02d", pos / 60000, pos / 1000 % 60);
+            T(dc, 272, 284, line, 17, kMuted, 600);
+            _snwprintf(line, 32, L"%d:%02d", len / 60000, len / 1000 % 60);
+            T(dc, 784, 284, line, 17, kMuted, 600, AL_END);
+        }
+    } else {
+        const wchar_t* head = on ? L"Играет с телефона" : L"Сейчас другой источник";
+        if (proxy && bt.av == 0)
+            head = L"Телефон не подключён";
+        T(dc, 272, 192, head, 30, on ? kText : kMuted, 700, AL_START, 512);
+        T(dc, 272, 222, on ? L"Звук идёт с подключённого телефона." : L"Телефон должен быть подключён по Bluetooth.",
+          18, kMuted, 400, AL_START, 512);
+    }
+    if (!on)   // not the source (the phone not connected, or the switch did not take): by hand
+        Button(dc, 584, 124, 200, 40, L"ВКЛЮЧИТЬ ЗВУК", B_N, IC_BT, 14, 20, A_BTMUSIC);
+    bool ctl = proxy && bt.av >= 1;   // the buttons: the SDK's AVRCP keys, through the proxy
+    bool playing = bt.playing ? bt.playing == 1 : bt.av == 2;
+    Button(dc, 392, 312, 64, 56, NULL, ctl ? B_N : B_DIS, IC_PREV, 18, 40, A_BTCMD, BT_CMD_PREV);
+    Button(dc, 496, 312, 64, 56, NULL, ctl ? B_N : B_DIS, playing ? IC_PAUSE : IC_PLAY, 18, 40, A_BTCMD,
+           BT_CMD_PLAYPAUSE);
+    Button(dc, 600, 312, 64, 56, NULL, ctl ? B_N : B_DIS, IC_FWD, 18, 40, A_BTCMD, BT_CMD_NEXT);
+    if (!proxy) {
+        T(dc, 272, 384, L"Название трека и кнопки — с proxy Bluetooth (кнопка 2 установщика).", 14, kDim, 400,
+          AL_START, 512);
+        T(dc, 272, 402, L"Пока — с телефона или кнопками руля.", 14, kDim, 400, AL_START, 512);
+    }
 }
 
 static void ScrAux(HDC dc)
@@ -1824,46 +2380,6 @@ static void ScrAux(HDC dc)
     T(dc, 272, 260, L"воспроизведением на самом устройстве.", 18, kMuted, 400, AL_START, 512);
     T(dc, 272, 326, L"Уровень входа", 19, kText, 700);
     Stepper(dc, 560, 296, 224, L"+2", 52);
-}
-
-static void ScrVideo(HDC dc)
-{
-    static const Tab tabs[2] = { { IC_FOLDER, L"ФАЙЛЫ", S_NONE }, { IC_CLOCK, L"НЕДАВНИЕ", S_NONE } };
-    static const wchar_t* vids[4][2] = { { L"DASHCAM_0410.MP4", L"2:58 · 180 МБ" }, { L"DASHCAM_0411.MP4", L"3:00 · 182 МБ" },
-                                         { L"DASHCAM_0412.MP4", L"3:45 · 226 МБ" }, { L"ROAD_TRIP_SOCHI.AVI", L"41:20 · 1,4 ГБ" } };
-    Frame(dc, L"МЕДИА · ВИДЕО · DASHCAM");
-    MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
-    SideTabs(dc, tabs, 2, 0, 70, 62, 124);
-    Panel(dc, 192, 124, 592, 276);
-    for (int i = 0; i < 4; i++) {
-        int y = 132 + i * 66;
-        bool cur = Zone(200, y, 560, 60, A_SCREEN, S_VIDEO_PLAY) || i == 2;
-        R(dc, 200, y, 560, 60, 10, cur ? kOrange : kPanel);
-        Road(dc, 208, y + 6, 88, 48);
-        Ico(dc, IC_PLAY, 240, y + 18, 24, kText);
-        T(dc, 312, y + 27, vids[i][0], 18, cur ? kInk : kText, 700, AL_START, 430);
-        T(dc, 312, y + 49, vids[i][1], 15, cur ? kInk : kMuted, 400);
-    }
-    Scrollbar(dc, 768, 136, 252, 20, 50);
-}
-
-static void ScrVideoPlay(HDC dc)
-{
-    Frame(dc, L"ВИДЕО · DASHCAM_0412.MP4");
-    Road(dc, 0, 56, 800, 424);
-    Shade(0, 56, 800, 64, 230, 34);   // #fade-band at 90 %
-    Shade(0, 330, 800, 150, 209, 209);   // control panel: graphite 82 % over the frame
-    T(dc, 16, 368, L"1:12", 17, kMuted);
-    T(dc, 784, 368, L"3:45", 17, kMuted, 600, AL_END);
-    R(dc, 80, 360, 640, 8, 4, kLine);
-    R(dc, 80, 360, 200, 8, 4, kOrange);
-    Disc(dc, 280, 364, 11, kText);
-    IconBtn(dc, IC_LIST, 24, 404, 44, kText, A_BACK);
-    IconBtn(dc, IC_PREV, 228, 400, 48, kText);
-    PauseBtn(dc, 400, 424, 40, 44);
-    IconBtn(dc, IC_FWD, 524, 400, 48, kText);
-    IconBtn(dc, IC_REPEAT, 630, 404, 40, kOrange);
-    IconBtn(dc, IC_GEAR, 726, 402, 44, kText, A_SCREEN, S_SET_VIDEO);
 }
 
 static void PhotoDock(HDC dc, Screen prev, Screen next)
@@ -1924,25 +2440,66 @@ static void ScrPhotoBad(HDC dc)
 }
 
 // Phone, a main screen: the number, recent calls and the way to the contacts on the left, the keypad on the right.
+// Phone: the stock shell's Bluetooth stack through our proxy (btshm.h): the connected phone, its operator, battery
+// and network; the keypad dials (Flc_Bluetooth_Hf_DialNumber), an incoming call opens its window by itself (the
+// 1 s timer), answer / end - the SDK's Hf_Answer / Hf_End. Pairing stays in the shell's own screens for now; the
+// phone book and the call log (PBAP) are the next step.
+static void BtCmd(int cmd);
+static void BtText(const char* u8, wchar_t* w, int cap);
+
+static void BtCmdText(int cmd, const wchar_t* text)
+{
+    BtShm* b = BtShmGet();
+    if (!b || b->magic != BT_SHM_MAGIC)
+        return;
+    WideCharToMultiByte(CP_ACP, 0, text, -1, b->cmdText, sizeof(b->cmdText), NULL, NULL);
+    b->cmdText[sizeof(b->cmdText) - 1] = 0;
+    BtCmd(cmd);
+}
+
 static void ScrPhone(HDC dc)
 {
     static const wchar_t* keys = L"123456789*0#";
-    static const wchar_t* recent[3][2] = { { L"Мама", L"12:05" }, { L"Сервис Лада", L"вчера" },
-                                           { L"+7 495 000-11-22", L"пн" } };
-    Frame(dc, L"ТЕЛЕФОН · Redmi Note");
+    BtState bt;
+    bool proxy = BtGet(&bt, NULL);
+    bool on = proxy && bt.hf == 2;
+    wchar_t title[160], name[BT_TEXT], s[120];
+    if (on && bt.devName[0]) {
+        BtText(bt.devName, name, BT_TEXT);
+        _snwprintf(title, 160, L"ТЕЛЕФОН · %s", name);
+    } else {
+        wcscpy(title, L"ТЕЛЕФОН");
+    }
+    Frame(dc, title);
     Panel(dc, 16, 64, 356, 72, 12);
     int end = T(dc, 32, 112, s_dial, 28, kText, 700, AL_START, 270);
     R(dc, end + 4, 86, 3, 28, 0, kOrange);
     IconBtn(dc, IC_BKSP, 320, 81, 38, kMuted, A_DEL, K_DIAL);
-    T(dc, 16, 162, L"НЕДАВНИЕ", 14, kMuted, 600);
-    for (int i = 0; i < 3; i++) {   // demo: the recent calls open the call log
-        int y = 172 + i * 60;
-        bool d = Zone(16, y, 356, 54, A_SCREEN, S_CALLS);
-        R(dc, 16, y, 356, 54, 10, d ? kOrange : kPanel);
-        T(dc, 32, y + 33, recent[i][0], 18, d ? kInk : i == 2 ? kStop : kText, 700, AL_START, 240);
-        T(dc, 356, y + 33, recent[i][1], 18, d ? kInk : kMuted, 400, AL_END);
+    Panel(dc, 16, 148, 356, 196, 12);
+    if (!proxy) {
+        T(dc, 32, 190, L"Нет proxy Bluetooth", 20, kText, 700, AL_START, 324);
+        T(dc, 32, 220, L"VestaHomeInstall, кнопка 2", 16, kMuted, 400, AL_START, 324);
+    } else if (!on) {
+        T(dc, 32, 190, L"Телефон не подключён", 20, kText, 700, AL_START, 324);
+        T(dc, 32, 220, L"Подключение пока — в штатной", 16, kMuted, 400, AL_START, 324);
+        T(dc, 32, 242, L"оболочке: Телефон → Bluetooth", 16, kMuted, 400, AL_START, 324);
+    } else {
+        T(dc, 32, 190, bt.devName[0] ? name : L"Телефон", 22, kText, 700, AL_START, 324);
+        BtText(bt.operatorName, name, BT_TEXT);
+        T(dc, 32, 220, name[0] ? name : L"оператор —", 17, kMuted, 600, AL_START, 324);
+        s[0] = 0;
+        if (bt.battery >= 0)
+            _snwprintf(s, 120, L"батарея %d/5", bt.battery);
+        if (bt.signal >= 0) {
+            wchar_t t[40];
+            _snwprintf(t, 40, L"%sсеть %d/5", s[0] ? L" · " : L"", bt.signal);
+            wcscat(s, t);
+        }
+        T(dc, 32, 250, s, 17, kMuted, 400, AL_START, 324);
+        T(dc, 32, 300, bt.av >= 1 ? L"музыка: подключена" : L"музыка: нет", 15, kDim, 400, AL_START, 324);
     }
-    Button(dc, 16, 354, 356, 44, L"КОНТАКТЫ", B_N, IC_USERS, 16, 26, A_SCREEN, S_CONTACTS);
+    Button(dc, 16, 354, 172, 44, L"КОНТАКТЫ", B_N, IC_USERS, 15, 24, A_SCREEN, S_CONTACTS);
+    Button(dc, 200, 354, 172, 44, L"ЖУРНАЛ", B_N, IC_CLOCK, 15, 24, A_SCREEN, S_CALLS);
     for (int i = 0; i < 12; i++) {   // keypad 3 x 4
         int x = 388 + (i % 3) * 136, y = 64 + (i / 3) * 62;
         wchar_t k[2] = { keys[i], 0 };
@@ -1950,123 +2507,78 @@ static void ScrPhone(HDC dc)
         R(dc, x, y, 124, 56, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
         T(dc, x + 62, y + 39, k, 30, d ? kInk : kText, 700, AL_MID);
     }
-    bool d = Zone(388, 316, 192, 82, A_SCREEN, S_CALL);
-    R(dc, 388, 316, 192, 82, 12, d ? Mix(kOk, kInk, 160) : kOk);
-    Ico(dc, IC_CALL, 462, 335, 44, kInk);
-    d = Zone(592, 316, 192, 82, A_NONE);
+    bool can = on && s_dial[0];
+    bool d = Zone(388, 316, 192, 82, can ? A_PHONECALL : A_NONE);
+    R(dc, 388, 316, 192, 82, 12, !can ? kPanel2 : d ? Mix(kOk, kInk, 160) : kOk);
+    Ico(dc, IC_CALL, 462, 335, 44, can ? kInk : kDim);
+    d = Zone(592, 316, 192, 82, s_dial[0] ? A_PHONECLR : A_NONE);
     R(dc, 592, 316, 192, 82, 12, d ? Mix(kStop, kInk, 160) : kStop);
     Ico(dc, IC_HANGUP, 666, 335, 44, kInk);
 }
 
-struct Person { const wchar_t* name; const wchar_t* number; const wchar_t* initials; };
+static void PhoneSoon(HDC dc, const wchar_t* what)   // the phone book and the call log: not yet
+{
+    Panel(dc, 192, 68, 592, 322);
+    T(dc, 220, 140, what, 24, kText, 700, AL_START, 540);
+    T(dc, 220, 180, L"Появится со следующим этапом: телефон отдаёт их по Bluetooth", 16, kMuted, 400, AL_START, 540);
+    T(dc, 220, 204, L"(PBAP), proxy Bluetooth их уже видит, разбор — впереди.", 16, kMuted, 400, AL_START, 540);
+    T(dc, 220, 246, L"Пока — набор номера и звонки работают.", 16, kMuted, 400, AL_START, 540);
+}
 
 static void ScrContacts(HDC dc)
 {
-    static const Person people[5] = { { L"Мама", L"+7 912 000-12-34", L"М" },
-                                      { L"Матвей Никифоров", L"+7 917 123-45-67", L"МН" },
-                                      { L"Мария Никифорова", L"+7 927 765-43-21", L"МН" },
-                                      { L"Сервис Лада", L"+7 8482 55-12-00", L"СЛ" },
-                                      { L"Сева", L"+7 903 111-22-33", L"С" } };
-    static const wchar_t* letters = L"АБВГДЕЖЗИКЛМНОПРСТУФХЦЧШЭЮЯ";
     Frame(dc, L"ТЕЛЕФОН · КОНТАКТЫ");
     PhoneNav(dc, 1);
-    R(dc, 192, 68, 560, 56, 10, kPanel, kLine);
-    Ico(dc, IC_SEARCH, 206, 80, 32, kMuted);
-    T(dc, 250, 104, L"Поиск по имени или номеру", 18, kDim, 400);
-    for (int i = 0; i < 5; i++) {
-        int y = 136 + i * 64;
-        bool d = Zone(192, y, 560, 58, A_SCREEN, S_CONTACT);
-        R(dc, 192, y, 560, 58, 10, d ? kOrange : kPanel);
-        Avatar(dc, 222, y + 29, 19, people[i].initials, 14);
-        T(dc, 256, y + 25, people[i].name, 19, d ? kInk : kText, 700);
-        T(dc, 256, y + 47, people[i].number, 15, d ? kInk : kMuted, 400);
-        Ico(dc, i == 0 ? IC_STAR_F : IC_NEXT, 708, y + 13, 32, d ? kInk : i == 0 ? kOrange : kDim);
-    }
-    for (int i = 0; letters[i]; i++) {   // letter bar: the one under the finger is highlighted
-        wchar_t ch[2] = { letters[i], 0 };
-        bool on = letters[i] == L'М';
-        if (on)
-            Disc(dc, 772, 136 + i * 23 / 2, 9, kOrange);
-        T(dc, 772, 140 + i * 23 / 2, ch, 10, on ? kInk : kDim, 700, AL_MID);
-    }
+    PhoneSoon(dc, L"Телефонная книга");
 }
 
 static void ScrContact(HDC dc)
 {
-    static const wchar_t* nums[3][2] = { { L"МОБИЛЬНЫЙ", L"+7 917 123-45-67" }, { L"РАБОЧИЙ", L"+7 8482 55-12-00" },
-                                         { L"ДОМАШНИЙ", L"+7 8482 31-44-90" } };
-    Frame(dc, L"ТЕЛЕФОН · КОНТАКТ");
-    PhoneNav(dc, 1);
-    Panel(dc, 192, 68, 592, 322);
-    AvatarOr(dc, 260, 136, 52, L"МН");
-    T(dc, 332, 128, L"Матвей Никифоров", 28, kText, 700, AL_START, 440);
-    Ico(dc, IC_STAR_F, 332, 144, 26, kOrange);
-    T(dc, 366, 164, L"В избранном", 16, kMuted, 400);
-    for (int i = 0; i < 3; i++) {
-        int y = 204 + i * 62;
-        R(dc, 208, y, 560, 56, 10, kPanel2);
-        T(dc, 224, y + 22, nums[i][0], 12, kMuted, 700);
-        T(dc, 224, y + 45, nums[i][1], 20, kText, 700);
-        bool d = Zone(688, y + 6, 72, 44, A_SCREEN, S_CALL);
-        R(dc, 688, y + 6, 72, 44, 10, d ? Mix(kOk, kInk, 160) : kOk);
-        Ico(dc, IC_CALL, 708, y + 10, 32, kInk);
-    }
+    ScrContacts(dc);
 }
 
 static void ScrCalls(HDC dc)
 {
-    static const wchar_t* filters[4] = { L"ВСЕ", L"ВХОДЯЩИЕ", L"ИСХОДЯЩИЕ", L"ПРОПУЩ." };
-    static const Icon icons[5] = { IC_CALL_IN, IC_CALL_MISS, IC_CALL_OUT, IC_CALL_OUT, IC_CALL_IN };
-    static const wchar_t* calls[5][2] = { { L"Мама", L"12:05 · 3 мин" }, { L"+7 495 000-11-22", L"11:40" },
-                                          { L"Сервис Лада", L"вчера · 1 мин" }, { L"Матвей Никифоров", L"вчера · 12 мин" },
-                                          { L"Мария Никифорова", L"пн · 5 мин" } };
     Frame(dc, L"ТЕЛЕФОН · ЖУРНАЛ");
     PhoneNav(dc, 3);
-    Seg(dc, 192, 68, 592, 52, filters, 4, G_CALLS, 15);
-    for (int i = 0; i < 5; i++) {
-        int y = 132 + i * 66;
-        R(dc, 192, y, 592, 60, 10, kPanel);
-        Ico(dc, icons[i], 206, y + 14, 32, i == 1 ? kStop : kMuted);
-        T(dc, 254, y + 27, calls[i][0], 19, kText, 700);
-        T(dc, 254, y + 49, calls[i][1], 15, kMuted, 400);
-        if (i == 1) {   // missed twice
-            R(dc, 560, y + 18, 34, 24, 12, kStop);
-            T(dc, 577, y + 36, L"2", 15, kText, 700, AL_MID);
-        }
-        bool d = Zone(704, y + 6, 72, 48, A_SCREEN, S_CALL);
-        R(dc, 704, y + 6, 72, 48, 10, d ? kOrange : kPanel2);
-        Ico(dc, IC_CALL, 724, y + 14, 32, d ? kInk : kOk);
-    }
+    PhoneSoon(dc, L"Журнал звонков");
 }
 
+// A call: its number, its state as the stack reports it, the time talking; "end" - Hf_End.
 static void ScrCall(HDC dc)
 {
-    static const Icon icons[3] = { IC_MIC_OFF, IC_KEYPAD, IC_HANDOVER };
-    static const wchar_t* labels[3] = { L"МИКРОФОН", L"НАБОР", L"НА ТЕЛЕФОН" };
+    BtState bt;
+    BtGet(&bt, NULL);
+    int c = bt.call[0];
+    const wchar_t* st = c == BT_CALL_INCOMING ? L"ВХОДЯЩИЙ ВЫЗОВ" : c == BT_CALL_DIALING ? L"НАБОР НОМЕРА"
+                      : c == BT_CALL_ALERTING ? L"ВЫЗОВ" : c == BT_CALL_ACTIVE ? L"РАЗГОВОР"
+                      : c == BT_CALL_HELD ? L"НА УДЕРЖАНИИ" : c == BT_CALL_WAITING ? L"ОЖИДАЕТ" : L"ЗВОНОК";
+    wchar_t num[40];
+    if (bt.callNumber[0] && c != BT_CALL_DIALING && c != BT_CALL_ALERTING)
+        BtText(bt.callNumber, num, 40);
+    else
+        wcscpy(num, s_callOut[0] ? s_callOut : L"—");
     Frame(dc, L"ТЕЛЕФОН");
-    AvatarOr(dc, 128, 168, 88, L"МН");
-    T(dc, 256, 112, L"РАЗГОВОР", 14, kMuted, 700);
-    T(dc, 256, 160, L"Матвей Никифоров", 40, kText, 700, AL_START, 528);
-    T(dc, 256, 196, L"+7 917 123-45-67 · мобильный", 20, kMuted, 400, AL_START, 528);
-    DWORD sec = (GetTickCount() - s_callTick) / 1000;
-    wchar_t s[16];
-    _snwprintf(s, 16, L"%02u:%02u", (unsigned)(sec / 60), (unsigned)(sec % 60));
-    T(dc, 256, 246, s, 34, kText, 700);
-    for (int i = 0; i < 3; i++) {   // microphone off = the pressed state
-        int x = 16 + i * 136;
-        bool d = Zone(x, 296, 124, 96, i == 0 ? A_TOGGLE : A_NONE, T_MUTED);
-        bool act = i == 0 ? s_on[T_MUTED] != d : d;
-        R(dc, x, 296, 124, 96, 12, act ? kOrange : kPanel, act ? CLR_INVALID : kLine);
-        Ico(dc, icons[i], x + 42, 308, 40, act ? kInk : kText);
-        T(dc, x + 62, 374, labels[i], 13, act ? kInk : kMuted, 700, AL_MID, 116);
+    Disc(dc, 128, 168, 88, kPanel2);
+    Ico(dc, IC_CALL, 96, 136, 64, c == BT_CALL_ACTIVE ? kOk : kMuted);
+    T(dc, 256, 112, st, 14, kMuted, 700);
+    T(dc, 256, 168, num, 40, kText, 700, AL_START, 528);
+    if (c == BT_CALL_ACTIVE) {
+        DWORD sec = (GetTickCount() - s_callTick) / 1000;
+        wchar_t s[16];
+        _snwprintf(s, 16, L"%02u:%02u", (unsigned)(sec / 60), (unsigned)(sec % 60));
+        T(dc, 256, 236, s, 34, kText, 700);
     }
-    bool d = Zone(424, 296, 360, 96, A_BACK);
-    R(dc, 424, 296, 360, 96, 12, d ? Mix(kStop, kInk, 160) : kStop);
-    Ico(dc, IC_HANGUP, 580, 320, 48, kInk);
-    Dock(dc);   // in a call the volume is the main control
+    bool d = Zone(216, 296, 368, 96, A_PHONEEND);
+    R(dc, 216, 296, 368, 96, 12, d ? Mix(kStop, kInk, 160) : kStop);
+    Ico(dc, IC_HANGUP, 376, 320, 48, kInk);
+    Dock(dc);   // in a call the volume is the main control: the MCU's, as it is now
     IconBtn(dc, IC_VOL, 24, 417, 44, kMuted, A_SCREEN, S_VOLUME);
-    Slider(dc, 88, 435, 560, 45, NULL);
-    T(dc, 700, 448, L"12", 22, kText, 700, AL_MID);
+    int vol, mute, src;
+    wchar_t v[16] = L"—";
+    if (VolGet(&vol, &mute, &src))
+        _snwprintf(v, 16, mute ? L"без звука" : L"%d", vol);
+    T(dc, 88, 452, v, 22, kText, 700);
 }
 
 static void ScrPhoneOff(HDC dc)
@@ -2120,124 +2632,219 @@ static void ScrSetGeneral(HDC dc)
     Toggle(dc, 688, 214, T_GPS_TIME);
     SetRow(dc, 256, L"Формат времени", NULL, false, A_NONE, 0, H);
     Seg(dc, 560, 260, 200, 40, fmt, 2, G_TIME_FMT);
-    SetRow(dc, 304, L"Язык", NULL, true, A_NONE, 0, H);
+    SetRow(dc, 304, L"Язык", NULL, false, A_NONE, 0, H);
     T(dc, 720, 335, L"Русский", 18, kMuted, 400, AL_END);
     Chevron(dc, 728, 312);
+    SetRow(dc, 352, L"Виджеты главной", NULL, true, A_SCREEN, S_SET_HOME, H);
+    Chevron(dc, 728, 360);
 }
 
 static void ScrSetSound(HDC dc);
 static void ScrSetBalance(HDC dc);
 static void ScrSetVolume(HDC dc);
 
-static void ScrSetScreen(HDC dc)
+static void ScrSetScreen(HDC dc);   // (after the MCU's part: brightness)
+
+// Settings -> Radio: the MCU's tuner settings. The switches show what the MCU reports (Tuner.set); a tap sends the
+// stock shell's key for on / off (extended keys, SPIPower.log 2026-10-18), the MCU's reply moves the switch.
+// Opening the screen asks for all of them (extended key 0x90, as the shell's screen does).
+static const int kRsetToggle[RSET_COUNT] = { T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_MS };
+static const int kRsetKey[RSET_COUNT][2] = { { 0xA8, 0xA7 }, { 0xAA, 0xA9 }, { 0x87, 0x86 }, { 0x8B, 0x8A },
+                                             { 0x8F, 0x8E }, { 0x89, 0x88 }, { 0xAC, 0xAB } };   // off, on
+
+static int RsetOfToggle(int id)
 {
-    static const wchar_t* night[3] = { L"АВТО", L"ВКЛ", L"ВЫКЛ" };
-    Settings(dc, S_SET_SCREEN);
-    T(dc, 264, 96, L"Подсветка днём", 19, kText, 700);
-    Slider(dc, 264, 112, 432, 80, L"80");
-    Sep(dc, 256, 142, 512);
-    T(dc, 264, 176, L"Подсветка ночью", 19, kText, 700);
-    Slider(dc, 264, 192, 432, 30, L"30");
-    Sep(dc, 256, 222, 512);
-    T(dc, 264, 262, L"Ночной режим", 19, kText, 700);
-    Seg(dc, 480, 236, 288, 44, night, 3, G_NIGHT);
-    Sep(dc, 256, 286, 512);
-    SetRow(dc, 288, L"Заставка с часами", NULL, false, A_SCREEN, S_SAVER);   // demo: opens the screen saver
-    Toggle(dc, 696, 298, T_SAVER);
-    SetRow(dc, 344, L"Калибровка экрана", NULL, true);
-    Chevron(dc, 736, 356);
+    for (int i = 0; i < RSET_COUNT; i++)
+        if (kRsetToggle[i] == id)
+            return i;
+    return -1;
 }
 
 static void ScrSetRadio(HDC dc)
 {
-    static const wchar_t* rows[6] = { L"Шумоподавление", L"Диапазон СВ", L"RDS", L"AF · альтернативные частоты",
-                                      L"CT · время по радио", L"TA · дорожные сообщения" };
-    static const int ids[6] = { T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA };
+    static const wchar_t* rows[RSET_COUNT] = { L"Шумоподавление", L"Диапазон СВ", L"RDS",
+                                               L"AF · альтернативные частоты", L"CT · время по радио",
+                                               L"TA · дорожные сообщения", L"MS · музыка / речь" };
+    static DWORD s_asked;
+    if (!s_asked || GetTickCount() - s_asked > 10000) {   // once on opening (the screen redraws often)
+        s_asked = GetTickCount();
+        McuKey(0x90, true);
+    }
+    Tuner t;
+    TunerGet(&t);
     Settings(dc, S_SET_RADIO);
-    for (int i = 0; i < 6; i++) {
-        SetRow(dc, 64 + i * 56, rows[i], NULL, i == 5);
-        Toggle(dc, 688, 74 + i * 56, ids[i]);
+    for (int i = 0; i < RSET_COUNT; i++) {
+        bool known = (t.setKnown >> i & 1) != 0;
+        if (known)
+            s_on[kRsetToggle[i]] = t.set[i] != 0;
+        SetRow(dc, 64 + i * 48, rows[i], NULL, i == RSET_COUNT - 1, A_NONE, 0, 48);
+        if (known)
+            Toggle(dc, 688, 70 + i * 48, kRsetToggle[i]);
+        else
+            T(dc, 760, 96 + i * 48, L"нет данных MCU", 14, kDim, 400, AL_END);
     }
 }
+
+// Settings -> Phone (Bluetooth): the stock shell's Bluetooth stack (FLC SDK in G3NavHMI) owns pairing and the
+// connected phone; with our proxy of FLC_BLUETOOTH_SDK.dll (btshm.h) VestaHome shows the phone and its links.
+// Pairing and the options (auto-connect, auto-answer) - the next step, through the same proxy.
+static bool McuBtAddr(wchar_t* s, int n);
 
 static void ScrSetBt(HDC dc)
 {
     Settings(dc, S_SET_BT);
-    SetRow(dc, 64, L"Имя устройства");
-    T(dc, 720, 99, L"VESTA", 18, kMuted, 700, AL_END);
-    Chevron(dc, 728, 76);
-    SetRow(dc, 120, L"Bluetooth");
-    Toggle(dc, 688, 130, T_BT);
-    SetRow(dc, 176, L"Подключено к", L"Redmi Note");
-    Button(dc, 560, 182, 200, 44, L"ОТКЛЮЧИТЬ", B_N, IC_POWER, 15, 0, A_SCREEN, S_PHONE_OFF);
-    SetRow(dc, 232, L"Автосоединение");
-    Toggle(dc, 688, 242, T_AUTOCONNECT);
-    SetRow(dc, 288, L"Автоответ");
-    Toggle(dc, 688, 298, T_AUTOANSWER);
-    SetRow(dc, 344, L"Телефонная книга", L"обновлена вчера, 412 контактов", true);
-    Button(dc, 600, 350, 160, 44, L"ОБНОВИТЬ", B_N, IC_REFRESH, 15);
+    wchar_t a[24];
+    SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен proxy MCU)");
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    SetRow(dc, 120, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");
+    if (src != 9)
+        Button(dc, 560, 126, 200, 44, L"ВКЛЮЧИТЬ", B_N, IC_BT, 15, 22, A_BTMUSIC);
+    BtState bt;
+    if (BtGet(&bt, NULL)) {
+        wchar_t name[BT_TEXT], s[200];
+        if (bt.devName[0]) {
+            BtText(bt.devName, name, BT_TEXT);
+            _snwprintf(s, 200, L"%s · %S", name, bt.devAddr);
+        } else {
+            wcscpy(s, bt.ready ? L"нет" : L"Bluetooth оболочки ещё не запущен");
+        }
+        SetRow(dc, 176, L"Телефон", s);
+        const wchar_t* av = bt.av == 2 ? L"играет" : bt.av == 1 ? L"подключена" : bt.av == 0 ? L"нет" : L"—";
+        const wchar_t* hf = bt.hf == 2 ? L"подключены" : bt.hf == 0 ? L"нет" : L"—";
+        wchar_t bs[40] = L"", ss[40] = L"";
+        if (bt.battery >= 0)
+            _snwprintf(bs, 40, L" · батарея %d", bt.battery);
+        if (bt.signal >= 0)
+            _snwprintf(ss, 40, L" · сеть %d", bt.signal);
+        _snwprintf(s, 200, L"музыка: %s · звонки: %s%s%s", av, hf, bs, ss);
+        SetRow(dc, 232, L"Связь", s);
+        s[0] = 0;   // the paired ones (0x08), by name
+        for (int i = 0; i < bt.paired && i < BT_PAIRED && wcslen(s) < 150; i++) {
+            wchar_t nm[48];
+            BtText(bt.pairedName[i], nm, 48);
+            if (s[0])
+                wcscat(s, L", ");
+            wcsncat(s, nm, 40);
+        }
+        SetRow(dc, 288, L"Сопряжённые", s[0] ? s : L"—");
+        SetRow(dc, 344, L"Сопряжение", L"пока в штатной оболочке: Телефон → Bluetooth", true);
+    } else {
+        SetRow(dc, 176, L"Сопряжение и подключение", L"пока в штатной оболочке: Телефон → Bluetooth", true);
+        T(dc, 264, 268, L"Подключённый телефон и его связь появятся здесь с proxy Bluetooth", 15, kMuted, 400,
+          AL_START, 500);
+        T(dc, 264, 290, L"(VestaHomeInstall, кнопка 2: ставится вместе с proxy MCU).", 15, kMuted, 400, AL_START, 500);
+    }
+}
+
+// Settings -> Wi-Fi (wifi.cpp: Windows CE's WZC): the state, the networks in sight (strongest first, kWifiRows a
+// page) with their signal and security; a tap connects (a new secured one asks its password on the keyboard),
+// "Забыть" drops a known one. The known networks live in VestaHome.ini: WZC forgets them on every boot.
+enum { kWifiRows = 3 };   // under them: the message and the access point's controls
+static int     s_wifiPage;
+static wchar_t s_wifiPass[64];     // typed on the keyboard
+static wchar_t s_wifiTarget[33];   // the network it is for
+static wchar_t s_wifiTitle[64];
+
+static void WifiStateText(const WifiInfo& w, wchar_t* s, int n)
+{
+    switch (w.state) {
+    case WIFI_NOWZC:      _snwprintf(s, n, L"%s", w.msg[0] ? w.msg : L"нет службы Wi-Fi"); break;
+    case WIFI_NOADAPTER:  _snwprintf(s, n, L"адаптер Wi-Fi не найден"); break;
+    case WIFI_OFF:        _snwprintf(s, n, L"выключено"); break;
+    case WIFI_AP:         _snwprintf(s, n, L"точка ГУ «%s» · телефонов: %d", w.apSsid, w.apClients); break;
+    case WIFI_CONNECTING: _snwprintf(s, n, L"подключение к %s…", w.ssid); break;
+    case WIFI_CONNECTED:
+        _snwprintf(s, n, L"%s · %S", w.ssid, w.ip[0] ? w.ip : "получение адреса…");
+        break;
+    default:              _snwprintf(s, n, L"не подключено"); break;
+    }
+    s[n - 1] = 0;
 }
 
 static void ScrSetWifi(HDC dc)
 {
-    static const wchar_t* nets[4] = { L"Vesta_Garage", L"Keenetic-4213", L"MTS_Router_5G", L"AndroidAP" };
-    static const bool locked[4] = { true, true, false, true };
+    static const wchar_t* kSec[4] = { L"открытая", L"WEP", L"WPA", L"WPA2" };
+    WifiInfo w;
+    WifiGet(&w);
     Settings(dc, S_SET_WIFI);
-    SetRow(dc, 64, L"Wi-Fi", NULL, !s_on[T_WIFI]);
-    Toggle(dc, 688, 74, T_WIFI);
-    if (!s_on[T_WIFI])
-        return;
-    for (int i = 0; i < 4; i++) {   // a network asks for its password
-        int y = 128 + i * 68;
-        bool cur = Zone(256, y, 512, 62, A_SCREEN, S_WIFI_KEYS) || i == 0;
-        R(dc, 256, y, 512, 62, 10, cur ? kOrange : kPanel2);
-        Ico(dc, IC_WIFI, 272, y + 13, 36, cur ? kInk : kMuted);
-        T(dc, 324, y + (i == 0 ? 28 : 38), nets[i], 19, cur ? kInk : kText, 700);
-        if (i == 0)
-            T(dc, 324, y + 50, L"подключено", 15, kInk, 400);
-        if (locked[i])
-            Ico(dc, IC_LOCK, 716, y + 17, 28, cur ? kInk : kDim);
+    wchar_t s[120];
+    WifiStateText(w, s, 120);
+    SetRow(dc, 64, L"Wi-Fi", s);
+    Toggle(dc, 696, 74, T_WIFI);
+    if (w.state >= WIFI_DISCONNECTED)
+        Button(dc, 556, 70, 124, 44, w.scanning ? L"ПОИСК…" : L"НАЙТИ", w.scanning ? B_SEL : B_N, IC_NONE, 15, 0,
+               A_WIFISCAN);
+    if (w.state == WIFI_AP) {   // the unit is the access point: what to type on the phone
+        Panel(dc, 256, 124, 512, 168, 12);
+        T(dc, 276, 160, w.apAuto ? L"ТОЧКА ГУ ДЛЯ ТЕЛЕФОНА (АВТО)" : L"ТОЧКА ГУ ДЛЯ ТЕЛЕФОНА", 14, kMuted, 700);
+        _snwprintf(s, 120, L"Сеть: %s", w.apSsid);
+        T(dc, 276, 198, s, 22, kText, 700, AL_START, 470);
+        _snwprintf(s, 120, L"Пароль: %s", w.apPass);
+        T(dc, 276, 232, s, 22, kText, 700, AL_START, 470);
+        _snwprintf(s, 120, L"Подключено телефонов: %d (2,4 ГГц, канал 6)", w.apClients < 0 ? 0 : w.apClients);
+        T(dc, 276, 270, s, 15, w.apClients > 0 ? kOrange : kMuted, 600, AL_START, 470);
+    }
+    int pages = (w.count + kWifiRows - 1) / kWifiRows;
+    if (s_wifiPage >= pages)
+        s_wifiPage = pages ? pages - 1 : 0;
+    for (int r = 0; r < kWifiRows; r++) {
+        int i = s_wifiPage * kWifiRows + r;
+        if (i >= w.count)
+            break;
+        const WifiNet& n = w.nets[i];
+        int y = 124 + r * 56;
+        bool cur = (w.state == WIFI_CONNECTED || w.state == WIFI_CONNECTING) && !wcscmp(n.ssid, w.ssid);
+        bool down = Zone(256, y, 512, 52, A_WIFINET, i);
+        bool hl = down || cur;
+        R(dc, 256, y, 512, 52, 10, hl ? kOrange : kPanel2);
+        int bars = WifiBars(n.rssi);
+        Ico(dc, IC_WIFI, 268, y + 10, 32, hl ? kInk : bars >= 3 ? kText : bars >= 2 ? kMuted : kDim);
+        T(dc, 312, y + 23, n.ssid, 18, hl ? kInk : kText, 700, AL_START, 280);
+        if (cur && w.state == WIFI_CONNECTED)
+            _snwprintf(s, 120, L"подключено · %d дБм", n.rssi);
+        else if (cur)
+            _snwprintf(s, 120, L"подключение…");
+        else
+            _snwprintf(s, 120, L"%s%s · %d дБм", n.known ? L"сохранена · " : L"", kSec[n.sec & 3], n.rssi);
+        T(dc, 312, y + 44, s, 14, hl ? kInk : kMuted, 400, AL_START, 280);
+        if (n.sec != WSEC_OPEN)
+            Ico(dc, IC_LOCK, 724, y + 12, 28, hl ? kInk : kDim);
+        if (n.known)   // drawn last: its button wins over the row's
+            Button(dc, 604, y + 9, 108, 34, L"ЗАБЫТЬ", hl ? B_FILL : B_N, IC_NONE, 13, 0, A_WIFIFORGET, i);
+    }
+    if (!w.count && w.state >= WIFI_DISCONNECTED)
+        T(dc, 272, 160, w.scanning ? L"Ищу сети…" : L"Сетей не видно — нажмите «НАЙТИ»", 16, kMuted, 400);
+    if (w.msg[0] && w.state != WIFI_NOWZC)
+        T(dc, 256, 312, w.msg, 14, kDim, 400, AL_START, 370);
+    // the unit's own access point: by hand, or automatically when no known network is in sight
+    if (w.state >= WIFI_AP) {
+        bool apOn = w.state == WIFI_AP && !w.apAuto;
+        Button(dc, 256, 352, 196, 40, apOn ? L"ТОЧКА ГУ: ВКЛ" : L"ТОЧКА ГУ", apOn ? B_SEL : B_N, IC_NONE, 14, 0,
+               A_WIFIAP);
+        T(dc, 466, 378, L"авто", 15, kMuted, 600);
+        Toggle(dc, 520, 354, T_WIFI_AP_AUTO);
+        T(dc, 610, 378, L"держать", 15, kMuted, 600);   // the connection: no WzcRefresh restarts (Xiaomi)
+        Toggle(dc, 696, 354, T_WIFI_HOLD);
+    }
+    if (pages > 1) {
+        _snwprintf(s, 16, L"%d/%d", s_wifiPage + 1, pages);
+        Button(dc, 644, 298, 56, 40, NULL, s_wifiPage ? B_N : B_DIS, IC_BACK, 18, 26, A_WIFIPAGE, -1);
+        T(dc, 638, 324, s, 14, kMuted, 600, AL_END);
+        Button(dc, 708, 298, 56, 40, NULL, s_wifiPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 26, A_WIFIPAGE, 1);
     }
 }
 
-static void ScrWifiKeys(HDC dc)
-{
-    static const wchar_t* rows[4] = { L"1234567890", L"qwertyuiop", L"asdfghjkl-", L"zxcvbnm_.@" };
-    Frame(dc, L"WI-FI · VESTA_GARAGE");
-    R(dc, 16, 68, 600, 60, 10, kPanel, kLine);
-    int end = T(dc, 32, 106, s_pass, 26, kText, 700, AL_START, 520);
-    R(dc, end + 4, 84, 3, 28, 0, kOrange);
-    IconBtn(dc, IC_EYE, 566, 82, 32, kMuted);
-    Button(dc, 628, 68, 156, 60, L"ГОТОВО", B_PRI, IC_NONE, 18, 0, A_BACK);
-    for (int r = 0; r < 4; r++)
-        for (int c = 0; rows[r][c]; c++) {
-            int x = 13 + c * 78, y = 140 + r * 66;
-            wchar_t ch[2] = { rows[r][c], 0 };
-            bool d = Zone(x, y, 72, 60, A_KEY, K_PASS * 65536 + rows[r][c]);
-            R(dc, x, y, 72, 60, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
-            T(dc, x + 36, y + 40, ch, 26, d ? kInk : kText, 700, AL_MID);
-        }
-    Button(dc, 13, 408, 150, 60, NULL, B_FILL, IC_SHIFT, 18, 32);
-    Button(dc, 169, 408, 150, 60, L"АБВ", B_FILL, IC_NONE, 20);
-    bool d = Zone(325, 408, 306, 60, A_KEY, K_PASS * 65536 + L' ');
-    R(dc, 325, 408, 306, 60, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
-    R(dc, 410, 442, 136, 4, 2, d ? kInk : kMuted);
-    Button(dc, 637, 408, 150, 60, NULL, B_FILL, IC_BKSP, 18, 36, A_DEL, K_PASS);
-}
-
+// The player's picture: kept in proportion (black bands) or stretched over the window; the picture while the
+// car moves (off: only the sound, the rules of the road). Both kept in the ini.
 static void ScrSetVideo(HDC dc)
 {
-    static const wchar_t* scale[2] = { L"ОБЫЧНЫЙ", L"АВТО" };
-    static const wchar_t* format[2] = { L"16:9", L"4:3" };
+    static const wchar_t* scale[2] = { L"ВПИСАТЬ", L"РАСТЯНУТЬ" };
     Settings(dc, S_SET_VIDEO);
     SetRow(dc, 64, L"Масштаб");
     Seg(dc, 512, 70, 248, 44, scale, 2, G_VIDEO_SCALE, 15);
-    SetRow(dc, 120, L"Формат");
-    Seg(dc, 512, 126, 248, 44, format, 2, G_VIDEO_FMT, 16);
-    SetRow(dc, 176, L"Видео в движении", L"по ПДД — выключено");
-    Toggle(dc, 688, 186, T_VIDEO_MOVING);
-    SetRow(dc, 232, L"Субтитры", NULL, true);
-    Toggle(dc, 688, 242, T_SUBTITLES);
+    SetRow(dc, 120, L"Видео в движении", L"выключено: в движении видео на паузе", true);
+    Toggle(dc, 688, 130, T_VIDEO_MOVING);
 }
 
 static void ScrSetPhoto(HDC dc)
@@ -2290,7 +2897,7 @@ static void ScrInfo(HDC dc)
         wcscpy(os, L"?");
     CanStatusText(can, 64);
     const wchar_t* rows[5][2] = { { L"Модель", L"LADA Vesta · MMC" }, { L"Оболочка G3", shell }, { L"ОС", os },
-                                  { L"CAN-модуль", can }, { L"VestaHome", L"0.5 · 2026-10-15" } };
+                                  { L"CAN-модуль", can }, { L"VestaHome", L"0.5 · 2026-10-18" } };
     Settings(dc, S_INFO);
     for (int i = 0; i < 5; i++) {
         int y = 64 + i * 44;
@@ -2338,7 +2945,7 @@ static int   s_touchCount;
 struct Test { const wchar_t* label; Action a; int arg; };
 static const Test kTests[8] = { { L"ЭКРАН", A_SCREEN, S_TEST_SCREEN }, { L"КАСАНИЯ", A_SCREEN, S_TEST_TOUCH },
                                 { L"КАЛИБРОВКА", A_CALIBRATE, 0 }, { L"ПАМЯТЬ И ДИСКИ", A_SCREEN, S_TEST_MEM },
-                                { L"КНОПКИ · MCU", A_SCREEN, S_TEST_MCU }, { L"ДИНАМИКИ", A_SOON, 0 },
+                                { L"КНОПКИ · MCU", A_SCREEN, S_TEST_MCU }, { L"ЗВУК И ВИДЕО", A_SCREEN, S_TEST_AV },
                                 { L"CAN / UART · ПОТОК", A_SCREEN, S_TEST_CAN }, { L"GPS", A_SCREEN, S_TEST_CAN } };
 
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
@@ -2351,7 +2958,7 @@ static void ScrDiag(HDC dc)
                kTests[i].a == A_SOON ? B_DIS : B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
     T(dc, 40, 362, L"«Кнопки» — монитор MCU (нажатия руля и панели приходят оттуда). GPS и CAN — один поток.",
       14, kDim, 400, AL_START, 720);
-    T(dc, 40, 384, L"Динамики, вентилятор, тюнер — когда будут разобраны их команды MCU.", 14, kDim, 400,
+    T(dc, 40, 384, L"«Звук и видео» — писк поверх радио и тестовые файлы (папка TestMedia).", 14, kDim, 400,
       AL_START, 720);
 }
 
@@ -2578,7 +3185,10 @@ static void Under(HDC dc, int alpha)
         NavBar(dc, Section(prev));
     s_histLen++;
     s_pressed = pressed;
-    kBtnCount = 0;
+    if (s_partial)   // the screen under the window has no buttons
+        s_zoneIdx = 0;
+    else
+        kBtnCount = 0;
     Shade(0, 56, 800, 424, alpha, alpha);
 }
 
@@ -2598,18 +3208,39 @@ static void ScrExit(HDC dc)
     Button(dc, 498, 284, 160, 60, L"ВЫХОД", B_PRI, IC_POWER, 17, 24, A_EXIT);
 }
 
-static void ScrIncoming(HDC dc)
+// The knob held 5 s (MCU 0x1102 18): the MCU reboots the unit 5 s later. The stock shell shows its own window
+// with "Cancel" = key 0x5A (SPIPower.log 2026-10-18); this is it over VestaHome.
+static DWORD s_rebootTick;
+
+static void ScrReboot(HDC dc)
 {
     Under(dc, 184);
+    Panel(dc, 150, 130, 500, 220, 16);
+    Ico(dc, IC_POWER, 182, 162, 48, kOrange);
+    int left = 5 - (int)((GetTickCount() - s_rebootTick) / 1000);
+    wchar_t s[48];
+    _snwprintf(s, 48, L"ПЕРЕЗАГРУЗКА ЧЕРЕЗ %d С", left < 0 ? 0 : left);
+    T(dc, 246, 198, s, 24, kText, 700, AL_START, 380);
+    T(dc, 182, 250, L"Крутилка громкости удержана. Отменить?", 17, kMuted, 400, AL_START, 440);
+    Button(dc, 250, 274, 300, 60, L"ОТМЕНА", B_PRI, IC_NONE, 18, 0, A_REBOOTNO);
+}
+
+static void ScrIncoming(HDC dc)
+{
+    BtState bt;
+    BtGet(&bt, NULL);
+    wchar_t num[40];
+    BtText(bt.callNumber, num, 40);
+    Under(dc, 184);
     Panel(dc, 100, 84, 600, 340, 16);
-    AvatarOr(dc, 196, 184, 64, L"МН");
+    Disc(dc, 196, 184, 64, kPanel2);
+    Ico(dc, IC_CALL, 172, 160, 48, kOk);
     T(dc, 286, 150, L"ВХОДЯЩИЙ ВЫЗОВ", 14, kMuted, 700);
-    T(dc, 286, 194, L"Мария Никифорова", 32, kText, 700, AL_START, 400);
-    T(dc, 286, 226, L"+7 927 765-43-21", 20, kMuted, 400);
-    bool d = Zone(124, 300, 266, 92, A_TAB, S_CALL);   // green and red: here the colour carries the meaning
+    T(dc, 286, 200, num[0] ? num : L"номер скрыт", 32, kText, 700, AL_START, 400);
+    bool d = Zone(124, 300, 266, 92, A_PHONEANS);   // green and red: here the colour carries the meaning
     R(dc, 124, 300, 266, 92, 12, d ? Mix(kOk, kInk, 160) : kOk);
     Ico(dc, IC_CALL, 233, 322, 48, kInk);
-    d = Zone(410, 300, 266, 92, A_BACK);
+    d = Zone(410, 300, 266, 92, A_PHONEEND);
     R(dc, 410, 300, 266, 92, 12, d ? Mix(kStop, kInk, 160) : kStop);
     Ico(dc, IC_HANGUP, 519, 322, 48, kInk);
 }
@@ -2619,37 +3250,69 @@ static void ScrVolume(HDC dc)
     Under(dc, 153);
     Zone(0, 0, 800, 480, A_BACK);
     Panel(dc, 150, 150, 500, 180, 16);
-    Ico(dc, IC_VOL, 182, 182, 48, kText);
-    T(dc, 246, 216, L"ГРОМКОСТЬ", 15, kMuted, 700);
-    T(dc, 618, 222, L"18", 48, kText, 700, AL_END);
-    for (int i = 0; i < 30; i++) {
-        int h = 14 + i * 12 / 10;
-        R(dc, 182 + i * 15, 300 - h, 10, h, 2, i < 18 ? kOrange : kLine);
+    // the MCU's volume of the current source, 0..50 (25 bars of 2), as it comes (the hardware knob, the wheel)
+    int vol, mute, src;
+    bool have = VolGet(&vol, &mute, &src);
+    const wchar_t* name = src == 0 ? L"ГРОМКОСТЬ · РАДИО" : src == 6 || src == 7 ? L"ГРОМКОСТЬ · МЕДИА"
+                        : src == 9 ? L"ГРОМКОСТЬ · BLUETOOTH" : L"ГРОМКОСТЬ";
+    Ico(dc, IC_VOL, 182, 182, 48, have && !mute ? kText : kDim);
+    T(dc, 246, 216, name, 15, kMuted, 700);
+    wchar_t s[16];
+    if (!have)
+        wcscpy(s, L"–");
+    else if (mute)
+        wcscpy(s, L"БЕЗ ЗВУКА");
+    else
+        _snwprintf(s, 16, L"%d", vol);
+    T(dc, 618, 222, s, mute ? 28 : 48, mute ? kMuted : kText, 700, AL_END);
+    int lit = have && !mute ? (vol + 1) / 2 : 0;
+    for (int i = 0; i < 25; i++) {
+        int h = 14 + i * 36 / 24;
+        R(dc, 182 + i * 18, 300 - h, 12, h, 2, i < lit ? kOrange : kLine);
     }
+    if (!have)
+        T(dc, 182, 316, L"MCU ещё не присылал громкость (нужен proxy)", 13, kDim, 400);
 }
+
+// The screen saver: the skin's picture (Skin\saver.png, skin.ini "saver": Lada's X-design, made by
+// skin/make_saver.py), dimmed by the night theme; the clock, the date, the weather with its picture in the middle,
+// what plays below. A tap goes back.
+static void SaverWeather(HDC dc, int cx, int y);   // (after the weather's part)
 
 static void ScrSaver(HDC dc)
 {
     SYSTEMTIME t;
     GetLocalTime(&t);
-    wchar_t clock[8], date[48];
+    wchar_t clock[8], date[48], s[160];
     Now(clock, 8);
     _snwprintf(date, 48, L"%s, %d %s", kDays[t.wDayOfWeek % 7], t.wDay, kMonths[(t.wMonth + 11) % 12]);
     CharUpperBuff(date, 1);
     Zone(0, 0, 800, 480, A_BACK);
-    Pattern(0, 404, 0);
-    TriFill(0, 404, 800, 76, 0);
-    Shade(0, 404, 800, 76, 140, 0);   // #fade-up at 55 %
-    R(dc, 0, 402, 800, 3, 0, kOrange);
-    T(dc, 400, 260, clock, 168, kText, 700, AL_MID);
-    T(dc, 400, 316, date, 26, kMuted, 400, AL_MID);
-    Ico(dc, IC_MUSIC, 24, 424, 36, kText);
-    T(dc, 72, 450, L"Кино — Группа крови", 18, kText, 700);
-    int temp;
-    if (OutsideTemp(&temp)) {
-        wchar_t ts[12];
-        _snwprintf(ts, 12, L"%+d °C", temp);
-        T(dc, 776, 450, ts, 18, kText, 400, AL_END);
+    SaverBackground(dc);
+    T(dc, 400, 218, clock, 132, kText, 700, AL_MID);
+    T(dc, 400, 270, date, 24, kMuted, 400, AL_MID);
+    SaverWeather(dc, 400, 300);
+    // what plays: the radio's station, Bluetooth's track
+    s[0] = 0;
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    BtState bt;
+    if (src == 9 && BtGet(&bt, NULL) && bt.title[0]) {
+        BtText(bt.title, s, 160);
+    } else if (src == 0) {
+        Tuner tu;
+        TunerGet(&tu);
+        wchar_t f[16];
+        FreqText(tu.f10, f, 16);
+        const wchar_t* nm = tu.ps[0] ? tu.ps : RadioName(tu, tu.f10);
+        if (tu.f10)
+            _snwprintf(s, 160, L"%s  %s", f, nm);
+    }
+    if (s[0]) {
+        int w = TextWidth(dc, s, 18, 700);
+        w = w > 560 ? 560 : w;
+        Ico(dc, src == 0 ? IC_RADIO : IC_MUSIC, 400 - (w + 40) / 2, 424, 30, kMuted);
+        T(dc, 400 - (w + 40) / 2 + 40, 446, s, 18, kText, 700, AL_START, 560);
     }
 }
 
@@ -2661,6 +3324,12 @@ static void Trim(wchar_t* s);
 // only the card keeps them.
 enum { W_OMETEO, W_OWM, W_YANDEX, W_COUNT };
 static const char* kProvKey[W_COUNT] = { "openmeteo", "owm", "yandex" };   // anything else (old wttr, gismeteo): Open-Meteo
+
+// The main screen's widgets (DrawHome's table follows them; the ini names them).
+enum { WG_MEDIA, WG_SPEED, WG_RADIO, WG_WEATHER, WG_APPS, WG_TRIP, WG_CLIMATE, WG_DATE, WG_PHONE, WG_CAR, WG_NAVI,
+       WG_COUNT };
+static const wchar_t* kWgKey[WG_COUNT] = { L"media", L"speed", L"radio", L"weather", L"apps", L"trip", L"climate",
+                                           L"date", L"phone", L"car", L"navi" };
 
 struct Cfg {
     int     weatherProv;
@@ -2674,6 +3343,8 @@ struct Cfg {
     int     tzMin;                     // local time = UTC + this (minutes): the unit's own zone resets with the registry
     bool    climate;                   // the car has climate control: its widget is shown
     bool    camAlert, camSound;
+    int     camOver;          // the beep: -1 always, else only above the camera's limit + camOver km/h
+    int     beepDev;          // the beep's waveOut device, -1 = WAVE_MAPPER (2026-10-17: which one the MCU mixes?)
     int     camDist;                   // m, 0 = by speed
     wchar_t camFile[MAX_PATH];         // the camera file (iGO / Navitel), relative = from the exe's folder
     wchar_t camRegions[200];           // speedcamonline.ru regions to download: "63,73", "-1" = all of Russia
@@ -2686,8 +3357,30 @@ struct Cfg {
     wchar_t musicDir[MAX_PATH];        // the player's folder and track, to come back to
     wchar_t musicFile[MAX_PATH];
     bool    shuffle, repeat;
+    bool    musicTree;                 // the playlist takes the subfolders too ("ИГРАТЬ ВСЁ")
+    wchar_t videoDir[MAX_PATH];        // the video player's folder and file
+    wchar_t videoFile[MAX_PATH];
+    bool    videoStretch;              // fill the window instead of keeping the proportions
+    bool    videoMoving;               // the picture also while the car moves
+    bool    rvcOwn;                    // the rear view camera shown by VestaHome (rvc.cpp), not by the shell
+    bool    wifiOn;                    // the Wi-Fi radio (wifi.cpp WifiEnable)
+    bool    wifiHold;                  // WifiHold: the vendor's WzcRefresh off
+    int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
+    int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
+    int     homeOrder[16];             // the main screen's widgets (WG_*) in their order
+    int     homeHidden;                // bit 1 << WG_*: hidden
+    bool    wifiApAuto;                // the access point for a phone, automatically (wifi.cpp WifiApSetup)
+    wchar_t wifiApSsid[33], wifiApPass[65];
+    bool    rvcInvert;                 // the trajectory bends the other way (the CAN angle's sign)
+    wchar_t radioStation[64];          // the internet radio's station (its name in radio.txt)
+    int     wifiCount;                 // the known Wi-Fi networks: WZC forgets them on every boot (the registry)
+    wchar_t wifiSsid[kWifiKnown][33];
+    wchar_t wifiPass[kWifiKnown][64];  // open in memory; in the file sealed with the unit's key (secret.cpp)
+    bool    wifiLocked[kWifiKnown];    // sealed by another unit (or damaged): kept as it was, not used
+    wchar_t wifiSealed[kWifiKnown][300];
 };
 static Cfg s_cfg;
+static const int kSaverMins[5] = { 0, 1, 3, 5, 10 };
 static const int kCamDists[4] = { 0, 200, 400, 600 };   // 0 = by speed
 // Camera bases live in their own folder next to the exe (kept out of git): downloads and the default file.
 static const wchar_t* kCamFolder  = L"speedcam\\";
@@ -2702,6 +3395,15 @@ static void CfgDefaults()
     s_cfg.gpsTime = true;
     s_cfg.tzMin = 180;                            // Moscow
     s_cfg.camAlert = s_cfg.camSound = true;
+    s_cfg.camOver = -1;
+    s_cfg.beepDev = 1;   // "Audio Output" 1: heard over the radio (HU 2026-10-18-2)
+    s_cfg.wifiOn = true;
+    s_cfg.wifiHold = true;
+    s_cfg.saverMin = 5;
+    for (int i = 0; i < WG_COUNT; i++)
+        s_cfg.homeOrder[i] = i;
+    s_cfg.homeHidden = 0;
+    wcscpy(s_cfg.wifiApSsid, L"VestaHome");
     s_cfg.camDist = 0;
     wcscpy(s_cfg.camFile, kCamDefault);
     wcscpy(s_cfg.camKinds, L"0,14,11,110,2,3");   // the speed cameras
@@ -2716,10 +3418,54 @@ static void CfgPath(wchar_t* path)
 static bool CfgBool(const wchar_t* v) { return v[0] == L'1' || !_wcsicmp(v, L"true") || !_wcsicmp(v, L"yes"); }
 
 static void SaveCfg();
+static void RadioCacheLoad(const wchar_t* k, const wchar_t* v);   // the tuner's last state, the stations' names
+static int  RadioCacheText(wchar_t* out, int cap);
+
+// "media,speed,-radio,...": the order, "-" hides; unknown names are skipped, widgets not named go to the end.
+static void HomeWidgetsLoad(const wchar_t* v)
+{
+    int n = 0;
+    bool seen[WG_COUNT] = { false };
+    s_cfg.homeHidden = 0;
+    while (*v) {
+        while (*v == L' ' || *v == L',')
+            v++;
+        bool hide = *v == L'-';
+        if (hide)
+            v++;
+        const wchar_t* e = v;
+        while (*e && *e != L',' && *e != L' ')
+            e++;
+        for (int i = 0; i < WG_COUNT; i++)
+            if (!seen[i] && (int)wcslen(kWgKey[i]) == e - v && !wcsncmp(kWgKey[i], v, e - v)) {
+                seen[i] = true;
+                s_cfg.homeOrder[n++] = i;
+                if (hide)
+                    s_cfg.homeHidden |= 1 << i;
+            }
+        v = e;
+    }
+    for (int i = 0; i < WG_COUNT; i++)
+        if (!seen[i])
+            s_cfg.homeOrder[n++] = i;
+}
+
+static void HomeWidgetsText(wchar_t* out, int cap)
+{
+    out[0] = 0;
+    for (int i = 0; i < WG_COUNT; i++) {
+        int id = s_cfg.homeOrder[i];
+        wchar_t t[16];
+        _snwprintf(t, 16, L"%s%s%s", i ? L"," : L"", s_cfg.homeHidden >> id & 1 ? L"-" : L"", kWgKey[id]);
+        if ((int)(wcslen(out) + wcslen(t)) < cap)
+            wcscat(out, t);
+    }
+}
 
 static void LoadCfg()
 {
     CfgDefaults();
+    bool resave = false;   // a password written open by hand: sealed now
     wchar_t path[MAX_PATH];
     CfgPath(path);
     DWORD size;
@@ -2784,6 +3530,10 @@ static void LoadCfg()
             s_cfg.camAlert = CfgBool(v);
         } else if (!wcscmp(k, L"cam.sound")) {
             s_cfg.camSound = CfgBool(v);
+        } else if (!wcscmp(k, L"cam.over")) {
+            s_cfg.camOver = _wtoi(v);
+        } else if (!wcscmp(k, L"sound.beepdev")) {
+            s_cfg.beepDev = _wtoi(v) < 0 ? 1 : _wtoi(v);   // AUTO was not heard over the radio
         } else if (!wcscmp(k, L"cam.distance")) {
             s_cfg.camDist = _wtoi(v);
         } else if (!wcscmp(k, L"cam.regions")) {
@@ -2817,13 +3567,74 @@ static void LoadCfg()
         } else if (!wcscmp(k, L"music.file")) {
             wcsncpy(s_cfg.musicFile, v, MAX_PATH - 1);
             s_cfg.musicFile[MAX_PATH - 1] = 0;
+        } else if (!wcscmp(k, L"music.tree")) {
+            s_cfg.musicTree = CfgBool(v);
         } else if (!wcscmp(k, L"music.shuffle")) {
             s_cfg.shuffle = CfgBool(v);
         } else if (!wcscmp(k, L"music.repeat")) {
             s_cfg.repeat = CfgBool(v);
+        } else if (!wcscmp(k, L"video.dir")) {
+            wcsncpy(s_cfg.videoDir, v, MAX_PATH - 1);
+            s_cfg.videoDir[MAX_PATH - 1] = 0;
+        } else if (!wcscmp(k, L"video.file")) {
+            wcsncpy(s_cfg.videoFile, v, MAX_PATH - 1);
+            s_cfg.videoFile[MAX_PATH - 1] = 0;
+        } else if (!wcscmp(k, L"video.stretch")) {
+            s_cfg.videoStretch = CfgBool(v);
+        } else if (!wcscmp(k, L"video.moving")) {
+            s_cfg.videoMoving = CfgBool(v);
+        } else if (!wcscmp(k, L"rvc.own")) {
+            s_cfg.rvcOwn = CfgBool(v);
+        } else if (!wcscmp(k, L"wifi.on")) {
+            s_cfg.wifiOn = CfgBool(v);
+        } else if (!wcscmp(k, L"home.widgets")) {
+            HomeWidgetsLoad(v);
+        } else if (!wcscmp(k, L"screen.theme")) {
+            s_cfg.themeMode = _wtoi(v) % 3;
+        } else if (!wcscmp(k, L"screen.light")) {
+            s_cfg.lightMode = _wtoi(v) % 3;
+        } else if (!wcscmp(k, L"screen.saver")) {
+            s_cfg.saverMin = _wtoi(v) < 0 ? 0 : _wtoi(v) > 60 ? 60 : _wtoi(v);
+        } else if (!wcscmp(k, L"wifi.hold")) {
+            s_cfg.wifiHold = CfgBool(v);
+        } else if (!wcscmp(k, L"wifi.ap.auto")) {
+            s_cfg.wifiApAuto = CfgBool(v);
+        } else if (!wcscmp(k, L"wifi.ap.ssid") && v[0]) {
+            wcsncpy(s_cfg.wifiApSsid, v, 32);
+        } else if (!wcscmp(k, L"wifi.ap.pass") && wcslen(v) >= 8) {
+            wcsncpy(s_cfg.wifiApPass, v, 63);
+        } else if (!wcscmp(k, L"rvc.invert")) {
+            s_cfg.rvcInvert = CfgBool(v);
+        } else if (!wcsncmp(k, L"radio.c", 7) || !wcscmp(k, L"radio.names")) {
+            RadioCacheLoad(k, v);
+        } else if (!wcscmp(k, L"radio.station")) {
+            wcsncpy(s_cfg.radioStation, v, 63);
+            s_cfg.radioStation[63] = 0;
+        } else if (!wcscmp(k, L"wifi.net") && s_cfg.wifiCount < kWifiKnown) {   // name|sealed password
+            wchar_t* bar = wcschr(v, L'|');
+            if (bar && bar > v) {
+                *bar = 0;
+                int i = s_cfg.wifiCount++;
+                wcsncpy(s_cfg.wifiSsid[i], v, 32);
+                s_cfg.wifiSsid[i][32] = 0;
+                const wchar_t* pass = bar + 1;
+                if (!SecretIsSealed(pass)) {   // written open by hand: taken, sealed at the next save
+                    wcsncpy(s_cfg.wifiPass[i], pass, 63);
+                    s_cfg.wifiPass[i][63] = 0;
+                    if (pass[0])
+                        resave = true;
+                } else if (!SecretOpen(pass, s_cfg.wifiPass[i], 64)) {
+                    s_cfg.wifiLocked[i] = true;
+                    wcsncpy(s_cfg.wifiSealed[i], pass, 299);
+                    s_cfg.wifiSealed[i][299] = 0;
+                    VLog(L"wifi: пароль сети %s не расшифрован (другое ГУ?)", s_cfg.wifiSsid[i]);
+                }
+            }
         }
     }
     free(buf);
+    if (resave)
+        SaveCfg();
     // the old default next to the exe: the file moves into the speedcam folder, the setting with it
     if (!_wcsicmp(s_cfg.camFile, L"speedcam.txt")) {
         wchar_t from[MAX_PATH], dir[MAX_PATH], to[MAX_PATH];
@@ -2841,8 +3652,10 @@ static void LoadCfg()
 // Written whole through a temporary file, like apps.txt.
 static void SaveCfg()
 {
-    wchar_t text[4000];
-    int n = _snwprintf(text, 4000,
+    wchar_t homeWg[200];
+    HomeWidgetsText(homeWg, 200);
+    static wchar_t text[12000];
+    int n = _snwprintf(text, 12000,
         L"# VestaHome settings (changed from its screens; the file is rewritten whole).\r\n"
         L"weather.provider=%S\r\nweather.key.owm=%s\r\nweather.key.yandex=%s\r\n"
         L"# Yandex requests made that day (its free tariff: 30 a day)\r\nweather.yandex.day=%d\r\nweather.yandex.count=%d\r\n"
@@ -2852,21 +3665,56 @@ static void SaveCfg()
         L"# time.tz: local time = UTC + minutes (180 = Moscow)\r\ntime.tz=%d\r\ncar.climate=%d\r\n"
         L"# cam.file: the camera file (iGO or Navitel), a relative path is from the VestaHome folder;\r\n"
         L"# downloads go to speedcam\\speedcam.txt\r\n"
-        L"cam.alert=%d\r\ncam.sound=%d\r\ncam.distance=%d\r\ncam.file=%s\r\n"
+        L"# cam.over: the beep only above the camera's limit + this many km/h; -1 = always\r\n"
+        L"cam.alert=%d\r\ncam.sound=%d\r\ncam.over=%d\r\nsound.beepdev=%d\r\ncam.distance=%d\r\ncam.file=%s\r\n"
         L"# cam.regions, cam.kinds: what to download from speedcamonline.ru (region codes, -1 = Russia; kinds)\r\n"
         L"cam.regions=%s\r\ncam.kinds=%s\r\ncam.weekly=%d\r\ncam.updated=%d\r\n"
         L"# audio: equalizer low,mid,high -6..6; balance/fader -8..8 (sent to the MCU when changed)\r\n"
         L"audio.eq=%d,%d,%d\r\naudio.balance=%d\r\naudio.fader=%d\r\n"
-        L"music.dir=%s\r\nmusic.file=%s\r\nmusic.shuffle=%d\r\nmusic.repeat=%d\r\n",
+        L"# music.tree: the playlist is music.dir with all its subfolders (music.file a path inside it)\r\n"
+        L"music.dir=%s\r\nmusic.file=%s\r\nmusic.shuffle=%d\r\nmusic.repeat=%d\r\nmusic.tree=%d\r\n"
+        L"# video.moving: the video also while the car moves (0: paused)\r\n"
+        L"video.dir=%s\r\nvideo.file=%s\r\nvideo.stretch=%d\r\nvideo.moving=%d\r\nradio.station=%s\r\n"
+        L"# rvc.own: the rear view camera by VestaHome (without the stock shell); rvc.invert: the trajectory mirrored\r\n"
+        L"rvc.own=%d\r\nrvc.invert=%d\r\nwifi.on=%d\r\n"
+        L"# wifi.hold: the vendor's WzcRefresh off - it restarted the search every 6 s while a phone gave the address\r\n"
+        L"wifi.hold=%d\r\n"
+        L"# screen.saver: the clock after this many minutes untouched (0 = never)\r\n"
+        L"screen.saver=%d\r\n"
+        L"# screen.theme / screen.light: our colours and maps / the unit's backlight: 0 by sunrise and sunset (GPS, else\r\n"
+        L"# home, else 7:00-20:00), 1 day, 2 night\r\n"
+        L"screen.theme=%d\r\nscreen.light=%d\r\n"
+        L"# home.widgets: the main screen's widgets in their order, \"-\" before a hidden one\r\n"
+        L"home.widgets=%s\r\n"
+        L"# wifi.ap.*: the unit's own access point for a phone with its hotspot on 5 GHz (auto: when no known network)\r\n"
+        L"wifi.ap.ssid=%s\r\nwifi.ap.pass=%s\r\nwifi.ap.auto=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
         s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.climate, s_cfg.camAlert, s_cfg.camSound,
-        s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
+        s_cfg.camOver, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
-        s_cfg.shuffle, s_cfg.repeat);
+        s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
+        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.wifiHold, s_cfg.saverMin, s_cfg.themeMode, s_cfg.lightMode, homeWg,
+        s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
     if (n < 0)
         return;
-    static char out[12000];
+    n += RadioCacheText(text + n, 12000 - n);
+    if (s_cfg.wifiCount) {
+        int k = _snwprintf(text + n, 12000 - n,
+                           L"# wifi.net: a known Wi-Fi network, name|password sealed with this unit's key\r\n");
+        n += k > 0 ? k : 0;
+    }
+    for (int i = 0; i < s_cfg.wifiCount && n < 11500; i++) {
+        wchar_t sealed[300];
+        if (s_cfg.wifiLocked[i])
+            wcscpy(sealed, s_cfg.wifiSealed[i]);
+        else if (!SecretSeal(s_cfg.wifiPass[i], sealed, 300))
+            continue;   // never written open
+        int k = _snwprintf(text + n, 12000 - n, L"wifi.net=%s|%s\r\n", s_cfg.wifiSsid[i], sealed);
+        n += k > 0 ? k : 0;
+    }
+    text[n < 12000 ? n : 11999] = 0;
+    static char out[36000];
     int len = WideCharToMultiByte(CP_UTF8, 0, text, -1, out, sizeof(out), NULL, NULL);
     wchar_t path[MAX_PATH], tmp[MAX_PATH];
     CfgPath(path);
@@ -2920,6 +3768,13 @@ static bool GpsFresh(const Gps& g, DWORD ms)
     return g.valid && GetTickCount() - g.fixTick < ms;
 }
 
+static bool GpsHasFix()
+{
+    Gps g;
+    GpsGet(&g);
+    return GpsFresh(g, 5000);
+}
+
 // Counts a sentence by its first field.
 static void NoteSentence(const char* s)
 {
@@ -2950,8 +3805,18 @@ static void NoteSentence(const char* s)
     LeaveCriticalSection(&s_gpsCs);
 }
 
-// The stream into can.log, byte for byte, up to 2 MB: the material for decoding what the CAN module sends.
-// Marks ("#MARK n uptime") are put in from the monitors when something is done in the car.
+// The stream into can.log, up to 2 MB: the material for decoding what the CAN module sends. Only changes: a line
+// the same as the last written one of its type (the text before the first comma) is left out - "@ANG" alone comes
+// ~100 times a second. Marks ("#MARK n uptime") are put in from the monitors when something is done in the car.
+struct CanLast {
+    char key[12];
+    char line[100];
+};
+static CanLast  s_canLast[kSentMax];   // under s_gpsCs
+static int      s_canLastCount;
+static char     s_canPart[128];        // a raw line not finished yet
+static int      s_canPartLen;
+
 static void CanLogWrite(const char* buf, DWORD len)
 {
     EnterCriticalSection(&s_gpsCs);
@@ -2963,6 +3828,66 @@ static void CanLogWrite(const char* buf, DWORD len)
             VLog(L"can.log: закрыт, %u байт", (unsigned)s_canLogBytes);
         } else {
             s_canLogBytes += w;
+        }
+    }
+    LeaveCriticalSection(&s_gpsCs);
+}
+
+// One line (no CR/LF) into can.log, unless it repeats the last one of its type.
+static void CanLogLine(const char* s, int len)
+{
+    char key[12];
+    int n = 0;
+    while (n < len && s[n] != ',' && s[n] != '*' && n < 11) {
+        key[n] = s[n];
+        n++;
+    }
+    key[n] = 0;
+    EnterCriticalSection(&s_gpsCs);
+    if (s_canLog != INVALID_HANDLE_VALUE && len > 0) {
+        int i = 0;
+        while (i < s_canLastCount && strcmp(s_canLast[i].key, key))
+            i++;
+        if (i == s_canLastCount && s_canLastCount < kSentMax) {
+            strcpy(s_canLast[i].key, key);
+            s_canLast[i].line[0] = 0;
+            s_canLastCount++;
+        }
+        bool same = false;
+        if (i < s_canLastCount) {
+            CanLast& c = s_canLast[i];
+            same = len < (int)sizeof(c.line) && (int)strlen(c.line) == len && !memcmp(c.line, s, len);
+            if (!same) {
+                int k = len < (int)sizeof(c.line) - 1 ? len : (int)sizeof(c.line) - 1;
+                memcpy(c.line, s, k);
+                c.line[k] = 0;
+            }
+        }
+        if (!same) {
+            CanLogWrite(s, (DWORD)len);
+            CanLogWrite("\r\n", 2);
+        }
+    }
+    LeaveCriticalSection(&s_gpsCs);
+}
+
+// Raw bytes (we read the port): cut into lines for CanLogLine.
+static void CanLogRaw(const char* buf, DWORD len)
+{
+    EnterCriticalSection(&s_gpsCs);
+    if (s_canLog != INVALID_HANDLE_VALUE) {
+        for (DWORD i = 0; i < len; i++) {
+            char c = buf[i];
+            if (c == '\n' || c == '\r') {
+                CanLogLine(s_canPart, s_canPartLen);
+                s_canPartLen = 0;
+                continue;
+            }
+            if (s_canPartLen == (int)sizeof(s_canPart)) {   // too long for a line of the module: as it is
+                CanLogLine(s_canPart, s_canPartLen);
+                s_canPartLen = 0;
+            }
+            s_canPart[s_canPartLen++] = c;
         }
     }
     LeaveCriticalSection(&s_gpsCs);
@@ -2986,6 +3911,8 @@ static void CanLogToggle()
         s_canLog = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         s_canLogBytes = 0;
         s_canMarks = 0;
+        s_canLastCount = 0;
+        s_canPartLen = 0;
         wcscpy(s_status, s_canLog != INVALID_HANDLE_VALUE ? L"запись потока в can.log" : L"can.log не создаётся");
     }
     LeaveCriticalSection(&s_gpsCs);
@@ -3001,16 +3928,14 @@ static void GpsTapRaw(const char* buf, DWORD len)
         if (c > 0x7E || (c < 0x20 && c != '\r' && c != '\n'))
             s_streamBin++;
     }
-    CanLogWrite(buf, len);
+    CanLogRaw(buf, len);
 }
 
 static void GpsTapLine(const char* line)
 {
     NoteSentence(line);
-    if (GetTickCount() - s_rawTick > 2000) {   // another program reads the port: record its lines
-        CanLogWrite(line, (DWORD)strlen(line));
-        CanLogWrite("\r\n", 2);
-    }
+    if (GetTickCount() - s_rawTick > 2000)   // another program reads the port: record its lines
+        CanLogLine(line, (int)strlen(line));
 }
 
 static void GpsLogLine(const char* line)
@@ -3141,6 +4066,17 @@ static bool AddMinutes(SYSTEMTIME* t, int minutes)
 static DWORD s_timeSyncTick;
 static bool  s_timeSynced;
 
+static bool McuSend6(const char* name, int a, int b, int c, int d, int e, int f);
+
+// Sets the clock and gives it to the MCU too: at boot the unit's time comes from the MCU's clock, so a time set
+// only with SetLocalTime was gone after a reboot (2026-10-17). As the stock shell does it (CSetupTimeDlg,
+// Ghidra): SPApi_SetClockTime(hour, minute, second, year % 100, month, day) = MCU message 0x3C01.
+static void ClockSet(const SYSTEMTIME& t)
+{
+    SetLocalTime(&t);
+    McuSend6("SPApi_SetClockTime", t.wHour, t.wMinute, t.wSecond, t.wYear % 100, t.wMonth, t.wDay);
+}
+
 static void GpsTimeSync(const Gps& g)
 {
     if (!s_cfg.gpsTime || !GpsFresh(g, 2000) || !g.date || (s_timeSynced && GetTickCount() - s_timeSyncTick < 3600000))
@@ -3165,7 +4101,7 @@ static void GpsTimeSync(const Gps& g)
     if (d > 30 || d < -30) {
         VLog(L"часы: по GPS %02u:%02u:%02u (UTC%+d мин), было %02u:%02u:%02u, сдвиг %+d с", gt.wHour, gt.wMinute,
              gt.wSecond, s_cfg.tzMin, now.wHour, now.wMinute, now.wSecond, (int)d);
-        SetLocalTime(&gt);
+        ClockSet(gt);
         VLog(L"часы: выставлены");
         _snwprintf(s_status, 96, L"время по GPS (было %+d с)", (int)-d);
     }
@@ -3186,7 +4122,7 @@ static void TzStep(int dir)
     SYSTEMTIME t;
     GetLocalTime(&t);
     if (AddMinutes(&t, m - s_cfg.tzMin))
-        SetLocalTime(&t);
+        ClockSet(t);
     VLog(L"часовой пояс: %+d -> %+d мин", s_cfg.tzMin, m);
     s_cfg.tzMin = m;
     s_timeSynced = false;
@@ -3204,7 +4140,7 @@ static void ClockStep(bool hour, int dir)
         t.wMinute = (WORD)((t.wMinute + dir + 60) % 60);
     t.wSecond = 0;
     t.wMilliseconds = 0;
-    SetLocalTime(&t);
+    ClockSet(t);
     VLog(L"часы вручную: %02u:%02u", t.wHour, t.wMinute);
 }
 
@@ -3212,10 +4148,10 @@ static void ClockStep(bool hour, int dir)
 // SPIPowerMgr proxy (VestaHome/SPIPower): it copies every inbound message into a named shared ring. Layout =
 // SPIPower/native/mcushm.h (keep both identical). Without the proxy the ring stays empty (magic 0).
 #define WM_APP_MCU (WM_APP + 20)
-#define MCU_SHM_NAME   L"VestaMCU"
+#define MCU_SHM_NAME   L"VestaMCU2"   // v2: 40 data bytes
 #define MCU_SHM_MAGIC  0x55434D56
 #define MCU_SHM_SLOTS  256
-#define MCU_SHM_DATA   28
+#define MCU_SHM_DATA   40   // v2, as SPIPower/native/mcushm.h
 
 struct McuMsg {
     volatile LONG  seq;
@@ -3263,6 +4199,245 @@ static HANDLE   s_mcuLog = INVALID_HANDLE_VALUE;
 static DWORD    s_mcuLogBytes;
 static Hvac     s_hvac = { -999, -1, -1, -1, -1, -1, -1, -1, -1, 0 };
 static volatile LONG s_mcuPosted;
+
+// The sound as the MCU reports it (mcu.log 2026-10-17, PROJECT.md): 0x3101 00 00 <n> = the volume of the current
+// source (0..50: the stock shell has the pictures volume/0..50), 0x3109 00 <0/1> = mute, 0x4904 00 <n> = the
+// source (00 radio, 06 and 07 the media player - USB, SD, video alike (2026-10-18), 09 Bluetooth). -1 = not seen yet. A change of the volume or the mute opens
+// the volume window (the same values sent again - the tuner repeats them - do not).
+enum { kVolMax = 50, WP_MCU_VOLUME = 1, WP_MCU_MARK = 2, WP_MCU_TUNER = 3, WP_MCU_REBOOT = 4, WP_MCU_SOUND = 5,
+       WP_MCU_DAYNIGHT = 6 };
+// The screen (2026-10-17 photos + Ghidra on the shell's CSetUpDisplayDlg 2026-10-18): 0x4105 00 <0 day, 1 night>,
+// 0x4107 00 <backlight 1..10> (10 by day, 1 at night as set); the shell's day / night buttons are keys 0x64 / 0x65,
+// its brightness slider SPApi_SysSendRadioBackLight(0..10) (the current mode's level).
+// The sound settings as the MCU reports them (SPIPower.log 2026-10-18, also after the stock shell's changes):
+// 0x3102 / 0x3103 / 0x3104 00 <0..12> = low / mid / high (6 = 0), 0x3105 00 <balance> <fader> (8 = the centre).
+struct McuSound { int eq[3], bal, fad; };   // VestaHome's units (-6..6, -8..8); 99 = not seen
+static McuSound s_mcuSnd = { { 99, 99, 99 }, 99, 99 };
+static int      s_vol = -1, s_mute = -1, s_src = -1;
+static volatile LONG s_volPosted;
+
+static Tuner s_tun;
+
+// "About the system -> Details" from the MCU (mcu.log, the engineering menu's photos; PROJECT.md): 0x7902 00 <00 SW |
+// 03 HW> 00 00 <len> <text>, 0x7902 00 00 01 <CS hi lo>; 0x7922 00 06 <BT address>; the machine ID = 0x4118
+// 00 <4 bytes> + 0x4111 00 20 <3 bytes> + 0x4112 00 <text>; System status 0x7905 00 <sub> <value> (5 bytes:
+// one byte - 0A navigation board °C, 06 amplifier °C, 07 the tuner's field dB; 4 bytes: two - 03 / 0E the
+// steering wheel buttons' voltages, as the shell shows them).
+struct McuInfo {
+    wchar_t sw[40], hw[16], id[16], idDate[8], idNum[12];
+    int     cs;                 // -1 not seen
+    BYTE    bt[6];
+    bool    btHave;
+    int     sys[16];            // by sub, -1 not seen
+};
+static McuInfo s_info;
+
+static bool McuBtAddr(wchar_t* s, int n)   // the unit's Bluetooth address, "AA:BB:…"
+{
+    EnterCriticalSection(&s_mcuCs);
+    bool have = s_info.btHave;
+    if (have)
+        _snwprintf(s, n, L"%02X:%02X:%02X:%02X:%02X:%02X", s_info.bt[0], s_info.bt[1], s_info.bt[2], s_info.bt[3],
+                   s_info.bt[4], s_info.bt[5]);
+    LeaveCriticalSection(&s_mcuCs);
+    return have;
+}
+static void McuText(const unsigned char* p, int n, wchar_t* out, bool lead);
+
+static void McuInfoTake(const McuMsg& m)   // under s_mcuCs
+{
+    const unsigned char* p = m.data;
+    int len = m.len < MCU_SHM_DATA ? m.len : MCU_SHM_DATA;
+    if (m.id == 0x7902 && len >= 5) {
+        if (p[2] == 1)
+            s_info.cs = p[3] << 8 | p[4];
+        else if (len > 5) {
+            wchar_t* out = p[1] == 3 ? s_info.hw : s_info.sw;
+            int cap = p[1] == 3 ? 16 : 40, k = 0;
+            for (int i = 5; i < len && k < cap - 1 && p[i] >= 0x20 && p[i] < 0x7F; i++)
+                out[k++] = p[i];
+            while (k > 0 && out[k - 1] == L'.')
+                k--;
+            out[k] = 0;
+        }
+    } else if (m.id == 0x7922 && len >= 8 && p[1] == 6) {
+        memcpy(s_info.bt, p + 2, 6);
+        s_info.btHave = true;
+    } else if (m.id == 0x4118 && len >= 5) {
+        _snwprintf(s_info.id, 16, L"%02X%02X%02X%02X", p[1], p[2], p[3], p[4]);
+    } else if (m.id == 0x4111 && len >= 5) {
+        _snwprintf(s_info.idDate, 8, L"%02X%02X%02X", p[2], p[3], p[4]);
+    } else if (m.id == 0x4112 && len >= 3) {
+        McuText(p + 1, len - 1 < 11 ? len - 1 : 11, s_info.idNum, true);
+    } else if (m.id == 0x7905 && len >= 4 && p[1] < 16) {
+        s_info.sys[p[1]] = len == 4 ? p[2] << 8 | p[3] : p[2];
+    }
+}
+
+static bool s_mcuCsReady;   // McuStart has made s_mcuCs (SaveCfg may run before it)
+
+// The radio's last state in the ini (the MCU sends it only on a change or when asked, HU 2026-10-18-2: VestaHome
+// started after the shell showed nothing until the radio screen asked) and the stations' names: from the MCU's list
+// and learned from RDS while listening - for the presets, which the MCU sends as frequencies only.
+enum { kRadioNames = 48 };
+static struct { int f10; wchar_t name[9]; } s_rnames[kRadioNames];
+static int s_rnameCount;
+static bool s_radioDirty;   // to be written (at most every 30 s)
+
+static const wchar_t* RadioName(const Tuner& t, int f10)   // "" when not known
+{
+    for (int i = 0; i < t.listCount && i < kTunList; i++)
+        if (t.list[i] == f10 && t.listName[i][0])
+            return t.listName[i];
+    for (int i = 0; i < s_rnameCount; i++)
+        if (s_rnames[i].f10 == f10)
+            return s_rnames[i].name;
+    return L"";
+}
+
+static void RadioNameLearn(int f10, const wchar_t* ps)
+{
+    if (f10 <= 0 || !ps[0])
+        return;
+    int i = 0;
+    while (i < s_rnameCount && s_rnames[i].f10 != f10)
+        i++;
+    if (i == s_rnameCount) {
+        if (s_rnameCount == kRadioNames)
+            i = s_rnameCount - 1;   // full: the last one goes
+        else
+            s_rnameCount++;
+    } else if (!wcscmp(s_rnames[i].name, ps)) {
+        return;
+    }
+    s_rnames[i].f10 = f10;
+    wcsncpy(s_rnames[i].name, ps, 8);
+    s_rnames[i].name[8] = 0;
+    s_radioDirty = true;
+}
+
+static void RadioCacheLoad(const wchar_t* k, const wchar_t* v)
+{
+    if (!wcscmp(k, L"radio.cache")) {   // f10,band,cur,presets,p0..p23
+        int a[28], n = 0;
+        const wchar_t* q = v;
+        while (n < 28 && *q) {
+            a[n++] = _wtoi(q);
+            while (*q && *q != L',')
+                q++;
+            if (*q)
+                q++;
+        }
+        if (n >= 4) {
+            s_tun.f10 = a[0];
+            s_tun.band = a[1];
+            s_tun.cur = a[2];
+            s_tun.presets = a[3];
+            for (int i = 0; i < 24 && 4 + i < n; i++)
+                s_tun.preset[i] = a[4 + i];
+        }
+    } else if (!wcscmp(k, L"radio.cvol")) {   // volume, mute, source: the last ones the MCU sent
+        int a[3] = { -1, -1, -1 }, n = 0;
+        const wchar_t* q = v;
+        while (n < 3 && *q) {
+            a[n++] = _wtoi(q);
+            while (*q && *q != L',')
+                q++;
+            if (*q)
+                q++;
+        }
+        if (n == 3 && a[0] >= 0 && a[0] <= kVolMax) {
+            s_vol = a[0];
+            s_mute = a[1];
+            s_src = a[2];
+        }
+    } else if (!wcscmp(k, L"radio.cset")) {   // known bits, value bits
+        int known = _wtoi(v), val = 0;
+        const wchar_t* c = wcschr(v, L',');
+        if (c)
+            val = _wtoi(c + 1);
+        s_tun.setKnown = known;
+        for (int i = 0; i < RSET_COUNT; i++)
+            s_tun.set[i] = val >> i & 1;
+    } else if (!wcscmp(k, L"radio.names")) {   // f10=NAME;...
+        const wchar_t* q = v;
+        while (*q && s_rnameCount < kRadioNames) {
+            int f = _wtoi(q);
+            const wchar_t* e = wcschr(q, L'=');
+            if (!e)
+                break;
+            e++;
+            int k2 = 0;
+            wchar_t nm[9];
+            while (e[k2] && e[k2] != L';' && k2 < 8) {
+                nm[k2] = e[k2];
+                k2++;
+            }
+            nm[k2] = 0;
+            if (f > 0 && nm[0]) {
+                s_rnames[s_rnameCount].f10 = f;
+                wcscpy(s_rnames[s_rnameCount].name, nm);
+                s_rnameCount++;
+            }
+            q = wcschr(e, L';');
+            if (!q)
+                break;
+            q++;
+        }
+    }
+}
+
+static int RadioCacheText(wchar_t* out, int cap)
+{
+    Tuner t;
+    if (s_mcuCsReady)
+        EnterCriticalSection(&s_mcuCs);
+    t = s_tun;
+    if (s_mcuCsReady)
+        LeaveCriticalSection(&s_mcuCs);
+    int n = _snwprintf(out, cap, L"# radio.*: the tuner's last state and the stations' names (VestaHome's cache)\r\n"
+                       L"radio.cache=%d,%d,%d,%d", t.f10, t.band, t.cur, t.presets);
+    if (n < 0)
+        return 0;
+    for (int i = 0; i < 24 && n < cap - 16; i++)
+        n += _snwprintf(out + n, cap - n, L",%d", t.preset[i]);
+    int val = 0;
+    for (int i = 0; i < RSET_COUNT; i++)
+        val |= (t.set[i] ? 1 : 0) << i;
+    int k = _snwprintf(out + n, cap - n, L"\r\nradio.cvol=%d,%d,%d\r\nradio.cset=%d,%d\r\nradio.names=", s_vol, s_mute,
+                       s_src, t.setKnown, val);
+    n += k > 0 ? k : 0;
+    for (int i = 0; i < s_rnameCount && n < cap - 32; i++) {
+        k = _snwprintf(out + n, cap - n, L"%d=%s;", s_rnames[i].f10, s_rnames[i].name);
+        n += k > 0 ? k : 0;
+    }
+    k = _snwprintf(out + n, cap - n, L"\r\n");
+    n += k > 0 ? k : 0;
+    return n < cap ? n : cap - 1;
+}
+
+static void TunerSet(int i, int v)   // under s_mcuCs
+{
+    s_tun.set[i] = v != 0;
+    s_tun.setKnown |= 1 << i;
+}
+static volatile LONG s_tunPosted;
+
+// The MCU's ASCII, trailing spaces cut; lead = the leading ones too (the RDS name is centred in its 8 characters;
+// a RadioText part is not: its second half may start with the space between two words).
+static void McuText(const unsigned char* p, int n, wchar_t* out, bool lead)
+{
+    int k;
+    while (lead && n > 0 && *p == ' ') {
+        p++;
+        n--;
+    }
+    for (k = 0; k < n; k++)
+        out[k] = p[k] >= 0x20 && p[k] < 0x7F ? (wchar_t)p[k] : L' ';
+    while (k > 0 && out[k - 1] == L' ')
+        k--;
+    out[k] = 0;
+}
 
 static void McuLogLine(const char* s)   // under s_mcuCs
 {
@@ -3319,6 +4494,87 @@ static void McuTake(const McuMsg& m)
         if (hvac)
             s_hvac.tick = GetTickCount();
     }
+    bool volume = false, mark = false;
+    if (m.id == 0x3101 && p[1] == 0 && p[2] <= kVolMax) {
+        volume = s_vol >= 0 && s_vol != p[2];
+        if (s_vol != p[2])
+            s_radioDirty = true;   // the cache in the ini
+        s_vol = p[2];
+    } else if (m.id == 0x3109) {
+        volume = s_mute >= 0 && s_mute != (p[1] != 0);
+        mark = s_mute == 0 && p[1] != 0;   // MUTE pressed: a mark in the records (the hardware key - an on-screen
+                                           // MARK would change the screen being tested; 2026-10-17)
+        s_mute = p[1] != 0;
+    } else if (m.id == 0x4904) {
+        s_src = p[1];
+    }
+    bool dayNight = false;
+    if (m.id == 0x4105 && p[1] <= 1) {
+        dayNight = s_mcuNight != p[1];
+        s_mcuNight = p[1];
+    } else if (m.id == 0x4107 && p[1] <= 10) {
+        dayNight = s_bright != p[1];
+        s_bright = p[1];
+    }
+    bool sound = false;
+    if (m.id >= 0x3102 && m.id <= 0x3104 && p[1] <= 12) {
+        sound = s_mcuSnd.eq[m.id - 0x3102] != p[1] - 6;
+        s_mcuSnd.eq[m.id - 0x3102] = p[1] - 6;
+    } else if (m.id == 0x3105 && p[1] <= 16 && p[2] <= 16) {
+        sound = s_mcuSnd.bal != p[1] - 8 || s_mcuSnd.fad != p[2] - 8;
+        s_mcuSnd.bal = p[1] - 8;
+        s_mcuSnd.fad = p[2] - 8;
+    }
+    static bool s_infoInit;
+    if (!s_infoInit) {
+        s_infoInit = true;
+        s_info.cs = -1;
+        for (int k = 0; k < 16; k++)
+            s_info.sys[k] = -1;
+    }
+    McuInfoTake(m);
+    bool tuner = true;
+    switch (m.id) {
+    case 0x0901: {
+        int f = p[2] << 8 | p[3];
+        if (f != s_tun.f10) {   // another station: its RDS name and text are not the old one's
+            s_tun.ps[0] = 0;
+            s_tun.rt[0][0] = s_tun.rt[1][0] = 0;
+            s_tun.fTick = GetTickCount();
+        }
+        s_tun.f10 = f;
+        s_tun.band = p[1] ? 1 : 0;
+        break;
+    }
+    case 0x0904: if (p[1] < 8) s_tun.flags[p[1]] = p[2]; break;
+    case 0x0930:   // station names, 4 a message
+        for (int k = 0; k < 4 && p[1] + k <= p[2] && p[1] + k < kTunList; k++)
+            McuText(p + 4 + k * 8, 8, s_tun.listName[p[1] + k], true);
+        break;
+    case 0x0907: s_tun.cur = p[2] == 0xFF ? -1 : p[2]; break;
+    case 0x0908:
+        if (p[1] == 0 && p[3] < kTunList && p[4] <= kTunList) {   // the station list
+            s_tun.listCount = p[4];
+            for (int k = 0; k < 8 && p[2] + k < kTunList; k++)
+                s_tun.list[p[2] + k] = p[5 + 2 * k] << 8 | p[6 + 2 * k];
+        }
+        if (p[1] == 1 && p[3] < 24 && p[4] <= 24) {
+            s_tun.presets = p[4];
+            for (int k = 0; k < 8 && p[2] + k < 24; k++)
+                s_tun.preset[p[2] + k] = p[5 + 2 * k] << 8 | p[6 + 2 * k];
+        }
+        break;
+    case 0x090B: McuText(p + 3, 8, s_tun.ps, true); break;
+    case 0x0931: if (p[3] < 2) McuText(p + 4, 32, s_tun.rt[p[3]], false); break;   // 2 x 32 = 64, RDS's RT
+    // the radio's settings (SPIPower.log 2026-10-18: the reply to each settings key, and all of them to
+    // the extended key 0x90): 0x0920 RDS, TA; 0x0921 -, AF; 0x0924 -, CT; 0x092D -, MS; 0x092E noise, MW
+    case 0x0920: TunerSet(RSET_RDS, p[1]); TunerSet(RSET_TA, p[2]); break;
+    case 0x0921: TunerSet(RSET_AF, p[2]); break;
+    case 0x0924: TunerSet(RSET_CT, p[2]); break;
+    case 0x092D: TunerSet(RSET_MS, p[2]); break;
+    case 0x092E: TunerSet(RSET_NOISE, p[1]); TunerSet(RSET_MW, p[2]); break;
+    default: tuner = false;
+    }
     if (s_mcuLog != INVALID_HANDLE_VALUE) {
         char line[200];
         int n = _snprintf(line, 120, "%u.%03u %04X s%u %u :", (unsigned)(m.tick / 1000), (unsigned)(m.tick % 1000),
@@ -3338,12 +4594,45 @@ static void McuTake(const McuMsg& m)
     LeaveCriticalSection(&s_mcuCs);
     if (hvac && !InterlockedExchange((LONG*)&s_mcuPosted, 1) && !PostMessage(s_wnd, WM_APP_MCU, 0, 0))
         s_mcuPosted = 0;
+    if (volume && !InterlockedExchange((LONG*)&s_volPosted, 1) && !PostMessage(s_wnd, WM_APP_MCU, WP_MCU_VOLUME, 0))
+        s_volPosted = 0;
+    if (mark)
+        PostMessage(s_wnd, WM_APP_MCU, WP_MCU_MARK, 0);
+    if (sound)
+        PostMessage(s_wnd, WM_APP_MCU, WP_MCU_SOUND, 0);
+    if (dayNight)
+        PostMessage(s_wnd, WM_APP_MCU, WP_MCU_DAYNIGHT, 0);
+    if (m.id == 0x1102 && p[1] == 0x18)   // the knob held 5 s: the MCU reboots the unit in 5 s more (2026-10-18)
+        PostMessage(s_wnd, WM_APP_MCU, WP_MCU_REBOOT, 0);
+    if (tuner && !InterlockedExchange((LONG*)&s_tunPosted, 1) && !PostMessage(s_wnd, WM_APP_MCU, WP_MCU_TUNER, 0))
+        s_tunPosted = 0;
+}
+
+static void TunerGet(Tuner* t)
+{
+    EnterCriticalSection(&s_mcuCs);
+    *t = s_tun;
+    LeaveCriticalSection(&s_mcuCs);
+    s_tunPosted = 0;
+}
+
+// The volume, mute and source (see s_vol); false = no volume message yet.
+static bool VolGet(int* vol, int* mute, int* src)
+{
+    EnterCriticalSection(&s_mcuCs);
+    *vol = s_vol;
+    *mute = s_mute > 0;
+    *src = s_src;
+    LeaveCriticalSection(&s_mcuCs);
+    s_volPosted = 0;
+    return *vol >= 0;
 }
 
 // Polls the ring 10 times a second. At the first look it takes what is there (up to 256 back): the climate and
 // the versions sent at boot are in it.
 static DWORD WINAPI McuThread(LPVOID)
 {
+    VLog(L"поток MCU: id %08X", (unsigned)GetCurrentThreadId());
     LONG seen = -1;
     DWORD lastTry = 0;
     while (!s_mcuStop) {
@@ -3375,6 +4664,7 @@ static DWORD WINAPI McuThread(LPVOID)
 static void McuStart()
 {
     InitializeCriticalSection(&s_mcuCs);
+    s_mcuCsReady = true;
     s_mcuThread = CreateThread(NULL, 0, McuThread, NULL, 0, NULL);
 }
 
@@ -3482,6 +4772,7 @@ static bool HvacGet(Hvac* h)
 // 1 mid, 2 low; -6..6 -> + 6), product info / BT address = requests answered as MCU messages (to the monitor).
 typedef void (*SpmFn0)(void);
 typedef void (*SpmFn2)(unsigned int, unsigned int);
+typedef void (*SpmFn6)(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
 static HMODULE s_spm;
 static int     s_spmTried;
 
@@ -3514,6 +4805,26 @@ static bool McuSend2(const char* name, int a, int b)
     }
     f((unsigned)a & 0xFF, (unsigned)b & 0xFF);
     VLog(L"mcu: %S(%d, %d)", name, a, b);
+    return true;
+}
+
+static bool McuSend3(const char* name, int a, int b, int c)
+{
+    SpmFn6 fn = (SpmFn6)SpmProc(name);   // three byte arguments in r0..r2; the rest is not read
+    if (!fn)
+        return false;
+    fn(a & 0xFF, b & 0xFF, c & 0xFF, 0, 0, 0);
+    VLog(L"mcu: %S(%d, %d, %d)", name, a, b, c);
+    return true;
+}
+
+static bool McuSend6(const char* name, int a, int b, int c, int d, int e, int f)
+{
+    SpmFn6 fn = (SpmFn6)SpmProc(name);
+    if (!fn)
+        return false;   // the PC, or no SPIPowerMgr: only the local clock
+    fn(a & 0xFF, b & 0xFF, c & 0xFF, d & 0xFF, e & 0xFF, f & 0xFF);
+    VLog(L"mcu: %S(%d, %d, %d, %d, %d, %d)", name, a, b, c, d, e, f);
     return true;
 }
 
@@ -3552,7 +4863,15 @@ typedef void  (CALLBACK *BassSyncProc)(DWORD, DWORD, DWORD, void*);
 typedef DWORD (WINAPI *BassSyncFn)(DWORD, DWORD, QWORD, BassSyncProc, void*);
 typedef int   (WINAPI *BassErrFn)(void);
 typedef const char* (WINAPI *TagsReadFn)(DWORD, const char*);
-enum { BASS_UNICODE_F = 0x80000000, BASS_SYNC_END_F = 2, BASS_ACTIVE_PLAYING_F = 1, BASS_ACTIVE_PAUSED_F = 3,
+// a "file" read by callbacks (the internet radio: BASS_StreamCreateFileUser, BASS_FILEPROCS)
+typedef void  (CALLBACK *BassFileCloseProc)(void*);
+typedef QWORD (CALLBACK *BassFileLenProc)(void*);
+typedef DWORD (CALLBACK *BassFileReadProc)(void*, DWORD, void*);
+typedef BOOL  (CALLBACK *BassFileSeekProc)(QWORD, void*);
+struct BassFileProcs { BassFileCloseProc close; BassFileLenProc length; BassFileReadProc read; BassFileSeekProc seek; };
+typedef DWORD (WINAPI *BassStreamUserFn)(DWORD, DWORD, const BassFileProcs*, void*);
+enum { BASS_UNICODE_F = 0x80000000, BASS_SYNC_END_F = 2, BASS_SYNC_STALL_F = 6, BASS_ACTIVE_PLAYING_F = 1,
+       BASS_ACTIVE_PAUSED_F = 3, BASS_STREAMFILE_BUFFER_F = 1, BASS_STREAM_BLOCK_F = 0x100000,
        kPlMax = 400, kMusRows = 5, kMusMax = 400 };
 
 static struct {
@@ -3569,7 +4888,14 @@ static struct {
     BassSyncFn       setSync;
     BassErrFn        error;
     TagsReadFn       tags;
+    BassStreamUserFn streamUser;
 } s_bass;
+
+// Only one of the music, the internet radio and the video plays: each one starting stops / pauses the others.
+static void NetStop();
+static void VidPauseForAudio();
+static void Redraw();
+static void RedrawArea(int l, int t, int r, int b);
 
 static DWORD    s_chan;                    // the stream playing (0 = none)
 static wchar_t  s_plDir[MAX_PATH];         // the playlist's folder
@@ -3619,6 +4945,7 @@ static bool BassLoad()
     s_bass.b2s = (BassB2SFn)BASS_PROC("BASS_ChannelBytes2Seconds");
     s_bass.setSync = (BassSyncFn)BASS_PROC("BASS_ChannelSetSync");
     s_bass.error = (BassErrFn)BASS_PROC("BASS_ErrorGetCode");
+    s_bass.streamUser = (BassStreamUserFn)BASS_PROC("BASS_StreamCreateFileUser");
     if (!s_bass.init || !s_bass.streamFile || !s_bass.play || !s_bass.active || !s_bass.getLength ||
         !s_bass.getPos || !s_bass.setPos || !s_bass.b2s || !s_bass.streamFree || !s_bass.pause || !s_bass.error) {
         s_bass.state = -1;
@@ -3639,6 +4966,8 @@ static bool BassLoad()
     }
     _snwprintf(path, MAX_PATH, L"%stags.dll", dir);
     HMODULE tl = LoadLibrary(path);
+    if (!tl && GetFileAttributes(path) != 0xFFFFFFFF)
+        VLog(L"плеер: tags.dll не загрузилась, ошибка %u", (unsigned)GetLastError());
     if (tl) {
 #ifdef UNDER_CE
         s_bass.tags = (TagsReadFn)GetProcAddress(tl, L"TAGS_Read");
@@ -3664,6 +4993,20 @@ static bool IsAudioName(const wchar_t* n)
     return false;
 }
 
+// What the shell's GStreamer can open (its demuxers; the pictures by omxdecoder, see video.cpp).
+static bool IsVideoName(const wchar_t* n)
+{
+    static const wchar_t* ext[14] = { L".mp4", L".m4v", L".mov", L".3gp", L".avi", L".mkv", L".flv", L".wmv",
+                                      L".asf", L".mpg", L".mpeg", L".ts", L".vob", L".rmvb" };
+    const wchar_t* dot = wcsrchr(n, L'.');
+    if (!dot)
+        return false;
+    for (int i = 0; i < 14; i++)
+        if (!_wcsicmp(dot, ext[i]))
+            return true;
+    return false;
+}
+
 static int CmpName(const void* a, const void* b)
 {
     const wchar_t* x = *(const wchar_t* const*)a;
@@ -3681,8 +5024,8 @@ static void FreeNames(wchar_t** v, int* n)
     *n = 0;
 }
 
-// Folder `dir` ("X\" form): subfolders (with "\" appended, when folders) and audio files, sorted.
-static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders)
+// Folder `dir` ("X\" form): subfolders (with "\" appended, when folders) and audio (or video) files, sorted.
+static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders, bool video = false)
 {
     wchar_t pat[MAX_PATH];
     _snwprintf(pat, MAX_PATH, L"%s*", dir);
@@ -3693,7 +5036,8 @@ static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders)
         return 0;
     do {
         bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        if (fd.cFileName[0] == L'.' || (isDir && !folders) || (!isDir && !IsAudioName(fd.cFileName)) ||
+        if (fd.cFileName[0] == L'.' || (isDir && !folders) ||
+            (!isDir && !(video ? IsVideoName(fd.cFileName) : IsAudioName(fd.cFileName))) ||
             (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN))
             continue;
         size_t len = wcslen(fd.cFileName);
@@ -3710,32 +5054,73 @@ static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders)
     return n;
 }
 
+// Folder `dir` with all its subfolders (up to 6 deep): the audio files as paths inside it ("Artist\Album\01.mp3"),
+// sorted by path - disc, artist, album, track. For "ИГРАТЬ ВСЁ".
+static int ReadMusicTree(const wchar_t* dir, const wchar_t* sub, wchar_t** v, int n, int cap, int depth)
+{
+    wchar_t pat[MAX_PATH];
+    _snwprintf(pat, MAX_PATH, L"%s%s*", dir, sub);
+    pat[MAX_PATH - 1] = 0;
+    WIN32_FIND_DATA fd;
+    HANDLE h = FindFirstFile(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE)
+        return n;
+    int first = n;
+    do {
+        bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        if (fd.cFileName[0] == L'.' || (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN))
+            continue;
+        if (isDir) {
+            if (depth < 6) {
+                wchar_t s2[MAX_PATH];
+                _snwprintf(s2, MAX_PATH, L"%s%s\\", sub, fd.cFileName);
+                s2[MAX_PATH - 1] = 0;
+                n = ReadMusicTree(dir, s2, v, n, cap, depth + 1);
+            }
+        } else if (IsAudioName(fd.cFileName)) {
+            size_t len = wcslen(sub) + wcslen(fd.cFileName);
+            wchar_t* p = (wchar_t*)malloc((len + 1) * sizeof(wchar_t));
+            if (!p)
+                break;
+            wcscpy(p, sub);
+            wcscat(p, fd.cFileName);
+            v[n++] = p;
+        }
+    } while (n < cap && FindNextFile(h, &fd));
+    FindClose(h);
+    if (!depth)
+        qsort(v + first, n - first, sizeof(wchar_t*), CmpName);
+    return n;
+}
+
+// The volumes that exist, as entries of a browser ("\SDMemory\" ...).
+static int ReadVolumes(wchar_t** v)
+{
+#ifdef UNDER_CE
+    static const wchar_t* vols[6] = { L"\\SDMemory\\", L"\\USBDisk\\", L"\\USBDevice\\", L"\\SDMMC\\",
+                                      L"\\StorageFlash\\", L"\\ResidentFlash\\" };
+#else
+    static const wchar_t* vols[6] = { L"C:\\", L"D:\\", L"E:\\", L"F:\\", L"G:\\", L"H:\\" };
+#endif
+    int n = 0;
+    for (int i = 0; i < 6; i++) {
+        DWORD a = GetFileAttributes(vols[i]);
+        if (a != 0xFFFFFFFF && (a & FILE_ATTRIBUTE_DIRECTORY)) {
+            v[n] = (wchar_t*)malloc((wcslen(vols[i]) + 1) * sizeof(wchar_t));
+            if (v[n])
+                wcscpy(v[n++], vols[i]);
+        }
+    }
+    return n;
+}
+
 static void MusicOpenDir(const wchar_t* dir)
 {
     FreeNames(s_mus, &s_musCount);
     wcsncpy(s_musDir, dir, MAX_PATH - 1);
     s_musDir[MAX_PATH - 1] = 0;
     s_musPage = 0;
-    if (!s_musDir[0]) {   // the volumes that exist
-#ifdef UNDER_CE
-        static const wchar_t* vols[6] = { L"\\SDMemory\\", L"\\USBDisk\\", L"\\USBDevice\\", L"\\SDMMC\\",
-                                          L"\\StorageFlash\\", L"\\ResidentFlash\\" };
-#else
-        static const wchar_t* vols[6] = { L"C:\\", L"D:\\", L"E:\\", L"F:\\", L"G:\\", L"H:\\" };
-#endif
-        for (int i = 0; i < 6; i++) {
-            DWORD a = GetFileAttributes(vols[i]);
-            if (a != 0xFFFFFFFF && (a & FILE_ATTRIBUTE_DIRECTORY)) {
-                s_mus[s_musCount] = (wchar_t*)malloc((wcslen(vols[i]) + 1) * sizeof(wchar_t));
-                if (s_mus[s_musCount])
-                    wcscpy(s_mus[s_musCount], vols[i]);
-                if (s_mus[s_musCount])
-                    s_musCount++;
-            }
-        }
-        return;
-    }
-    s_musCount = ReadMusicDir(s_musDir, s_mus, kMusMax, true);
+    s_musCount = s_musDir[0] ? ReadMusicDir(s_musDir, s_mus, kMusMax, true) : ReadVolumes(s_mus);
 }
 
 static void PlayerReadTags()
@@ -3752,8 +5137,9 @@ static void PlayerReadTags()
         if (t && *t)
             MultiByteToWideChar(CP_UTF8, 0, t, -1, s_tAlbum, 96);
     }
-    if (!s_tTitle[0] && s_plCur >= 0) {   // the file name without its extension
-        wcsncpy(s_tTitle, s_pl[s_plCur], 95);
+    if (!s_tTitle[0] && s_plCur >= 0) {   // the file name without its extension (and its folders, "ИГРАТЬ ВСЁ")
+        const wchar_t* fn = wcsrchr(s_pl[s_plCur], L'\\');
+        wcsncpy(s_tTitle, fn ? fn + 1 : s_pl[s_plCur], 95);
         s_tTitle[95] = 0;
         wchar_t* dot = wcsrchr(s_tTitle, L'.');
         if (dot)
@@ -3778,6 +5164,8 @@ static bool PlayerPlay(int i)
 {
     if (!BassLoad() || i < 0 || i >= s_plCount)
         return false;
+    NetStop();
+    VidPauseForAudio();
     PlayerStopStream();
     wchar_t path[MAX_PATH];
     _snwprintf(path, MAX_PATH, L"%s%s", s_plDir, s_pl[i]);
@@ -3800,13 +5188,14 @@ static bool PlayerPlay(int i)
     return true;
 }
 
-// The playlist = the audio files of `dir`, starting with `file` (or the first).
-static bool PlayerLoadDir(const wchar_t* dir, const wchar_t* file)
+// The playlist = the audio files of `dir` (tree: with all its subfolders), starting with `file` (or the first).
+static bool PlayerLoadDir(const wchar_t* dir, const wchar_t* file, bool tree = false)
 {
     FreeNames(s_pl, &s_plCount);
     wcsncpy(s_plDir, dir, MAX_PATH - 1);
     s_plDir[MAX_PATH - 1] = 0;
-    s_plCount = ReadMusicDir(s_plDir, s_pl, kPlMax, false);
+    s_cfg.musicTree = tree;
+    s_plCount = tree ? ReadMusicTree(s_plDir, L"", s_pl, 0, kPlMax, 0) : ReadMusicDir(s_plDir, s_pl, kPlMax, false);
     s_plCur = -1;
     if (!s_plCount)
         return false;
@@ -3862,15 +5251,18 @@ static void PlayerToggle()
         return;
     }
     if (!s_chan) {   // nothing loaded: the last track, otherwise the list
-        if (!s_cfg.musicDir[0] || !PlayerLoadDir(s_cfg.musicDir, s_cfg.musicFile))
+        if (!s_cfg.musicDir[0] || !PlayerLoadDir(s_cfg.musicDir, s_cfg.musicFile, s_cfg.musicTree))
             Go(S_AUDIO_LIST, true);
         return;
     }
     DWORD a = s_bass.active(s_chan);
-    if (a == BASS_ACTIVE_PLAYING_F)
+    if (a == BASS_ACTIVE_PLAYING_F) {
         s_bass.pause(s_chan);
-    else
+    } else {
+        NetStop();
+        VidPauseForAudio();
         s_bass.play(s_chan, a == 0);   // stopped at the end: from the start
+    }
 }
 
 static void PlayerSeek(int k)   // k of 20 along the bar
@@ -4022,8 +5414,24 @@ static void ScrAudioList(HDC dc)
     }
     Dock(dc);
     Button(dc, 16, 410, 200, 58, L"НОСИТЕЛИ", B_N, IC_FOLDER, 16, 28, A_MUP, 1);
+    if (s_musDir[0])   // this folder and everything under it, in path order
+        Button(dc, 232, 410, 220, 58, L"ИГРАТЬ ВСЁ", B_N, IC_PLAY, 16, 26, A_MALL);
     IconBtn(dc, IC_MUSIC, 600, 417, 44, kText, A_BACK);
     IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_SOUND);
+}
+
+// A browser's folder ("X\" form) -> its parent; the volume root ("\SDMemory\" or "C:\") -> "" (the volumes).
+static void ParentDir(wchar_t* d)
+{
+    int l = (int)wcslen(d);
+    if (l && d[l - 1] == L'\\')
+        d[--l] = 0;
+    wchar_t* slash = wcsrchr(d, L'\\');
+    // the volume root ("\SDMemory\" or "C:\") goes back to the volume list
+    if (!slash || slash == d || (slash == d + 2 && d[1] == L':' && !d[3]))
+        d[0] = 0;
+    else
+        slash[1] = 0;
 }
 
 static void MusicUp(bool toVolumes)
@@ -4034,15 +5442,7 @@ static void MusicUp(bool toVolumes)
     }
     wchar_t d[MAX_PATH];
     wcscpy(d, s_musDir);
-    int l = (int)wcslen(d);
-    if (l && d[l - 1] == L'\\')
-        d[--l] = 0;
-    wchar_t* slash = wcsrchr(d, L'\\');
-    // the volume root ("\SDMemory\" or "C:\") goes back to the volume list
-    if (!slash || slash == d || (slash == d + 2 && d[1] == L':' && !d[3]))
-        d[0] = 0;
-    else
-        slash[1] = 0;
+    ParentDir(d);
     MusicOpenDir(d);
 }
 
@@ -4067,6 +5467,1010 @@ static void MusicPick(int i)
     }
     if (PlayerLoadDir(d, file))
         Back();
+}
+
+// ---- internet radio (Media -> "Интернет"): the stations of radio.txt next to the exe ("name|address" lines),
+// played by BASS from our own HTTP / HTTPS reader (https.cpp: BearSSL, redirects; the BASS for CE has no HTTPS):
+// BASS_StreamCreateFileUser with a buffered "file" in blocks (nothing kept after it is played) whose read
+// callback takes the ICY metadata (the title of the song) out of the audio. MP3 and OGG by BASS, AAC / AAC+ by
+// bass_aac. The connection is made in a thread of its own (it takes seconds); a broken stream is opened again
+// after 3, 6 ... 60 s while the radio is on.
+#define WM_APP_NET (WM_APP + 22)
+#define WM_APP_WIFI (WM_APP + 24)
+enum { NET_READY = 1, NET_FAILED, NET_ENDED, NET_META, NET_STALL, kNetMax = 100, kNetRows = 5 };
+enum { NR_OFF, NR_CONNECT, NR_PLAY, NR_STALL, NR_WAIT, NR_ERROR };
+
+struct NetStation { wchar_t name[64]; char url[400]; };
+struct NetFile {
+    HttpStream* http;     // NULL once closed (under s_netCs)
+    int         metaint;  // the ICY block size (0: no metadata)
+    int         left;     // audio bytes before the next metadata block
+    LONG        gen;
+};
+struct NetReady { LONG gen; DWORD chan; NetFile* file; };
+
+static NetStation* s_stations;          // radio.txt, read when the screen is first opened
+static int         s_netCount = -1, s_netPage;
+static int         s_netCur = -1;  // the station chosen
+static bool        s_netOn;        // the radio should play: reconnects while on
+static int         s_netState;     // NR_*
+static DWORD       s_netChan;
+static NetFile*    s_netFile;      // the playing stream's
+static NetFile*    s_netOpening;   // the stream BASS_StreamCreateFileUser is reading now (under s_netCs)
+static LONG       s_netGen;       // the attempt: an older thread's result is thrown away
+static DWORD       s_netRetryAt;
+static int         s_netRetries;
+static bool        s_netFatal;     // the last failure was the format, not the network: no retry
+static wchar_t     s_netMsg[96];   // the state or the error (under s_netCs while the thread writes it)
+static wchar_t     s_netTitle[160]; // the song (ICY StreamTitle), under s_netCs
+static wchar_t     s_netInfo[64];   // MP3 / AAC / OGG
+static CRITICAL_SECTION s_netCs;
+
+static void NetInit()
+{
+    InitializeCriticalSection(&s_netCs);
+}
+
+static void NetLoadList()
+{
+    if (s_netCount >= 0)
+        return;
+    s_netCount = 0;
+    s_stations = (NetStation*)calloc(kNetMax, sizeof(NetStation));
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%sradio.txt", s_dir);
+    DWORD size;
+    char* buf = s_stations ? ReadAll(path, &size) : NULL;
+    if (!buf)
+        return;
+    char* p = buf;
+    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF)
+        p += 3;
+    while (*p && s_netCount < kNetMax) {
+        char* end = strchr(p, '\n');
+        if (end)
+            *end = 0;
+        int n = (int)strlen(p);
+        while (n > 0 && (p[n - 1] == '\r' || p[n - 1] == ' ' || p[n - 1] == '\t'))
+            p[--n] = 0;
+        char* bar = strchr(p, '|');
+        if (p[0] != '#' && bar && (!_strnicmp(bar + 1, "http://", 7) || !_strnicmp(bar + 1, "https://", 8))) {
+            *bar = 0;
+            NetStation& s = s_stations[s_netCount];
+            MultiByteToWideChar(CP_UTF8, 0, p, -1, s.name, 64);
+            s.name[63] = 0;
+            Trim(s.name);
+            strncpy(s.url, bar + 1, sizeof(s.url) - 1);
+            if (s.name[0])
+                s_netCount++;
+        }
+        p = end ? end + 1 : p + strlen(p);
+    }
+    free(buf);
+    for (int i = 0; i < s_netCount; i++)
+        if (!wcscmp(s_stations[i].name, s_cfg.radioStation))
+            s_netCur = i;
+}
+
+static bool ValidUtf8(const unsigned char* s)
+{
+    while (*s) {
+        int n = *s < 0x80 ? 0 : (*s & 0xE0) == 0xC0 ? 1 : (*s & 0xF0) == 0xE0 ? 2 : (*s & 0xF8) == 0xF0 ? 3 : -1;
+        if (n < 0)
+            return false;
+        s++;
+        for (; n > 0; n--, s++)
+            if ((*s & 0xC0) != 0x80)
+                return false;
+    }
+    return true;
+}
+
+// Russian stations send their titles in UTF-8 or in Windows-1251.
+static void DecodeTitle(const char* s, wchar_t* w, int cap)
+{
+    if (ValidUtf8((const unsigned char*)s) && MultiByteToWideChar(CP_UTF8, 0, s, -1, w, cap))
+        return;
+    int i = 0;
+    for (; s[i] && i < cap - 1; i++) {   // 1251 by hand: the unit may lack the code page
+        unsigned char c = (unsigned char)s[i];
+        w[i] = c >= 0xC0 ? (wchar_t)(0x410 + c - 0xC0) : c == 0xA8 ? 0x401 : c == 0xB8 ? 0x451 : c < 0x80 ? c : L'?';
+    }
+    w[i] = 0;
+}
+
+// A metadata block: "StreamTitle='Artist - Song';StreamUrl='';"
+static void NetMeta(const char* m, LONG gen)
+{
+    const char* p = strstr(m, "StreamTitle='");
+    if (!p)
+        return;
+    p += 13;
+    const char* e = strstr(p, "';");
+    if (!e)
+        e = p + strlen(p);
+    char t[320];
+    int n = (int)(e - p) < 319 ? (int)(e - p) : 319;
+    memcpy(t, p, n);
+    t[n] = 0;
+    wchar_t w[160];
+    DecodeTitle(t, w, 160);
+    Trim(w);
+    EnterCriticalSection(&s_netCs);
+    bool changed = wcscmp(w, s_netTitle) != 0;
+    if (changed)
+        wcscpy(s_netTitle, w);
+    LeaveCriticalSection(&s_netCs);
+    if (changed)
+        PostMessage(s_wnd, WM_APP_NET, NET_META, gen);
+}
+
+static bool NetReadFull(NetFile* f, char* buf, int len)
+{
+    while (len > 0) {
+        int k = HttpStreamRead(f->http, buf, len);
+        if (k <= 0)
+            return false;
+        buf += k;
+        len -= k;
+    }
+    return true;
+}
+
+// BASS's download thread: the audio bytes; the metadata blocks are taken out. 0 = the end of the "file".
+static DWORD CALLBACK NetReadProc(void* buf, DWORD len, void* user)
+{
+    NetFile* f = (NetFile*)user;
+    for (;;) {
+        if (f->metaint && f->left == 0) {
+            unsigned char l;
+            if (!NetReadFull(f, (char*)&l, 1))
+                return 0;
+            if (l) {
+                char m[16 * 255 + 1];
+                if (!NetReadFull(f, m, l * 16))
+                    return 0;
+                m[l * 16] = 0;
+                NetMeta(m, f->gen);
+            }
+            f->left = f->metaint;
+            continue;
+        }
+        int want = (int)len;
+        if (f->metaint && want > f->left)
+            want = f->left;
+        int k = HttpStreamRead(f->http, (char*)buf, want);
+        if (k <= 0)
+            return 0;   // broken or closed: BASS plays what it has, then the END sync
+        if (f->metaint)
+            f->left -= k;
+        return (DWORD)k;
+    }
+}
+
+static void CALLBACK NetCloseProc(void* user)
+{
+    NetFile* f = (NetFile*)user;
+    EnterCriticalSection(&s_netCs);
+    if (f->http)
+        HttpStreamClose(f->http);
+    f->http = NULL;
+    LeaveCriticalSection(&s_netCs);
+}
+
+static QWORD CALLBACK NetLenProc(void*) { return 0; }      // unknown: endless
+static BOOL CALLBACK NetSeekProc(QWORD, void*) { return FALSE; }
+
+static const BassFileProcs kNetProcs = { NetCloseProc, NetLenProc, NetReadProc, NetSeekProc };
+
+static void NetAbortFile(NetFile* f)   // the blocked read returns: BASS can free the stream at once
+{
+    EnterCriticalSection(&s_netCs);
+    if (f && f->http)
+        HttpStreamAbort(f->http);
+    LeaveCriticalSection(&s_netCs);
+}
+
+static void CALLBACK NetEndSync(DWORD, DWORD, DWORD, void* user)
+{
+    PostMessage(s_wnd, WM_APP_NET, NET_ENDED, (LPARAM)user);
+}
+
+static void CALLBACK NetStallSync(DWORD, DWORD, DWORD data, void* user)
+{
+    PostMessage(s_wnd, WM_APP_NET, NET_STALL | (data << 8), (LPARAM)user);   // data 0 stalled, 1 going on
+}
+
+struct NetStart { LONG gen; char url[400]; };
+
+static DWORD WINAPI NetThread(LPVOID p)
+{
+    VLog(L"поток радио-сети: id %08X", (unsigned)GetCurrentThreadId());
+    NetStart* st = (NetStart*)p;
+    int err = 0, metaint = 0;
+    char name[96], type[64];
+    HttpStream* h = HttpStreamOpen(st->url, &err, &metaint, name, sizeof(name), type, sizeof(type));
+    NetFile* f = NULL;
+    DWORD chan = 0;
+    wchar_t msg[96] = L"";
+    if (!h) {
+        _snwprintf(msg, 96, L"%s", NetErrorText(err));
+    } else {
+        f = (NetFile*)calloc(1, sizeof(NetFile));
+        if (f) {
+            f->http = h;
+            f->metaint = metaint;
+            f->left = metaint;
+            f->gen = st->gen;
+            EnterCriticalSection(&s_netCs);
+            s_netOpening = f;
+            LeaveCriticalSection(&s_netCs);
+            if (st->gen == s_netGen)   // reads the start of the stream to know its format (blocks)
+                chan = s_bass.streamUser(BASS_STREAMFILE_BUFFER_F, BASS_STREAM_BLOCK_F, &kNetProcs, f);
+            int berr = chan ? 0 : s_bass.error();
+            EnterCriticalSection(&s_netCs);
+            s_netOpening = NULL;
+            if (!chan && f->http)
+                HttpStreamClose(f->http);
+            if (!chan)
+                f->http = NULL;
+            LeaveCriticalSection(&s_netCs);
+            if (!chan) {
+                free(f);
+                f = NULL;
+                _snwprintf(msg, 96, L"поток не играет (BASS %d)", berr);
+            }
+        } else {
+            HttpStreamClose(h);
+            wcscpy(msg, NetErrorText(NET_MEMORY));
+        }
+    }
+    if (chan) {
+        EnterCriticalSection(&s_netCs);
+        wcscpy(s_netInfo, strstr(type, "aac") ? L"AAC" : strstr(type, "ogg") ? L"OGG" : strstr(type, "mpeg") ? L"MP3" : L"");
+        LeaveCriticalSection(&s_netCs);
+        NetReady* r = (NetReady*)malloc(sizeof(NetReady));
+        if (r) {
+            r->gen = st->gen;
+            r->chan = chan;
+            r->file = f;
+        }
+        if (!r || !PostMessage(s_wnd, WM_APP_NET, NET_READY, (LPARAM)r)) {
+            NetAbortFile(f);
+            s_bass.streamFree(chan);
+            free(f);
+            free(r);
+        }
+    } else if (st->gen == s_netGen) {   // (an older attempt, stopped or replaced, ends quietly)
+        EnterCriticalSection(&s_netCs);
+        wcscpy(s_netMsg, msg);
+        s_netFatal = h != NULL;   // connected, but BASS doesn't take it
+        LeaveCriticalSection(&s_netCs);
+        VLog(L"радио: %S — %s", st->url, msg);
+        PostMessage(s_wnd, WM_APP_NET, NET_FAILED, st->gen);
+    }
+    free(st);
+    return 0;
+}
+
+static void NetFreeChan()
+{
+    if (s_netChan) {
+        NetAbortFile(s_netFile);
+        s_bass.streamFree(s_netChan);   // calls NetCloseProc
+        s_netChan = 0;
+    }
+    free(s_netFile);
+    s_netFile = NULL;
+}
+
+static void NetConnect()
+{
+    if (s_netCur < 0 || s_netCur >= s_netCount)
+        return;
+    NetStart* st = (NetStart*)malloc(sizeof(NetStart));
+    if (!st)
+        return;
+    st->gen = InterlockedIncrement(&s_netGen);
+    strcpy(st->url, s_stations[s_netCur].url);
+    s_netState = NR_CONNECT;
+    EnterCriticalSection(&s_netCs);
+    wcscpy(s_netMsg, L"подключение…");
+    s_netTitle[0] = s_netInfo[0] = 0;
+    LeaveCriticalSection(&s_netCs);
+    HANDLE t = CreateThread(NULL, 0, NetThread, st, 0, NULL);
+    if (t)
+        CloseHandle(t);
+    else
+        free(st);
+}
+
+static void NetStop()
+{
+    if (!s_netOn && !s_netChan)
+        return;
+    s_netOn = false;
+    InterlockedIncrement(&s_netGen);   // a connection under way is thrown away when it comes
+    EnterCriticalSection(&s_netCs);
+    if (s_netOpening && s_netOpening->http)
+        HttpStreamAbort(s_netOpening->http);
+    LeaveCriticalSection(&s_netCs);
+    NetFreeChan();
+    s_netState = NR_OFF;
+    s_netMsg[0] = 0;
+}
+
+static void NetPlay(int i)
+{
+    NetLoadList();
+    if (i < 0 || i >= s_netCount)
+        return;
+    if (!BassLoad() || !s_bass.streamUser) {
+        wcscpy(s_status, s_bass.state == -1 ? L"нет bass.dll: папка bass рядом с VestaHome" : L"звук не запускается (BASS)");
+        return;
+    }
+    NetStop();
+    PlayerStopStream();
+    VidPauseForAudio();
+    s_netCur = i;
+    s_netOn = true;
+    s_netRetries = 0;
+    s_netFatal = false;
+    wcscpy(s_cfg.radioStation, s_stations[i].name);
+    SaveCfg();
+    VLog(L"радио: %s", s_stations[i].name);
+    NetConnect();
+}
+
+static void NetToggle()
+{
+    NetLoadList();
+    if (s_netOn)
+        NetStop();
+    else
+        NetPlay(s_netCur >= 0 ? s_netCur : 0);
+}
+
+static void NetStep(int dir)
+{
+    NetLoadList();
+    if (s_netCount > 0)
+        NetPlay(s_netCur < 0 ? 0 : (s_netCur + dir + s_netCount) % s_netCount);
+}
+
+// The thread's results and BASS's syncs (wp = what, lp = the attempt).
+static void OnNetMessage(WPARAM wp, LPARAM lp)
+{
+    int what = (int)(wp & 0xFF);
+    if (what == NET_READY) {
+        NetReady* r = (NetReady*)lp;
+        if (r->gen != s_netGen || !s_netOn) {   // stopped or another station meanwhile
+            NetAbortFile(r->file);
+            s_bass.streamFree(r->chan);
+            free(r->file);
+        } else {
+            s_netChan = r->chan;
+            s_netFile = r->file;
+            if (s_bass.setSync) {
+                s_bass.setSync(s_netChan, BASS_SYNC_END_F, 0, NetEndSync, (void*)r->gen);
+                s_bass.setSync(s_netChan, BASS_SYNC_STALL_F, 0, NetStallSync, (void*)r->gen);
+            }
+            s_bass.play(s_netChan, FALSE);
+            s_netState = NR_PLAY;
+            s_netRetries = 0;
+            s_netMsg[0] = 0;
+        }
+        free(r);
+        return;
+    }
+    if ((LONG)lp != s_netGen || !s_netOn)
+        return;
+    if (what == NET_STALL) {
+        if (s_netState == NR_PLAY || s_netState == NR_STALL)
+            s_netState = (wp >> 8) ? NR_PLAY : NR_STALL;
+    } else if (what == NET_ENDED || what == NET_FAILED) {
+        NetFreeChan();
+        if (what == NET_FAILED && s_netFatal) {
+            s_netState = NR_ERROR;   // the message is the thread's
+            return;
+        }
+        if (what == NET_ENDED)
+            wcscpy(s_netMsg, L"связь прервалась");
+        int delay = s_netRetries < 5 ? 3 << s_netRetries : 60;
+        delay = delay > 60 ? 60 : delay;
+        s_netRetries++;
+        s_netRetryAt = GetTickCount() + delay * 1000;
+        s_netState = NR_WAIT;
+    }
+}
+
+// Once a second (the window's clock timer): the next attempt.
+static void NetTick()
+{
+    if (s_netOn && s_netState == NR_WAIT && (int)(GetTickCount() - s_netRetryAt) >= 0)
+        NetConnect();
+}
+
+static void NetStateText(wchar_t* s, int n)
+{
+    EnterCriticalSection(&s_netCs);
+    switch (s_netState) {
+    case NR_CONNECT: _snwprintf(s, n, L"%s", s_netMsg); break;
+    case NR_PLAY:    _snwprintf(s, n, L"%s%sв эфире", s_netInfo, s_netInfo[0] ? L" · " : L""); break;
+    case NR_STALL:   _snwprintf(s, n, L"буферизация…"); break;
+    case NR_WAIT: {
+        int left = (int)(s_netRetryAt - GetTickCount()) / 1000 + 1;
+        _snwprintf(s, n, L"%s — снова через %d с", s_netMsg[0] ? s_netMsg : L"нет связи", left > 0 ? left : 1);
+        break;
+    }
+    case NR_ERROR:   _snwprintf(s, n, L"%s", s_netMsg); break;
+    default:         _snwprintf(s, n, L"выключено"); break;
+    }
+    s[n - 1] = 0;
+    LeaveCriticalSection(&s_netCs);
+}
+
+static void NetPlayBtn(HDC dc, int cx, int cy, int r, int isz)
+{
+    bool down = Zone(cx - r, cy - r, 2 * r, 2 * r, A_NRPLAY);
+    Disc(dc, cx, cy, r, down ? kFacet : kOrange);
+    Ico(dc, s_netOn ? IC_PAUSE : IC_PLAY, cx - isz / 2, cy - isz / 2, isz, kInk);
+}
+
+// Media -> internet radio: the station, the song, the state; previous / on-off / next station.
+static void ScrNetRadio(HDC dc)
+{
+    NetLoadList();
+    Frame(dc, L"МЕДИА · ИНТЕРНЕТ-РАДИО");
+    MediaTabs(dc, S_NETRADIO, IC_LIST, A_SCREEN, S_NETRADIO_LIST, S_SET_SOUND);
+    Cover(dc, IC_RADIO, 16, 124, 232);
+    wchar_t s[160], title[160];
+    if (s_netCount <= 0) {
+        T(dc, 272, 170, L"НЕТ СТАНЦИЙ", 22, kText, 700, AL_START, 512);
+        _snwprintf(s, 160, L"нет %sradio.txt", s_dir);
+        s[159] = 0;
+        T(dc, 272, 200, s, 15, kMuted, 400, AL_START, 512);
+        T(dc, 272, 224, L"Строка: название|адрес потока (http:// или https://)", 15, kMuted, 400, AL_START, 512);
+        return;
+    }
+    if (s_netCur < 0) {
+        T(dc, 272, 170, L"ВЫБЕРИТЕ СТАНЦИЮ", 22, kText, 700, AL_START, 512);
+        T(dc, 272, 200, L"Кнопка списка вверху или ▶ — первая станция", 16, kMuted, 400, AL_START, 512);
+    } else {
+        _snwprintf(s, 160, L"СТАНЦИЯ %d ИЗ %d", s_netCur + 1, s_netCount);
+        T(dc, 272, 150, s, 14, kMuted, 600, AL_START, 512);
+        T(dc, 272, 192, s_stations[s_netCur].name, 34, kText, 700, AL_START, 512);
+        EnterCriticalSection(&s_netCs);
+        wcscpy(title, s_netTitle);
+        LeaveCriticalSection(&s_netCs);
+        if (s_netOn && title[0])
+            T(dc, 272, 222, title, 20, kMuted, 400, AL_START, 512);
+        NetStateText(s, 160);
+        T(dc, 272, 282, s, 17, s_netState == NR_PLAY ? kOrange : kMuted, 600, AL_START, 512);
+    }
+    IconBtn(dc, IC_PREV, 392, 312, 48, kText, A_NRSTEP, -1);
+    NetPlayBtn(dc, 528, 336, 42, 48);
+    IconBtn(dc, IC_FWD, 616, 312, 48, kText, A_NRSTEP, 1);
+}
+
+// The stations of radio.txt, kNetRows a page; the current one orange.
+static void ScrNetRadioList(HDC dc)
+{
+    NetLoadList();
+    Frame(dc, L"ИНТЕРНЕТ-РАДИО · СТАНЦИИ");
+    Panel(dc, 16, 68, 704, 322);
+    int first = s_netPage * kNetRows, y = 76;
+    for (int i = first; i < s_netCount && i < first + kNetRows; i++, y += 62)
+        ListRow(dc, 24, y, 680, 56, s_stations[i].name, NULL, i == s_netCur ? L_CUR : L_N, IC_RADIO, NULL, NULL,
+                A_NRPICK, i);
+    if (s_netCount <= 0)
+        T(dc, 40, 114, L"Нет станций: radio.txt рядом с VestaHome", 18, kMuted, 400);
+    int pages = (s_netCount + kNetRows - 1) / kNetRows;
+    if (pages > 1) {
+        wchar_t p[16];
+        _snwprintf(p, 16, L"%d/%d", s_netPage + 1, pages);
+        Button(dc, 728, 68, 56, 96, NULL, s_netPage ? B_N : B_DIS, IC_UP, 18, 30, A_NRPAGE, -1);
+        T(dc, 756, 236, p, 15, kMuted, 600, AL_MID);
+        Button(dc, 728, 294, 56, 96, NULL, s_netPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 30, A_NRPAGE, 1);
+    }
+    Dock(dc);
+    IconBtn(dc, IC_RADIO, 600, 417, 44, kText, A_BACK);
+    IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_SOUND);
+}
+
+static void NetPage(int dir)
+{
+    int pages = (s_netCount + kNetRows - 1) / kNetRows;
+    s_netPage += dir;
+    s_netPage = s_netPage < 0 ? 0 : s_netPage >= pages ? (pages > 0 ? pages - 1 : 0) : s_netPage;
+}
+
+// ---- video (Media -> Video): a browser of the volumes' video files, then the player (video.cpp: the shell's
+// GStreamer) drawing into a child window of ours over the screen's picture area; a tap on the picture: the whole
+// screen and back. The picture pauses when another screen or program comes up, and while the car moves it is
+// hidden (the sound goes on) unless the setting allows it. The playlist = the videos of the file's folder.
+#define WM_APP_VIDTAP (WM_APP + 23)
+#define VIDEO_CLASS L"VestaHome_Video"
+enum { TIMER_VIDEO = 7, kVidMax = 400, kVidRows = 4 };
+static HWND     s_vidWnd;             // the picture
+static wchar_t  s_vidDir[MAX_PATH];   // the browser's folder, "" = the volumes
+static wchar_t* s_vids[kVidMax];      // its entries: folders ("\" at the end), then videos
+static int      s_vidCount, s_vidPage;
+static bool     s_vidRead;
+static wchar_t  s_vpDir[MAX_PATH];    // the playing file's folder and its videos
+static wchar_t* s_vp[kVidMax];
+static int      s_vpCount, s_vpCur = -1;
+static int      s_vidState;           // VID_* (video.h)
+static bool     s_vidFull;            // the picture over the whole screen
+static bool     s_vidMoving;          // the car moves and the picture is not allowed
+static bool     s_vidParked;          // stopped by VidSync (see there), s_vidParkPos = where
+static double   s_vidParkPos, s_vidSeekTo;
+static wchar_t  s_vidMsg[160];        // why it doesn't play
+static bool     s_vidShown;
+
+static LRESULT CALLBACK VideoProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_ERASEBKGND: {   // black, as the stock player's window
+        RECT rc;
+        GetClientRect(hwnd, &rc);
+        FillRect((HDC)wp, &rc, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        return 1;
+    }
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        BeginPaint(hwnd, &ps);
+        EndPaint(hwnd, &ps);
+        VideoExpose();   // the sink draws its frame again
+        return 0;
+    }
+    case WM_LBUTTONUP:   // a tap on the picture: the whole screen and back
+        PostMessage(s_wnd, WM_APP_VIDTAP, 0, 0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, msg, wp, lp);
+}
+
+static bool VidEnsureWnd()
+{
+    if (s_vidWnd)
+        return true;
+    WNDCLASS wc;
+    memset(&wc, 0, sizeof(wc));
+    wc.lpfnWndProc = VideoProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = VIDEO_CLASS;
+    RegisterClass(&wc);
+    s_vidWnd = CreateWindowEx(0, VIDEO_CLASS, L"", WS_CHILD, 0, 56, 800, 342, s_wnd, NULL, wc.hInstance, NULL);
+    return s_vidWnd != NULL;
+}
+
+static bool VidPlay(int i);
+
+// After every frame: the picture is shown only on the player's screen, with VestaHome in front, a video open and
+// the car standing (or allowed). The picture is a hardware overlay: hiding our window leaves it on top of
+// everything (HU 2026-10-18), so leaving the player (or the car moving) "parks" the video - stopped, the overlay
+// gone, the position kept - and coming back opens it again from there.
+static void VidSync()
+{
+    if (!s_vidWnd)
+        return;
+    bool open = s_vidState == VID_PLAYING || s_vidState == VID_PAUSED || s_vidState == VID_ENDED;
+    bool front = IsWindowVisible(s_wnd) && GetForegroundWindow() == s_wnd;
+    bool show = open && front && s_screen == S_VIDEO_PLAY && !s_vidMoving;
+    if (open && !show && !s_vidParked) {
+        double pos, len;
+        VideoTimes(&pos, &len);
+        VideoStop();
+        s_vidParked = true;
+        s_vidParkPos = s_vidState == VID_ENDED ? 0 : pos;
+        s_vidState = VID_PAUSED;
+    } else if (show && s_vidParked) {
+        double pos = s_vidParkPos;
+        if (VidPlay(s_vpCur))
+            s_vidSeekTo = pos;   // VidTick seeks once the file is open
+        return;
+    }
+    if (show) {
+        if (s_vidFull)
+            SetWindowPos(s_vidWnd, HWND_TOP, 0, 0, 800, 480, SWP_SHOWWINDOW);
+        else
+            SetWindowPos(s_vidWnd, HWND_TOP, 0, 56, 800, 342, SWP_SHOWWINDOW);
+        if (!s_vidShown)
+            VideoExpose();
+    } else if (s_vidShown) {
+        ShowWindow(s_vidWnd, SW_HIDE);
+    }
+    s_vidShown = show;
+}
+
+static void VidPauseForAudio()
+{
+    if (s_vidState == VID_PLAYING) {
+        VideoPause(true);
+        s_vidState = VID_PAUSED;
+    }
+}
+
+static void VidOpenDir(const wchar_t* dir)
+{
+    FreeNames(s_vids, &s_vidCount);
+    wcsncpy(s_vidDir, dir, MAX_PATH - 1);
+    s_vidDir[MAX_PATH - 1] = 0;
+    s_vidPage = 0;
+    s_vidRead = true;
+    s_vidCount = s_vidDir[0] ? ReadMusicDir(s_vidDir, s_vids, kVidMax, true, true) : ReadVolumes(s_vids);
+}
+
+static bool VidPlay(int i)
+{
+    if (i < 0 || i >= s_vpCount)
+        return false;
+    s_vpCur = i;
+    s_vidFull = false;
+    if (!VideoLoad(VLog, s_vidMsg, 160) || !VidEnsureWnd()) {
+        if (!s_vidMsg[0])
+            wcscpy(s_vidMsg, L"нет окна для видео");
+        s_vidState = VID_ERROR;
+        return false;
+    }
+    NetStop();
+    if (PlayerPlaying())
+        s_bass.pause(s_chan);
+    SetWindowPos(s_vidWnd, HWND_TOP, 0, 56, 800, 342, SWP_SHOWWINDOW);   // the sink takes the window as it is
+    s_vidShown = true;
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%s%s", s_vpDir, s_vp[i]);
+    path[MAX_PATH - 1] = 0;
+    s_vidMsg[0] = 0;
+    s_vidParked = false;
+    s_vidSeekTo = 0;
+    if (!VideoOpen(path, s_vidWnd, s_cfg.videoStretch, s_vidMsg, 160)) {
+        VLog(L"видео: %s не открылось: %s", path, s_vidMsg);
+        s_vidState = VID_ERROR;
+        return false;
+    }
+    VLog(L"видео: %s", path);
+    s_vidState = VID_PLAYING;
+    SetTimer(s_wnd, TIMER_VIDEO, 250, NULL);
+    wcscpy(s_cfg.videoDir, s_vpDir);
+    wcsncpy(s_cfg.videoFile, s_vp[i], MAX_PATH - 1);
+    s_cfg.videoFile[MAX_PATH - 1] = 0;
+    SaveCfg();
+    return true;
+}
+
+// The playlist = the videos of `dir`, starting with `file`.
+static bool VidLoadDir(const wchar_t* dir, const wchar_t* file)
+{
+    FreeNames(s_vp, &s_vpCount);
+    wcsncpy(s_vpDir, dir, MAX_PATH - 1);
+    s_vpDir[MAX_PATH - 1] = 0;
+    s_vpCount = ReadMusicDir(s_vpDir, s_vp, kVidMax, false, true);
+    s_vpCur = -1;
+    int start = 0;
+    for (int i = 0; file && i < s_vpCount; i++)
+        if (!_wcsicmp(s_vp[i], file))
+            start = i;
+    return s_vpCount > 0 && VidPlay(start);
+}
+
+static void VidPick(int i)
+{
+    if (i < 0 || i >= s_vidCount)
+        return;
+    const wchar_t* n = s_vids[i];
+    wchar_t d[MAX_PATH];
+    if (n[wcslen(n) - 1] == L'\\') {   // a folder (or a volume)
+        _snwprintf(d, MAX_PATH, L"%s%s", s_vidDir, n);
+        d[MAX_PATH - 1] = 0;
+        VidOpenDir(d);
+        return;
+    }
+    wchar_t file[MAX_PATH];
+    wcscpy(file, n);
+    wcscpy(d, s_vidDir);
+    if (s_vidParked && s_vpCur >= 0 && s_vpCur < s_vpCount && !_wcsicmp(d, s_vpDir) && !_wcsicmp(s_vp[s_vpCur], file)) {
+        Go(S_VIDEO_PLAY, true);   // the video left a moment ago: on from where it was (VidSync)
+        return;
+    }
+    VidLoadDir(d, file);
+    Go(S_VIDEO_PLAY, true);
+}
+
+static void VidUp(bool toVolumes)
+{
+    wchar_t d[MAX_PATH];
+    wcscpy(d, s_vidDir);
+    if (toVolumes)
+        d[0] = 0;
+    else
+        ParentDir(d);
+    VidOpenDir(d);
+}
+
+static void VidToggle()
+{
+    if (s_vidParked)
+        return;   // parked on this screen = the car moves
+    if (s_vidState == VID_PLAYING) {
+        VideoPause(true);
+        s_vidState = VID_PAUSED;
+    } else if (s_vidState == VID_PAUSED || s_vidState == VID_ENDED) {
+        PlayerStopStream();
+        NetStop();
+        VideoPause(false);
+        s_vidState = VID_PLAYING;
+    } else if (s_cfg.videoDir[0]) {   // nothing open: the last video
+        VidLoadDir(s_cfg.videoDir, s_cfg.videoFile);
+    }
+}
+
+static void VidStep(int dir)
+{
+    if (s_vpCount > 0)
+        VidPlay((s_vpCur + dir + s_vpCount) % s_vpCount);
+}
+
+static void VidSeek(int k)   // k of 20 along the bar
+{
+    double pos, len;
+    if (VideoTimes(&pos, &len) && len > 0)
+        VideoSeek(len * k / 20);
+}
+
+static int CarKmh()
+{
+    Gps g;
+    GpsGet(&g);
+    if (g.carTick && GetTickCount() - g.carTick < 3000)
+        return g.carSpeed;
+    return GpsFresh(g, 5000) ? (int)g.speedKmh : 0;
+}
+
+// Every 250 ms while a video is open: its bus, the end (the next file of the folder), the car's speed; the
+// player's bar once a second.
+static void VidTick()
+{
+    if (s_vidState == VID_NONE || s_vidState == VID_ERROR) {
+        KillTimer(s_wnd, TIMER_VIDEO);
+        return;
+    }
+    int was = s_vidState;
+    if (!s_vidParked)   // parked: no pipeline, only the speed is watched (to come back when the car stops)
+        s_vidState = VideoPoll(s_vidMsg, 160);
+    if (s_vidSeekTo > 0 && s_vidState == VID_PLAYING) {   // back from parking: the position once it can seek
+        double pos, len;
+        if (VideoTimes(&pos, &len) && len > 0) {
+            VideoSeek(s_vidSeekTo);
+            s_vidSeekTo = 0;
+        }
+    }
+    if (s_vidState == VID_ENDED && was != VID_ENDED && s_vpCur + 1 < s_vpCount) {
+        VidPlay(s_vpCur + 1);
+        return;
+    }
+    int kmh = CarKmh();
+    bool moving = !s_cfg.videoMoving && (s_vidMoving ? kmh >= 3 : kmh >= 8);   // a margin against flicker
+    bool redraw = moving != s_vidMoving || s_vidState != was;
+    s_vidMoving = moving;
+    static DWORD s_barTick;
+    bool bar = false;
+    if (s_screen == S_VIDEO_PLAY && GetTickCount() - s_barTick >= 1000) {
+        s_barTick = GetTickCount();
+        bar = true;
+    }
+    if (IsWindowVisible(s_wnd) && GetForegroundWindow() == s_wnd) {
+        if (redraw)
+            Redraw();
+        else if (bar && !s_vidFull)
+            RedrawArea(0, 398, 800, 480);   // the bar and the times
+    }
+}
+
+// Media -> video: the volumes, then folders and videos; a file plays its folder from it.
+static void ScrVideo(HDC dc)
+{
+    if (!s_vidRead)
+        VidOpenDir(s_cfg.videoDir[0] && GetFileAttributes(s_cfg.videoDir) != 0xFFFFFFFF ? s_cfg.videoDir : L"");
+    wchar_t s[MAX_PATH + 16], folder[MAX_PATH];
+    wcscpy(folder, s_vidDir);
+    int fl = (int)wcslen(folder);
+    if (fl && folder[fl - 1] == L'\\')
+        folder[--fl] = 0;
+    const wchar_t* fn = wcsrchr(folder, L'\\');
+    _snwprintf(s, MAX_PATH + 16, L"МЕДИА · ВИДЕО · %s", !s_vidDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
+    Frame(dc, s);
+    MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
+    Panel(dc, 16, 120, 704, 280);
+    int y = 126;
+    if (s_vidDir[0]) {
+        ListRow(dc, 24, y, 680, 60, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_VUP);
+        y += 68;
+    }
+    int rows = s_vidDir[0] ? kVidRows - 1 : kVidRows, first = s_vidPage * rows;
+    for (int i = first; i < s_vidCount && i < first + rows; i++, y += 68) {
+        const wchar_t* n = s_vids[i];
+        bool isDir = n[wcslen(n) - 1] == L'\\';
+        bool cur = !isDir && s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) && !_wcsicmp(n, s_vp[s_vpCur]);
+        wcsncpy(s, n, MAX_PATH);
+        s[MAX_PATH] = 0;
+        if (isDir && s[0] && s[wcslen(s) - 1] == L'\\')
+            s[wcslen(s) - 1] = 0;
+        ListRow(dc, 24, y, 680, 60, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_VIDEO, NULL, NULL, A_VFILE, i,
+                isDir ? kOrange : CLR_INVALID);
+    }
+    if (!s_vidCount)
+        T(dc, 40, s_vidDir[0] ? 236 : 168, s_vidDir[0] ? L"Здесь нет папок и видео" : L"Нет носителей", 18, kMuted, 400);
+    int pages = (s_vidCount + rows - 1) / rows;
+    if (pages > 1) {
+        wchar_t p[16];
+        _snwprintf(p, 16, L"%d/%d", s_vidPage + 1, pages);
+        Button(dc, 728, 120, 56, 116, NULL, s_vidPage ? B_N : B_DIS, IC_UP, 18, 30, A_VPAGE, -1);
+        T(dc, 756, 266, p, 15, kMuted, 600, AL_MID);
+        Button(dc, 728, 284, 56, 116, NULL, s_vidPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 30, A_VPAGE, 1);
+    }
+}
+
+// The player: the picture (our child window) between the top bar and the dock: the bar (a tap seeks), the
+// list, previous, play / pause, next, the whole screen, the settings.
+static void ScrVideoPlay(HDC dc)
+{
+    const wchar_t* name = s_vpCur >= 0 ? s_vp[s_vpCur] : NULL;
+    wchar_t s[MAX_PATH + 16];
+    _snwprintf(s, MAX_PATH + 16, L"ВИДЕО · %s", name ? name : L"НЕТ ФАЙЛА");
+    s[MAX_PATH + 15] = 0;
+    Frame(dc, s);
+    Fill(dc, 0, 56, 800, 398, RGB(0, 0, 0));
+    if (s_vidState == VID_ERROR || s_vidState == VID_NONE) {
+        T(dc, 400, 210, s_vidState == VID_ERROR ? L"ВИДЕО НЕ ИГРАЕТ" : L"НИЧЕГО НЕ ОТКРЫТО", 22, kText, 700, AL_MID, 720);
+        T(dc, 400, 244, s_vidState == VID_ERROR ? s_vidMsg : L"Выберите файл в «Медиа → Видео»", 16, kMuted, 400,
+          AL_MID, 720);
+    } else if (s_vidMoving) {
+        T(dc, 400, 210, L"В ДВИЖЕНИИ — ПАУЗА", 22, kText, 700, AL_MID, 720);
+        T(dc, 400, 244, L"Картинка вернётся на остановке (или включите её в настройках видео)", 16, kMuted, 400,
+          AL_MID, 720);
+    }
+    Dock(dc);
+    double pos = 0, len = 0;
+    bool have = (s_vidState == VID_PLAYING || s_vidState == VID_PAUSED || s_vidState == VID_ENDED) &&
+                VideoTimes(&pos, &len);
+    int k = len > 0 ? (int)(pos * 640 / len) : 0;
+    R(dc, 80, 404, 640, 6, 3, kLine);
+    if (have) {
+        R(dc, 80, 404, k > 6 ? k : 6, 6, 3, kOrange);
+        Disc(dc, 80 + k, 407, 8, kText);
+        for (int z = 0; z < 20; z++)
+            Zone(80 + z * 32, 392, 33, 28, A_VSEEK, z);
+    }
+    Mmss(s, 16, pos);
+    T(dc, 16, 414, s, 15, kMuted, 600);
+    Mmss(s, 16, len);
+    T(dc, 784, 414, s, 15, kMuted, 600, AL_END);
+    IconBtn(dc, IC_LIST, 24, 430, 40, kText, A_BACK);
+    IconBtn(dc, IC_HOME, 124, 430, 40, kText, A_NAV, S_HOME);
+    IconBtn(dc, IC_PREV, 236, 430, 40, kText, A_VPREV);
+    bool down = Zone(376, 426, 48, 48, A_VPLAY);
+    Disc(dc, 400, 450, 24, down ? kFacet : kOrange);
+    Ico(dc, s_vidState == VID_PLAYING ? IC_PAUSE : IC_PLAY, 384, 434, 32, kInk);
+    IconBtn(dc, IC_FWD, 524, 430, 40, kText, A_VNEXT);
+    IconBtn(dc, IC_VIDEO, 632, 430, 40, s_vidFull ? kOrange : kText, A_VFULL);
+    IconBtn(dc, IC_GEAR, 736, 430, 40, kText, A_SCREEN, S_SET_VIDEO);
+}
+
+// ---- the rear view camera (rvc.cpp) when "own" is on (Settings -> Car): the reverse gear polled every 250 ms;
+// in reverse a topmost window over everything paints the colour key (the camera's video shows there) and the
+// guide lines with the CAN module's steering angle, drawn again when the angle moves by half a degree.
+// The window is painted by GDI straight in the screen's format: the key must stay exactly RGB(1, 1, 0).
+#define RVC_CLASS L"VestaHome_Rvc"
+enum { TIMER_RVC = 8, kRvcMs = 250 };
+static HWND s_rvcWnd;
+static int  s_rvcAngle;   // the angle drawn, tenths of a degree
+static bool s_rvcValid;
+#ifndef UNDER_CE
+static bool s_rvcFake;    // PC test build: R toggles a "reverse"
+#endif
+
+static void RvcAngleNow(int* a10, bool* valid)
+{
+    Gps g;
+    GpsGet(&g);
+    *valid = g.angTick && GetTickCount() - g.angTick < 2000;
+    *a10 = s_cfg.rvcInvert ? -g.angle10 : g.angle10;
+}
+
+static LRESULT CALLBACK RvcProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        HDC dc = CreateCompatibleDC(hdc);
+        HBITMAP bmp = CreateCompatibleBitmap(hdc, 800, 480);   // the screen's own format
+        HGDIOBJ ob = SelectObject(dc, bmp);
+        RECT rc = { 0, 0, 800, 480 };
+        HBRUSH key = CreateSolidBrush(RvcKey());
+        FillRect(dc, &rc, key);
+        DeleteObject(key);
+        RvcDrawLines(dc, s_rvcAngle, s_rvcValid);
+#ifndef UNDER_CE
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(200, 200, 200));
+        wchar_t s[64];
+        _snwprintf(s, 64, L"камера (ПК: без видео и разметки), руль %d.%d", s_rvcAngle / 10, abs(s_rvcAngle % 10));
+        TextOut(dc, 20, 20, s, (int)wcslen(s));
+#endif
+        BitBlt(hdc, 0, 0, 800, 480, dc, 0, 0, SRCCOPY);
+        SelectObject(dc, ob);
+        DeleteObject(bmp);
+        DeleteDC(dc);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    }
+    return DefWindowProc(hwnd, msg, wp, lp);
+}
+
+static void RvcShow()
+{
+    static bool s_registered;
+    if (!s_registered) {
+        WNDCLASS wc;
+        memset(&wc, 0, sizeof(wc));
+        wc.lpfnWndProc = RvcProc;
+        wc.hInstance = GetModuleHandle(NULL);
+        wc.lpszClassName = RVC_CLASS;
+        s_registered = RegisterClass(&wc) != 0;
+    }
+    RvcAngleNow(&s_rvcAngle, &s_rvcValid);
+    VidPauseForAudio();
+#ifdef UNDER_CE
+    s_rvcWnd = CreateWindowEx(WS_EX_TOPMOST, RVC_CLASS, L"VestaHome camera", WS_POPUP | WS_VISIBLE, 0, 0, 800, 480,
+                              NULL, NULL, GetModuleHandle(NULL), NULL);
+#else
+    RECT r;
+    GetWindowRect(s_wnd, &r);
+    s_rvcWnd = CreateWindowEx(WS_EX_TOPMOST, RVC_CLASS, L"VestaHome camera", WS_POPUP | WS_VISIBLE, r.left, r.top,
+                              800, 480, s_wnd, NULL, GetModuleHandle(NULL), NULL);
+#endif
+    RvcVideo(true);
+    VLog(L"камера: задний ход, своё окно %s", s_rvcWnd ? L"открыто" : L"не создано");
+}
+
+static void RvcHide()
+{
+    RvcVideo(false);
+    if (s_rvcWnd)
+        DestroyWindow(s_rvcWnd);
+    s_rvcWnd = NULL;
+    VLog(L"камера: задний ход выключен");
+    if (IsWindowVisible(s_wnd))
+        Redraw();
+}
+
+static void RvcTick()
+{
+    int rev = RvcReverse();
+#ifndef UNDER_CE
+    rev = s_rvcFake ? 1 : 0;
+#endif
+    bool want = s_cfg.rvcOwn && rev == 1;
+    if (want && !s_rvcWnd)
+        RvcShow();
+    else if (!want && s_rvcWnd)
+        RvcHide();
+    if (!s_rvcWnd)
+        return;
+    int a;
+    bool v;
+    RvcAngleNow(&a, &v);
+    if (v != s_rvcValid || a - s_rvcAngle >= 5 || s_rvcAngle - a >= 5) {   // half a degree of the wheel
+        s_rvcAngle = a;
+        s_rvcValid = v;
+        InvalidateRect(s_rvcWnd, NULL, FALSE);
+    }
 }
 
 // ---- HTTP and HTTPS through https.cpp (BearSSL; the copy of OSMapsCE's client).
@@ -4141,6 +6545,7 @@ struct Weather {
     wchar_t desc[48], place[48], err[80], rise[8], set[8];
     SYSTEMTIME at;                 // local time of the fetch
     DWORD   tick;
+    int     prov;                  // W_*: where the data came from (Open-Meteo: its credit, CC BY 4.0)
 };
 static CRITICAL_SECTION s_wxCs;
 static Weather          s_wx;
@@ -4225,6 +6630,7 @@ static void UnixClock(double t, double tz, wchar_t* out)
 
 static DWORD WINAPI WeatherThread(LPVOID)
 {
+    VLog(L"поток погоды: id %08X", (unsigned)GetCurrentThreadId());
     Weather w;
     memset(&w, 0, sizeof(w));
     int prov = s_wxProv;
@@ -4333,6 +6739,7 @@ static DWORD WINAPI WeatherThread(LPVOID)
         GetLocalTime(&w.at);
         w.tick = GetTickCount();
         w.have = true;
+        w.prov = prov;
         s_wx = w;
     } else {
         s_wx.ok = -1;
@@ -4525,15 +6932,79 @@ static void LoadCams(double lat, double lon)
     VLog(L"камеры: %d в 150 км из %d за %u мс", s_camCount, s_camTotal, (unsigned)(GetTickCount() - t0));
 }
 
+// A sound over the radio, as an external navigator says its prompts (Ghidra, PROJECT.md): WM_NAVIGATION_VOICE
+// (0x101D, wParam 1 = a prompt starts, 0 = ended) to the stock shell's main window "RadioCommWindow"; the shell
+// tells the MCU (SPApi_SendRadioNaviVoiceGuidance), which turns the radio down and lets our waveOut through.
+// The sound starts kVoiceLeadMs after "1" (the MCU turns the radio down meanwhile), "0" goes kVoiceTailMs after
+// it ends. No shell window: played at once. A device that never says "done" (Bluetooth HF without a phone, HU
+// 2026-10-18: the "1" stayed on, the knob then set the navigation's volume) is cut after kVoiceMaxMs.
+enum { TIMER_VOICE = 9, WM_NAVIGATION_VOICE = 0x101D, kVoiceLeadMs = 1000, kVoiceTailMs = 800, kVoiceMaxMs = 1500 };
+static int s_voice;   // 0 idle, 1 waiting to play, 2 playing, 3 waiting to end
+
+static bool NaviVoice(bool on)
+{
+    HWND h = FindWindow(NULL, L"RadioCommWindow");
+    if (h)
+        PostMessage(h, WM_NAVIGATION_VOICE, on ? 1 : 0, 0);
+    static int s_logged = -1;
+    if (s_logged != (h != NULL)) {
+        s_logged = h != NULL;
+        VLog(L"звук поверх радио: %s", h ? L"через оболочку (RadioCommWindow, 0x101D)" : L"окна оболочки нет — сразу");
+    }
+    return h != NULL;
+}
+
 static HWAVEOUT s_beepOut;
 static WAVEHDR  s_beepHdr;
 static short    s_beep[11025 / 2];   // 2 x 120 ms at 1.2 kHz with a gap, 11 kHz mono
 
+static void BeepPlay();
+
 static void Beep2()
+{
+    if (s_voice)
+        return;   // one is on its way
+    if (NaviVoice(true)) {
+        s_voice = 1;
+        SetTimer(s_wnd, TIMER_VOICE, kVoiceLeadMs, NULL);
+    } else {
+        BeepPlay();
+    }
+}
+
+// TIMER_VOICE: the lead is over (play) or the tail (the prompt has ended).
+static void VoiceTimer()
+{
+    KillTimer(s_wnd, TIMER_VOICE);
+    if (s_voice == 1) {
+        s_voice = 2;
+        SetTimer(s_wnd, TIMER_VOICE, kVoiceMaxMs, NULL);   // the guard (BeepPlay may end it at once: VoiceDone)
+        BeepPlay();
+    } else if (s_voice == 2) {   // no "done" from the device
+        if (s_beepOut)
+            waveOutReset(s_beepOut);
+        s_voice = 3;
+        SetTimer(s_wnd, TIMER_VOICE, kVoiceTailMs, NULL);
+    } else if (s_voice == 3) {
+        s_voice = 0;
+        NaviVoice(false);
+    }
+}
+
+// MM_WOM_DONE: the sound has been played.
+static void VoiceDone()
+{
+    if (s_voice == 2) {
+        s_voice = 3;
+        SetTimer(s_wnd, TIMER_VOICE, kVoiceTailMs, NULL);
+    }
+}
+
+static void BeepPlay()
 {
     if (s_beepOut) {
         if (!(s_beepHdr.dwFlags & WHDR_DONE))
-            return;
+            waveOutReset(s_beepOut);   // the last one hung: dropped
         waveOutUnprepareHeader(s_beepOut, &s_beepHdr, sizeof(s_beepHdr));
         waveOutClose(s_beepOut);
         s_beepOut = NULL;
@@ -4546,8 +7017,10 @@ static void Beep2()
     wf.wBitsPerSample = 16;
     wf.nBlockAlign = 2;
     wf.nAvgBytesPerSec = 22050;
-    if (waveOutOpen(&s_beepOut, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+    UINT dev = s_cfg.beepDev < 0 ? WAVE_MAPPER : (UINT)s_cfg.beepDev;
+    if (waveOutOpen(&s_beepOut, dev, &wf, (DWORD)s_wnd, 0, CALLBACK_WINDOW) != MMSYSERR_NOERROR) {
         s_beepOut = NULL;
+        VoiceDone();
         return;
     }
     int n = sizeof(s_beep) / sizeof(s_beep[0]);
@@ -4561,6 +7034,127 @@ static void Beep2()
     s_beepHdr.dwBufferLength = sizeof(s_beep);
     waveOutPrepareHeader(s_beepOut, &s_beepHdr, sizeof(s_beepHdr));
     waveOutWrite(s_beepOut, &s_beepHdr, sizeof(s_beepHdr));
+}
+
+// Diagnostics -> "Sound and video": the beep over the radio and short test files (VestaHome/tools/
+// make_testmedia.py -> Tests\SDMemory\TestMedia) played by our own players. The folder: TestMedia on the SD card,
+// a USB disk or next to the exe.
+struct AvTest { const wchar_t* label; const wchar_t* file; bool video; };
+static const AvTest kAvTests[10] = {
+    { L"ПИСК ПОВЕРХ РАДИО", NULL, false },     { L"ЛЕВО → ПРАВО (MP3)", L"lr.mp3", false },
+    { L"СВИП 40 Гц – 12 кГц", L"sweep.mp3", false }, { L"MP3 + теги", L"test.mp3", false },
+    { L"M4A (AAC)", L"test.m4a", false },      { L"FLAC", L"test.flac", false },
+    { L"WAV", L"test.wav", false },            { L"ВИДЕО MP4 (H.264)", L"test.mp4", true },
+    { L"ВИДЕО AVI (XviD)", L"test.avi", true }, { L"ВИДЕО MKV (H.264)", L"test.mkv", true } };
+
+// The TestMedia folder with a trailing '\', or "" when there is none.
+static const wchar_t* AvDir()
+{
+    static wchar_t d[MAX_PATH];
+    const wchar_t* roots[4] = { L"\\SDMemory\\", L"\\USBDisk\\", L"\\USBDevice\\", s_dir };
+    for (int i = 0; i < 4; i++) {
+        _snwprintf(d, MAX_PATH, L"%sTestMedia\\", roots[i]);
+        d[MAX_PATH - 1] = 0;
+        if (GetFileAttributes(d) != 0xFFFFFFFF)
+            return d;
+    }
+    d[0] = 0;
+    return d;
+}
+
+static bool AvHas(const wchar_t* dir, const wchar_t* file)
+{
+    wchar_t p[MAX_PATH];
+    _snwprintf(p, MAX_PATH, L"%s%s", dir, file);
+    p[MAX_PATH - 1] = 0;
+    return dir[0] && GetFileAttributes(p) != 0xFFFFFFFF;
+}
+
+// waveOut devices: "АВТО" (WAVE_MAPPER) or "<n> · <its name>". The unit has more than one (wav_proxy.dll: DSP and
+// ONCHIP, Bluetooth, iPod): the navigation prompt may need another one than the default.
+static void WaveDevName(int dev, wchar_t* s, int n)
+{
+    WAVEOUTCAPS c;
+    if (dev < 0)
+        _snwprintf(s, n, L"АВТО (из %u)", (unsigned)waveOutGetNumDevs());
+    else if (waveOutGetDevCaps((UINT)dev, &c, sizeof(c)) == MMSYSERR_NOERROR)
+        _snwprintf(s, n, L"%d · %s", dev, c.szPname);
+    else
+        _snwprintf(s, n, L"%d", dev);
+    s[n - 1] = 0;
+}
+
+static void WaveDevsLog()
+{
+    UINT n = waveOutGetNumDevs();
+    for (UINT i = 0; i < n; i++) {
+        wchar_t s[64];
+        WaveDevName((int)i, s, 64);
+        VLog(L"звук: устройство %s", s);
+    }
+    if (!n)
+        VLog(L"звук: устройств waveOut нет");
+}
+
+static void ScrTestAv(HDC dc)
+{
+    Frame(dc, L"ЗВУК И ВИДЕО");
+    Panel(dc, 16, 68, 768, 396);
+    const wchar_t* dir = AvDir();
+    for (int i = 0; i < 10; i++) {
+        bool ok = !kAvTests[i].file || AvHas(dir, kAvTests[i].file);
+        Button(dc, 40 + (i % 2) * 368, 84 + (i / 2) * 54, 352, 46, kAvTests[i].label, ok ? B_N : B_DIS, IC_NONE,
+               16, 0, ok ? A_AVTEST : A_NONE, i);
+    }
+    wchar_t s[160];
+    WaveDevName(s_cfg.beepDev, s, 64);
+    wchar_t b[96];
+    _snwprintf(b, 96, L"УСТРОЙСТВО ПИСКА: %s", s);
+    Button(dc, 40, 356, 720, 42, b, B_N, IC_NONE, 15, 0, A_AVDEV);   // the next device and a beep on it
+    if (dir[0])
+        _snwprintf(s, 160, L"Файлы: %s. Писк — через канал голоса навигации (радио тише).", dir);
+    else
+        wcscpy(s, L"Нет папки TestMedia (на SD-карте, USB или рядом с VestaHome) — работает только писк.");
+    T(dc, 40, 420, s, 14, kDim, 400, AL_START, 720);
+    T(dc, 40, 444, L"Лево → право: 3 с слева, 3 с справа, 3 с оба. Свип — для проверки эквалайзера.", 14, kDim,
+      400, AL_START, 720);
+}
+
+static void AvDevNext()
+{
+    int n = (int)waveOutGetNumDevs();
+    s_cfg.beepDev = s_cfg.beepDev + 1 >= n ? -1 : s_cfg.beepDev + 1;
+    SaveCfg();
+    wchar_t s[64];
+    WaveDevName(s_cfg.beepDev, s, 64);
+    VLog(L"звук: писк на устройство %s", s);
+    Beep2();
+}
+
+static void AvTestRun(int i)
+{
+    if (i < 0 || i >= 10)
+        return;
+    if (!kAvTests[i].file) {
+        Beep2();
+        return;
+    }
+    const wchar_t* dir = AvDir();
+    if (!AvHas(dir, kAvTests[i].file))
+        return;
+    wchar_t d[MAX_PATH];
+    wcscpy(d, dir);
+    if (kAvTests[i].video) {
+        VidLoadDir(d, kAvTests[i].file);
+        Go(S_VIDEO_PLAY, true);
+        return;
+    }
+    if (!BassLoad()) {
+        wcscpy(s_status, s_bass.state == -1 ? L"нет bass.dll: папка bass рядом с VestaHome" : L"звук не запускается (BASS_Init)");
+        return;
+    }
+    if (PlayerLoadDir(d, kAvTests[i].file))
+        Go(S_AUDIO, true);
 }
 
 // Without the road graph a camera is matched to the car's line of travel: in front of the car along the course
@@ -4601,6 +7195,22 @@ static bool CamFacing(const Cam& cm)
     return true;   // 0: any direction
 }
 
+// The beep for the camera ahead, once per camera: at once, or (cam.over) only while the car goes faster than
+// the camera's limit + cam.over km/h - then it comes when the speed gets there, while the camera is still ahead.
+// A camera without a known limit beeps only in the "always" mode.
+static bool s_camBeeped;
+
+static void CamSound()
+{
+    if (s_camNear < 0 || s_camBeeped || !s_cfg.camSound)
+        return;
+    int lim = s_cams[s_camNear].speed;
+    if (s_cfg.camOver >= 0 && (!lim || CarKmh() <= lim + s_cfg.camOver))
+        return;   // not over the limit (yet)
+    s_camBeeped = true;
+    Beep2();
+}
+
 // On every GPS update: the camera to warn about; true when what is shown changed.
 static bool CamCheck(const Gps& g)
 {
@@ -4624,6 +7234,7 @@ static bool CamCheck(const Gps& g)
         CamOffset(g, s_cams[s_camNear], &along, &cross);
         if (along > -10 && along < limit + 100 && cross < kCamCrossKeep) {
             s_camNearDist = (int)(along > 0 ? along : 0);
+            CamSound();   // the speed may have gone over the limit since
             return s_camNearDist / 50 != wasDist;
         }
         s_camNear = -1;
@@ -4644,8 +7255,9 @@ static bool CamCheck(const Gps& g)
     if (s_camNear >= 0)
         VLog(L"камера: %d м впереди, лимит %d, курс %.0f%s", s_camNearDist, s_cams[s_camNear].speed, s_course,
              s_cfg.camSound ? L", сигнал" : L"");
-    if (s_camNear >= 0 && s_cfg.camSound)
-        Beep2();
+    if (s_camNear != was)
+        s_camBeeped = false;   // a new camera: its own beep
+    CamSound();
     return s_camNear != was || s_camNearDist / 50 != wasDist;
 }
 
@@ -5899,7 +8511,8 @@ static void DrawTasks(HDC dc)
 }
 
 static int s_homePage;
-enum { kHomePages = 2 };
+// The widgets' grid: 3 x 2 on a page, a single 248 x 158, a double two singles and the gap.
+enum { kWgW = 248, kWgH = 158, kWgGap = 12, kWgW2 = kWgW * 2 + kWgGap, kWgPages = 6 };
 
 // Widget panel with its caption; pressed = orange like a tile (returns it: the content follows in ink).
 // With a settings screen the caption strip is a button of its own (a gear at its end) leading there.
@@ -5922,7 +8535,24 @@ static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, I
 // minute redraw, the player screen itself updates every second.
 static void WMedia(HDC dc, int x, int y)
 {
-    bool d = Widget(dc, x, y, 504, 158, L"СЕЙЧАС ИГРАЕТ · МУЗЫКА", IC_MUSIC, A_NAV, S_AUDIO);
+    if (s_netOn && s_netCur >= 0) {   // the internet radio: the station, the song or its state
+        bool d = Widget(dc, x, y, kWgW2, kWgH, L"СЕЙЧАС ИГРАЕТ · ИНТЕРНЕТ-РАДИО", IC_RADIO, A_NAV, S_NETRADIO);
+        TriFill(x + 16, y + 42, 100, 100, 12);
+        Ico(dc, IC_RADIO, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
+        wchar_t s[160];
+        EnterCriticalSection(&s_netCs);
+        wcscpy(s, s_netTitle);
+        LeaveCriticalSection(&s_netCs);
+        if (!s[0] || s_netState != NR_PLAY)
+            NetStateText(s, 160);
+        T(dc, x + 136, y + 70, s_stations[s_netCur].name, 26, d ? kInk : kText, 700, AL_START, 352);
+        TWrap(dc, x + 136, y + 94, s, 16, d ? kInk : kMuted, 400, 352, 1, 0);
+        IconBtn(dc, IC_PREV, x + 196, y + 122, 28, d ? kInk : kText, A_NRSTEP, -1);
+        NetPlayBtn(dc, x + 312, y + 136, 20, 22);
+        IconBtn(dc, IC_FWD, x + 400, y + 122, 28, d ? kInk : kText, A_NRSTEP, 1);
+        return;
+    }
+    bool d = Widget(dc, x, y, kWgW2, kWgH, L"СЕЙЧАС ИГРАЕТ · МУЗЫКА", IC_MUSIC, A_NAV, S_AUDIO);
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     TriFill(x + 16, y + 42, 100, 100, 12);
     Ico(dc, IC_MUSIC, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
@@ -5932,18 +8562,18 @@ static void WMedia(HDC dc, int x, int y)
     if (PlayerNow(title, sub, 96, &pos, &len)) {
         T(dc, tx, y + 70, title, 26, fg, 700, AL_START, 352);
         _snwprintf(s, 48, L"трек %d из %d", s_plCur + 1, s_plCount);
-        T(dc, tx, y + 94, sub[0] ? sub : s, 16, mg, 400, AL_START, 260);
+        TWrap(dc, tx, y + 94, sub[0] ? sub : s, 16, mg, 400, 260, 1, 0);
         Mmss(a, 16, pos);
         Mmss(b, 16, len);
         _snwprintf(s, 48, L"%s / %s", a, b);
-        T(dc, x + 488, y + 94, s, 15, mg, 600, AL_END);
+        T(dc, x + kWgW2 - 16, y + 94, s, 15, mg, 600, AL_END);
         int k = len > 0 ? (int)(pos * 352 / len) : 0;
         R(dc, tx, y + 106, 352, 6, 3, d ? kInk : kLine);
         R(dc, tx, y + 106, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
     } else {
         T(dc, tx, y + 70, L"Ничего не играет", 26, fg, 700, AL_START, 352);
-        T(dc, tx, y + 94, s_cfg.musicFile[0] ? s_cfg.musicFile : L"выберите музыку в «Медиа»", 16, mg, 400,
-          AL_START, 352);
+        TWrap(dc, tx, y + 94, s_cfg.musicFile[0] ? s_cfg.musicFile : L"выберите музыку в «Медиа»", 16, mg, 400,
+              352, 1, 0);
     }
     IconBtn(dc, IC_PREV, tx + 60, y + 122, 28, fg, A_PREVTRK);
     PlayBtn(dc, tx + 176, y + 136, 20, 22);
@@ -5988,17 +8618,25 @@ static void WSpeed(HDC dc, int x, int y)
         _snwprintf(v, 64, L"%s · %d м · спутников %d", kHeadings[((int)(g.course + 22.5) / 45) % 8], (int)g.alt, g.sats);
     else
         GpsStatusText(v, 64);
-    T(dc, x + 16, y + 144, v, 14, fix ? kMuted : kDim, 400, AL_START, 216);
+    TWrap(dc, x + 16, y + 144, v, 14, fix ? kMuted : kDim, 400, 216, 1, 0);
 }
 
+// The radio widget: the MCU's frequency and RDS name; the arrows step the presets of the page playing.
 static void WRadio(HDC dc, int x, int y)
 {
-    int cur = s_seg[G_PRESET] < 7 ? s_seg[G_PRESET] : 2;
-    bool d = Widget(dc, x, y, 248, 158, L"РАДИО · FM", IC_RADIO, A_NAV, S_RADIO);
-    T(dc, x + 16, y + 88, kPresets[cur].freq, 44, d ? kInk : kText, 700);
-    T(dc, x + 16, y + 114, kPresets[cur].name, 17, d ? kInk : kMuted, 600, AL_START, 216);
-    IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_SEG, G_PRESET * 16 + (cur + 6) % 7);
-    IconBtn(dc, IC_FWD, x + 82, y + 124, 26, d ? kInk : kText, A_SEG, G_PRESET * 16 + (cur + 1) % 7);
+    Tuner t;
+    TunerGet(&t);
+    wchar_t f[16];
+    FreqText(t.f10, f, 16);
+    bool d = Widget(dc, x, y, 248, 158, t.f10 > 0 && t.f10 < 8750 ? L"РАДИО · УКВ" : L"РАДИО · FM", IC_RADIO, A_NAV,
+                    S_RADIO);
+    T(dc, x + 16, y + 88, f, 44, d ? kInk : t.f10 ? kText : kDim, 700);
+    TWrap(dc, x + 16, y + 114, t.ps, 17, d ? kInk : kMuted, 600, 216, 1, 0);
+    if (t.presets > 0 && t.cur >= 0) {
+        int page = t.cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
+        IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_PRESET, page + (t.cur - page + per - 1) % per);
+        IconBtn(dc, IC_FWD, x + 82, y + 124, 26, d ? kInk : kText, A_PRESET, page + (t.cur - page + 1) % per);
+    }
 }
 
 // The weather's sign in a 64 x 64 box: sun, sun and cloud, cloud, and the cloud with rain, snow or lightning; fog.
@@ -6038,8 +8676,8 @@ static void WWeather(HDC dc, int x, int y)
     bool d = Widget(dc, x, y, 248, 158, cap, IC_CLOUD, A_WXNOW, 0, S_WSET_WEATHER);
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     if (!w.have) {
-        T(dc, x + 16, y + 90, s_wxBusy ? L"Загрузка…" : L"Нет данных", 22, fg, 700, AL_START, 216);
-        T(dc, x + 16, y + 118, w.ok < 0 ? w.err : L"нажмите, чтобы обновить", 14, mg, 400, AL_START, 216);
+        T(dc, x + 16, y + 84, s_wxBusy ? L"Загрузка…" : L"Нет данных", 22, fg, 700, AL_START, 216);
+        TWrap(dc, x + 16, y + 108, w.ok < 0 ? w.err : L"нажмите, чтобы обновить", 14, mg, 400, 216, 3, 18);
         return;
     }
     WxIcon(dc, w.kind, x + 16, y + 44, fg);
@@ -6047,12 +8685,31 @@ static void WWeather(HDC dc, int x, int y)
     T(dc, x + 96, y + 96, s, 44, fg, 700);
     _snwprintf(s, 100, L"%s, ветер %d м/с", w.desc, w.wind);
     CharUpperBuff(s, 1);
-    T(dc, x + 16, y + 126, s, 15, mg, 400, AL_START, 216);
+    TWrap(dc, x + 16, y + 126, s, 15, mg, 400, 216, 1, 0);
     if (w.ok < 0)
         _snwprintf(s, 100, L"не обновилась: %s", w.err);
     else
         _snwprintf(s, 100, L"днём %+d°, ночью %+d° · %02d:%02d", w.tmax, w.tmin, w.at.wHour, w.at.wMinute);
-    T(dc, x + 16, y + 146, s, 14, d ? kInk : kDim, 400, AL_START, 216);
+    TWrap(dc, x + 16, y + 146, s, 14, d ? kInk : kDim, 400, 216, 1, 0);
+}
+
+// The screen saver's weather, centred on cx: the picture and the temperature (the car's sensor first), below them
+// the sky's text.
+static void SaverWeather(HDC dc, int cx, int y)
+{
+    Weather w;
+    WxGet(&w);
+    int temp;
+    if (!OutsideTemp(&temp))
+        return;
+    wchar_t ts[16];
+    _snwprintf(ts, 16, L"%+d°", temp);
+    int tw = TextWidth(dc, ts, 40, 700), iw = w.have ? 72 : 0, x = cx - (iw + tw) / 2;
+    if (w.have)
+        WxIcon(dc, w.kind, x, y, kText);
+    T(dc, x + iw, y + 48, ts, 40, kText, 700);
+    if (w.have && w.desc[0])
+        T(dc, cx, y + 88, w.desc, 18, kMuted, 400, AL_MID, 400);
 }
 
 static void WCar(HDC dc, int x, int y)
@@ -6063,7 +8720,7 @@ static void WCar(HDC dc, int x, int y)
     Disc(dc, x + 24, y + 58, 7, d ? kInk : kOk);
     T(dc, x + 40, y + 65, L"Ошибок нет", 19, d ? kInk : kText, 700);
     for (int i = 0; i < 3; i++) {
-        T(dc, x + 16, y + 94 + i * 24, rows[i][0], 15, d ? kInk : kMuted, 400);
+        T(dc, x + 16, y + 94 + i * 24, rows[i][0], 15, d ? kInk : kMuted, 400, AL_START, 140);
         T(dc, x + 232, y + 94 + i * 24, rows[i][1], 15, d ? kInk : kText, 700, AL_END);
     }
 }
@@ -6072,7 +8729,7 @@ static void WTrip(HDC dc, int x, int y)
 {
     static const wchar_t* cells[4][3] = { { L"РАСХОД", L"7,4", L"л/100 км" }, { L"ЗАПАС ХОДА", L"420", L"км" },
                                           { L"ПРОБЕГ", L"34,5", L"км" }, { L"СРЕДНЯЯ", L"49", L"км/ч" } };
-    bool d = Widget(dc, x, y, 504, 158, L"БОРТОВОЙ КОМПЬЮТЕР · ПОЕЗДКА", IC_CLOCK, A_SCREEN, S_CAR);
+    bool d = Widget(dc, x, y, kWgW2, kWgH, L"БОРТОВОЙ КОМПЬЮТЕР · ПОЕЗДКА", IC_CLOCK, A_SCREEN, S_CAR);
     for (int i = 0; i < 4; i++) {
         int cx = x + 16 + i * 120;
         if (i)
@@ -6101,7 +8758,7 @@ static void WDate(HDC dc, int x, int y)
         _snwprintf(s, 48, L"Восход %s · закат %s", w.rise, w.set);
     else
         wcscpy(s, L"Восход и закат — с погодой");
-    T(dc, x + 16, y + 144, s, 14, d ? kInk : kDim, 400, AL_START, 216);
+    TWrap(dc, x + 16, y + 144, s, 14, d ? kInk : kDim, 400, 216, 1, 0);
 }
 
 // Climate control, only when the car has it (the car widget's settings); demo until the MCU protocol is known.
@@ -6165,10 +8822,9 @@ static void WPhone(HDC dc, int x, int y)
 // The first three programs of the list; the widget itself leads to all of them.
 static void WFavorites(HDC dc, int x, int y)
 {
-    bool d = Widget(dc, x, y, 248, 158, L"ПРОГРАММЫ", IC_APPS, A_NAV, S_APPS);
+    bool d = Widget(dc, x, y, 248, 158, L"ПРИЛОЖЕНИЯ", IC_APPS, A_NAV, S_APPS);
     if (s_appCount == 0) {
-        T(dc, x + 16, y + 92, L"Добавьте программы", 16, d ? kInk : kMuted, 400, AL_START, 216);
-        T(dc, x + 16, y + 114, L"в «Приложениях»", 16, d ? kInk : kMuted, 400, AL_START, 216);
+        TWrap(dc, x + 16, y + 92, L"Добавьте программы в «Приложениях»", 16, d ? kInk : kMuted, 400, 216, 2, 22);
         return;
     }
     for (int i = 0; i < 3 && i < s_appCount; i++) {
@@ -6182,17 +8838,98 @@ static void WFavorites(HDC dc, int x, int y)
 }
 
 // Navigation: starts the first program of the list (the example list begins with the maps).
-static void WNavi(HDC dc, int x, int y)
+// OSMapsCE among the programs: the first whose path has "OSMaps" (OSMapsCE.exe; OSMapsPC.exe on the PC); -1 none.
+static int NaviApp()
 {
-    const wchar_t* name = s_appCount ? s_apps[0].name : L"Карты";
-    bool d = Widget(dc, x, y, 248, 158, L"НАВИГАЦИЯ", IC_NAV, s_appCount ? A_RUN : A_NAV, s_appCount ? 0 : S_APPS);
-    Ico(dc, IC_MAP, x + 16, y + 52, 48, d ? kInk : kText);
-    T(dc, x + 78, y + 74, name, 19, d ? kInk : kText, 700, AL_START, 154);
-    T(dc, x + 78, y + 96, L"маршрут не задан", 15, d ? kInk : kMuted, 400, AL_START, 154);
-    T(dc, x + 16, y + 144, L"нажмите, чтобы открыть карты", 14, d ? kInk : kDim, 400, AL_START, 216);
+    for (int i = 0; i < s_appCount; i++) {
+        wchar_t lp[MAX_PATH];
+        wcscpy(lp, s_apps[i].path);
+        CharLowerBuff(lp, (DWORD)wcslen(lp));
+        if (wcsstr(lp, L"osmaps"))
+            return i;
+    }
+    return -1;
 }
 
-// The main screen: the date as the title, the widgets, the page dots.
+static void WNavi(HDC dc, int x, int y)
+{
+    int app = NaviApp();
+    const wchar_t* name = app >= 0 ? s_apps[app].name : L"OSMapsCE не найден";
+    bool d = Widget(dc, x, y, 248, 158, L"НАВИГАЦИЯ", IC_NAV, app >= 0 ? A_RUN : A_NAV, app >= 0 ? app : S_APPS);
+    Ico(dc, IC_MAP, x + 16, y + 52, 48, d ? kInk : kText);
+    T(dc, x + 78, y + 74, name, 19, d ? kInk : kText, 700, AL_START, 154);
+    TWrap(dc, x + 78, y + 96, L"маршрут не задан", 15, d ? kInk : kMuted, 400, 154, 1, 0);
+    TWrap(dc, x + 16, y + 144, app >= 0 ? L"нажмите, чтобы открыть карты" : L"добавьте его в «Приложениях»", 14,
+          d ? kInk : kDim, 400, 216, 1, 0);
+}
+
+struct WidgetDef { const wchar_t* name; bool wide; Icon ic; void (*draw)(HDC dc, int x, int y); };
+static const WidgetDef kWidgets[WG_COUNT] = {
+    { L"Сейчас играет", true, IC_MUSIC, WMedia }, { L"Скорость", false, IC_NAV, WSpeed },
+    { L"Радио", false, IC_RADIO, WRadio }, { L"Погода", false, IC_CLOUD, WWeather },
+    { L"Приложения", false, IC_APPS, WFavorites }, { L"Поездка", true, IC_CLOCK, WTrip },
+    { L"Климат", false, IC_CAR, WClimate }, { L"Календарь", false, IC_CLOCK, WDate },
+    { L"Телефон", false, IC_PHONE, WPhone }, { L"Автомобиль", false, IC_CAR, WCar },
+    { L"Навигация", false, IC_NAV, WNavi } };
+
+// Shown: not hidden, and the climate only when the car has it (Settings -> Car).
+static bool WgShown(int id)
+{
+    return !(s_cfg.homeHidden >> id & 1) && (id != WG_CLIMATE || s_cfg.climate);
+}
+
+// Where each shown widget goes: in their order, each into the first free place (a double needs two free cells
+// side by side in a row), so the later ones close up the gaps. page < 0: not placed. Returns the pages.
+struct WgPlace { int page, x, y; };
+static int HomeLayout(WgPlace* at)
+{
+    bool used[kWgPages][6];
+    memset(used, 0, sizeof(used));
+    int pages = 1;
+    for (int i = 0; i < WG_COUNT; i++) {
+        int id = s_cfg.homeOrder[i];
+        at[id].page = -1;
+        if (!WgShown(id))
+            continue;
+        bool wide = kWidgets[id].wide;
+        for (int k = 0; k < kWgPages * 6 && at[id].page < 0; k++) {
+            int pg = k / 6, c = k % 6;
+            if (used[pg][c] || (wide && (c % 3 == 2 || used[pg][c + 1])))
+                continue;
+            used[pg][c] = true;
+            if (wide)
+                used[pg][c + 1] = true;
+            at[id].page = pg;
+            at[id].x = 16 + c % 3 * (kWgW + kWgGap);
+            at[id].y = 64 + c / 3 * (kWgH + kWgGap);
+            if (pg + 1 > pages)
+                pages = pg + 1;
+        }
+    }
+    return pages;
+}
+
+static int HomePages()
+{
+    WgPlace at[WG_COUNT];
+    return HomeLayout(at);
+}
+
+// A widget's rectangle when it is on the page shown (for its own redraws).
+static bool HomeRect(int id, RECT* rc)
+{
+    WgPlace at[WG_COUNT];
+    HomeLayout(at);
+    if (at[id].page != s_homePage)
+        return false;
+    rc->left = at[id].x;
+    rc->top = at[id].y;
+    rc->right = at[id].x + (kWidgets[id].wide ? kWgW2 : kWgW);
+    rc->bottom = at[id].y + kWgH;
+    return true;
+}
+
+// The main screen: the date as the title, the widgets of the page, the page dots.
 static void DrawHome(HDC dc)
 {
     SYSTEMTIME t;
@@ -6201,23 +8938,44 @@ static void DrawHome(HDC dc)
     _snwprintf(s, 48, L"%s, %d %s", kDays[t.wDayOfWeek % 7], t.wDay, kMonths[(t.wMonth + 11) % 12]);
     CharUpperBuff(s, 1);
     Frame(dc, s);
-    if (s_homePage == 0) {
-        WMedia(dc, 16, 64);
-        WSpeed(dc, 536, 64);
-        WRadio(dc, 16, 232);
-        WWeather(dc, 276, 232);
-        WCar(dc, 536, 232);
-    } else {
-        WTrip(dc, 16, 64);
-        if (s_cfg.climate)
-            WClimate(dc, 536, 64);
-        else
-            WDate(dc, 536, 64);
-        WPhone(dc, 16, 232);
-        WFavorites(dc, 276, 232);
-        WNavi(dc, 536, 232);
+    WgPlace at[WG_COUNT];
+    int pages = HomeLayout(at);
+    if (s_homePage >= pages)
+        s_homePage = pages - 1;
+    for (int id = 0; id < WG_COUNT; id++)
+        if (at[id].page == s_homePage)
+            kWidgets[id].draw(dc, at[id].x, at[id].y);
+    bool any = false;
+    for (int id = 0; id < WG_COUNT; id++)
+        any = any || at[id].page >= 0;
+    if (!any)
+        T(dc, 400, 230, L"Все виджеты скрыты: «Настройки → Общие → Виджеты главной»", 16, kMuted, 400, AL_MID, 740);
+    PageDots(dc, s_homePage, pages);
+}
+
+// Settings -> General -> the main screen's widgets: in their order (down the left column, then the right), each
+// with "show" (the eye) and up / down (earlier / later).
+static void ScrSetHome(HDC dc)
+{
+    Frame(dc, L"ГЛАВНАЯ · ВИДЖЕТЫ");
+    Panel(dc, 16, 64, 768, 336);
+    for (int i = 0; i < WG_COUNT; i++) {
+        int id = s_cfg.homeOrder[i], x = 24 + i / 6 * 380, y = 70 + i % 6 * 54;
+        bool shown = !(s_cfg.homeHidden >> id & 1);
+        if (i % 6)
+            Sep(dc, x, y - 2, 368);
+        Ico(dc, kWidgets[id].ic, x + 8, y + 12, 26, shown ? kOrange : kDim);
+        const wchar_t* sub = kWidgets[id].wide ? L"двойной" : NULL;
+        if (id == WG_CLIMATE && !s_cfg.climate)
+            sub = L"нет в машине (Настройки → Автомобиль)";
+        T(dc, x + 46, y + (sub ? 24 : 33), kWidgets[id].name, 18, shown ? kText : kDim, 700, AL_START, 172);
+        if (sub)
+            T(dc, x + 46, y + 43, sub, 13, kMuted, 400, AL_START, 172);
+        Button(dc, x + 222, y + 7, 44, 40, NULL, i ? B_N : B_DIS, IC_UP, 15, 24, A_WGMOVE, id * 2);
+        Button(dc, x + 270, y + 7, 44, 40, NULL, i < WG_COUNT - 1 ? B_N : B_DIS, IC_DOWN, 15, 24, A_WGMOVE, id * 2 + 1);
+        Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, IC_EYE, 15, 24, A_WGVIS, id);
     }
-    PageDots(dc, s_homePage, kHomePages);
+    T(dc, 412, 390, L"вверх / вниз — раньше / позже; следующие занимают место скрытых", 13, kDim, 400, AL_START, 360);
 }
 
 // The car's systems and the trip, opened from the widgets.
@@ -6312,8 +9070,10 @@ static void ScrWSetWeather(HDC dc)
         wcscpy(s, L"ещё не загружалась");
     WRow(dc, 348, L"Состояние", s, A_NONE, 0, 568, true);
     Button(dc, 576, 354, 192, 44, L"ОБНОВИТЬ", B_PRI, IC_REFRESH, 15, 22, A_WXNOW);
-    T(dc, 36, 440, L"Обновляется раз в 30 мин. Open-Meteo из сети пользователя не отвечал.",
-      13, kDim, 400, AL_START, 728);
+    // Open-Meteo's data is CC BY 4.0: its credit wherever it is shown in detail (here; also "About the system")
+    bool om = p == W_OMETEO || (w.have && w.prov == W_OMETEO);
+    T(dc, 36, 440, om ? L"Обновляется раз в 30 мин. Weather data by Open-Meteo.com (CC BY 4.0)"
+                      : L"Обновляется раз в 30 мин.", 13, kDim, 400, AL_START, 728);
 }
 
 static void RegionsText(wchar_t* s, int n);
@@ -6326,8 +9086,9 @@ static void ScrWSetSpeed(HDC dc)
     wchar_t s[160], label[48];
     WRow(dc, 68, L"Предупреждать о камерах", L"знак на виджете и в верхнем баре", A_NONE, 0, 640);
     Toggle(dc, 688, 78, T_CAM_ALERT);
-    WRow(dc, 124, L"Звуковой сигнал", L"два коротких, когда камера появляется впереди", A_NONE, 0, 640);
-    Toggle(dc, 688, 134, T_CAM_SOUND);
+    static const wchar_t* snd[5] = { L"ВЫКЛ", L"ВСЕГДА", L"> ЛИМИТ", L"+10", L"+20" };
+    WRow(dc, 124, L"Звуковой сигнал", L"всегда или если скорость выше лимита камеры", A_NONE, 0, 340);
+    Seg(dc, 352, 130, 416, 44, snd, 5, G_CAMSND, 14);
     WRow(dc, 180, L"Дистанция", L"по скорости: за 10 с, 100–500 м", A_NONE, 0, 340);
     Seg(dc, 352, 186, 416, 44, dist, 4, G_CAMDIST, 14);
     wchar_t path[MAX_PATH];
@@ -6360,7 +9121,7 @@ static void ScrWSetCar(HDC dc)
 {
     Frame(dc, L"АВТОМОБИЛЬ · НАСТРОЙКИ");
     Panel(dc, 16, 64, 768, 400);
-    WRow(dc, 68, L"Климат-контроль в машине", L"виджет «Климат» на главной вместо календаря", A_NONE, 0, 640, true);
+    WRow(dc, 68, L"Климат-контроль в машине", L"виджет «Климат» на главной", A_NONE, 0, 640, true);
     Toggle(dc, 688, 78, T_CLIMATE);
     T(dc, 36, 160, L"Ошибки, температуры, климат и датчик за бортом придут из MCU, когда будет", 15, kMuted, 400,
       AL_START, 728);
@@ -6416,11 +9177,14 @@ static void ScrSetCar(HDC dc)
         _snwprintf(mcu, 80, L"proxy работает · сообщений %u", (unsigned)s_mcuTotal);
     SetRow(dc, 208, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU, H);
     Chevron(dc, 728, 216);
-    SetRow(dc, 256, L"Климат-контроль в машине", L"виджет «Климат» вместо календаря", true, A_NONE, 0, H);
+    SetRow(dc, 256, L"Климат-контроль в машине", L"виджет «Климат» вместо календаря", false, A_NONE, 0, H);
     Toggle(dc, 688, 262, T_CLIMATE);
-    T(dc, 264, 336, L"CAN-модуль даёт скорость и угол руля; климат, наружная температура,", 14, kDim, 400,
+    SetRow(dc, 304, L"Камера заднего хода — своя", L"видео и разметка VestaHome (когда нет оболочки)", true,
+           A_NONE, 0, H);
+    Toggle(dc, 688, 310, T_RVC_OWN);
+    T(dc, 264, 372, L"CAN-модуль даёт скорость и угол руля; климат, наружная температура,", 14, kDim, 400,
       AL_START, 504);
-    T(dc, 264, 356, L"кнопки и версии приходят от MCU — через proxy SPIPowerMgr.", 14, kDim, 400, AL_START, 504);
+    T(dc, 264, 392, L"кнопки и версии приходят от MCU — через proxy SPIPowerMgr.", 14, kDim, 400, AL_START, 504);
 }
 
 // MCU monitor ("Car -> MCU data", "Diagnostics -> keys"): the proxy's state, every message id with its count,
@@ -6455,7 +9219,7 @@ static void ScrTestMcu(HDC dc)
     if (state < 0)
         wcscpy(s, L"Общей памяти нет — VestaHome не смог её создать");
     else if (!state)
-        wcscpy(s, L"Proxy не пишет: не установлен или старая версия — установить новую (SPIPowerInstall)");
+        wcscpy(s, L"Proxy не пишет: не установлен или старая версия — установить новую (VestaHomeInstall)");
     else
         _snwprintf(s, 160, L"Proxy: загрузок %d, обработчиков %d · сообщений %u, разных %d", (int)attach, (int)wraps,
                    (unsigned)total, count);
@@ -6516,6 +9280,8 @@ static void ScrTestMcu(HDC dc)
 // (photos MAIN/Foto/info: SW / MCU / CAN / OS versions, ID, BT, HW, temperatures, steering-wheel keys voltages,
 // tuner). Here: what VestaHome knows itself, and the MCU's answers that look like text (versions, names) - asked
 // with "Request" (product info, BT address). Which message carries which field is decoded from mcu.log later.
+static void McuRequest();
+
 static void ScrInfoMore(HDC dc)
 {
     wchar_t s[160], can[64];
@@ -6545,36 +9311,38 @@ static void ScrInfoMore(HDC dc)
         _snwprintf(canv, 16, L"%S", g.canVer);
     LONG attach, wraps;
     int st = McuState(&attach, &wraps);
-    const wchar_t* rows[5][2] = { { L"Оболочка G3 (SW)", s }, { L"Windows CE", os }, { L"CAN-модуль", canv },
-                                  { L"Proxy MCU", st > 0 ? L"работает" : L"нет" }, { L"VestaHome", L"0.5 · 2026-10-15" } };
-    for (int i = 0; i < 5; i++) {
-        int y = 104 + i * 32;
-        T(dc, 32, y + 22, rows[i][0], 15, kMuted, 400);
-        T(dc, 444, y + 22, rows[i][1], 15, kText, 700, AL_END, 240);
+    static DWORD s_asked;   // the MCU's versions and BT address, asked for once on opening (as the stock "Info")
+    if (st > 0 && (!s_asked || GetTickCount() - s_asked > 30000)) {
+        s_asked = GetTickCount();
+        McuRequest();
     }
-    Sep(dc, 32, 270, 412);
-    T(dc, 32, 294, L"ОТ MCU (текстом)", 13, kMuted, 700);
-    int shown = 0;
     EnterCriticalSection(&s_mcuCs);
-    for (int i = 0; i < s_mcuStatCount && shown < 4; i++) {
-        const McuStat& m = s_mcuStat[i];
-        int len = m.len < MCU_SHM_DATA ? m.len : MCU_SHM_DATA, printable = 0, n;
-        for (int k = 0; k < len; k++)
-            printable += m.data[k] >= 0x20 && m.data[k] <= 0x7E;
-        if (printable < 5 || printable * 3 < len * 2)
-            continue;
-        n = _snwprintf(s, 160, L"%04X  ", (unsigned)m.id);
-        for (int k = 0; k < len && n < 150; k++)
-            if (m.data[k] >= 0x20 && m.data[k] <= 0x7E)
-                s[n++] = (wchar_t)m.data[k];
-        s[n] = 0;
-        T(dc, 32, 318 + shown * 24, s, 14, kText, 600, AL_START, 412);
-        shown++;
-    }
+    McuInfo inf = s_info;
     LeaveCriticalSection(&s_mcuCs);
-    if (!shown)
-        T(dc, 32, 318, st > 0 ? L"нажмите ЗАПРОСИТЬ — ответы появятся здесь" : L"нужен новый proxy SPIPowerMgr",
-          14, kDim, 400, AL_START, 412);
+    wchar_t mcu[48], hw[24], bt[24], id[40];
+    if (inf.sw[0] && inf.cs >= 0)
+        _snwprintf(mcu, 48, L"%s · CS %04X", inf.sw, inf.cs);
+    else
+        wcscpy(mcu, inf.sw[0] ? inf.sw : L"—");
+    wcscpy(hw, inf.hw[0] ? inf.hw : L"—");
+    if (inf.btHave)
+        _snwprintf(bt, 24, L"%02X:%02X:%02X:%02X:%02X:%02X", inf.bt[0], inf.bt[1], inf.bt[2], inf.bt[3], inf.bt[4],
+                   inf.bt[5]);
+    else
+        wcscpy(bt, L"—");
+    if (inf.id[0])
+        _snwprintf(id, 40, L"%s %s %s", inf.id, inf.idDate, inf.idNum);
+    else
+        wcscpy(id, L"—");
+    const wchar_t* rows[9][2] = { { L"Оболочка G3 (SW)", s }, { L"Windows CE", os }, { L"MCU (радио)", mcu },
+                                  { L"Железо (HW)", hw }, { L"CAN-модуль", canv }, { L"Bluetooth-адрес", bt },
+                                  { L"ID устройства", id }, { L"Proxy MCU", st > 0 ? L"работает" : L"нет" },
+                                  { L"VestaHome", L"0.5 · 2026-10-18" } };
+    for (int i = 0; i < 9; i++) {
+        int y = 100 + i * 33;
+        T(dc, 32, y + 22, rows[i][0], 15, kMuted, 400);
+        T(dc, 444, y + 22, rows[i][1], 15, kText, 700, AL_END, 260);
+    }
     Button(dc, 32, 412, 200, 44, L"ЗАПРОСИТЬ", st > 0 ? B_N : B_DIS, IC_REFRESH, 14, 22, A_MCUREQ);
     Button(dc, 244, 412, 200, 44, L"ДАННЫЕ MCU", B_N, IC_NONE, 14, 0, A_SCREEN, S_TEST_MCU);
 
@@ -6582,27 +9350,34 @@ static void ScrInfoMore(HDC dc)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    wchar_t ram[40], up[24], out[24], gps[40];
+    wchar_t ram[40], up[24], temp[32], sw[32], field[16], gps[40];
     _snwprintf(ram, 40, L"%u из %u МБ", (unsigned)(ms.dwAvailPhys >> 20), (unsigned)(ms.dwTotalPhys >> 20));
     DWORD m = GetTickCount() / 60000;
     _snwprintf(up, 24, L"%u ч %02u мин", (unsigned)(m / 60), (unsigned)(m % 60));
-    Hvac h;
-    if (HvacGet(&h) && h.outer > -100)
-        _snwprintf(out, 24, L"%+d °C", h.outer);
+    // System status (0x7905; the MCU sends it every 2 s for a while after start, not always)
+    if (inf.sys[0x0A] >= 0 || inf.sys[0x06] >= 0)
+        _snwprintf(temp, 32, L"плата %d °C · усилитель %d °C", inf.sys[0x0A], inf.sys[0x06]);
     else
-        wcscpy(out, L"—");
+        wcscpy(temp, L"—");
+    if (inf.sys[0x03] >= 0)
+        _snwprintf(sw, 32, L"%d · %d", inf.sys[0x03], inf.sys[0x0E]);
+    else
+        wcscpy(sw, L"—");
+    if (inf.sys[0x07] >= 0)
+        _snwprintf(field, 16, L"%d дБ", inf.sys[0x07]);
+    else
+        wcscpy(field, L"—");
     _snwprintf(gps, 40, L"%s · %d спутн.", GpsFresh(g, 5000) ? L"фикс" : L"нет фикса", g.sats);
     CanStatusText(can, 64);
-    const wchar_t* right[5][2] = { { L"Память свободно", ram }, { L"Работает", up }, { L"За бортом", out },
-                                   { L"GPS", gps }, { L"CAN", can } };
-    for (int i = 0; i < 5; i++) {
-        int y = 104 + i * 52;
-        T(dc, 488, y + 20, right[i][0], 14, kMuted, 400);
-        T(dc, 488, y + 42, right[i][1], 15, kText, 700, AL_START, 280);
+    const wchar_t* right[7][2] = { { L"Память свободно", ram }, { L"Работает", up }, { L"GPS", gps }, { L"CAN", can },
+                                   { L"Температура", temp }, { L"Кнопки руля (покой)", sw },
+                                   { L"Поле тюнера", field } };
+    for (int i = 0; i < 7; i++) {
+        int y = 100 + i * 41;
+        T(dc, 488, y + 18, right[i][0], 13, kMuted, 400);
+        T(dc, 488, y + 37, right[i][1], 15, kText, 700, AL_START, 284);
     }
-    T(dc, 488, 384, L"Температуры, напряжения кнопок руля,", 13, kDim, 400, AL_START, 288);
-    T(dc, 488, 402, L"тюнер (System status) — из MCU,", 13, kDim, 400, AL_START, 288);
-    T(dc, 488, 420, L"после разбора mcu.log.", 13, kDim, 400, AL_START, 288);
+    T(dc, 488, 412 + 22, L"Weather data by Open-Meteo.com (CC BY 4.0)", 12, kDim, 400, AL_START, 288);
 }
 
 // "Request": product info and the BT address, as the stock "Info" asks for them (FUN_00679190); the answers come
@@ -6624,8 +9399,11 @@ static const EqPreset kEqPresets[5] = { { L"РОВНО", { 0, 0, 0 } }, { L"ПО
                                         { L"ГОЛОС", { -2, 3, 1 } } };
 static const int kEqBand[3] = { 2, 1, 0 };   // low, mid, high -> the MCU's band (0 = high, OnTimerHighSlot)
 
+static DWORD s_sndSentTick;   // our last EQ / balance: the MCU's echoes of older values are not taken back meanwhile
+
 static void EqSend(int i)
 {
+    s_sndSentTick = GetTickCount();
     if (McuSend2("SPApi_SendRadioAudioHMLData", kEqBand[i], s_cfg.eq[i] + 6))
         wcscpy(s_status, L"эквалайзер → MCU");
 }
@@ -6652,6 +9430,7 @@ static void EqPresetSet(int p)
 
 static void BalanceSend()
 {
+    s_sndSentTick = GetTickCount();
     if (McuSend2("SPApi_SendRadioAudioBalanceFaderData", s_cfg.balance + 8, s_cfg.fader + 8))
         wcscpy(s_status, L"баланс → MCU");
 }
@@ -6671,10 +9450,39 @@ static void BalanceStep(bool fader, int dir)   // dir 0 = both to the centre
     BalanceSend();
 }
 
+// The car from above on the balance screen: a tap or a drag puts the point there (as in the stock shell's
+// CAudioFieldDlg). The point's place: x = kBalX + balance * kBalDX, y = kBalY + fader * kBalDY.
+enum { kBalX = 376, kBalY = 230, kBalDX = 10, kBalDY = 18 };
+
+static int BalRound(int d, int step)
+{
+    int v = (d + (d < 0 ? -step / 2 : step / 2)) / step;
+    return v < -8 ? -8 : v > 8 ? 8 : v;
+}
+
+// A point of the screen -> balance and fader; sent when they change. save: the finger is up.
+static void BalanceAt(int x, int y, bool save)
+{
+    int b = BalRound(x - kBalX, kBalDX), f = BalRound(y - kBalY, kBalDY);
+    if (b != s_cfg.balance || f != s_cfg.fader) {
+        s_cfg.balance = b;
+        s_cfg.fader = f;
+        BalanceSend();
+        Redraw();
+    }
+    if (save)
+        SaveCfg();
+}
+
 // Equalizer: presets, three sliders (a tap on a slider sets the value there), balance and volumes as buttons.
 static void ScrSetSound(HDC dc)
 {
     static const wchar_t* bands[3] = { L"НИЗКИЕ", L"СРЕДНИЕ", L"ВЫСОКИЕ" };
+    static DWORD s_seen;   // opened: the shell's key of its equalizer screen - the MCU takes the changes only after it
+    if (s_seen != s_screenTick) {   // (HU 2026-10-18-2: ours alone had no answer, the shell's 0xE6 first had)
+        s_seen = s_screenTick;
+        McuKey(0xE6, false);
+    }
     Settings(dc, S_SET_SOUND);
     T(dc, 264, 92, L"Эквалайзер (MCU)", 19, kText, 700);
     for (int p = 0; p < 5; p++) {
@@ -6701,6 +9509,11 @@ static void ScrSetSound(HDC dc)
 static void ScrSetBalance(HDC dc)
 {
     static const wchar_t* speed[4] = { L"ВЫКЛ", L"1", L"2", L"3" };
+    static DWORD s_seen;   // opened: the shell's key of its balance screen (as 0xE6 for the equalizer)
+    if (s_seen != s_screenTick) {
+        s_seen = s_screenTick;
+        McuKey(0xE4, false);
+    }
     Settings(dc, S_SET_BALANCE);
     R(dc, 276, 76, 200, 316, 40, kPanel2);   // the car from above, four seats
     R(dc, 296, 126, 70, 76, 10, kInk);
@@ -6709,7 +9522,8 @@ static void ScrSetBalance(HDC dc)
     R(dc, 386, 256, 70, 76, 10, kInk);
     Dash(dc, 376, 84, 376, 384, 4, 6, kDim);
     Dash(dc, 284, 230, 468, 230, 4, 6, kDim);
-    int cx = 376 + s_cfg.balance * 10, cy = 230 + s_cfg.fader * 18;   // + fader = to the rear (to verify)
+    Zone(276, 76, 200, 316, A_BALXY);   // the whole car: tap or drag
+    int cx = kBalX + s_cfg.balance * kBalDX, cy = kBalY + s_cfg.fader * kBalDY;   // + fader = to the rear (to verify)
     Disc(dc, cx, cy, 18, kOrange);
     Disc(dc, cx, cy, 6, kInk);
     wchar_t b[24], f[24];
@@ -6836,9 +9650,83 @@ static void OpenCfgKeys(int which)
     }
 }
 
+// A known network (name + password) into the settings and to the Wi-Fi thread; pass NULL = forget it.
+static void WifiKnownSet(const wchar_t* ssid, const wchar_t* pass)
+{
+    int k = 0;
+    while (k < s_cfg.wifiCount && wcscmp(s_cfg.wifiSsid[k], ssid))
+        k++;
+    if (!pass) {
+        if (k < s_cfg.wifiCount) {
+            int last = --s_cfg.wifiCount;
+            wcscpy(s_cfg.wifiSsid[k], s_cfg.wifiSsid[last]);
+            wcscpy(s_cfg.wifiPass[k], s_cfg.wifiPass[last]);
+            wcscpy(s_cfg.wifiSealed[k], s_cfg.wifiSealed[last]);
+            s_cfg.wifiLocked[k] = s_cfg.wifiLocked[last];
+        }
+        WifiForget(ssid);
+    } else {
+        if (k == kWifiKnown)
+            return;
+        wcsncpy(s_cfg.wifiSsid[k], ssid, 32);
+        s_cfg.wifiSsid[k][32] = 0;
+        wcsncpy(s_cfg.wifiPass[k], pass, 63);
+        s_cfg.wifiPass[k][63] = 0;
+        s_cfg.wifiLocked[k] = false;
+        if (k == s_cfg.wifiCount)
+            s_cfg.wifiCount++;
+        WifiRemember(ssid, pass);
+    }
+    SaveCfg();
+}
+
+// A tap on a network: a known or open one connects at once, a new secured one asks its password first.
+static void WifiTap(int i)
+{
+    WifiInfo w;
+    WifiGet(&w);
+    if (i < 0 || i >= w.count)
+        return;
+    const WifiNet& n = w.nets[i];
+    if (w.state == WIFI_CONNECTED && !wcscmp(w.ssid, n.ssid)) {
+        wcscpy(s_status, L"уже подключено");
+        return;
+    }
+    for (int k = 0; k < s_cfg.wifiCount; k++)
+        if (!s_cfg.wifiLocked[k] && !wcscmp(s_cfg.wifiSsid[k], n.ssid)) {
+            WifiConnect(n.ssid, s_cfg.wifiPass[k]);
+            return;
+        }
+    if (n.sec == WSEC_OPEN) {
+        WifiKnownSet(n.ssid, L"");
+        WifiConnect(n.ssid, L"");
+        return;
+    }
+    wcscpy(s_wifiTarget, n.ssid);
+    s_wifiPass[0] = 0;
+    _snwprintf(s_wifiTitle, 64, L"ПАРОЛЬ · %s", n.ssid);
+    s_wifiTitle[63] = 0;
+    OpenKeysFor(s_wifiPass, 63, s_wifiTitle, S_SET_WIFI);
+}
+
+static void WifiForgetTap(int i)
+{
+    WifiInfo w;
+    WifiGet(&w);
+    if (i >= 0 && i < w.count)
+        WifiKnownSet(w.nets[i].ssid, NULL);
+}
+
 // Typed into a setting: coordinates are parsed, the file written, what depends on it restarted.
 static void CfgKeysDone()
 {
+    if (s_keysTarget == s_wifiPass) {   // the password of a new network: kept and connected with
+        if (s_wifiPass[0]) {
+            WifiKnownSet(s_wifiTarget, s_wifiPass);
+            WifiConnect(s_wifiTarget, s_wifiPass);
+        }
+        return;
+    }
     if (s_keysTarget == s_coordText) {
         wchar_t* e;
         double lat = wcstod(s_coordText, &e);
@@ -6861,8 +9749,14 @@ static void CfgToControls()
     s_on[T_W_GPS] = s_cfg.weatherGps;
     s_on[T_CLIMATE] = s_cfg.climate;
     s_on[T_CAM_ALERT] = s_cfg.camAlert;
-    s_on[T_CAM_SOUND] = s_cfg.camSound;
+    s_seg[G_CAMSND] = !s_cfg.camSound ? 0 : s_cfg.camOver < 0 ? 1 : s_cfg.camOver < 10 ? 2 : s_cfg.camOver < 20 ? 3 : 4;
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
+    s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
+    s_on[T_RVC_OWN] = s_cfg.rvcOwn;
+    s_on[T_WIFI] = s_cfg.wifiOn;
+    s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
+    s_on[T_WIFI_HOLD] = s_cfg.wifiHold;
+    s_seg[G_VIDEO_SCALE] = s_cfg.videoStretch ? 1 : 0;
     s_seg[G_WPROV] = s_cfg.weatherProv;
     s_seg[G_CAMDIST] = 0;
     for (int i = 0; i < 4; i++)
@@ -6872,8 +9766,9 @@ static void CfgToControls()
 
 static bool IsCfgToggle(int id)
 {
-    return id == T_GPS_TIME || id == T_W_GPS || id == T_CLIMATE || id == T_CAM_ALERT || id == T_CAM_SOUND ||
-           id == T_CAM_WEEKLY;
+    return id == T_GPS_TIME || id == T_W_GPS || id == T_CLIMATE || id == T_CAM_ALERT ||
+           id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_RVC_OWN || id == T_WIFI ||
+           id == T_WIFI_AP_AUTO || id == T_WIFI_HOLD;
 }
 
 static void ControlsToCfg()
@@ -6883,8 +9778,30 @@ static void ControlsToCfg()
     s_cfg.weatherGps = s_on[T_W_GPS];
     s_cfg.climate = s_on[T_CLIMATE];
     s_cfg.camAlert = s_on[T_CAM_ALERT];
-    s_cfg.camSound = s_on[T_CAM_SOUND];
+    {   // the beep: off / always / above the camera's limit by 0, 10, 20 km/h
+        static const int over[5] = { -1, -1, 0, 10, 20 };
+        s_cfg.camSound = s_seg[G_CAMSND] > 0;
+        s_cfg.camOver = over[s_seg[G_CAMSND] % 5];
+    }
     s_cfg.camWeekly = s_on[T_CAM_WEEKLY];
+    s_cfg.videoMoving = s_on[T_VIDEO_MOVING];
+    s_cfg.rvcOwn = s_on[T_RVC_OWN];
+    if (s_cfg.wifiOn != s_on[T_WIFI]) {
+        s_cfg.wifiOn = s_on[T_WIFI];
+        WifiEnable(s_cfg.wifiOn);
+    }
+    if (s_cfg.wifiHold != s_on[T_WIFI_HOLD]) {
+        s_cfg.wifiHold = s_on[T_WIFI_HOLD];
+        WifiHold(s_cfg.wifiHold);
+    }
+    if (s_cfg.wifiApAuto != s_on[T_WIFI_AP_AUTO]) {
+        s_cfg.wifiApAuto = s_on[T_WIFI_AP_AUTO];
+        WifiApSetup(s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
+    }
+    if (s_cfg.videoStretch != (s_seg[G_VIDEO_SCALE] == 1)) {
+        s_cfg.videoStretch = s_seg[G_VIDEO_SCALE] == 1;
+        VideoSetStretch(s_cfg.videoStretch);
+    }
     s_cfg.weatherProv = s_seg[G_WPROV];
     s_cfg.camDist = kCamDists[s_seg[G_CAMDIST] & 3];
     if (!s_cfg.camAlert)
@@ -7078,6 +9995,7 @@ static int Today()
 
 static DWORD WINAPI CamDownloadThread(LPVOID)
 {
+    VLog(L"поток базы камер: id %08X", (unsigned)GetCurrentThreadId());
     char regions[200], kinds[120];
     WideCharToMultiByte(CP_UTF8, 0, s_cfg.camRegions, -1, regions, sizeof(regions), NULL, NULL);
     strcpy(kinds, "1000");
@@ -7264,7 +10182,6 @@ static void DrawScreen(HDC dc, Screen s)
     case S_SET_RADIO:   ScrSetRadio(dc); break;
     case S_SET_BT:      ScrSetBt(dc); break;
     case S_SET_WIFI:    ScrSetWifi(dc); break;
-    case S_WIFI_KEYS:   ScrWifiKeys(dc); break;
     case S_SET_VIDEO:   ScrSetVideo(dc); break;
     case S_SET_PHOTO:   ScrSetPhoto(dc); break;
     case S_INFO:        ScrInfo(dc); break;
@@ -7272,6 +10189,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_VOLUME:      ScrVolume(dc); break;
     case S_SAVER:       ScrSaver(dc); break;
     case S_EXIT:        ScrExit(dc); break;
+    case S_REBOOT:      ScrReboot(dc); break;
     case S_CAR:         ScrCar(dc); break;
     case S_APPS:        DrawApps(dc); break;
     case S_EDIT:        DrawEdit(dc); break;
@@ -7284,14 +10202,18 @@ static void DrawScreen(HDC dc, Screen s)
     case S_WSET_WEATHER: ScrWSetWeather(dc); break;
     case S_WSET_SPEED:  ScrWSetSpeed(dc); break;
     case S_WSET_CAR:    ScrWSetCar(dc); break;
+    case S_SET_HOME:    ScrSetHome(dc); break;
     case S_SET_CAR:     ScrSetCar(dc); break;
     case S_TEST_CAN:    ScrTestCan(dc); break;
     case S_TEST_MCU:    ScrTestMcu(dc); break;
+    case S_TEST_AV:     ScrTestAv(dc); break;
     case S_INFO_MORE:   ScrInfoMore(dc); break;
     case S_SET_VOLUME:  ScrSetVolume(dc); break;
     case S_CAMDL:       ScrCamDl(dc); break;
     case S_CAMREG:      ScrCamReg(dc); break;
     case S_TASKS:       DrawTasks(dc); break;
+    case S_NETRADIO:    ScrNetRadio(dc); break;
+    case S_NETRADIO_LIST: ScrNetRadioList(dc); break;
     default:            break;
     }
 }
@@ -7303,27 +10225,207 @@ static void DrawFrame(HDC dc)
         MainBackground(dc);
     else
         SubBackground(dc);
-    kBtnCount = 0;
+    if (s_partial)
+        s_zoneIdx = 0;
+    else
+        kBtnCount = 0;
     DrawScreen(dc, s_screen);
     if (Section(s_screen) >= 0)
         NavBar(dc, Section(s_screen));
 }
 
 static int s_drawnMinute = -1;   // the minute on the clock of the last frame
+static DWORD s_drawCount, s_drawMs, s_drawMax;   // the frames since the last load line, their time
+static DWORD s_areaCount, s_areaMs, s_areaShown;  // the partial ones: drawn, their time, how many went out
 
 static void Redraw()
 {
     SYSTEMTIME t;
     GetLocalTime(&t);
     s_drawnMinute = t.wMinute;
+    DWORD t0 = GetTickCount();
     HDC hdc = GetDC(s_wnd);
     HDC dc = CreateCompatibleDC(hdc);
     HGDIOBJ ob = SelectObject(dc, s_back);
     DrawFrame(dc);
-    BitBlt(hdc, 0, 0, 800, 480, dc, 0, 0, SRCCOPY);
+    BitBlt(hdc, 0, 0, 800, 480, dc, 0, 0, SRCCOPY);   // the video's window is left out (WS_CLIPCHILDREN)
     SelectObject(dc, ob);
     DeleteDC(dc);
     ReleaseDC(s_wnd, hdc);
+    VidSync();
+    DWORD ms = GetTickCount() - t0;   // for the load line of the log (once a minute)
+    s_drawCount++;
+    s_drawMs += ms;
+    if (ms > s_drawMax)
+        s_drawMax = ms;
+}
+
+// Only what changed: the frame drawn again clipped to [l, t, r, b) (the layout and the buttons stay those of the
+// last full frame, so it is for values that change in place: the speed, the track's position, a song title),
+// and only if its pixels are not the same as before does the area go to the screen.
+static void RedrawArea(int l, int t, int r, int b)
+{
+    if (!s_back || l >= r || t >= b)
+        return;
+    DWORD t0 = GetTickCount();
+    int w = r - l, h = b - t;
+    unsigned short* was = (unsigned short*)malloc(w * h * 2);
+    if (!was) {
+        Redraw();
+        return;
+    }
+    for (int y = t; y < b; y++)
+        memcpy(was + (y - t) * w, s_backBits + (479 - y) * 800 + l, w * 2);
+    s_partial = true;
+    s_zoneIdx = 0;
+    s_clip.left = l;
+    s_clip.top = t;
+    s_clip.right = r;
+    s_clip.bottom = b;
+    HDC hdc = GetDC(s_wnd);
+    HDC dc = CreateCompatibleDC(hdc);
+    HGDIOBJ ob = SelectObject(dc, s_back);
+    IntersectClipRect(dc, l, t, r, b);
+    DrawFrame(dc);
+#ifndef UNDER_CE
+    GdiFlush();
+#endif
+    bool changed = false;
+    for (int y = t; y < b && !changed; y++)
+        changed = memcmp(was + (y - t) * w, s_backBits + (479 - y) * 800 + l, w * 2) != 0;
+    if (changed)
+        BitBlt(hdc, l, t, w, h, dc, l, t, SRCCOPY);
+    SelectObject(dc, ob);
+    DeleteDC(dc);
+    ReleaseDC(s_wnd, hdc);
+    free(was);
+    s_partial = false;
+    s_clip.left = s_clip.top = 0;
+    s_clip.right = 800;
+    s_clip.bottom = 480;
+    DWORD ms = GetTickCount() - t0;
+    s_areaCount++;
+    s_areaMs += ms;
+    if (changed)
+        s_areaShown++;
+}
+
+// Our own threads' share of the CPU since the last call, the 4 busiest: "<id> NN%" (2026-10-18: VestaHome showed
+// 82-92 % with no frames drawn and minimized - which thread; the threads log their ids as they start).
+static void OwnThreadsLoad(wchar_t* out, int n)
+{
+    out[0] = 0;
+    struct Th { DWORD id; unsigned __int64 t; };
+    static Th s_prev[48];
+    static int s_prevCount;
+    static DWORD s_prevTick;
+    Th cur[48];
+    int count = 0;
+#ifdef UNDER_CE
+    typedef HANDLE (WINAPI *SnapFn)(DWORD, DWORD);
+    typedef BOOL (WINAPI *ThFn)(HANDLE, THREADENTRY32*);
+    typedef BOOL (WINAPI *CloseFn)(HANDLE);
+    typedef HANDLE (WINAPI *OpenFn)(DWORD, BOOL, DWORD);
+    static HMODULE s_th;
+    if (!s_th)
+        s_th = LoadLibrary(L"toolhelp.dll");
+    SnapFn snap = s_th ? (SnapFn)GetProcAddress(s_th, L"CreateToolhelp32Snapshot") : NULL;
+    ThFn first = s_th ? (ThFn)GetProcAddress(s_th, L"Thread32First") : NULL;
+    ThFn next = s_th ? (ThFn)GetProcAddress(s_th, L"Thread32Next") : NULL;
+    CloseFn close = s_th ? (CloseFn)GetProcAddress(s_th, L"CloseToolhelp32Snapshot") : NULL;
+    OpenFn open = (OpenFn)GetProcAddress(GetModuleHandle(L"coredll.dll"), L"OpenThread");
+    if (!snap || !first || !next || !close) {
+        wcscpy(out, L"нет toolhelp");
+        return;
+    }
+    HANDLE h = snap(TH32CS_SNAPTHREAD, 0);
+    if (h == INVALID_HANDLE_VALUE)
+        return;
+    THREADENTRY32 te;
+    te.dwSize = sizeof(te);
+    DWORD pid = GetCurrentProcessId();
+    for (BOOL ok = first(h, &te); ok && count < 48; ok = next(h, &te)) {
+        if (te.th32OwnerProcessID == pid) {
+            HANDLE th = open ? open(THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID) : NULL;
+            FILETIME c, e, k, u;
+            if (GetThreadTimes(th ? th : (HANDLE)te.th32ThreadID, &c, &e, &k, &u)) {
+                cur[count].id = te.th32ThreadID;
+                cur[count].t = ((unsigned __int64)k.dwHighDateTime << 32 | k.dwLowDateTime) +
+                               ((unsigned __int64)u.dwHighDateTime << 32 | u.dwLowDateTime);
+                count++;
+            }
+            if (th)
+                CloseHandle(th);
+        }
+        te.dwSize = sizeof(te);
+    }
+    close(h);
+#else
+    wcscpy(out, L"только на ГУ");
+    return;
+#endif
+    DWORD now = GetTickCount(), wall = now - s_prevTick;
+    int pct[48];
+    for (int i = 0; i < count; i++) {
+        pct[i] = -1;
+        for (int j = 0; j < s_prevCount; j++)
+            if (s_prev[j].id == cur[i].id && s_prevTick && wall)
+                pct[i] = (int)((cur[i].t - s_prev[j].t) / 10000 * 100 / wall);   // 100 ns -> ms -> %
+    }
+    for (int k = 0; k < 4; k++) {   // the 4 busiest
+        int best = -1;
+        for (int i = 0; i < count; i++)
+            if (pct[i] >= 0 && (best < 0 || pct[i] > pct[best]))
+                best = i;
+        if (best < 0)
+            break;
+        wchar_t s[32];
+        _snwprintf(s, 32, L"%s%08X %d%%", k ? L", " : L"", (unsigned)cur[best].id, pct[best]);
+        s[31] = 0;
+        if ((int)(wcslen(out) + wcslen(s)) < n - 1)
+            wcscat(out, s);
+        pct[best] = -1;
+    }
+    if (!out[0])
+        _snwprintf(out, n, L"%d, замер с этой минуты", count);
+    memcpy(s_prev, cur, count * sizeof(Th));
+    s_prevCount = count;
+    s_prevTick = now;
+}
+
+// Once a minute into the log: the CPU over that minute (the whole and the busiest processes, VestaCore vtask)
+// and what our frames cost - to find what loads the unit.
+static void LogLoad(HWND hwnd)
+{
+    if (s_screen != S_TASKS)   // (its screen samples every 2 s itself)
+        TaskSample(&s_task, hwnd);
+    int idx[4] = { -1, -1, -1, -1 };
+    for (int i = 0; i < s_task.procCount; i++) {
+        int c = s_task.proc[i].cpu10;
+        for (int k = 0; k < 4; k++)
+            if (idx[k] < 0 || c > s_task.proc[idx[k]].cpu10) {
+                for (int m = 3; m > k; m--)
+                    idx[m] = idx[m - 1];
+                idx[k] = i;
+                break;
+            }
+    }
+    wchar_t top[200] = L"";
+    for (int k = 0; k < 4 && idx[k] >= 0 && s_task.proc[idx[k]].cpu10 > 0; k++) {
+        wchar_t s[64];
+        _snwprintf(s, 64, L"%s%s %d%%", k ? L", " : L"", s_task.proc[idx[k]].name, (s_task.proc[idx[k]].cpu10 + 5) / 10);
+        s[63] = 0;
+        if (wcslen(top) + wcslen(s) < 199)
+            wcscat(top, s);
+    }
+    wchar_t thr[160];
+    OwnThreadsLoad(thr, 160);
+    VLog(L"нагрузка: ЦП %d%%; %s; кадров %u, в среднем %u мс, макс %u мс; частичных %u (%u на экран), в среднем %u мс; "
+         L"потоки VH: %s",
+         s_task.cpu10 >= 0 ? (s_task.cpu10 + 5) / 10 : -1, top[0] ? top : L"процессы не видны", (unsigned)s_drawCount,
+         (unsigned)(s_drawCount ? s_drawMs / s_drawCount : 0), (unsigned)s_drawMax, (unsigned)s_areaCount,
+         (unsigned)s_areaShown, (unsigned)(s_areaCount ? s_areaMs / s_areaCount : 0), thr);
+    s_drawCount = s_drawMs = s_drawMax = s_areaCount = s_areaMs = s_areaShown = 0;
 }
 
 // A page turn: the new page slides in from the right (dir 1) or the left (dir -1) and pushes the old one out,
@@ -7374,6 +10476,7 @@ static void RedrawSlide(int dir)
     DeleteDC(dc);
     ReleaseDC(s_wnd, hdc);
     DeleteObject(old);
+    VidSync();
 }
 
 static int s_slideDir;   // set by an action that turned a page: the next frame slides in
@@ -7433,8 +10536,12 @@ static void Back()
 }
 
 // A main screen from the bottom bar (or a widget): the history starts over.
+static void RadioOn();
+
 static void Nav(Screen s)
 {
+    if (s == S_RADIO)
+        RadioOn();
     s_histLen = 0;
     s_status[0] = 0;
     s_editMode = false;
@@ -7451,15 +10558,143 @@ static bool Swipe(int dir)
     int was = s_homePage + s_page * 100 + s_filePage * 10000;
     if (s_screen == S_HOME) {
         s_homePage += dir;
-        s_homePage = s_homePage < 0 ? 0 : s_homePage >= kHomePages ? kHomePages - 1 : s_homePage;
+        s_homePage = s_homePage < 0 ? 0 : s_homePage >= HomePages() ? HomePages() - 1 : s_homePage;
     } else if (s_screen == S_APPS) {
         s_page += dir;
         s_page = s_page < 0 ? 0 : s_page >= AppsPages() ? AppsPages() - 1 : s_page;
+    } else if (s_screen == S_RADIO) {
+        int was2 = s_radioPage;
+        s_radioPage += dir;
+        s_radioPage = s_radioPage < 0 ? 0 : s_radioPage > 2 ? 2 : s_radioPage;
+        return s_radioPage != was2;
     } else if (s_screen == S_FILES) {
         s_filePage += dir;
         s_filePage = s_filePage < 0 ? 0 : s_filePage >= FilePages() ? FilePages() - 1 : s_filePage;
     }
     return s_homePage + s_page * 100 + s_filePage * 10000 != was;
+}
+
+// Day / night, two things set apart: the theme - VestaHome's colours a third darker, OSMapsCE's night map (VestaCore
+// vnight) - and the unit's backlight (the shell's key: the MCU switches it and reports 0x4105, its own brightness
+// for each).
+static void SetTheme(bool night)
+{
+    s_night = night;
+    NightShare(night);
+}
+
+static void SetLight(bool night)
+{
+    if (s_mcuNight != (night ? 1 : 0))
+        McuKey(night ? 0x65 : 0x64, false);
+    s_mcuNight = night ? 1 : 0;   // at once in the settings; the MCU's 0x4105 confirms
+}
+
+static DWORD s_lastTouch;   // the last tap: the screen saver counts from it
+
+// Sunrise or sunset for the day of the year, minutes after local midnight; -1: the sun stays down, -2: up.
+// The almanac's algorithm (zenith 90.833 deg), good to a couple of minutes.
+static int SunEvent(int doy, double lat, double lon, bool rise)
+{
+    const double k = 3.14159265358979 / 180;
+    double lh = lon / 15, t = doy + ((rise ? 6 : 18) - lh) / 24;
+    double m = 0.9856 * t - 3.289;
+    double l = fmod(m + 1.916 * sin(m * k) + 0.020 * sin(2 * m * k) + 282.634 + 720, 360);
+    double ra = fmod(atan(0.91764 * tan(l * k)) / k + 720, 360);
+    ra = (ra + floor(l / 90) * 90 - floor(ra / 90) * 90) / 15;
+    double sd = 0.39782 * sin(l * k), cd = cos(asin(sd));
+    double ch = (cos(90.833 * k) - sd * sin(lat * k)) / (cd * cos(lat * k));
+    if (ch > 1)
+        return -1;
+    if (ch < -1)
+        return -2;
+    double h = (rise ? 360 - acos(ch) / k : acos(ch) / k) / 15;
+    double ut = h + ra - 0.06571 * t - 6.622 - lh;
+    return ((int)floor(ut * 60 + 0.5) + s_cfg.tzMin + 2880) % 1440;
+}
+
+// The automatic mode's answer for now: night between sunset and sunrise (the place: the GPS's last fix, else home,
+// else 7:00-20:00). rise / set for the settings' line.
+static bool SunNight(int* rise, int* set)
+{
+    Gps g;
+    GpsGet(&g);
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    static const int kDays0[12] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
+    int doy = kDays0[(t.wMonth + 11) % 12] + t.wDay + (t.wMonth > 2 && t.wYear % 4 == 0 ? 1 : 0);
+    int now = t.wHour * 60 + t.wMinute;
+    bool gps = g.fixTick && (g.lat || g.lon), home = s_cfg.homeLat || s_cfg.homeLon;
+    int a = 7 * 60, b = 20 * 60;
+    if (gps || home) {
+        double lat = gps ? g.lat : s_cfg.homeLat, lon = gps ? g.lon : s_cfg.homeLon;
+        a = SunEvent(doy, lat, lon, true);
+        b = SunEvent(doy, lat, lon, false);
+    }
+    *rise = a;
+    *set = b;
+    if (a == -1 || b == -1)
+        return true;    // polar night
+    if (a == -2 || b == -2)
+        return false;   // polar day
+    return a < b ? now < a || now >= b : now >= b && now < a;
+}
+
+// Applies the theme's and the backlight's modes. "By the sun" switches when the sun's answer changes (a switch by
+// hand - the bar, the shell, OSMapsCE - holds until the next sunrise / sunset); force: apply all now (the start,
+// a choice in the settings).
+static void NightAuto(bool force)
+{
+    static int s_last = -1;
+    int a, b;
+    int n = SunNight(&a, &b) ? 1 : 0;
+    bool edge = n != s_last || force;
+    if (n != s_last)
+        VLog(L"экран: по солнцу %s", n ? L"ночь" : L"день");
+    s_last = n;
+    if (s_cfg.themeMode == 0 ? edge : force)
+        SetTheme(s_cfg.themeMode == 0 ? n != 0 : s_cfg.themeMode == 2);
+    if (s_cfg.lightMode == 0 ? edge : force)
+        SetLight(s_cfg.lightMode == 0 ? n != 0 : s_cfg.lightMode == 2);
+}
+
+// Settings -> Screen: the theme's and the backlight's day / night, the current backlight's brightness, the screen
+// saver, the touch calibration.
+static void ScrSetScreen(HDC dc)
+{
+    static const wchar_t* saver[5] = { L"ВЫКЛ", L"1", L"3", L"5", L"10" };
+    Settings(dc, S_SET_SCREEN);
+    wchar_t sub[48];
+    int a, b;
+    SunNight(&a, &b);
+    if (a >= 0 && b >= 0)   // "auto": the sun's times
+        _snwprintf(sub, 48, L"восход %d:%02d · закат %d:%02d", a / 60, a % 60, b / 60, b % 60);
+    else
+        wcscpy(sub, a == -1 ? L"полярная ночь" : L"полярный день");
+    int light = s_mcuNight;
+    for (int row = 0; row < 2; row++) {   // the theme, the backlight: АВТО / ДЕНЬ / НОЧЬ
+        int y = 64 + row * 56, mode = row ? s_cfg.lightMode : s_cfg.themeMode;
+        Action act = row ? A_LIGHT : A_THEME;
+        SetRow(dc, y, row ? L"Подсветка" : L"Тема",
+               row ? (light < 0 ? L"нет данных от MCU" : light ? L"сейчас ночная" : L"сейчас дневная") : sub);
+        Button(dc, 456, y + 6, 96, 44, L"АВТО", mode == 0 ? B_SEL : B_N, IC_NONE, 15, 0, act, 0);
+        Button(dc, 560, y + 6, 96, 44, L"ДЕНЬ", mode == 1 ? B_SEL : B_N, IC_SUN, 15, 22, act, 1);
+        Button(dc, 664, y + 6, 104, 44, L"НОЧЬ", mode == 2 ? B_SEL : B_N, IC_MOON, 15, 22, act, 2);
+    }
+    wchar_t v[16];
+    if (s_bright > 0)
+        _snwprintf(v, 16, L"%d / 10", s_bright);
+    else
+        wcscpy(v, L"—");
+    SetRow(dc, 176, L"Яркость", light < 0 ? L"текущей подсветки" : light ? L"ночной подсветки" : L"дневной подсветки");
+    Stepper(dc, 560, 182, 208, v, 44, 18, A_BRIGHT);
+    SetRow(dc, 232, L"Заставка, мин", L"часы и дата без касаний");
+    for (int i = 0; i < 5; i++)
+        if (kSaverMins[i] == s_cfg.saverMin)
+            s_seg[G_SAVER] = i;
+    Seg(dc, 456, 238, 312, 44, saver, 5, G_SAVER, 14);
+    SetRow(dc, 288, L"Калибровка экрана", L"системные перекрестья", true, A_CALIBRATE);
+    Chevron(dc, 736, 300);
 }
 
 static void DoAction(const Btn& b)
@@ -7483,19 +10718,57 @@ static void DoAction(const Btn& b)
     case A_CLIPPASTE:  ClipPaste(); break;
     case A_CLIPCLEAR:  s_keysText[0] = 0; break;
     case A_NAV:      Nav((Screen)b.arg); break;
-    case A_NIGHT:    s_night = !s_night; break;
+    case A_NIGHT:    SetTheme(!s_night); break;   // the bar: the theme (the backlight: in the settings)
+    case A_WGVIS:
+        s_cfg.homeHidden ^= 1 << b.arg;
+        SaveCfg();
+        break;
+    case A_WGMOVE: {   // arg: id * 2 + (1 later, 0 earlier)
+        int i = 0;
+        while (i < WG_COUNT && s_cfg.homeOrder[i] != b.arg / 2)
+            i++;
+        int j = b.arg % 2 ? i + 1 : i - 1;
+        if (i < WG_COUNT && j >= 0 && j < WG_COUNT) {
+            int t = s_cfg.homeOrder[i];
+            s_cfg.homeOrder[i] = s_cfg.homeOrder[j];
+            s_cfg.homeOrder[j] = t;
+            SaveCfg();
+        }
+        break;
+    }
+    case A_THEME:
+    case A_LIGHT:
+        (b.action == A_THEME ? s_cfg.themeMode : s_cfg.lightMode) = b.arg;
+        SaveCfg();
+        NightAuto(true);
+        break;
+    case A_BRIGHT: {   // the current mode's backlight, as the shell's slider
+        int v = (s_bright > 0 ? s_bright : 5) + b.arg;
+        v = v < 1 ? 1 : v > 10 ? 10 : v;
+        if (McuSend3("SPApi_SysSendRadioBackLight", v, 0, 0))
+            s_bright = v;
+        break;
+    }
     case A_SCREEN:   Go((Screen)b.arg, true); break;
     case A_TAB:      Go((Screen)b.arg, false); break;
     case A_BACK:     Back(); break;
     case A_TOGGLE:
         s_on[b.arg] = !s_on[b.arg];
+        if (RsetOfToggle(b.arg) >= 0)   // a radio setting: the MCU's key, its reply sets the switch
+            McuKey(kRsetKey[RsetOfToggle(b.arg)][s_on[b.arg] ? 1 : 0], true);
         if (IsCfgToggle(b.arg))
             ControlsToCfg();
         break;
     case A_SEG:
         s_seg[b.arg / 16] = b.arg % 16;
-        if (b.arg / 16 == G_WPROV || b.arg / 16 == G_CAMDIST)
+        if (b.arg / 16 == G_SAVER) {
+            s_cfg.saverMin = kSaverMins[b.arg % 16 % 5];
+            SaveCfg();
+        }
+        if (b.arg / 16 == G_WPROV || b.arg / 16 == G_CAMDIST || b.arg / 16 == G_VIDEO_SCALE || b.arg / 16 == G_CAMSND)
             ControlsToCfg();
+        if (b.arg / 16 == G_CAMSND && b.arg % 16 > 0)
+            Beep2();   // a sample: how it sounds over the radio
         break;
     case A_KEYS:     OpenCfgKeys(b.arg); break;
     case A_HOMEGPS:  HomeFromGps(); break;
@@ -7513,9 +10786,67 @@ static void DoAction(const Btn& b)
     case A_SEEK:     PlayerSeek(b.arg); break;
     case A_SHUFFLE:  s_cfg.shuffle = !s_cfg.shuffle; SaveCfg(); break;
     case A_REPEAT:   s_cfg.repeat = !s_cfg.repeat; SaveCfg(); break;
+    case A_AVTEST:   AvTestRun(b.arg); break;
+    case A_AVDEV:    AvDevNext(); break;
+    case A_PRESET:   RadioPreset(b.arg); break;
+    case A_RKEY:     RadioKey(b.arg); break;
+    case A_RBAND:    RadioBand(); break;
+    case A_RPAGE:    s_radioPage = b.arg; break;
+    case A_RLIST:    McuSend3("SPApi_SendListItemControl", 0, b.arg, 0); break;
+    case A_RLISTPAGE: s_rlistPage += b.arg; if (s_rlistPage < 0) s_rlistPage = 0; break;
+    case A_RSCAN:    RadioScan(); break;
+    case A_BTMUSIC:  BtMusicOn(); break;
+    case A_BTCMD:    BtCmd(b.arg); break;
+    case A_REBOOTNO: McuKey(0x5A, false); Back(); break;
     case A_MFILE:    MusicPick(b.arg); break;
+    case A_PHONECALL:
+        wcscpy(s_callOut, s_dial);
+        BtCmdText(BT_CMD_DIAL, s_dial);
+        Go(S_CALL, true);
+        break;
+    case A_PHONECLR: s_dial[0] = 0; break;
+    case A_PHONEANS:
+        BtCmd(BT_CMD_ANSWER);
+        Back();
+        Go(S_CALL, true);
+        break;
+    case A_PHONEEND:
+        BtCmd(BT_CMD_END);
+        if (s_screen == S_INCOMING || s_screen == S_CALL)
+            Back();
+        break;
+    case A_MALL:
+        if (!BassLoad())
+            wcscpy(s_status, L"звук не запускается (BASS)");
+        else if (PlayerLoadDir(s_musDir, NULL, true))
+            Back();
+        else
+            wcscpy(s_status, L"здесь и глубже нет музыки");
+        break;
     case A_MUP:      MusicUp(b.arg != 0); break;
     case A_MPAGE:    s_musPage += b.arg; if (s_musPage < 0) s_musPage = 0; break;
+    case A_VFILE:    VidPick(b.arg); break;
+    case A_VUP:      VidUp(b.arg != 0); break;
+    case A_VPAGE:    s_vidPage += b.arg; if (s_vidPage < 0) s_vidPage = 0; break;
+    case A_VPLAY:    VidToggle(); break;
+    case A_VPREV:    VidStep(-1); break;
+    case A_VNEXT:    VidStep(1); break;
+    case A_VSEEK:    VidSeek(b.arg); break;
+    case A_VFULL:    s_vidFull = !s_vidFull; break;
+    case A_NRPLAY:   NetToggle(); break;
+    case A_NRSTEP:   NetStep(b.arg); break;
+    case A_NRPICK:   NetPlay(b.arg); Back(); break;
+    case A_NRPAGE:   NetPage(b.arg); break;
+    case A_WIFINET:  WifiTap(b.arg); break;
+    case A_WIFIFORGET: WifiForgetTap(b.arg); break;
+    case A_WIFISCAN: WifiScan(); break;
+    case A_WIFIAP: {   // the access point by hand: on until pressed again
+        WifiInfo w;
+        WifiGet(&w);
+        WifiApManual(!(w.state == WIFI_AP && !w.apAuto));
+        break;
+    }
+    case A_WIFIPAGE: s_wifiPage += b.arg; if (s_wifiPage < 0) s_wifiPage = 0; break;
     case A_MCUREQ:   McuRequest(); break;
     case A_EQ:       EqSet(b.arg); break;
     case A_EQPRESET: EqPresetSet(b.arg); break;
@@ -7555,7 +10886,7 @@ static void DoAction(const Btn& b)
     }
     case A_PAGE:     // the dots go round
         if (s_screen == S_HOME)
-            s_homePage = (s_homePage + 1) % kHomePages;
+            s_homePage = (s_homePage + 1) % HomePages();
         else
             s_page = (s_page + 1) % AppsPages();
         s_slideDir = 1;
@@ -7704,6 +11035,10 @@ static void LoadSkin()
         file[MAX_PATH - 1] = 0;
         if (!_wcsicmp(line, L"background")) {
             wcscpy(s_skinBg, file);
+            continue;
+        }
+        if (!_wcsicmp(line, L"saver")) {
+            wcscpy(s_skinSaver, file);
             continue;
         }
         int len = (int)wcslen(line);
@@ -7857,7 +11192,8 @@ static void ExportSkin()
                "; Icons are square and drawn scaled: 60 px on tiles, 40 px on buttons, other sizes on the\n"
                "; other screens, where they are tinted with that screen's colour unless it is the text colour.\n"
                "; Optional: <name>_down = a separate pressed picture (otherwise the icon is tinted dark),\n"
-               ";   background = an 800 x 480 picture for the main menu instead of the built-in mosaic.\n"
+               ";   background = an 800 x 480 picture for the main menu instead of the built-in mosaic,\n"
+               ";   saver = the screen saver's 800 x 480 picture (kept only while it shows).\n"
                "; Each picture costs memory: a 64 x 64 icon 16 KB, the background 750 KB.\n"
                "; A missing line or file falls back to the built-in drawing.\n\n[colors]\n");
     for (int k = 0; k < (int)(sizeof(kSkinColors) / sizeof(kSkinColors[0])); k++) {
@@ -7892,16 +11228,42 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             ShowWindow(s_taskbar, SW_HIDE);
 #endif
         LoadApps();
+        {
+            static const wchar_t* kSrc[4] = { L"нет", L"ID устройства", L"MAC адаптеров", L"ПК" };
+            int src = SecretInit();   // the key that seals the passwords of the settings
+            VLog(L"ключ паролей: %s", kSrc[src & 3]);
+        }
         LoadCfg();
         CfgToControls();
+        WaveDevsLog();
         {
             WSADATA wsa;
             WSAStartup(MAKEWORD(2, 2), &wsa);
         }
         InitializeCriticalSection(&s_wxCs);
+        NetInit();
         HttpInit();
         GpsStartCore();
         McuStart();
+        VLog(L"поток главный (окно): id %08X", (unsigned)GetCurrentThreadId());
+        if (!s_cfg.wifiApPass[0]) {   // the access point's password: 8 digits, made once
+            srand(GetTickCount() ^ (DWORD)(INT_PTR)hwnd);
+            for (int i = 0; i < 8; i++)
+                s_cfg.wifiApPass[i] = (wchar_t)(L'0' + (rand() ^ (GetTickCount() >> i)) % 10);
+            s_cfg.wifiApPass[8] = 0;
+            SaveCfg();
+        }
+        WifiEnable(s_cfg.wifiOn);
+        if (s_cfg.wifiHold)
+            WifiHold(true);   // (off is the firmware's own state: nothing to do)
+        WifiApSetup(s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
+        WifiStart(hwnd, WM_APP_WIFI, VLog);
+        for (int i = 0; i < s_cfg.wifiCount; i++)
+            if (!s_cfg.wifiLocked[i])
+                WifiRemember(s_cfg.wifiSsid[i], s_cfg.wifiPass[i]);
+        s_mediaMask = MediaMask();
+        RvcInit(VLog);
+        SetTimer(hwnd, TIMER_RVC, kRvcMs, NULL);   // the reverse gear (rvc.cpp), cheap: one GPIO read
         WeatherRefresh();
         BuildButtons();
         SetTimer(hwnd, 1, 1000, NULL);
@@ -7910,6 +11272,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_TIMER: {
         if (wp == TIMER_LONG) {   // held on the keyboard's text field: copy / paste
             KillTimer(hwnd, TIMER_LONG);
+            if (s_pressed >= 0 && s_btns[s_pressed].action == A_BTCMD) {   // held on ⏮ / ⏭: rewind / fast forward
+                s_btHold = s_btns[s_pressed].arg == BT_CMD_NEXT ? BT_CMD_FF_RELEASE : BT_CMD_REW_RELEASE;
+                BtCmd(s_btns[s_pressed].arg == BT_CMD_NEXT ? BT_CMD_FF_PRESS : BT_CMD_REW_PRESS);
+                return 0;   // the button stays pressed until the finger goes up
+            }
+            if (s_pressed >= 0 && s_btns[s_pressed].action == A_PRESET) {   // held on a preset: save it
+                RadioPresetSave(s_btns[s_pressed].arg);
+                s_pressed = -1;
+                Redraw();
+                return 0;
+            }
             if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD) {
                 s_pressed = -1;   // the release does nothing
                 s_clipMenu = true;
@@ -7921,6 +11294,112 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             OnGuardTimer();
             return 0;
         }
+        if (wp == TIMER_VIDEO) {
+            VidTick();
+            return 0;
+        }
+        if (wp == TIMER_RVC) {
+            RvcTick();
+            return 0;
+        }
+        if (wp == TIMER_MARQ) {   // the running lines of the radio screen: only its text strip is drawn again
+            if (s_screen != S_RADIO || !s_marqOn || !IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd) {
+                KillTimer(hwnd, TIMER_MARQ);
+                return 0;
+            }
+            s_marq += kMarqStep;
+            s_marqOn = false;   // set again by a line that still does not fit
+            RedrawArea(300, 100, 764, 164);
+            return 0;
+        }
+        if (wp == TIMER_VOICE) {
+            VoiceTimer();
+            return 0;
+        }
+        if (wp == TIMER_BTSRC) {   // BtMusicOn's second key
+            KillTimer(hwnd, TIMER_BTSRC);
+            McuKey(0x54, false);
+            return 0;
+        }
+        if (wp == 1 && s_screen == S_RADIO_LIST && s_scanStart && IsWindowVisible(hwnd)) {
+            RadioScanTick();
+            Redraw();
+        }
+        if (wp == 1) {   // day / night: all modes 10 s after the start (the MCU's link up), then by the sun
+            static int s_ticks;
+            if (++s_ticks >= 10)
+                NightAuto(s_ticks == 10);
+        }
+        if (wp == 1) {   // the night mode switched in OSMapsCE: follow it
+            int n = NightShared();
+            if (n >= 0 && (n != 0) != s_night) {   // OSMapsCE switched it: our colours, not the backlight
+                SetTheme(n != 0);
+                if (IsWindowVisible(hwnd))
+                    Redraw();
+            }
+        }
+        if (wp == 1) {   // calls: an incoming one opens its window, a taken one the call's, the end closes them
+            BtState bt;
+            static int s_lastCall;
+            if (BtGet(&bt, NULL) && bt.call[0] != s_lastCall) {
+                int c = bt.call[0];
+                s_lastCall = c;
+                bool front = IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd;
+                if (c == BT_CALL_ACTIVE)
+                    s_callTick = GetTickCount();
+                if (front && c == BT_CALL_INCOMING && s_screen != S_INCOMING) {
+                    Go(S_INCOMING, true);
+                } else if (front && s_screen == S_INCOMING && c >= BT_CALL_DIALING) {
+                    Back();
+                    Go(S_CALL, true);
+                } else if (c == BT_CALL_NONE && (s_screen == S_INCOMING || s_screen == S_CALL)) {
+                    Back();
+                }
+                if (IsWindowVisible(hwnd))
+                    Redraw();
+            } else if (s_screen == S_CALL && IsWindowVisible(hwnd)) {
+                Redraw();   // the time talking
+            }
+        }
+        if (wp == 1) {   // the screen saver: untouched for its minutes, VestaHome in front, nothing to watch
+            DWORD now = GetTickCount();
+            bool front = IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd;
+            if (!s_lastTouch)
+                s_lastTouch = now;
+            if (s_screen != S_SAVER)
+                SaverFree();
+            if (s_screen == S_SAVER) {
+                static int s_min = -1;
+                SYSTEMTIME t;
+                GetLocalTime(&t);
+                if (t.wMinute != s_min && front) {   // the clock
+                    s_min = t.wMinute;
+                    Redraw();
+                }
+            } else if (s_cfg.saverMin > 0 && front && now - s_lastTouch > (DWORD)s_cfg.saverMin * 60000 &&
+                       s_screen != S_VIDEO_PLAY && s_screen != S_CALL && s_screen != S_INCOMING &&
+                       s_screen != S_REBOOT && s_screen != S_KEYS) {
+                Go(S_SAVER, true);
+                Redraw();
+            }
+        }
+        if (wp == 1 && s_radioDirty) {   // the radio's cache, at most every 30 s
+            static DWORD s_saved;
+            if (GetTickCount() - s_saved > 30000) {
+                s_saved = GetTickCount();
+                s_radioDirty = false;
+                SaveCfg();
+            }
+        }
+        if (wp == 1 && (s_screen == S_AUDIO_BT || s_screen == S_SET_BT) && IsWindowVisible(hwnd)) {
+            BtState bt;   // the Bluetooth screens follow the proxy's state
+            LONG seq = 0;
+            static LONG s_btSeen;
+            if (BtGet(&bt, &seq) && seq != s_btSeen) {
+                s_btSeen = seq;
+                Redraw();
+            }
+        }
         if (wp == TIMER_WAIT) {
             OnWaitTimer();
             if (IsWindowVisible(hwnd))
@@ -7929,7 +11408,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         // the volume window closes by itself after 2.5 s, the warning after 10 s
         DWORD open = GetTickCount() - s_screenTick;
-        if ((s_screen == S_VOLUME && open > 2500) || (s_screen == S_WARNING && open > 10000)) {
+        if (s_screen == S_REBOOT && open <= 6000) {   // the countdown
+            Redraw();
+            return 0;
+        }
+        if ((s_screen == S_VOLUME && open > 2500) || (s_screen == S_WARNING && open > 10000) ||
+            s_screen == S_REBOOT) {
             Back();
             BuildButtons();
             Redraw();
@@ -7943,6 +11427,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 WeatherRefresh();
         }
         CamAutoUpdate();
+        NetTick();
+        {
+            static DWORD s_loadTick;
+            if (!s_loadTick) {   // the first sample: the minute is counted from it
+                s_loadTick = GetTickCount();
+                TaskSample(&s_task, hwnd);
+            } else if (GetTickCount() - s_loadTick >= 60000) {
+                s_loadTick = GetTickCount();
+                LogLoad(hwnd);
+            }
+        }
+        {   // an SD card or a USB disk in or out: the marks of the top bar
+            int m = MediaMask();
+            if (m != s_mediaMask) {
+                s_mediaMask = m;
+                if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
+                    Redraw();
+            }
+        }
         if (s_hvacShowTick && GetTickCount() - s_hvacShowTick > 4000) {   // the climate plate goes away
             s_hvacShowTick = 0;
             if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
@@ -7953,14 +11456,22 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                      GetForegroundWindow() == hwnd;
         if (tasks)
             TaskSample(&s_task, hwnd);
-        // a whole frame costs: redraw only for a new minute (or the call timer), and only when in front
+        // only what changed, only when in front: the whole frame for a new minute (the clock, the date) and the
+        // screens that are lists of live data; otherwise just the area of the value that moves
         SYSTEMTIME t;
         GetLocalTime(&t);
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd && (t.wMinute != s_drawnMinute || tasks ||
-                                                                  s_screen == S_CALL ||
-                                                                  s_screen == S_TEST_CAN || s_screen == S_TEST_MCU ||
-                                                                  (s_screen == S_AUDIO && PlayerPlaying())))
-            Redraw();
+        RECT wr;
+        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
+            if (t.wMinute != s_drawnMinute || tasks || s_screen == S_CALL || s_screen == S_TEST_CAN ||
+                s_screen == S_TEST_MCU)
+                Redraw();
+            else if (s_screen == S_AUDIO && PlayerPlaying())
+                RedrawArea(272, 130, 800, 300);   // the track's position
+            else if (s_screen == S_HOME && HomeRect(WG_MEDIA, &wr) && PlayerPlaying())
+                RedrawArea(wr.left, wr.top, wr.right, wr.bottom);   // the media widget
+            else if (s_screen == S_NETRADIO && s_netState == NR_WAIT)
+                RedrawArea(272, 262, 800, 300);   // "again in N s"
+        }
         return 0;
     }
     case WM_PAINT: {
@@ -7973,6 +11484,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND:
         return 1;
     case WM_ACTIVATE:   // back in front: the clock may be behind
+        if (LOWORD(wp) == WA_INACTIVE)
+            VidSync();   // another program in front: the video pauses, its picture goes
         if (LOWORD(wp) != WA_INACTIVE) {
 #ifdef UNDER_CE
             if (s_minimized) {   // after "Minimize": on top again, the taskbar away
@@ -7993,7 +11506,102 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
             Redraw();
         return 0;
+    case WM_APP_NET:   // the internet radio: connected, failed, broken, a new song title
+        OnNetMessage(wp, lp);
+        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
+            RECT wr;
+            if (s_screen == S_NETRADIO)
+                RedrawArea(272, 130, 800, 390);   // the station's lines and its buttons
+            else if (s_screen == S_HOME && HomeRect(WG_MEDIA, &wr))
+                RedrawArea(wr.left, wr.top, wr.right, wr.bottom);   // the media widget
+            else if (s_screen == S_NETRADIO_LIST)
+                Redraw();
+        }
+        return 0;
+    case WM_APP_WIFI: {   // the Wi-Fi thread saw a change: its screen, or the top bar's mark when the state moved
+        static int s_lastState = -1;
+        WifiInfo w;
+        WifiGet(&w);
+        bool mark = w.state != s_lastState;
+        s_lastState = w.state;
+        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd && (mark || s_screen == S_SET_WIFI))
+            Redraw();
+        return 0;
+    }
+    case WM_APP_VIDTAP:   // a tap on the picture: the whole screen and back
+        s_vidFull = !s_vidFull;
+        Redraw();
+        return 0;
     case WM_APP_MCU: {   // a climate change: its plate in the top bar for 4 s, the screens that show it
+        if (wp == WP_MCU_TUNER) {   // the tuner changed: the radio screen and the home widget
+            Tuner t;
+            TunerGet(&t);   // (clears s_tunPosted)
+            RadioBandStep(t);
+            RadioNameLearn(t.f10, t.ps);
+            s_radioDirty = true;
+            if (IsWindowVisible(hwnd) && (s_screen == S_RADIO || s_screen == S_HOME || s_screen == S_SET_RADIO ||
+                                          s_screen == S_RADIO_LIST))
+                Redraw();
+            return 0;
+        }
+        if (wp == WP_MCU_DAYNIGHT) {   // the backlight's day / night and brightness: the settings' lines
+            if (IsWindowVisible(hwnd))
+                Redraw();
+            return 0;
+        }
+        if (wp == WP_MCU_SOUND) {   // the MCU's EQ / balance (the shell's too): ours follow
+            if (GetTickCount() - s_sndSentTick < 1500)
+                return 0;
+            EnterCriticalSection(&s_mcuCs);
+            McuSound m = s_mcuSnd;
+            LeaveCriticalSection(&s_mcuCs);
+            bool changed = false;
+            for (int i = 0; i < 3; i++)
+                if (m.eq[i] != 99 && m.eq[i] != s_cfg.eq[i]) {
+                    s_cfg.eq[i] = m.eq[i];
+                    changed = true;
+                }
+            if (m.bal != 99 && (m.bal != s_cfg.balance || m.fad != s_cfg.fader)) {
+                s_cfg.balance = m.bal;
+                s_cfg.fader = m.fad;
+                changed = true;
+            }
+            if (changed) {
+                SaveCfg();
+                if (IsWindowVisible(hwnd) && (s_screen == S_SET_SOUND || s_screen == S_SET_BALANCE))
+                    Redraw();
+            }
+            return 0;
+        }
+        if (wp == WP_MCU_REBOOT) {
+            VLog(L"mcu: крутилка удержана — перезагрузка через 5 с");
+            s_rebootTick = GetTickCount();
+            if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
+                if (s_screen != S_REBOOT)
+                    Go(S_REBOOT, true);
+                BuildButtons();
+                Redraw();
+            }
+            return 0;
+        }
+        if (wp == WP_MCU_MARK) {   // MUTE on while recording: one mark
+            if (s_canLog != INVALID_HANDLE_VALUE || s_mcuLog != INVALID_HANDLE_VALUE)
+                MarkLogs();
+            return 0;
+        }
+        if (wp == WP_MCU_VOLUME) {   // the volume or the mute changed: the volume window for 2.5 s
+            int v, mu, src;
+            VolGet(&v, &mu, &src);
+            if (!IsWindowVisible(hwnd))
+                return 0;
+            if (GetForegroundWindow() == hwnd && s_screen != S_VOLUME)
+                Go(S_VOLUME, true);
+            if (s_screen == S_VOLUME)
+                s_screenTick = GetTickCount();   // kept open while it keeps changing
+            BuildButtons();
+            Redraw();   // the window, or the level in the top bar
+            return 0;
+        }
         Hvac h;
         HvacGet(&h);
         s_hvacShowTick = GetTickCount();
@@ -8023,11 +11631,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             s_wxByGps = true;
             WeatherRefresh();
         }
-        bool shown = (s_screen == S_HOME && s_homePage == 0) || s_screen == S_WSET_SPEED || s_screen == S_SET_CAR ||
+        RECT sr;
+        bool spd = s_screen == S_HOME && HomeRect(WG_SPEED, &sr);
+        bool shown = spd || s_screen == S_WSET_SPEED || s_screen == S_SET_CAR ||
                      s_screen == S_TEST_CAN || s_screen == S_INFO;
         if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd && (cam || (shown && GetTickCount() - s_drawTick >= 1000))) {
             s_drawTick = GetTickCount();
-            Redraw();
+            if (!cam && spd) {   // the speed widget and the top bar's marks
+                RedrawArea(sr.left, sr.top, sr.right, sr.bottom);
+                RedrawArea(0, 0, 800, 56);
+            } else {
+                Redraw();
+            }
         }
         return 0;
     }
@@ -8042,20 +11657,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
         return 0;
     case WM_LBUTTONDOWN:
+        s_lastTouch = GetTickCount();
         s_downX = (short)LOWORD(lp);
         s_pressed = HitTest((short)LOWORD(lp), (short)HIWORD(lp));
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
-        if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD)
-            SetTimer(hwnd, TIMER_LONG, kLongMs, NULL);
+        if (s_pressed >= 0 && (s_btns[s_pressed].action == A_KEYFIELD || s_btns[s_pressed].action == A_PRESET ||
+                               (s_btns[s_pressed].action == A_BTCMD &&
+                                (s_btns[s_pressed].arg == BT_CMD_NEXT || s_btns[s_pressed].arg == BT_CMD_PREV))))
+            SetTimer(hwnd, TIMER_LONG, s_btns[s_pressed].action == A_PRESET ? 1200 : kLongMs, NULL);
         SetCapture(hwnd);
         Redraw();
         return 0;
-    case WM_MOUSEMOVE:   // the touch test follows the finger
+    case WM_MOUSEMOVE:   // the touch test and the balance point follow the finger
         if (s_screen == S_TEST_TOUCH && (wp & MK_LBUTTON) && s_pressed < 0) {
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
             Redraw();
         }
+        if ((wp & MK_LBUTTON) && s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY)
+            BalanceAt((short)LOWORD(lp), (short)HIWORD(lp), false);
         return 0;
     case WM_SHOWWINDOW:   // shown again after "Minimize VH": the taskbar goes away again
 #ifdef UNDER_CE
@@ -8068,12 +11688,26 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_LBUTTONUP: {
         KillTimer(hwnd, TIMER_LONG);
+        if (s_btHold) {   // rewind / fast forward ends with the finger
+            BtCmd(s_btHold);
+            s_btHold = 0;
+            s_pressed = -1;
+            ReleaseCapture();
+            Redraw();
+            return 0;
+        }
         ReleaseCapture();
         int x = (short)LOWORD(lp), dx = x - s_downX;
         int i = HitTest(x, (short)HIWORD(lp));
         int was = s_pressed;
         s_pressed = -1;
-        if ((s_screen == S_HOME || s_screen == S_APPS || s_screen == S_FILES) && (dx > 120 || dx < -120)) {
+        if (was >= 0 && s_btns[was].action == A_BALXY) {   // the finger may have left the car: still the point
+            BalanceAt(x, (short)HIWORD(lp), true);
+            Redraw();
+            return 0;
+        }
+        if ((s_screen == S_HOME || s_screen == S_APPS || s_screen == S_FILES || s_screen == S_RADIO) &&
+            (dx > 120 || dx < -120)) {
             Redraw();   // the old page without the pressed look: the frame the new one pushes out
             if (Swipe(dx < 0 ? 1 : -1)) {
                 BuildButtons();
@@ -8114,14 +11748,26 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (s_screen == S_KEYS)
             return 0;
         if (wp == 'N') {
-            s_night = !s_night;
+            SetTheme(!s_night);
             Redraw();
+        } else if (wp == 'R') {   // a "reverse" to try the camera window
+            s_rvcFake = !s_rvcFake;
         } else if (wp == VK_ESCAPE) {
             DestroyWindow(hwnd);
         }
         return 0;
 #endif
+    case MM_WOM_DONE:   // the camera beep has been played
+        VoiceDone();
+        return 0;
     case WM_DESTROY:
+        if (s_voice)
+            NaviVoice(false);
+        if (s_rvcWnd)
+            RvcHide();
+        VideoStop();
+        NetStop();
+        WifiStop();
         GpsStopThread();
         McuStopThread();
         HttpCloseAll();
@@ -8189,10 +11835,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
     RegisterClass(&wc);
 
 #ifdef UNDER_CE
-    DWORD style = WS_POPUP | WS_VISIBLE;
+    DWORD style = WS_POPUP | WS_VISIBLE | WS_CLIPCHILDREN;   // children: the video's picture
     int x = 0, y = 0, w = 800, h = 480;
 #else
-    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE;
+    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE | WS_CLIPCHILDREN;
     RECT rc = { 0, 0, 800, 480 };
     AdjustWindowRect(&rc, style, FALSE);
     int x = CW_USEDEFAULT, y = CW_USEDEFAULT, w = rc.right - rc.left, h = rc.bottom - rc.top;

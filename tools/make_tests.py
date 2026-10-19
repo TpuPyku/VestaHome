@@ -12,7 +12,7 @@ VestaHome\\VestaHome\\ ...), and this script copies the CE exe and what it needs
 *.ini (API keys), logs, caches and test tracks are not copied. SDMemory\\SafeMode and
 SDMemory\\SPIPower_rescue hold files for the ROOT of the card, not a folder (see Tests\\README.md).
 The SPIPower set is laid out by VestaHome/SPIPower/tools/make_deploy.py (md5-checked), called from here.
-Large third-party payloads that have no build (Tests\\SDMemory\\navit, "GpsGate 2.0") live only in Tests:
+Large third-party payloads that have no build ("GpsGate 2.0") live only in Tests:
 only our own files are copied over them.
 
 Usage: python VestaHome/tools/make_tests.py
@@ -20,6 +20,7 @@ Usage: python VestaHome/tools/make_tests.py
 import importlib.util
 import os
 import shutil
+import subprocess
 import sys
 
 ROOT  = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -33,26 +34,17 @@ PLAN = (
     (os.path.join(ROOT, 'YaMaps', 'YaMapsCE'), r'SDMMC\YaMapsCE',
         ('YaMapsCE.exe', 'toolhelp.dll', 'Images', 'GpsGate')),
     (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDMMC\OSMapsCE',
-        ('OSMapsCE.exe', 'toolhelp.dll', 'Images')),
+        ('OSMapsCE.exe', 'Images')),   # toolhelp.dll: the firmware's own (\Windows) is used
     # ExternNavi.cfg points the shell's "Navigation" at \SDMMC\VestaLaunch: without the SD card the shell would
     # lose it, so VestaLaunch stays on the built-in card
     (os.path.join(VL, 'VestaLaunch'), r'SDMMC\VestaLaunch',
         ('VestaLaunch.exe', 'Skin')),
-    (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDMemory\VestaHome',
-        ('VestaHome.exe', 'Skin')),
-    # the player's audio library: BASS 2.4.12 for CE/ARM + its plugins, third-party (un4seen, free for
-    # non-commercial use), taken from the SinglePlayer package in MAIN; VestaHome loads it from bass\
-    (os.path.join(ROOT, 'MAIN', 'SinglePlayer'), r'SDMemory\VestaHome\bass',
-        ('bass.dll', 'bass_aac.dll', 'bassflac.dll', 'bassalac.dll', 'bass_mpc.dll', 'tags.dll')),
-    (os.path.join(V, 'GstProbe', 'GstProbe'), r'SDMemory\GstProbe',
-        ('GstProbe.exe',)),
-    (os.path.join(V, 'G3patch', 'VestaInstall'), r'SDMemory\VestaInstall',
-        ('VestaInstall.exe',)),
+    # VestaHome itself is installed by VestaHomeInstall (SDMemory\VestaHomeInstall, from make_deploy.py)
+    # short audio/video files for VestaHome's "Diagnostics -> Sound and video" (made by make_testmedia.py)
+    (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDMemory',
+        ('TestMedia',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\LaunchInstall',
         ('LaunchInstall.exe',)),
-    # our Navit settings over the Navit package (Tests\SDMemory\navit: navit.exe, icons, maps ...)
-    (os.path.join(V, 'NavitCfg'), r'SDMemory\navit',
-        (('navit_hu.xml', 'navit.xml'), 'navit_layout_car_lite.xml', 'navit_layout_car_dark_lite.xml', 'GpsGate')),
 )
 
 
@@ -67,6 +59,8 @@ def copy(src, dst):
 
 
 def main():
+    if not os.path.isdir(os.path.join(V, 'VestaHome', 'VestaHome', 'TestMedia')):   # generated once (needs ffmpeg)
+        subprocess.call([sys.executable, os.path.join(V, 'tools', 'make_testmedia.py')])
     for src_dir, sub, entries in PLAN:
         print('[%s]' % sub)
         for e in entries:

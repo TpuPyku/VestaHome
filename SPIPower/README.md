@@ -24,8 +24,8 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
   и падает, если proxy и заводская перепутаны.
 - `tools/make_deploy.py [outdir]` — собирает **весь набор для ГУ** в `<repo>\Tests\` (папки по томам;
   его же вызывает `VestaHome\tools\make_tests.py`): `SDMMC\SPIPower_test\` (Уровень 0) → `\SDMMC\SPIPower_test\`,
-  `ResidentFlash\SPIPower\` (установщик + proxy + `SwDnl_drill.upg`, пакет обязан лежать рядом с exe,
-  + `README.md`/`help.txt` из `deploy\` + `FILES.md`) → `\ResidentFlash\SPIPower\`,
+  `ResidentFlash\VestaHomeInstall\` (установщик + proxy + `SwDnl_drill.upg`, пакет обязан лежать рядом с exe,
+  + `README.md`/`help.txt` из `deploy\` + `FILES.md`) → `\ResidentFlash\VestaHomeInstall\`,
   `SDMemory\SPIPower_rescue\` (rescue-пара `SwDnl.upg` + `SwDnl.cfg`) и `SDMemory\SafeMode\` (безопасный
   режим) → **корень** SD-карты. Каждая копия сверяется по md5 с `fingerprints.h`, иначе набор не собирается
   (страховка от смеси сборок). Порядок действий и предупреждения — `deploy\README.md`.
@@ -34,7 +34,7 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
   `\StaticStore\SPIPower_test.log`, иначе рядом с самим exe. **v3** печатает размер и md5 найденных
   `SPIPowerMgr.dll`/`_orig`: `proxy=yes` сам по себе не отличает заводскую DLL
   (111 104 Б / `438505b7…`) от proxy (22 016 Б / `fa7b65e0…`).
-- `install/spipower_install.cpp` + `install/build.bat` — `SPIPowerInstall.exe` (ARM, импорт COREDLL):
+- `install/spipower_install.cpp` + `install/build.bat` — `VestaHomeInstall.exe` (ARM, импорт COREDLL):
   `status | install [p2|p3] [force] | rollback | drill [force] | drill-off`; без аргументов — окно
   с теми же действиями кнопками (раздел «Установщик» ниже).
   Исходник — UTF-8 **с BOM**: без BOM MSVC 2005 читает его как cp1251 и все русские строки в exe
@@ -47,7 +47,7 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
   а также md5 наших артефактов (proxy рядом с exe, drill-пакет).
 - `tools/make_drill.py` — drill-пакет для проверки загрузочного rescue-пути **до** подмены DLL:
   `rescue/drill/SwDnl_drill.upg` (один файл `\navigation\app\VestaDrill.txt`) + `SwDnl.cfg` +
-  копия `SPIPowerInstall.exe` рядом с ними.
+  копия `VestaHomeInstall.exe` рядом с ними.
 - `native/gen_thunks.py <real_dll>` — генерит из оригинала:
   - `thunks.s` — по одному ARM-trampoline на экспорт (`ldr ip,[pc,#off]; ldr ip,[ip]; mov pc,ip`),
     tail-jump в таблицу указателей `g_real[]`; сигнатуры функций знать не нужно;
@@ -72,7 +72,7 @@ native\build.bat        # нужно, чтобы рядом был исходн�
   импорт только COREDLL.
 - P2 (лог исходящих) готов: 7 функций (`EngSendTFTBrightnessData`, `EngSendCarSpeed`,
   `SPApi_SendKeyEvent/ExtendKeyEvent/RotaryEvent`, `SPApi_SetSkelonton`, `SPApi_LoadByMain`)
-  логируют аргументы в `\SDMMC\SPIPower.log`, если есть флаг `\SDMMC\SPIPower.on`.
+  логируют аргументы в `\SDMemory\VestaLogs\SPIPower.log`, если есть флаг `\SDMMC\SPIPower.on`.
 - P3 (перехват входящих) готов: `SPApi_SetSkelonton` подменяет vtable каждого скелетона
   (slot 1 → хук, логирует `msg`/`len`/payload и форвардит), только при флаге.
 - На ГУ **не запускался**. Уровень 0 на эмуляторе **пройден** (2026-10-09): `RESULT: OK`,
@@ -103,9 +103,9 @@ python tools\make_test_dir.py hu_test   # папка: proxy + orig + завис�
 `LoadLibrary(proxy): err=N`, `orig: MISSING (DllMain will fail)` или список `MISSING: <имя>`.
 Выход 0 = OK, 1 = FAIL (то же в MessageBox).
 
-## Установщик (ГУ): `SPIPowerInstall.exe`
+## Установщик (ГУ): `VestaHomeInstall.exe`
 ```
-install\build.bat                       # → out\SPIPowerInstall.exe
+install\build.bat                       # → out\VestaHomeInstall.exe
 ```
 Запускать можно из любой папки: proxy берётся **рядом с exe**, поэтому всю папку можно положить и на
 SD, и на `\SDMMC`. Подкоманды:
@@ -152,25 +152,19 @@ proxy остаётся заводской (`Риск` ниже): `Main.exe` 3 р
 `SwUpdate.flag=0x02` → `SwDnl.exe` вернёт DLL из rescue-пакета на SD.
 
 ### Окно (запуск без аргументов)
-`SPIPowerInstall.exe` без параметров открывает полноэкранное окно 800×480 (чистый GDI: без `.rc`,
-`comctl32` и MFC, импорт остаётся только COREDLL) — те же действия кнопками, удобно на ГУ:
+`VestaHomeInstall.exe` без параметров открывает полноэкранное окно 800×480 (чистый GDI, импорт только COREDLL). **С 2026-10-17 установщик — один файл** (ресурсы: 101 = сборка VestaHome, 102 = proxy; при старте proxy пишется в `\Temp\VestaHomeInstall\` и берётся оттуда) — запускается из любой папки. Кнопки в порядке первой установки:
 
 | Кнопка | Действие |
 |---|---|
-| `СТАТУС` | обновить отчёт в окне и в логе (то же, что `status`) |
-| `УСТАНОВИТЬ` | `install` (pass-through), с подтверждением |
-| `УСТ. + ЛОГ` | `install` с флагом `\SDMMC\SPIPower.on` (лог proxy: исходящие + входящие) |
-| `ТЕСТ ВОССТ.` | `drill` — тест восстановления, с подтверждением (потребуется перезагрузка ГУ) |
-| `СНЯТЬ ТЕСТ` | `drill-off` (снять флаг, убрать drill-файлы с SD, вердикт) |
-| `УДАЛИТЬ` | `rollback` — деинсталляция: вернуть заводскую DLL, снять флаг, перезапустить оболочку |
-| `FORCE: ВЫКЛ/ВКЛ` | тумблер обхода гейта версии (красный = включён), передаётся в `install`/`drill` |
+| `1. VESTAHOME: УСТАНОВИТЬ / ОБНОВИТЬ` | `vh` — встроенная сборка VestaHome (exe, Skin, radio.txt, bass) → `\SDMMC\VestaHome`, без перезагрузки: запущенный VestaHome закрывается, файлы `.new` → сверка → старые `.bak` → при сбое назад; `VestaHome.ini`, `apps.txt`, `speedcam\` не трогаются, свой `radio.txt` остаётся. Потом — «Запустить?» |
+| `2. PROXY MCU: УСТАНОВИТЬ / ОБНОВИТЬ` | `boot install p2` — всегда с флагом журнала `\SDMMC\SPIPower.on` (файл журнала — только на SD); загрузочный путь, перезагрузка |
+| `УДАЛИТЬ VESTAHOME` | `vh-remove` — `\SDMMC\VestaHome` целиком (с настройками), журналы на SD остаются |
+| `УДАЛИТЬ PROXY MCU` | стоит наш proxy → `boot rollback`: при загрузке заводская DLL на место, затем (DLL = заводская 4120 по md5) убираются `SPIPowerMgr_orig.dll`, копия `SPIPower_backup`, флаг, задание; стоит заводская → сразу убираются остатки, в т. ч. наш `SwDnl.exe` с SD |
+| `СТАТУС` | отчёт в окне и в логе (`status`); строка «VestaHome: та же / другая сборка / нет» |
+| `ОТМЕНИТЬ ЗАДАНИЕ` | `drill-off` / `boot-off` — снять заряженное задание и флаг до перезагрузки |
 | `ВЫХОД` | закрыть окно (или `Esc`) |
 
-Сверху окно показывает строку состояния и полный отчёт гейта версии (то же, что печатает `status`);
-этот же текст всегда пишется в `\SDMMC\SPIPower_install.log`. При открытии окно сразу выполняет
-`status`. Разрушающие кнопки (`УСТАНОВИТЬ`, `УСТ. + ЛОГ`, `ТЕСТ ВОССТ.`) спрашивают подтверждение, а на
-время операции ввод блокируется. `УДАЛИТЬ` подтверждения не просит — это аварийный выход: одно нажатие,
-и заводская DLL на месте.
+Ниже, отдельно («Сервис:»): `ТЕСТ ВОССТ.` (`drill`, пакет `SwDnl_drill.upg` встроен — ресурс 103) и `СНЯТЬ ТЕСТ` (`drill-off`). Обход гейта (`force`) — только командная строка. Отчёт сверху пишется и в ``VestaHomeInstall.log` (SD/USB `VestaLogs`, без них `\SDMMC`)`; при открытии окно сразу выполняет `status`. Установка и удаление спрашивают подтверждение, на время операции ввод блокируется.
 
 CLI-режим **сохранён** для тестов и автоматизации: известная подкоманда в командной строке →
 прежний однократный `MessageBox`; аргументов нет → окно; неизвестное слово → подсказка (`Способ: …`).
@@ -191,7 +185,7 @@ CLI-режим **сохранён** для тестов и автоматиза�
 Отдельно проверяется **самопроверка MD5 на месте**: хешируются proxy рядом с exe и `SwDnl_drill.upg`
 и сверяются с md5, записанными при генерации таблицы. Это одновременно (а) доказывает, что MD5-код
 работает на этом ГУ, и (б) ловит папку установщика, собранную из разных сборок (proxy не от этого
-`SPIPowerInstall.exe`) — в этом случае тоже отказ (код `4`).
+`VestaHomeInstall.exe`) — в этом случае тоже отказ (код `4`).
 
 Если `SPIPowerMgr.dll` уже равен нашему proxy — `install` скажет «сначала `rollback`» (отдельный
 код `3`), а не «чужая прошивка».
@@ -214,9 +208,9 @@ tools\drilltag_hosttest.bat                 # guard маркера drill-пак�
 | `\SDMMC` | внутренний eMMC (`Profiles\MMC`/`MMC2`, «EMMC Disk Drive») |
 | `\SDMemory2` | второй том eMMC |
 
-SD-тома в эмуляторе нет (общая папка — `\StaticStore`), поэтому `\SDMMC` там пуст. Пути proxy/теста
-(`\SDMMC\SPIPower.on`, `\SDMMC\SPIPower.log`) пока остаются на eMMC — это контракт установщика и
-proxy; перенос на `\SDMemory` делать только после `status` на живом ГУ (увидим, какие тома есть).
+SD-тома в эмуляторе нет (общая папка — `\StaticStore`), поэтому `\SDMMC` там пуст. Флаг
+`\SDMMC\SPIPower.on` остаётся на eMMC — это контракт установщика и proxy. Журнал proxy с 2026-10-17 —
+`\SDMemory\VestaLogs\SPIPower.log` (только на SD-карте; нет карты — нет журнала; решение пользователя).
 
 ### Тест восстановления (drill): проверка rescue-пути до подмены DLL
 
@@ -227,11 +221,11 @@ proxy; перенос на `\SDMemory` делать только после `sta
 В окне это кнопки `ТЕСТ ВОССТ.` и `СНЯТЬ ТЕСТ` (в командной строке — `drill` / `drill-off`).
 
 ```
-python tools\make_drill.py rescue\drill   # SwDnl_drill.upg + SwDnl.cfg + SPIPowerInstall.exe
+python tools\make_drill.py rescue\drill   # SwDnl_drill.upg + SwDnl.cfg + VestaHomeInstall.exe
 ```
 1. Положить `SwDnl_drill.upg` **рядом с exe** (exe можно запускать откуда угодно — с SD или из
-   `\ResidentFlash\SPIPower\`; пакет ищется в папке exe, не на SD) и запустить
-   `SPIPowerInstall.exe drill`: на SD раскладываются `SwDnl_drill.upg` + `SwDnl.cfg`,
+   `\ResidentFlash\VestaHomeInstall\`; пакет ищется в папке exe, не на SD) и запустить
+   `VestaHomeInstall.exe drill`: на SD раскладываются `SwDnl_drill.upg` + `SwDnl.cfg`,
    в `\ResidentFlash\SwUpdate.flag` пишется байт `0x02`. Нет пакета рядом с exe →
    `Ошибка: рядом с exe нет SwDnl_drill.upg`.
    `drill` отказывается, если: нет SD, рядом с exe нет пакета, md5 пакета не равен эталону
@@ -245,7 +239,7 @@ python tools\make_drill.py rescue\drill   # SwDnl_drill.upg + SwDnl.cfg + SPIPow
    `python tools\make_drill.py rescue\drill && python tools\gen_fingerprints.py`.
 2. Перезагрузить ГУ, **оставив SD**: `Main.exe` пропустит `G3NavHMI` и поднимет `SwDnl.exe`, тот
    распакует пакет в `\ResidentFlash` и снимет бит `0x2`.
-3. `SPIPowerInstall.exe status` (или `drill-off`) даёт вердикт: PASS = маркер
+3. `VestaHomeInstall.exe status` (или `drill-off`) даёт вердикт: PASS = маркер
    `\ResidentFlash\navigation\app\VestaDrill.txt` появился и `swflag:none`. Тот же тест отвечает на
    вопрос «автостарт или диалог `Update Start!`» (если маркера нет, а флаг остался — апдейтер не
    стартовал сам).

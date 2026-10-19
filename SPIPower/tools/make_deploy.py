@@ -3,8 +3,7 @@
 
 The result mirrors the HU mounts 1:1, so each subfolder is copied as-is:
 
-    <outdir>\\SDMMC\\SPIPower_test\\       ->  \\SDMMC\\SPIPower_test\\    Level 0 (pre-swap proxy check)
-    <outdir>\\ResidentFlash\\SPIPower\\    ->  \\ResidentFlash\\SPIPower\\ installer + proxy + drill + docs
+    <outdir>\\SDMemory\\VestaHomeInstall\\  ->  anywhere (SD card, USB disk, the unit)  installer (VestaHome + proxy inside) + help.txt
     <outdir>\\SDMemory\\SPIPower_rescue\\  ->  ROOT of the SD card        rescue set (staged before install)
     <outdir>\\SDMemory\\SafeMode\\         ->  ROOT of the SD card        safe mode: Explorer + VestaRescue log
 
@@ -24,8 +23,6 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 SP   = os.path.join(ROOT, 'VestaHome', 'SPIPower')
 OUT  = os.path.join(SP, 'out')
-APP  = os.path.join(ROOT, 'MAIN', 'ResidentFlash', 'navigation', 'app')
-NKFS = os.path.join(ROOT, 'MAIN', '4120_unpacked', 'NK', 'fs', 'Windows')
 
 def _fingerprint(name):
     """A constant of install/fingerprints.h (the installer's own references), so the two never drift apart."""
@@ -38,25 +35,15 @@ def _fingerprint(name):
 
 
 PROXY_MD5   = _fingerprint('kProxyMd5')                # out\SPIPowerMgr.dll (2026-10-15: + MCU shared ring)
-FACTORY_MD5 = '438505b76467ee393156f1aaacb9e3ab'   # factory SPIPowerMgr.dll
-DRILL_MD5   = '8800cb0ef22a13f7677cef8a9d09c5dc'   # rescue\drill\SwDnl_drill.upg
 
 # subdir (relative to outdir) -> ((source, name, expected md5 or None, note), ...)
 PLAN = (
-    (r'SDMMC\SPIPower_test', (
-        (os.path.join(OUT, 'SPIPowerMgr.dll'),    'SPIPowerMgr.dll',      PROXY_MD5,   'proxy (P1-P3)'),
-        (os.path.join(OUT, 'SPIPowerTest.exe'),   'SPIPowerTest.exe',     None,        'Level 0 harness v3'),
-        (os.path.join(APP, 'SPIPowerMgr.dll'),    'SPIPowerMgr_orig.dll', FACTORY_MD5, 'factory DLL = rollback'),
-        (os.path.join(APP, 'NCL_BaseCom.dll'),    'NCL_BaseCom.dll',      None,        'factory dependency'),
-        (os.path.join(NKFS, 'desay_sdk_api.dll'), 'desay_sdk_api.dll',    None,        'factory dependency'),
-    )),
-    (r'ResidentFlash\SPIPower', (
-        (os.path.join(SP, 'deploy', 'README.md'),  'README.md',           None,      'how to use the set'),
-        (os.path.join(SP, 'deploy', 'help.txt'),   'help.txt',            None,      'the same, step by step'),
-        (os.path.join(OUT, 'SPIPowerInstall.exe'), 'SPIPowerInstall.exe', None,      'installer'),
-        (os.path.join(OUT, 'SPIPowerMgr.dll'),     'SPIPowerMgr.dll',     PROXY_MD5, 'proxy - taken from beside the exe'),
-        (os.path.join(SP, 'rescue', 'drill', 'SwDnl_drill.upg'),
-                                                   'SwDnl_drill.upg',     DRILL_MD5, 'drill package (must sit by the exe)'),
+    # the Level 0 harness (SDMMC\SPIPower_test, SPIPowerTest.exe) is no longer laid out (2026-10-17, user): the
+    # boot path's own safety net rolls a broken proxy back; test\ and its build stay in the repo
+    # the installer is one file (VestaHome and the proxy embedded; it runs from any folder) + the user's guide
+    (r'SDMemory\VestaHomeInstall', (
+        (os.path.join(SP, 'deploy', 'help.txt'),   'help.txt',            None,      'how to install / update / remove'),
+        (os.path.join(OUT, 'VestaHomeInstall.exe'), 'VestaHomeInstall.exe', None,      'installer: VestaHome + proxy inside'),
     )),
     (r'SDMemory\SafeMode', (
         (os.path.join(ROOT, 'VestaHome', 'Rescue', 'out', 'Cancle60s.exe'), 'Cancle60s.exe', None,
@@ -66,7 +53,7 @@ PLAN = (
                                                    'Main.exe: run Cancle60s.exe + Explorer'),
     )),
     (r'SDMemory\SPIPower_rescue', (
-        (os.path.join(SP, 'rescue', 'SwDnl.upg'), 'SwDnl.upg', None, 'rescue package: factory DLL only'),
+        (os.path.join(SP, 'rescue', 'SwDnl.upg'), 'SwDnl.upg', None, 'rescue package: the two factory DLLs (MCU, Bluetooth)'),
         (os.path.join(SP, 'rescue', 'SwDnl.cfg'), 'SwDnl.cfg', None, 'rescue cfg -> SDMemory\\SwDnl.upg'),
     )),
 )
@@ -82,6 +69,10 @@ def md5(path):
 
 def main(outdir):
     rows = []
+    # the proxy embedded in the installer must be the reference build (install/fingerprints.h)
+    proxy = open(os.path.join(OUT, 'SPIPowerMgr.dll'), 'rb').read()
+    if hashlib.md5(proxy).hexdigest() != PROXY_MD5 or proxy not in open(os.path.join(OUT, 'VestaHomeInstall.exe'), 'rb').read():
+        raise SystemExit('VestaHomeInstall.exe does not hold the reference proxy - rebuild install\\build.bat')
     for sub, files in PLAN:
         dst_dir = os.path.join(outdir, sub)
         if not os.path.isdir(dst_dir):
@@ -100,7 +91,7 @@ def main(outdir):
                   % (name, os.path.getsize(dst), h, 'OK  ' if expect else '    ', note))
             rows.append((sub + '\\' + name, os.path.getsize(dst), h, note))
 
-    files_md = os.path.join(outdir, 'ResidentFlash', 'SPIPower', 'FILES.md')
+    files_md = os.path.join(outdir, 'SDMemory', 'VestaHomeInstall', 'FILES.md')
     with open(files_md, 'w', encoding='utf-8', newline='\r\n') as f:
         f.write('<!-- GENERATED by VestaHome/SPIPower/tools/make_deploy.py -- DO NOT EDIT. -->\n\n')
         f.write('# Файлы набора (размеры и md5)\n\n')

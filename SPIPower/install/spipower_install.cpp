@@ -1,13 +1,13 @@
-﻿// SPIPowerInstall - safe swap/rollback for the SPIPowerMgr proxy on the
+﻿// VestaHomeInstall - safe swap/rollback for the SPIPowerMgr proxy on the
 // Lada Vesta MMC (Windows CE 6.0, ARM). Follows the reversible-install pattern of
 // VestaInstall (toolhelp KillProcess, .bak-style backups, append-only log).
 //
-// Usage: SPIPowerInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off
+// Usage: VestaHomeInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off
 //                            | boot install [p2|p3] [force] | boot rollback | boot-off
 //        (no command line arguments -> the GUI at the bottom: the same actions as buttons)
-//   UI buttons    -> СТАТУС | УСТАНОВИТЬ | УСТ. + ЛОГ | ТЕСТ ВОССТ. | СНЯТЬ ФЛАГ | УДАЛИТЬ | FORCE | ВЫХОД
+//   UI buttons    -> СТАТУС | УСТАНОВИТЬ | УСТ. + ЛОГ | ТЕСТ ВОССТ. | ОТМЕНИТЬ ЗАДАНИЕ | УДАЛИТЬ | FORCE | ВЫХОД
 //                    (УСТАНОВИТЬ / УСТ. + ЛОГ / УДАЛИТЬ use the boot path, see BOOT MODE below)
-//   status        -> report current state to \SDMMC\SPIPower_install.log + a message box:
+//   status        -> report current state to VestaHomeInstall.log (SD/USB VestaLogs, else \SDMMC) + a message box:
 //                    which DLL is in the app folder, the factory copies, the flag, who is
 //                    up (shell / Main.exe / services) and the firmware table
 //   install       -> the swap (THE SWAP below): kill every holder of the DLL, back the
@@ -100,6 +100,9 @@
 static const wchar_t* kAppDir    = L"\\ResidentFlash\\navigation\\app";
 static const wchar_t* kDll       = L"SPIPowerMgr.dll";
 static const wchar_t* kOrig      = L"SPIPowerMgr_orig.dll";
+// the Bluetooth proxy (../bt): the shell's Bluetooth SDK, replaced by the same job, its original kept beside it
+static const wchar_t* kBtDll     = L"FLC_BLUETOOTH_SDK.dll";
+static const wchar_t* kBtOrig    = L"FLC_BLUETOOTH_SDK_orig.dll";
 static const wchar_t* kBackupSub = L"SPIPower_backup";
 static const wchar_t* kFlag      = L"\\SDMMC\\SPIPower.on";     // written/read by the proxy
 static const wchar_t* kShell     = L"G3NavHMI.exe";
@@ -142,6 +145,7 @@ static const int      kSdCandN   = 2;
 
 static wchar_t g_dll[MAX_PATH];
 static wchar_t g_orig[MAX_PATH];
+static wchar_t g_btDll[MAX_PATH], g_btOrig[MAX_PATH], g_btProxySrc[MAX_PATH];
 static wchar_t g_ownDir[MAX_PATH];
 static wchar_t g_proxySrc[MAX_PATH];
 static wchar_t g_backupDir[MAX_PATH];
@@ -150,6 +154,7 @@ static wchar_t g_sd[MAX_PATH];      // "\SDMemory" / "\SDMMC", empty = no card
 static wchar_t g_sdName[32];        // bare mount name for the cfg ("SDMemory")
 static wchar_t g_status[4096];
 static wchar_t g_srcDir[MAX_PATH];  // where the proxy is taken from; empty = this exe's folder
+                                    // (normally \Temp\VestaHomeInstall: the proxy embedded in this exe)
 static wchar_t g_log2[MAX_PATH];    // second log (boot mode: on the SD), empty = none
 
 static void Join(wchar_t* out, const wchar_t* a, const wchar_t* b)
@@ -162,6 +167,8 @@ static void Join(wchar_t* out, const wchar_t* a, const wchar_t* b)
 static int FileExists(const wchar_t* p);   // defined below
 static const wchar_t* SdRoot();            // defined below
 static int SameFile(const wchar_t* a, const wchar_t* b);   // defined below (boot mode)
+static void ProxyCleanup(wchar_t* rep, int cap);           // defined below (complete removal)
+static void BtRollback();                                  // defined below (the Bluetooth proxy)
 
 static void SetPaths()
 {
@@ -181,6 +188,9 @@ static void SetPaths()
         wcscpy(g_ownDir, L"\\SDMMC\\SPIPower_install");
     }
     Join(g_proxySrc, g_srcDir[0] ? g_srcDir : g_ownDir, kDll);
+    Join(g_btDll, kAppDir, kBtDll);
+    Join(g_btOrig, kAppDir, kBtOrig);
+    Join(g_btProxySrc, g_srcDir[0] ? g_srcDir : g_ownDir, kBtDll);
 
     // the second backup copy goes to the real SD card when one is mounted
     const wchar_t* sd = SdRoot();
@@ -204,9 +214,30 @@ static void LogTo(const wchar_t* path, const wchar_t* s)
     CloseHandle(h);
 }
 
+// The installer's log VestaHomeInstall.log: on removable media (the SD card, else a USB disk) in VestaLogs\, like
+// all our logs; without them on \SDMMC (the user's decision 2026-10-17: the installer's own record must exist).
+static const wchar_t* InstallLogPath()
+{
+    static wchar_t p[MAX_PATH];
+    static const wchar_t* roots[3] = { L"\\SDMemory", L"\\USBDisk", L"\\USBDevice" };
+    for (int i = 0; i < 3; i++) {
+        DWORD a = GetFileAttributes(roots[i]);
+        if (a == 0xFFFFFFFF || !(a & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        wchar_t d[MAX_PATH];
+        _snwprintf(d, MAX_PATH, L"%s\\VestaLogs", roots[i]);
+        d[MAX_PATH - 1] = 0;
+        CreateDirectory(d, NULL);
+        if (GetFileAttributes(d) == 0xFFFFFFFF) continue;   // read-only or not really mounted
+        _snwprintf(p, MAX_PATH, L"%s\\VestaHomeInstall.log", d);
+        p[MAX_PATH - 1] = 0;
+        return p;
+    }
+    return L"\\SDMMC\\VestaHomeInstall.log";
+}
+
 static void LogMsg(const wchar_t* s)
 {
-    LogTo(L"\\SDMMC\\SPIPower_install.log", s);
+    LogTo(InstallLogPath(), s);
     if (g_log2[0]) LogTo(g_log2, s);
 }
 
@@ -396,8 +427,13 @@ static const wchar_t* TierName(int tier)
 // rep gets a human-readable report (log/status/message box); verbose=0 keeps it short.
 // Proxies installed by earlier builds of this installer: one of them in place is not "a foreign DLL" but an
 // update - the new proxy goes over it, the factory copy (SPIPowerMgr_orig.dll) stays and is checked.
-static const char* kOldProxyMd5[] = { "fa7b65e000c6f33bbd2f8be18fe85808" };   // 2026-10-11 (P1-P3, file log only)
-static const int   kOldProxyN = 1;
+static const char* kOldProxyMd5[] = {
+    "fa7b65e000c6f33bbd2f8be18fe85808",   // 2026-10-11 (P1-P3, file log only)
+    "0e0a11692af2409dcca273625078222f",   // 2026-10-15 (v2: shared memory, log on \SDMMC)
+    "96f4486b5415e194cabb0363009f4dd2",   // 2026-10-17 (log on the SD card, sound/source calls logged)
+    "88eb58021d893cdb8e0edf84b3a5feb0",   // 2026-10-18 (shared memory v2, the shell's calls logged too)
+};
+static const int   kOldProxyN = 4;
 
 static int IsOldProxy(const char* md5)
 {
@@ -430,7 +466,7 @@ static int InstallCheck(int verbose, wchar_t* rep, int repLen)
             HexToW(kProxyMd5, wref);
             if (kProxyMd5[0] && !HexEq(md5, kProxyMd5)) {
                 selfFail = 1;
-                _snwprintf(line, 512, L"самопроверка: proxy рядом с exe = %s, эталон %s\n", whex, wref);
+                _snwprintf(line, 512, L"самопроверка: встроенный proxy = %s, эталон %s\n", whex, wref);
             } else {
                 _snwprintf(line, 512, L"самопроверка MD5: ok (proxy %s)\n", whex);
             }
@@ -440,7 +476,7 @@ static int InstallCheck(int verbose, wchar_t* rep, int repLen)
         AppendStr(rep, repLen, line);
     }
 
-    Join(src, g_ownDir, kDrillUpg);
+    Join(src, g_srcDir[0] ? g_srcDir : g_ownDir, kDrillUpg);
     if (FileExists(src) && FileMd5(src, md5, &size)) {
         wchar_t wref[40];
         HexToW(kDrillMd5, wref);
@@ -843,15 +879,93 @@ static int Rollback()
     }
 
     LogMsg(L"rollback: factory SPIPowerMgr.dll restored");
+    BtRollback();
     DeleteFile(kFlag);
+    {   // the complete removal: copies and staging go too (the running SwDnl.exe stays until the next run)
+        wchar_t rep[512] = L"rollback cleanup:";
+        ProxyCleanup(rep, 512);
+        LogMsg(rep);
+    }
     RestartShell();
     return 1;
+}
+
+// ---- the Bluetooth proxy (FLC_BLUETOOTH_SDK.dll), done by the same job as the MCU proxy, after it and with the
+// shell down. Only over the factory SDK (4120, MD5) or our own proxy; anything else is left alone. The original
+// goes to FLC_BLUETOOTH_SDK_orig.dll once; the copy is proved by MD5, a bad one puts the original back. Never
+// fatal for the MCU proxy: a refusal is a line in the log and in the status. Returns the status line.
+static int Md5Is(const wchar_t* path, const char* want)
+{
+    char md5[33];
+    return FileMd5(path, md5, NULL) && HexEq(md5, want);
+}
+
+// The MCU proxy is the current one but the Bluetooth proxy is not in place: the job does the Bluetooth one only.
+static int BtOnly(int rc)
+{
+    return rc == 3 && FileExists(g_btProxySrc) && FileExists(g_btDll) && !Md5Is(g_btDll, kBtProxyMd5);
+}
+
+static const wchar_t* BtInstall()
+{
+    if (!FileExists(g_btProxySrc)) {
+        LogMsg(L"bt: no Bluetooth proxy next to the installer - skipped");
+        return L"\nBluetooth proxy: нет в установщике — пропущен";
+    }
+    if (!FileExists(g_btDll)) {
+        LogMsg(L"bt: FLC_BLUETOOTH_SDK.dll not found - skipped");
+        return L"\nBluetooth proxy: нет FLC_BLUETOOTH_SDK.dll — пропущен";
+    }
+    if (Md5Is(g_btDll, kBtProxyMd5)) {
+        LogMsg(L"bt: the Bluetooth proxy is already in place");
+        return L"\nBluetooth proxy: уже стоит";
+    }
+    int factory = Md5Is(g_btDll, kBtFactoryMd5);
+    if (!factory && !(FileExists(g_btOrig) && Md5Is(g_btOrig, kBtFactoryMd5))) {
+        LogMsg(L"bt: FLC_BLUETOOTH_SDK.dll is neither the factory 4120 one nor ours - not touched");
+        return L"\nBluetooth proxy: FLC_BLUETOOTH_SDK.dll не заводская 4120 — не тронут";
+    }
+    if (factory && !Md5Is(g_btOrig, kBtFactoryMd5) && (!MyCopyFile(g_btDll, g_btOrig) || !Md5Is(g_btOrig, kBtFactoryMd5))) {
+        LogMsg(L"bt: could not keep the original as FLC_BLUETOOTH_SDK_orig.dll - skipped");
+        return L"\nBluetooth proxy: не удалось сохранить оригинал — пропущен";
+    }
+    if (!MyCopyFile(g_btProxySrc, g_btDll) || !Md5Is(g_btDll, kBtProxyMd5)) {
+        MyCopyFile(g_btOrig, g_btDll);
+        LogMsg(Md5Is(g_btDll, kBtFactoryMd5) ? L"bt: copy failed -> the original is back"
+                                             : L"bt: copy failed, the original NOT back");
+        return L"\nBluetooth proxy: копия не совпала — оригинал возвращён";
+    }
+    LogMsg(L"bt: Bluetooth proxy in place (original: FLC_BLUETOOTH_SDK_orig.dll)");
+    return L"\nBluetooth proxy: установлен";
+}
+
+// The factory SDK back (rollback, rescue); the _orig copy goes once the factory bytes are in place.
+static void BtRollback()
+{
+    if (!FileExists(g_btOrig) || Md5Is(g_btDll, kBtFactoryMd5)) {
+        if (FileExists(g_btOrig) && Md5Is(g_btDll, kBtFactoryMd5)) {
+            SetFileAttributes(g_btOrig, FILE_ATTRIBUTE_NORMAL);
+            DeleteFile(g_btOrig);
+        }
+        return;
+    }
+    if (!Md5Is(g_btOrig, kBtFactoryMd5)) {
+        LogMsg(L"bt rollback: FLC_BLUETOOTH_SDK_orig.dll is not the factory one - left as it is");
+        return;
+    }
+    if (MyCopyFile(g_btOrig, g_btDll) && Md5Is(g_btDll, kBtFactoryMd5)) {
+        SetFileAttributes(g_btOrig, FILE_ATTRIBUTE_NORMAL);
+        DeleteFile(g_btOrig);
+        LogMsg(L"bt rollback: factory FLC_BLUETOOTH_SDK.dll restored");
+    } else {
+        LogMsg(L"bt rollback FAILED: could not write FLC_BLUETOOTH_SDK.dll");
+    }
 }
 
 // g_status for a refused firmware gate (rc from InstallCheck), shared by install and boot
 static void GateRefusal(int rc, const wchar_t* rep)
 {
-    if (rc == 4)      wcscpy(g_status, L"Отказ: самопроверка MD5 не прошла — proxy рядом с exe не тот, под который собран этот установщик.");
+    if (rc == 4)      wcscpy(g_status, L"Отказ: самопроверка MD5 не прошла — встроенный proxy не тот, под который собран этот установщик (повреждённая копия?).");
     else if (rc == 3) wcscpy(g_status, L"Отказ: SPIPowerMgr.dll уже наш proxy — сначала удалить (rollback или кнопка УДАЛИТЬ)");
     else if (rc == 2) wcscpy(g_status, L"Отказ: SPIPowerMgr.dll не из прошивки 4120 (HARD) — подмена убьёт оболочку. Продолжить осознанно: install force");
     else              wcscpy(g_status, L"Отказ: часть файлов не из прошивки 4120 (SOFT). Продолжить на свой риск: install force");
@@ -867,13 +981,13 @@ static int DoInstall(int logging, int force)
     LogMsg(logging ? L"--- install (logging on) ---" : L"--- install (pass-through) ---");
 
     if (FlagByte() >= 0) {
-        wcscpy(g_status, L"Отказ: заряжен \\ResidentFlash\\SwUpdate.flag (загрузочное обновление) — сначала: drill-off (кнопка СНЯТЬ ФЛАГ)");
+        wcscpy(g_status, L"Отказ: заряжен \\ResidentFlash\\SwUpdate.flag (загрузочное обновление) — сначала: drill-off (кнопка ОТМЕНИТЬ ЗАДАНИЕ)");
         return 0;
     }
     if (!FileExists(g_dll)) { wcscpy(g_status, L"Ошибка: SPIPowerMgr.dll не найден в app"); return 0; }
     if (!FileExists(g_proxySrc)) {
         wchar_t m[512];
-        _snwprintf(m, 512, L"Ошибка: рядом с exe нет proxy SPIPowerMgr.dll (%s)", g_proxySrc);
+        _snwprintf(m, 512, L"Ошибка: нет proxy SPIPowerMgr.dll (%s) — установщик повреждён?", g_proxySrc);
         wcscpy(g_status, m);
         return 0;
     }
@@ -884,6 +998,11 @@ static int DoInstall(int logging, int force)
     // in place. Default = refuse, "force" overrides loudly for a known-good variant.
     wchar_t rep[2048];
     int rc = InstallCheck(1, rep, 2048);
+    int btOnly = BtOnly(rc);
+    if (btOnly) {
+        LogMsg(L"install: the MCU proxy is current -> the Bluetooth proxy only");
+        rc = 0;
+    }
     int forced = (rc != 0 && force);
     LogMsg(rep);
     if (rc && !force) {
@@ -921,9 +1040,9 @@ static int DoInstall(int logging, int force)
     }
     LogMsg(L"install: SPIPowerMgr.dll is free to write");
 
-    if (!Backup()) { RestartShell(); return 0; }
+    if (!btOnly && !Backup()) { RestartShell(); return 0; }
 
-    if (!MyCopyFile(g_proxySrc, g_dll)) {
+    if (!btOnly && !MyCopyFile(g_proxySrc, g_dll)) {
         wcscpy(g_status, L"Ошибка: не удалось скопировать proxy на место SPIPowerMgr.dll");
         RestartShell();
         return 0;
@@ -937,7 +1056,7 @@ static int DoInstall(int logging, int force)
         char md5[33];
         unsigned int size = 0;
         wchar_t line[192], whex[40];
-        int ok = FileMd5(g_dll, md5, &size);
+        int ok = FileMd5(g_dll, md5, &size);   // (the Bluetooth-only job: the current proxy, checked the same way)
         if (ok) HexToW(md5, whex);
         _snwprintf(line, 192, L"install: in place %s size=%u", ok ? whex : L"?", size);
         LogMsg(line);
@@ -950,6 +1069,8 @@ static int DoInstall(int logging, int force)
             return 0;
         }
     }
+
+    const wchar_t* bt = BtInstall();   // the shell is down: the Bluetooth SDK is free too
 
     SetFlag(logging ? 1 : 0);
 
@@ -977,7 +1098,383 @@ static int DoInstall(int logging, int force)
         : L"\nсброс: не подтверждён — выключите и включите ГУ. Оболочка не запущена, поэтому МКУ перезагрузит ГУ и сам (~1 мин).");
     AppendStr(g_status, 4096, forced ? L"\nпрошивка: гейт 4120 обойдён (force)"
                                      : L"\nпрошивка: 4120, файлы совпали");
+    AppendStr(g_status, 4096, bt);
     return rst ? 1 : 2;
+}
+
+// ---------------------------------------------------------------- VestaHome (install / update)
+// The VestaHome build packed in by make_vh_payload.py (resource 101, the format of LaunchInstall's payload:
+// [u32 count][count x (u16 nameLen, UTF-8 name with '/', u32 dataLen, data)][u32 CRC-32 of all before]) goes
+// to \SDMMC\VestaHome (the built-in card: it starts without the SD card, like VestaLaunch). File by file:
+//   1. every file is written as <name>.new and read back (nothing is replaced yet);
+//   2. each old file becomes <name>.bak and <name>.new takes its place; any failure puts the .bak files back;
+//   3. the .bak files are deleted.
+// Files that are not in the package stay as they are: VestaHome.ini (settings, Wi-Fi passwords), apps.txt,
+// speedcam\. radio.txt is the user's list once it is there: written only when missing.
+// A running VestaHome is asked to close (WM_CLOSE), killed after 5 s.
+#define IDR_VH_PAYLOAD 101
+static const wchar_t* kVhDir   = L"\\SDMMC\\VestaHome";
+static const wchar_t* kVhExe   = L"VestaHome.exe";
+static const wchar_t* kVhClass = L"VestaHome_Wnd";
+static const char*    kVhKeep  = "radio.txt";   // the user's once it exists
+
+struct VhPayload { const unsigned char* base; DWORD size; };
+
+static unsigned long Crc32(const unsigned char* p, DWORD n)
+{
+    unsigned long c = 0xFFFFFFFFUL;
+    while (n--) {
+        c ^= *p++;
+        for (int k = 0; k < 8; k++)
+            c = (c >> 1) ^ (0xEDB88320UL & (0 - (c & 1)));
+    }
+    return ~c;
+}
+
+static unsigned long ReadU32(const unsigned char* p)
+{
+    return p[0] | (p[1] << 8) | (p[2] << 16) | ((unsigned long)p[3] << 24);
+}
+
+static int VhGetPayload(VhPayload* pl)
+{
+    HRSRC r = FindResource(NULL, MAKEINTRESOURCE(IDR_VH_PAYLOAD), RT_RCDATA);
+    if (!r) return 0;
+    pl->size = SizeofResource(NULL, r);
+    pl->base = (const unsigned char*)LockResource(LoadResource(NULL, r));
+    return pl->base && pl->size >= 8 && Crc32(pl->base, pl->size - 4) == ReadU32(pl->base + pl->size - 4);
+}
+
+// The i-th entry: its name (with '\') and data. 0 = past the end or damaged.
+static int VhEntry(const VhPayload& pl, unsigned long i, char* name, int nameCap,
+                   const unsigned char** data, DWORD* len)
+{
+    const unsigned char* p = pl.base + 4;
+    const unsigned char* end = pl.base + pl.size - 4;
+    if (i >= ReadU32(pl.base)) return 0;
+    for (unsigned long k = 0; ; k++) {
+        if (p + 2 > end) return 0;
+        unsigned nl = p[0] | (p[1] << 8);
+        p += 2;
+        if ((int)nl >= nameCap || p + nl + 4 > end) return 0;
+        const unsigned char* nm = p;
+        p += nl;
+        DWORD dl = ReadU32(p);
+        p += 4;
+        if (p + dl > end) return 0;
+        if (k == i) {
+            memcpy(name, nm, nl);
+            name[nl] = 0;
+            for (char* s = name; *s; s++) if (*s == '/') *s = '\\';
+            *data = p;
+            *len = dl;
+            return 1;
+        }
+        p += dl;
+    }
+}
+
+static int WriteBytes(const wchar_t* path, const unsigned char* data, DWORD len)
+{
+    HANDLE h = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    DWORD w = 0;
+    int ok = WriteFile(h, data, len, &w, NULL) && w == len;
+    FlushFileBuffers(h);
+    CloseHandle(h);
+    return ok;
+}
+
+// The file holds exactly these bytes.
+static int SameBytes(const wchar_t* path, const unsigned char* data, DWORD len)
+{
+    HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    int same = GetFileSize(h, NULL) == len;
+    unsigned char buf[4096];
+    DWORD off = 0, got = 0;
+    while (same && off < len && ReadFile(h, buf, sizeof(buf), &got, NULL) && got) {
+        if (off + got > len || memcmp(buf, data + off, got)) same = 0;
+        off += got;
+    }
+    CloseHandle(h);
+    return same && off == len;
+}
+
+static void VhPath(wchar_t* out, const char* name, const wchar_t* suffix)
+{
+    wchar_t w[MAX_PATH], rel[MAX_PATH];
+    MultiByteToWideChar(CP_UTF8, 0, name, -1, w, MAX_PATH);
+    _snwprintf(rel, MAX_PATH, L"%s%s", w, suffix);
+    rel[MAX_PATH - 1] = 0;
+    Join(out, kVhDir, rel);
+}
+
+// The subfolders a file needs (Skin\, bass\).
+static void VhDirsFor(const char* name)
+{
+    char part[MAX_PATH];
+    for (int i = 0; name[i] && i < MAX_PATH - 1; i++) {
+        if (name[i] != '\\') continue;
+        memcpy(part, name, i);
+        part[i] = 0;
+        wchar_t p[MAX_PATH];
+        VhPath(p, part, L"");
+        EnsureDir(p);
+    }
+}
+
+// One status line: what is installed against what is packed in.
+static void VhStatusLine(wchar_t* line, int cap)
+{
+    VhPayload pl;
+    char name[MAX_PATH];
+    const unsigned char* data;
+    DWORD len;
+    wchar_t exe[MAX_PATH];
+    Join(exe, kVhDir, kVhExe);
+    if (!VhGetPayload(&pl) || !VhEntry(pl, 0, name, MAX_PATH, &data, &len)) {
+        _snwprintf(line, cap, L"\nVestaHome: встроенные файлы повреждены (CRC) — установщик не годится");
+    } else if (!FileExists(exe)) {
+        _snwprintf(line, cap, L"\nVestaHome: в %s нет — кнопка VESTAHOME установит (%u файлов)",
+                   kVhDir, (unsigned)ReadU32(pl.base));
+    } else {
+        _snwprintf(line, cap, SameBytes(exe, data, len) ? L"\nVestaHome: %s — та же сборка, что встроена"
+                                                       : L"\nVestaHome: %s — другая сборка, кнопка VESTAHOME обновит",
+                   kVhDir);
+    }
+    line[cap - 1] = 0;
+    if (FileExists(L"\\SDMemory\\VestaHome\\VestaHome.exe"))
+        AppendStr(line, cap, L"\n  есть и копия на SD (\\SDMemory\\VestaHome) — запускайте одну");
+}
+
+static void VhClose()
+{
+    HWND w = FindWindow(kVhClass, NULL);
+    if (w) {
+        PostMessage(w, WM_CLOSE, 0, 0);
+        LogMsg(L"vh: WM_CLOSE to VestaHome");
+    }
+    for (int i = 0; i < 50 && ProcExists(kVhExe) == 1; i++)
+        Sleep(100);
+    if (ProcExists(kVhExe) == 1) {
+        KillProcess(kVhExe, 1);
+        Sleep(500);
+    }
+}
+
+// Install or update; the outcome goes to g_status. 1 = done.
+static int DoVhInstall()
+{
+    VhPayload pl;
+    if (!VhGetPayload(&pl)) {
+        wcscpy(g_status, L"VestaHome: встроенные файлы повреждены (CRC) — скачайте установщик заново.");
+        return 0;
+    }
+    unsigned long n = ReadU32(pl.base);
+    char name[MAX_PATH];
+    const unsigned char* data;
+    DWORD len;
+    wchar_t p[MAX_PATH], pn[MAX_PATH], pb[MAX_PATH];
+    LogMsg(L"vh: install/update -> \\SDMMC\\VestaHome");
+    if (!FileExists(L"\\SDMMC")) {
+        wcscpy(g_status, L"VestaHome: нет тома \\SDMMC.");
+        return 0;
+    }
+    VhClose();
+    if (ProcExists(kVhExe) == 1) {
+        wcscpy(g_status, L"VestaHome не закрылся — закройте его («О системе» → питание → «Выход») и повторите.");
+        return 0;
+    }
+    EnsureDir(kVhDir);
+
+    // 1. everything as .new, read back
+    int keep = 0, fail = 0;
+    unsigned long i;
+    for (i = 0; i < n && !fail; i++) {
+        if (!VhEntry(pl, i, name, MAX_PATH, &data, &len)) { fail = 1; break; }
+        VhPath(p, name, L"");
+        if (!_stricmp(name, kVhKeep) && FileExists(p)) { keep = 1; continue; }
+        VhDirsFor(name);
+        VhPath(pn, name, L".new");
+        if (!WriteBytes(pn, data, len) || !SameBytes(pn, data, len)) {
+            wchar_t m[300];
+            _snwprintf(m, 300, L"vh: write/check FAILED: %s", pn);
+            LogMsg(m);
+            fail = 1;
+        }
+    }
+    if (fail) {
+        for (unsigned long k = 0; k < n; k++)
+            if (VhEntry(pl, k, name, MAX_PATH, &data, &len)) { VhPath(pn, name, L".new"); DeleteFile(pn); }
+        wcscpy(g_status, L"VestaHome: ОШИБКА записи на \\SDMMC — ничего не заменено (журнал VestaHomeInstall.log в VestaLogs на SD-карте).");
+        return 0;
+    }
+
+    // 2. old -> .bak, .new -> in place; back on any failure
+    unsigned long done = 0;
+    for (i = 0; i < n && !fail; i++, done = i) {
+        VhEntry(pl, i, name, MAX_PATH, &data, &len);
+        VhPath(p, name, L"");
+        VhPath(pn, name, L".new");
+        VhPath(pb, name, L".bak");
+        if (!FileExists(pn)) continue;   // radio.txt kept
+        DeleteFile(pb);
+        if (FileExists(p) && !MoveFile(p, pb)) { fail = 1; break; }
+        if (!MoveFile(pn, p)) { MoveFile(pb, p); fail = 1; break; }
+    }
+    if (fail) {
+        for (unsigned long k = 0; k < done; k++) {
+            VhEntry(pl, k, name, MAX_PATH, &data, &len);
+            VhPath(p, name, L"");
+            VhPath(pb, name, L".bak");
+            if (FileExists(pb)) { DeleteFile(p); MoveFile(pb, p); }
+        }
+        for (unsigned long k = 0; k < n; k++)
+            if (VhEntry(pl, k, name, MAX_PATH, &data, &len)) { VhPath(pn, name, L".new"); DeleteFile(pn); }
+        LogMsg(L"vh: swap FAILED, old files put back");
+        wcscpy(g_status, L"VestaHome: ОШИБКА замены файла — прежняя версия возвращена (журнал VestaHomeInstall.log в VestaLogs на SD-карте).");
+        return 0;
+    }
+
+    // 3. the old copies go
+    for (i = 0; i < n; i++)
+        if (VhEntry(pl, i, name, MAX_PATH, &data, &len)) { VhPath(pb, name, L".bak"); DeleteFile(pb); }
+    _snwprintf(g_status, 4096, L"VestaHome установлен в %s: %u файлов.\n%s"
+               L"Настройки (VestaHome.ini, пароли Wi-Fi), apps.txt и база камер не тронуты.",
+               kVhDir, (unsigned)(keep ? n - 1 : n), keep ? L"Свой radio.txt оставлен.\n" : L"");
+    LogMsg(g_status);
+    return 1;
+}
+
+static void VhStart()
+{
+    wchar_t exe[MAX_PATH];
+    Join(exe, kVhDir, kVhExe);
+    PROCESS_INFORMATION pi;
+    memset(&pi, 0, sizeof(pi));
+    if (CreateProcess(exe, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
+// The proxy embedded in this exe (resource 102) -> \Temp\VestaHomeInstall\SPIPowerMgr.dll, which becomes the
+// source (g_srcDir): the installer is one file and runs from anywhere. Not in the boot run (it takes the copy
+// staged on the SD). Without the resource / the write: the old way, a proxy next to the exe.
+#define IDR_PROXY 102
+#define IDR_DRILL 103
+#define IDR_BTPROXY 104
+static const wchar_t* kTmpDir = L"\\Temp\\VestaHomeInstall";
+
+static void ExtractProxy()
+{
+    HRSRC r = FindResource(NULL, MAKEINTRESOURCE(IDR_PROXY), RT_RCDATA);
+    if (!r) return;
+    DWORD len = SizeofResource(NULL, r);
+    const unsigned char* data = (const unsigned char*)LockResource(LoadResource(NULL, r));
+    if (!data || !len) return;
+    wchar_t p[MAX_PATH];
+    EnsureDir(L"\\Temp");
+    EnsureDir(kTmpDir);
+    Join(p, kTmpDir, kDll);
+    if (!WriteBytes(p, data, len) || !SameBytes(p, data, len))
+        return;
+    wcscpy(g_srcDir, kTmpDir);
+    // the drill package (the rescue-path test, resource 103) next to it
+    r = FindResource(NULL, MAKEINTRESOURCE(IDR_DRILL), RT_RCDATA);
+    len = r ? SizeofResource(NULL, r) : 0;
+    data = r ? (const unsigned char*)LockResource(LoadResource(NULL, r)) : NULL;
+    Join(p, kTmpDir, kDrillUpg);
+    if (data && len)
+        WriteBytes(p, data, len);
+    // the Bluetooth proxy (resource 104)
+    r = FindResource(NULL, MAKEINTRESOURCE(IDR_BTPROXY), RT_RCDATA);
+    len = r ? SizeofResource(NULL, r) : 0;
+    data = r ? (const unsigned char*)LockResource(LoadResource(NULL, r)) : NULL;
+    Join(p, kTmpDir, kBtDll);
+    if (data && len && (!WriteBytes(p, data, len) || !SameBytes(p, data, len)))
+        DeleteFile(p);
+}
+
+// Remove VestaHome completely: \SDMMC\VestaHome with its settings (VestaHome.ini, Wi-Fi passwords), apps.txt,
+// the camera base. The logs on the SD card (VestaLogs) stay.
+static int DelTree(const wchar_t* dir)
+{
+    wchar_t mask[MAX_PATH], p[MAX_PATH];
+    WIN32_FIND_DATA fd;
+    int ok = 1;
+    Join(mask, dir, L"*");
+    HANDLE f = FindFirstFile(mask, &fd);
+    if (f != INVALID_HANDLE_VALUE) {
+        do {
+            if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
+            Join(p, dir, fd.cFileName);
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ok &= DelTree(p);
+            else {
+                SetFileAttributes(p, FILE_ATTRIBUTE_NORMAL);
+                if (!DeleteFile(p)) ok = 0;
+            }
+        } while (FindNextFile(f, &fd));
+        FindClose(f);
+    }
+    if (!RemoveDirectory(dir)) ok = 0;
+    return ok;
+}
+
+static int DoVhUninstall()
+{
+    LogMsg(L"vh: uninstall \\SDMMC\\VestaHome");
+    if (!FileExists(kVhDir)) {
+        wcscpy(g_status, L"VestaHome: в \\SDMMC\\VestaHome его нет — удалять нечего.");
+        return 1;
+    }
+    VhClose();
+    if (ProcExists(kVhExe) == 1) {
+        wcscpy(g_status, L"VestaHome не закрылся — закройте его («О системе» → питание → «Выход») и повторите.");
+        return 0;
+    }
+    int ok = DelTree(kVhDir);
+    wcscpy(g_status, ok ? L"VestaHome удалён: папка \\SDMMC\\VestaHome со всеми настройками.\n"
+                          L"Журналы на SD-карте (\\SDMemory\\VestaLogs) оставлены."
+                        : L"VestaHome удалён не полностью — часть файлов занята (журнал VestaHomeInstall.log в VestaLogs на SD-карте).");
+    LogMsg(g_status);
+    return ok;
+}
+
+// The proxy's leftovers once the factory DLL is back (after the rollback boot): our SwDnl.exe and SPIPower_boot on
+// the SD (boot.log stays), the backup copies, the log flag. SPIPowerMgr_orig.dll goes only when the DLL in place
+// is the factory 4120 one byte for byte.
+static void ProxyCleanup(wchar_t* rep, int cap)
+{
+    const wchar_t* sd = SdRoot();
+    wchar_t p[MAX_PATH], d[MAX_PATH];
+    char md5[33];
+    unsigned int size = 0;
+    int factory = FileMd5(g_dll, md5, &size) && HexEq(md5, kFw[0].md5) && size == kFw[0].size;
+    if (factory && FileExists(g_orig)) {
+        SetFileAttributes(g_orig, FILE_ATTRIBUTE_NORMAL);
+        AppendStr(rep, cap, DeleteFile(g_orig) ? L"\nубран SPIPowerMgr_orig.dll" : L"\nSPIPowerMgr_orig.dll не удалился");
+    }
+    if (factory && FileExists(g_backup)) {
+        DeleteFile(g_backup);
+        RemoveDirectory(g_backupDir);
+        AppendStr(rep, cap, L"\nубрана копия на SD (SPIPower_backup)");
+    }
+    if (FileExists(kFlag)) { DeleteFile(kFlag); AppendStr(rep, cap, L"\nснят флаг журнала"); }
+    if (sd) {
+        Join(d, sd, kBootSub);
+        Join(p, d, kBootJob); DeleteFile(p);
+        Join(p, d, kDll);     DeleteFile(p);
+        Join(p, d, kBtDll);   DeleteFile(p);
+        Join(p, sd, kBootExe);
+        // our SwDnl.exe sits next to SPIPower_boot; a factory updater never has that folder
+        if (FileExists(p) && FileExists(d) && FlagByte() < 0) {
+            AppendStr(rep, cap, DeleteFile(p) ? L"\nубран SwDnl.exe с SD-карты" : L"\nSwDnl.exe на SD не удалился");
+        }
+    }
+    if (!factory)
+        AppendStr(rep, cap, L"\nвнимание: стоящая SPIPowerMgr.dll не совпала с заводской 4120 — копии оставлены");
 }
 
 static void DoStatus()
@@ -1014,19 +1511,31 @@ static void DoStatus()
                sdTxt, flagTxt, drillTxt, FileExists(kMarker) ? L"y" : L"n", bootTxt);
     wcscpy(g_status, line);
 
-    // the proxy's own log (\SDMMC\SPIPower.log, next to the flag): "PROXY OK" on every load into a process
-    // while the flag is there, then the MCU traffic - its size says whether the proxy runs and logs
+    // the proxy's own log (\SDMemory\VestaLogs\SPIPower.log, only with the SD card in): "PROXY OK" on every load
+    // into a process while the flag is there, then the MCU traffic - its size says whether the proxy runs and logs
     {
         WIN32_FIND_DATA fd;
-        HANDLE f = FindFirstFile(L"\\SDMMC\\SPIPower.log", &fd);
+        HANDLE f = FindFirstFile(L"\\SDMemory\\VestaLogs\\SPIPower.log", &fd);
         if (f != INVALID_HANDLE_VALUE) {
             FindClose(f);
-            _snwprintf(line, 512, L"\nжурнал MCU: \\SDMMC\\SPIPower.log, %u КБ", (unsigned)(fd.nFileSizeLow / 1024));
+            _snwprintf(line, 512, L"\nжурнал MCU: \\SDMemory\\VestaLogs\\SPIPower.log, %u КБ", (unsigned)(fd.nFileSizeLow / 1024));
         } else {
-            wcscpy(line, L"\nжурнал MCU: \\SDMMC\\SPIPower.log нет");
+            wcscpy(line, L"\nжурнал MCU: \\SDMemory\\VestaLogs\\SPIPower.log нет");
         }
         AppendStr(g_status, 4096, line);
     }
+
+    {   // the Bluetooth proxy
+        const wchar_t* t = !FileExists(g_btDll) ? L"нет FLC_BLUETOOTH_SDK.dll"
+                         : Md5Is(g_btDll, kBtProxyMd5) ? L"стоит (текущий)"
+                         : Md5Is(g_btDll, kBtFactoryMd5) ? L"нет (заводская SDK)"
+                         : FileExists(g_btOrig) ? L"стоит (другая версия)" : L"SDK не заводская 4120";
+        _snwprintf(line, 512, L"\nBluetooth proxy: %s", t);
+        AppendStr(g_status, 4096, line);
+    }
+
+    VhStatusLine(line, 512);   // VestaHome: installed against packed in
+    AppendStr(g_status, 4096, line);
 
     // firmware version gate: full report into the log and the message box (see InstallCheck)
     {
@@ -1066,7 +1575,7 @@ static void DoDrill(int force)
     }
 
     wchar_t src[MAX_PATH], dstUpg[MAX_PATH], dstCfg[MAX_PATH];
-    Join(src,    g_ownDir, kDrillUpg);
+    Join(src,    g_srcDir[0] ? g_srcDir : g_ownDir, kDrillUpg);
     Join(dstUpg, sd,       kDrillUpg);
     Join(dstCfg, sd,       kDrillCfg);
 
@@ -1131,7 +1640,7 @@ static void DoDrill(int force)
     LogMsg(L"drill: armed, \\ResidentFlash\\SwUpdate.flag = 0x02");
     _snwprintf(g_status, 512,
         L"Тест восстановления заряжен.\nSD: %s\nпакет: %s\ncfg: %s\nфлаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
-        L"Перезагрузите ГУ, оставив SD в слоте. После загрузки: кнопка СТАТУС (или SPIPowerInstall.exe status)\n"
+        L"Перезагрузите ГУ, оставив SD в слоте. После загрузки: кнопка СТАТУС (или VestaHomeInstall.exe status)\n"
         L"Ожидание: маркер \\ResidentFlash\\navigation\\app\\VestaDrill.txt есть, флаг снят.",
         sd, dstUpg, dstCfg);
 }
@@ -1209,7 +1718,7 @@ static void DoBootArm(const char* verb, int force)
         return;
     }
     if (FlagByte() >= 0) {
-        wcscpy(g_status, L"Отказ: \\ResidentFlash\\SwUpdate.flag уже заряжен — сначала кнопка СНЯТЬ ФЛАГ (drill-off).");
+        wcscpy(g_status, L"Отказ: \\ResidentFlash\\SwUpdate.flag уже заряжен — сначала кнопка ОТМЕНИТЬ ЗАДАНИЕ.");
         return;
     }
     for (int i = 0; i < kDangerN; i++) {
@@ -1230,7 +1739,7 @@ static void DoBootArm(const char* verb, int force)
         }
     } else {
         if (!FileExists(g_proxySrc)) {
-            _snwprintf(g_status, 512, L"Ошибка: рядом с exe нет proxy SPIPowerMgr.dll (%s)", g_proxySrc);
+            _snwprintf(g_status, 512, L"Ошибка: нет proxy SPIPowerMgr.dll (%s) — установщик повреждён?", g_proxySrc);
             return;
         }
         // the same firmware gate as install, now, while the user can still read it;
@@ -1238,6 +1747,8 @@ static void DoBootArm(const char* verb, int force)
         wchar_t rep[2048];
         int rc = InstallCheck(1, rep, 2048);
         LogMsg(rep);
+        if (BtOnly(rc))
+            rc = 0;   // the MCU proxy is current: the job puts the Bluetooth proxy in
         if (rc && !force) { GateRefusal(rc, rep); return; }
     }
 
@@ -1268,6 +1779,11 @@ static void DoBootArm(const char* verb, int force)
             _snwprintf(g_status, 512, L"Ошибка: копия proxy на SD не совпала с эталоном (%s)", p);
             return;
         }
+        Join(p, dir, kBtDll);   // the Bluetooth proxy rides along (not fatal: the job then skips it)
+        if (!FileExists(g_btProxySrc) || !MyCopyFile(g_btProxySrc, p) || !Md5Is(p, kBtProxyMd5)) {
+            DeleteFile(p);
+            LogMsg(L"boot arm: the Bluetooth proxy not staged");
+        }
     }
 
     char job[64];
@@ -1295,8 +1811,8 @@ static void DoBootArm(const char* verb, int force)
             L"флаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
             L"Перезагрузите ГУ, НЕ вынимая SD. Вместо оболочки запустится наш SwDnl.exe: снимет флаг, "
             L"остановит Main.exe и %s, затем ГУ перезагрузится ещё раз (или поднимет оболочку сама).\n"
-            L"После загрузки — кнопка СТАТУС; журнал: \\SDMMC\\SPIPower_install.log и %s\\%s.\n"
-            L"Передумали до перезагрузки — кнопка СНЯТЬ ФЛАГ.",
+            L"После загрузки — кнопка СТАТУС; журнал: VestaHomeInstall.log (VestaLogs на SD-карте) и %s\\%s.\n"
+            L"Передумали до перезагрузки — кнопка ОТМЕНИТЬ ЗАДАНИЕ.",
             wjob, dstExe, dir, isRollback ? L"" : L" + proxy",
             isRollback ? L"вернёт заводскую DLL" : L"поставит proxy", dir, kBootLog);
     }
@@ -1422,7 +1938,7 @@ static void BootRun()
 }
 
 // ---------------------------------------------------------------- GUI
-// On-device front-end: running SPIPowerInstall.exe with no arguments opens this window,
+// On-device front-end: running VestaHomeInstall.exe with no arguments opens this window,
 // where the very same actions are plain buttons. Drawn with GDI only - the CE build links
 // COREDLL alone, so there is no comctl32 and no dialog resources; the look follows
 // G3patch/native/vesta_install.cpp. Every action also appends its result to the log.
@@ -1435,22 +1951,26 @@ static void BootRun()
 #define C_FACET  RGB(0xc2,0x4a,0x0b)
 
 struct Btn { RECT rc; const wchar_t* label; int id; };
-enum { B_STATUS, B_INSTALL, B_INST_LOG, B_DRILL, B_DRILLOFF, B_ROLLBACK, B_FORCE, B_EXIT };
+enum { B_STATUS, B_INSTALL, B_DRILLOFF, B_ROLLBACK, B_EXIT, B_VH, B_VH_DEL, B_DRILL, B_TESTOFF };
 
-static const Btn g_btns[8] = {
-    { {  24, 380, 206, 420 }, L"СТАТУС",      B_STATUS   },
-    { { 214, 380, 396, 420 }, L"УСТАНОВИТЬ",  B_INSTALL  },
-    { { 404, 380, 586, 420 }, L"УСТ. + ЛОГ",  B_INST_LOG },
-    { { 594, 380, 776, 420 }, L"ТЕСТ ВОССТ.", B_DRILL    },
-    { {  24, 428, 206, 468 }, L"СНЯТЬ ФЛАГ", B_DRILLOFF },
-    { { 214, 428, 396, 468 }, L"УДАЛИТЬ",     B_ROLLBACK },
-    { { 404, 428, 586, 468 }, L"FORCE: ВЫКЛ", B_FORCE    },
-    { { 594, 428, 776, 468 }, L"ВЫХОД",       B_EXIT     },
+// In the order of a first install: 1. VestaHome (no reboot), 2. the proxy (with its log; the boot path, a reboot);
+// then the complete removal of each; the status, cancelling an armed job, exit. Below, apart ("Сервис"): the test
+// of the rescue path (drill: the package is embedded too) and taking it off. FORCE - the command line only.
+enum { kBtnN = 9, kServiceY = 428 };
+static const Btn g_btns[kBtnN] = {
+    { {  24, 266, 396, 306 }, L"1. VESTAHOME: УСТАНОВИТЬ / ОБНОВИТЬ", B_VH },
+    { { 404, 266, 776, 306 }, L"2. PROXY MCU: УСТАНОВИТЬ / ОБНОВИТЬ", B_INSTALL },
+    { {  24, 314, 396, 354 }, L"УДАЛИТЬ VESTAHOME",    B_VH_DEL   },
+    { { 404, 314, 776, 354 }, L"УДАЛИТЬ PROXY MCU",    B_ROLLBACK },
+    { {  24, 362, 266, 402 }, L"СТАТУС",               B_STATUS   },
+    { { 274, 362, 526, 402 }, L"ОТМЕНИТЬ ЗАДАНИЕ",     B_DRILLOFF },
+    { { 534, 362, 776, 402 }, L"ВЫХОД",                B_EXIT     },
+    { { 274, kServiceY, 526, kServiceY + 40 }, L"ТЕСТ ВОССТ.", B_DRILL   },
+    { { 534, kServiceY, 776, kServiceY + 40 }, L"СНЯТЬ ТЕСТ",  B_TESTOFF },
 };
 static HFONT g_font, g_fontB, g_fontS;
 static HWND  g_hwnd  = NULL;
 static int   g_press = -1;
-static int   g_force = 0;   // "force" toggle (off by default, highlighted when on)
 static int   g_busy  = 0;   // held while an action runs, blocks a second click
 
 static HFONT MakeFont(int height, int weight)
@@ -1531,37 +2051,35 @@ static void Paint(HDC dc)
     RECT full = { 0, 0, 800, 480 };
     FillC(dc, &full, C_INK);
 
-    TextL(dc, 24, 12, L"SPIPowerInstall — proxy SPIPowerMgr.dll (прошивка 4120)", C_TEXT, g_fontB);
-    TextL(dc, 24, 50, L"HARD/SOFT файлы не из 4120 — установка откажет (обойти: тумблер FORCE). INFO — только справка.",
+    TextL(dc, 24, 12, L"VestaHome + proxy SPIPowerMgr.dll (прошивка 4120)", C_TEXT, g_fontB);
+    TextL(dc, 24, 50, L"Сначала 1, потом 2. SD-карта в слоте. Прошивка не 4120 — proxy не встанет (отчёт ниже).",
           C_MUTED, g_fontS);
 
-    RECT box = { 20, 76, 780, 368 };
+    RECT box = { 20, 76, 780, 256 };
     FillC(dc, &box, C_PANEL);
     FrameC(dc, &box, C_LINE);
-    DrawBlock(dc, 30, 84, 740, 362, g_status[0] ? g_status : L"(нет данных)",
+    DrawBlock(dc, 30, 84, 740, 250, g_status[0] ? g_status : L"(нет данных)",
               g_busy ? C_MUTED : C_TEXT, g_fontS);
 
-    if (g_busy) TextL(dc, 24, 366, L"идёт операция, подождите...", C_ORANGE, g_fontS);
+    if (g_busy) TextL(dc, 24, 250, L"идёт операция, подождите...", C_ORANGE, g_fontS);
 
-    for (int i = 0; i < 8; i++) {
+    // the service group, apart from the user's buttons
+    RECT sep = { 24, kServiceY - 14, 776, kServiceY - 13 };
+    FillC(dc, &sep, C_LINE);
+    TextL(dc, 24, kServiceY + 10, L"Сервис:", C_MUTED, g_fontS);
+
+    for (int i = 0; i < kBtnN; i++) {
         RECT r = g_btns[i].rc;
         int pressed = (g_press == i);
-        int isForce = (g_btns[i].id == B_FORCE);
-        if (isForce && g_force) {
-            FillC(dc, &r, C_FACET);
-            FrameC(dc, &r, C_ORANGE);
-            TextC(dc, &r, L"FORCE: ВКЛ", C_TEXT, g_font);
-        } else {
-            FillC(dc, &r, pressed ? C_ORANGE : C_PANEL);
-            FrameC(dc, &r, pressed ? C_FACET : C_LINE);
-            TextC(dc, &r, g_btns[i].label, C_TEXT, g_font);
-        }
+        FillC(dc, &r, pressed ? C_ORANGE : C_PANEL);
+        FrameC(dc, &r, pressed ? C_FACET : C_LINE);
+        TextC(dc, &r, g_btns[i].label, C_TEXT, g_font);
     }
 }
 
 static int HitTest(int x, int y)
 {
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < kBtnN; i++) {
         RECT r = g_btns[i].rc;
         if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return i;
     }
@@ -1570,14 +2088,13 @@ static int HitTest(int x, int y)
 
 static int Confirm(const wchar_t* msg)
 {
-    return MessageBox(g_hwnd, msg, L"SPIPower Install", MB_YESNO | MB_ICONWARNING) == IDYES;
+    return MessageBox(g_hwnd, msg, L"VestaHome Install", MB_YESNO | MB_ICONWARNING) == IDYES;
 }
 
 // Runs one button: confirm the destructive actions, then call the very same Do* function
 // the command line uses, log the outcome and repaint. g_busy keeps a second tap out.
 static void RunAction(int id)
 {
-    if (id == B_FORCE) { g_force = !g_force; InvalidateRect(g_hwnd, NULL, TRUE); return; }
     if (g_busy) return;
 
     if (id == B_STATUS) {
@@ -1587,31 +2104,60 @@ static void RunAction(int id)
         return;
     }
 
-    // install/uninstall run at the next boot (BOOT MODE at the top): the live swap cannot
-    // kill the running shell and the HU resets in the middle of it
-    if (id == B_INSTALL || id == B_INST_LOG) {
-        if (!Confirm(L"Заменить SPIPowerMgr.dll на proxy при следующей загрузке?\n"
-                     L"На SD будет записан SwDnl.exe (этот установщик) + proxy, заряжен флаг обновления.\n"
-                     L"Потом перезагрузите ГУ, не вынимая SD. Вернуть заводскую DLL — кнопкой УДАЛИТЬ."))
+    // VestaHome: plain file work while everything runs (no reboot)
+    if (id == B_VH || id == B_VH_DEL) {
+        if (id == B_VH && !Confirm(L"Установить / обновить VestaHome в \\SDMMC\\VestaHome?\n"
+                                   L"Запущенный VestaHome будет закрыт. Настройки, пароли Wi-Fi и база камер сохранятся."))
+            return;
+        if (id == B_VH_DEL && !Confirm(L"Удалить VestaHome полностью (\\SDMMC\\VestaHome)?\n"
+                                       L"Удалятся и его настройки, пароли Wi-Fi, ярлыки и база камер."))
+            return;
+        g_busy = 1;
+        InvalidateRect(g_hwnd, NULL, TRUE);
+        UpdateWindow(g_hwnd);
+        int ok = id == B_VH ? DoVhInstall() : DoVhUninstall();
+        g_busy = 0;
+        InvalidateRect(g_hwnd, NULL, TRUE);
+        if (id == B_VH && ok && Confirm(L"VestaHome установлен. Запустить его сейчас?"))
+            VhStart();
+        return;
+    }
+
+    // the proxy: install / remove at the next boot (BOOT MODE at the top) - the live swap cannot kill the
+    // running shell and the HU resets in the middle of it. Always with its log (the flag; the file only on SD).
+    if (id == B_INSTALL) {
+        if (!Confirm(L"Установить / обновить proxy MCU (SPIPowerMgr.dll) при следующей загрузке?\n"
+                     L"На SD-карту будет записан SwDnl.exe (этот установщик) и proxy, заряжен флаг обновления.\n"
+                     L"Потом перезагрузите ГУ, НЕ вынимая SD-карту."))
             return;
     } else if (id == B_ROLLBACK) {
-        if (!Confirm(L"Вернуть заводскую SPIPowerMgr.dll при следующей загрузке?\n"
-                     L"На SD будет записан SwDnl.exe (этот установщик), заряжен флаг обновления.\n"
-                     L"Потом перезагрузите ГУ, не вынимая SD."))
+        char md5[33];
+        SetPaths();
+        int ours = FileMd5(g_dll, md5, NULL) && (HexEq(md5, kProxyMd5) || IsOldProxy(md5));
+        if (!ours) {   // the factory DLL is already in place: only the leftovers
+            wcscpy(g_status, L"Proxy не установлен — стоит заводская SPIPowerMgr.dll. Убираю остатки:");
+            ProxyCleanup(g_status, 4096);
+            LogMsg(g_status);
+            InvalidateRect(g_hwnd, NULL, TRUE);
             return;
-    } else if (id == B_DRILL) {
-        if (!Confirm(L"Тест восстановления: зарядить заводской загрузочный апдейтер (drill)?\n"
-                     L"Потребуется ПЕРЕЗАГРУЗКА ГУ; SD не вынимать во время загрузки."))
+        }
+        if (!Confirm(L"Удалить proxy MCU полностью при следующей загрузке?\n"
+                     L"Вернётся заводская SPIPowerMgr.dll, копии и флаг журнала будут убраны.\n"
+                     L"Потом перезагрузите ГУ, НЕ вынимая SD-карту; после загрузки нажмите эту кнопку ещё раз — "
+                     L"она уберёт SwDnl.exe с SD-карты."))
             return;
     }
+
+    if (id == B_DRILL && !Confirm(L"Тест восстановления: зарядить заводской загрузочный апдейтер безобидным пакетом?\n"
+                                  L"Нужна перезагрузка ГУ, SD-карту не вынимать. Потом — «СНЯТЬ ТЕСТ»."))
+        return;
 
     g_busy = 1;
     InvalidateRect(g_hwnd, NULL, TRUE);
 
-    if      (id == B_INSTALL)  DoBootArm("install", g_force);
-    else if (id == B_INST_LOG) DoBootArm("install p2", g_force);
-    else if (id == B_DRILL)    DoDrill(g_force);
-    else if (id == B_DRILLOFF) DoDrillOff();
+    if      (id == B_INSTALL)  DoBootArm("install p2", 0);
+    else if (id == B_DRILL)    DoDrill(0);
+    else if (id == B_DRILLOFF || id == B_TESTOFF) DoDrillOff();
     else if (id == B_ROLLBACK) DoBootArm("rollback", 0);
 
     g_busy = 0;
@@ -1673,12 +2219,12 @@ static void ShowGui(HINSTANCE hInst)
     memset(&wc, 0, sizeof(wc));
     wc.lpfnWndProc   = WndProc;
     wc.hInstance     = hInst;
-    wc.lpszClassName = L"SPIPowerInstall_Wnd";
+    wc.lpszClassName = L"VestaHomeInstall_Wnd";
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     if (!RegisterClass(&wc)) return;
 
-    HWND hwnd = CreateWindow(L"SPIPowerInstall_Wnd", L"SPIPower Install", WS_POPUP,
+    HWND hwnd = CreateWindow(L"VestaHomeInstall_Wnd", L"VestaHome Install", WS_POPUP,
         0, 0, 800, 480, NULL, NULL, hInst, NULL);
     if (!hwnd) return;
     ShowWindow(hwnd, SW_SHOW);
@@ -1708,6 +2254,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
             if (_wcsicmp(name, kBootExe) == 0) { BootRun(); return 0; }
         }
     }
+    ExtractProxy();   // the embedded proxy becomes the source: no files needed next to this exe
 
     if (lpCmd) {
         for (; lpCmd[n] && n < 63; n++)
@@ -1724,7 +2271,11 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     } else if (wcsstr(a, L"boot")) {
         if (wcsstr(a, L"rollback"))     DoBootArm("rollback", 0);
         else if (wcsstr(a, L"install")) DoBootArm(logging ? "install p2" : "install", force);
-        else wcscpy(g_status, L"Способ: SPIPowerInstall.exe boot install [p2|p3] [force] | boot rollback | boot-off");
+        else wcscpy(g_status, L"Способ: VestaHomeInstall.exe boot install [p2|p3] [force] | boot rollback | boot-off");
+    } else if (wcsstr(a, L"vh-remove")) {
+        DoVhUninstall();
+    } else if (wcsstr(a, L"vh")) {
+        DoVhInstall();
     } else if (wcsstr(a, L"drill")) {
         DoDrill(force);
     } else if (wcsstr(a, L"rollback")) {
@@ -1736,7 +2287,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
         DoInstall(logging, force);
     } else if (a[0]) {
         // an unknown verb: keep the one-shot help so a typo does not silently open the GUI
-        wcscpy(g_status, L"Способ: SPIPowerInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off | boot install [p2|p3] [force] | boot rollback | boot-off");
+        wcscpy(g_status, L"Способ: VestaHomeInstall.exe status | install [p2|p3] [force] | rollback | drill [force] | drill-off | boot install [p2|p3] [force] | boot rollback | boot-off");
     } else {
         // no command line at all: the on-device front-end (buttons, mouse/touch)
         ShowGui(hInst);
@@ -1744,6 +2295,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
     }
 
     LogMsg(g_status);
-    MessageBox(NULL, g_status, L"SPIPower Install", MB_OK | MB_ICONINFORMATION);
+    MessageBox(NULL, g_status, L"VestaHome Install", MB_OK | MB_ICONINFORMATION);
     return 0;
 }

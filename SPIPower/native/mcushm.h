@@ -3,16 +3,17 @@
 //
 // The proxy lives inside every process that loads SPIPowerMgr.dll (G3NavHMI, Main.exe, AppLauncher...).
 // Each inbound message the MCU hands to a skeleton (rmtAdapter::interpretCommand -> vtable[1]) is copied
-// here: a named file mapping "VestaMCU", 256 slots. Writer: n = InterlockedIncrement(&seq), slot (n-1)%256,
+// here: a named file mapping "VestaMCU2" (v2), 256 slots. Writer: n = InterlockedIncrement(&seq), slot (n-1)%256,
 // the slot's seq is set to n last. Reader: walks its last seen n up to seq and takes a slot only when its
 // seq equals the n it expects (a slot being rewritten is skipped).
 #ifndef MCUSHM_H
 #define MCUSHM_H
 
-#define MCU_SHM_NAME   L"VestaMCU"
+#define MCU_SHM_NAME   L"VestaMCU2"   // v2 (2026-10-18): 40 data bytes; a new name, as an old proxy's smaller
+                                     // mapping of the same name could not be mapped bigger
 #define MCU_SHM_MAGIC  0x55434D56   // "VMCU"
 #define MCU_SHM_SLOTS  256
-#define MCU_SHM_DATA   28
+#define MCU_SHM_DATA   40   // the RadioText parts are 4 + 32 bytes
 
 struct McuMsg {
     volatile LONG seq;              // = the writer's n when the slot is complete
@@ -25,7 +26,7 @@ struct McuMsg {
 
 struct McuShm {
     DWORD         magic;
-    DWORD         version;          // 1
+    DWORD         version;          // 2
     volatile LONG seq;              // messages written so far
     volatile LONG attach;           // proxy loads into processes since boot
     volatile LONG wraps;            // skeleton handlers wrapped

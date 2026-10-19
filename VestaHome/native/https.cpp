@@ -41,6 +41,8 @@ static Conn*                s_conns[kMaxConns];
 static br_x509_trust_anchor s_tas[TA_COUNT];
 static volatile LONG        s_gpsDays;     // days since 0 AD from GPS, 0 = unknown
 static CRITICAL_SECTION     s_lock;
+static CRITICAL_SECTION     s_sharedLock;  // the DNS cache and the trust anchors: also used by the streams,
+                                           // which don't take s_lock (a long download holds it)
 
 #define Log(...) ((void)0)
 #define HTTP_USER_AGENT "VestaHome/0.5"
@@ -48,6 +50,7 @@ static CRITICAL_SECTION     s_lock;
 void HttpInit()
 {
     InitializeCriticalSection(&s_lock);
+    InitializeCriticalSection(&s_sharedLock);
 }
 
 const wchar_t* NetErrorText(int err)
@@ -226,7 +229,9 @@ static void ResolveAgain(const char* host)
 static int Connect(const char* host, int port, SOCKET* out)
 {
     unsigned long addr;
+    EnterCriticalSection(&s_sharedLock);
     int dns = Resolve(host, &addr);
+    LeaveCriticalSection(&s_sharedLock);
     if (dns != NET_OK)
         return dns;
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -243,7 +248,9 @@ static int Connect(const char* host, int port, SOCKET* out)
         !WaitSocket(s, true, kConnectTimeoutSec)) {
         Log("http: connect to %s:%d failed (%d)", host, port, WSAGetLastError());
         closesocket(s);
+        EnterCriticalSection(&s_sharedLock);
         ResolveAgain(host);
+        LeaveCriticalSection(&s_sharedLock);
         return NET_CONNECT;
     }
     nb = 0;
@@ -253,6 +260,14 @@ static int Connect(const char* host, int port, SOCKET* out)
 }
 
 // ---------------------------------------------------------------- connections
+
+static void EnsureTrustAnchors()
+{
+    EnterCriticalSection(&s_sharedLock);
+    if (!s_tas[0].dn.data)
+        InitTrustAnchors(s_tas);
+    LeaveCriticalSection(&s_sharedLock);
+}
 
 static void CloseConn(Conn* c)
 {
@@ -305,8 +320,7 @@ static int OpenConn(Conn* c)
 
     bool resume = c->tlsReady;
     if (!c->tlsReady) {
-        if (!s_tas[0].dn.data)
-            InitTrustAnchors(s_tas);
+        EnsureTrustAnchors();
         br_ssl_client_init_full(&c->sc, &c->xc, s_tas, TA_COUNT);
         br_ssl_engine_set_buffer(&c->sc.eng, c->iobuf, sizeof(c->iobuf), 1);
         c->tlsReady = true;
@@ -588,4 +602,234 @@ void HttpCloseAll()
             free(s_conns[i]);
             s_conns[i] = NULL;
         }
+}
+
+// ---------------------------------------------------------------- streams (internet radio)
+// One endless GET per stream on its own connection (not one of s_conns, without s_lock: a camera download may
+// hold it for minutes). HTTP/1.0, so the servers send the body as it is, without chunks, until they close;
+// redirects (also http -> https) are followed. The reader blocks in HttpStreamRead; HttpStreamAbort from another
+// thread shuts the socket down and the read returns.
+
+struct HttpStream {
+    SOCKET                  s;
+    bool                    https;
+    volatile bool           aborted;
+    br_ssl_client_context   sc;
+    br_x509_minimal_context xc;
+    br_sslio_context        ioc;
+    unsigned char           iobuf[BR_SSL_BUFSIZE_BIDI];
+    char                    buf[4096];   // what came with the headers
+    int                     pos, end;
+};
+
+// "http(s)://host[:port]/path" -> its parts; false if it is not such a URL.
+static bool SplitUrl(const char* url, bool* https, char* host, int hostCap, int* port, char* path, int pathCap)
+{
+    const char* p;
+    if (!_strnicmp(url, "http://", 7)) {
+        *https = false;
+        p = url + 7;
+    } else if (!_strnicmp(url, "https://", 8)) {
+        *https = true;
+        p = url + 8;
+    } else {
+        return false;
+    }
+    const char* slash = strchr(p, '/');
+    const char* hend = slash ? slash : p + strlen(p);
+    const char* colon = (const char*)memchr(p, ':', hend - p);
+    int hl = (int)((colon ? colon : hend) - p);
+    if (hl <= 0 || hl >= hostCap)
+        return false;
+    memcpy(host, p, hl);
+    host[hl] = 0;
+    *port = colon ? atoi(colon + 1) : *https ? 443 : 80;
+    if (*port <= 0 || *port > 65535)
+        return false;
+    _snprintf(path, pathCap, "%s", slash ? slash : "/");
+    path[pathCap - 1] = 0;
+    return true;
+}
+
+static int StreamRaw(HttpStream* st, char* buf, int len)
+{
+    if (st->aborted)
+        return -1;
+    if (!st->https)
+        return SockRead(&st->s, (unsigned char*)buf, len);
+    return br_sslio_read(&st->ioc, buf, len);
+}
+
+static bool StreamLine(HttpStream* st, char* line, int max)
+{
+    int n = 0;
+    for (;;) {
+        if (st->pos == st->end) {
+            int k = StreamRaw(st, st->buf, sizeof(st->buf));
+            if (k <= 0)
+                return false;
+            st->pos = 0;
+            st->end = k;
+        }
+        char ch = st->buf[st->pos++];
+        if (ch == '\n')
+            break;
+        if (ch != '\r' && n < max - 1)
+            line[n++] = ch;
+    }
+    line[n] = 0;
+    return true;
+}
+
+static void Copy(char* to, int cap, const char* from)
+{
+    strncpy(to, from, cap - 1);
+    to[cap - 1] = 0;
+}
+
+static int StreamTlsError(HttpStream* st, int otherwise)
+{
+    if (!st->https)
+        return otherwise;
+    int tls = br_ssl_engine_last_error(&st->sc.eng);
+    return tls != BR_ERR_OK && tls != BR_ERR_IO ? NET_TLS : otherwise;
+}
+
+// One request on a new connection: NET_OK with the headers read (the body comes next), or with a redirect's
+// address in `location` (absolute).
+static int StreamRequest(HttpStream* st, const char* url, char* location, int locCap, int* metaint, char* name,
+                         int nameCap, char* type, int typeCap)
+{
+    char host[128], path[1024];
+    int port;
+    bool https;
+    location[0] = 0;
+    if (!SplitUrl(url, &https, host, sizeof(host), &port, path, sizeof(path)))
+        return NET_HTTP;
+    st->https = https;
+    int err = Connect(host, port, &st->s);
+    if (err != NET_OK) {
+        st->s = INVALID_SOCKET;
+        return err;
+    }
+    if (https) {
+        EnsureTrustAnchors();
+        br_ssl_client_init_full(&st->sc, &st->xc, s_tas, TA_COUNT);
+        br_ssl_engine_set_buffer(&st->sc.eng, st->iobuf, sizeof(st->iobuf), 1);
+        unsigned long days, secs;
+        ValidationTime(&days, &secs);
+        br_x509_minimal_set_time(&st->xc, days, secs);
+        InjectEntropy(&st->sc.eng);
+        if (!br_ssl_client_reset(&st->sc, host, 0))
+            return NET_TLS;
+        br_sslio_init(&st->ioc, &st->sc.eng, SockRead, &st->s, SockWrite, &st->s);
+    }
+    char hostHdr[140], req[1400];
+    if (port == (https ? 443 : 80))
+        Copy(hostHdr, sizeof(hostHdr), host);
+    else
+        _snprintf(hostHdr, sizeof(hostHdr), "%s:%d", host, port);
+    hostHdr[sizeof(hostHdr) - 1] = 0;
+    int n = _snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: " HTTP_USER_AGENT "\r\n"
+                      "Accept: */*\r\nIcy-MetaData: 1\r\nConnection: close\r\n\r\n", path, hostHdr);
+    if (n < 0)
+        return NET_HTTP;
+    bool sent = https ? br_sslio_write_all(&st->ioc, req, n) >= 0 && br_sslio_flush(&st->ioc) >= 0
+                      : send(st->s, req, n, 0) == n;
+    if (!sent)
+        return StreamTlsError(st, NET_CONNECT);
+    char line[1024];
+    if (!StreamLine(st, line, sizeof(line)))
+        return StreamTlsError(st, NET_TIMEOUT);
+    int status;
+    if (!strncmp(line, "HTTP/1.", 7) && strlen(line) >= 12)
+        status = atoi(line + 9);
+    else if (!strncmp(line, "ICY ", 4))   // old SHOUTcast servers
+        status = atoi(line + 4);
+    else
+        return NET_HTTP;
+    for (;;) {
+        if (!StreamLine(st, line, sizeof(line)))
+            return NET_TIMEOUT;
+        if (!line[0])
+            break;
+        const char* v = strchr(line, ':');
+        if (!v)
+            continue;
+        for (v++; *v == ' '; v++) {}
+        if (!_strnicmp(line, "Location:", 9)) {
+            if (v[0] == '/')   // relative: on the same server
+                _snprintf(location, locCap, "%s://%s%s", https ? "https" : "http", hostHdr, v);
+            else
+                _snprintf(location, locCap, "%s", v);
+            location[locCap - 1] = 0;
+        } else if (!_strnicmp(line, "icy-metaint:", 12)) {
+            *metaint = atoi(v);
+        } else if (!_strnicmp(line, "icy-name:", 9)) {
+            Copy(name, nameCap, v);
+        } else if (!_strnicmp(line, "Content-Type:", 13)) {
+            Copy(type, typeCap, v);
+        }
+    }
+    if (status >= 300 && status < 400 && location[0])
+        return NET_OK;
+    location[0] = 0;
+    return status == 200 ? NET_OK : NET_HTTP;
+}
+
+static void StreamFree(HttpStream* st)
+{
+    if (st->s != INVALID_SOCKET)
+        closesocket(st->s);
+    free(st);
+}
+
+HttpStream* HttpStreamOpen(const char* url, int* err, int* metaint, char* name, int nameCap, char* type,
+                           int typeCap)
+{
+    char cur[1024], next[1024];
+    Copy(cur, sizeof(cur), url);
+    *metaint = 0;
+    name[0] = type[0] = 0;
+    for (int hop = 0; hop < 5; hop++) {
+        HttpStream* st = (HttpStream*)calloc(1, sizeof(HttpStream));
+        if (!st) {
+            *err = NET_MEMORY;
+            return NULL;
+        }
+        st->s = INVALID_SOCKET;
+        *err = StreamRequest(st, cur, next, sizeof(next), metaint, name, nameCap, type, typeCap);
+        if (*err == NET_OK && !next[0])
+            return st;
+        StreamFree(st);
+        if (*err != NET_OK)
+            return NULL;
+        strcpy(cur, next);   // a redirect
+        *metaint = 0;
+    }
+    *err = NET_HTTP;
+    return NULL;
+}
+
+int HttpStreamRead(HttpStream* st, char* buf, int len)
+{
+    if (st->pos < st->end) {
+        int k = st->end - st->pos < len ? st->end - st->pos : len;
+        memcpy(buf, st->buf + st->pos, k);
+        st->pos += k;
+        return k;
+    }
+    return StreamRaw(st, buf, len);
+}
+
+void HttpStreamAbort(HttpStream* st)
+{
+    st->aborted = true;
+    if (st->s != INVALID_SOCKET)
+        shutdown(st->s, 2);   // SD_BOTH: the blocked recv / select returns
+}
+
+void HttpStreamClose(HttpStream* st)
+{
+    StreamFree(st);
 }

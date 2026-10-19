@@ -7,16 +7,32 @@
 
 extern McuShm* g_shm;   // spipower_proxy.cpp: the shared ring, NULL if the mapping failed
 
+// The flag \SDMMC\SPIPower.on is read in DllMain, but the shell loads us at boot, possibly before the cards are
+// mounted (2026-10-17: no line of the shell's at all): while it reads "off", it is looked at again every 10 s.
+static int LogOn()
+{
+    static DWORD s_checked;
+    if (!g_logging && GetTickCount() - s_checked > 10000) {
+        s_checked = GetTickCount();
+        g_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF;
+    }
+    return g_logging;
+}
+
 static void logLine(const wchar_t* s)
 {
-    if (!g_logging)
+    if (!LogOn())
         return;
-    HANDLE f = CreateFileW(L"\\SDMMC\\SPIPower.log", GENERIC_WRITE, FILE_SHARE_READ,
+    CreateDirectoryW(L"\\SDMemory\\VestaLogs", NULL);   // logs only on the SD card: no card, no log
+    HANDLE f = CreateFileW(L"\\SDMemory\\VestaLogs\\SPIPower.log", GENERIC_WRITE, FILE_SHARE_READ,
                            NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE)
         return;
     SetFilePointer(f, 0, NULL, FILE_END);
-    DWORD n = 0;
+    DWORD n = 0, t = GetTickCount();
+    wchar_t ts[16];   // seconds since boot, as VestaHome's mcu.log and its marks: the records line up
+    wsprintfW(ts, L"%u.%03u ", t / 1000, t % 1000);
+    WriteFile(f, ts, wcslen(ts) * sizeof(wchar_t), &n, NULL);
     WriteFile(f, s, wcslen(s) * sizeof(wchar_t), &n, NULL);
     static const wchar_t nl[] = L"\r\n";
     WriteFile(f, nl, sizeof(nl) - sizeof(wchar_t), &n, NULL);
@@ -56,7 +72,7 @@ static void hookSkelHandler(void* self, unsigned char* data)
             m->data[k] = k < (int)len ? data[3 + k] : 0;
         m->seq = n;
     }
-    if (g_logging) {
+    if (LogOn()) {
         unsigned char p[4] = { 0, 0, 0, 0 };
         for (int k = 0; k < 4 && k < (int)len; k++)
             p[k] = data[3 + k];
@@ -137,4 +153,44 @@ extern "C" void proxy_SPApi_LoadByMain(void)
 {
     logLine(L"SPApi_LoadByMain");
     ((void (*)(void))g_real[IDX_SPApi_LoadByMain])();
+}
+
+// ---- sound and source (2026-10-17): one line per call, with the caller's process id (the shell or VestaHome)
+typedef void (*Fn0)(void);
+typedef void (*Fn1)(unsigned char);
+typedef void (*Fn2)(unsigned char, unsigned char);
+
+static void logCall(const wchar_t* name, int n, unsigned a, unsigned b)
+{
+    wchar_t buf[96];
+    if (n == 2)
+        wsprintfW(buf, L"%s %u %u pid=%08X", name, a, b, GetCurrentProcessId());
+    else if (n == 1)
+        wsprintfW(buf, L"%s %u pid=%08X", name, a, GetCurrentProcessId());
+    else
+        wsprintfW(buf, L"%s pid=%08X", name, GetCurrentProcessId());
+    logLine(buf);
+}
+
+#define PROXY2(name) extern "C" void proxy_##name(unsigned char a, unsigned char b)     { logCall(L ## #name, 2, a, b); ((Fn2)g_real[IDX_##name])(a, b); }
+#define PROXY1(name) extern "C" void proxy_##name(unsigned char a)     { logCall(L ## #name, 1, a, 0); ((Fn1)g_real[IDX_##name])(a); }
+#define PROXY0(name) extern "C" void proxy_##name(void)     { logCall(L ## #name, 0, 0, 0); ((Fn0)g_real[IDX_##name])(); }
+
+PROXY2(SPApi_SendRadioAudioHMLData)
+PROXY2(SPApi_SendRadioAudioBalanceFaderData)
+PROXY2(SPApi_SendRadioAudioVolData)
+PROXY2(SPApi_SendMediaSourceSelect)
+PROXY1(SPApi_SendRadioNaviVoiceGuidance)
+PROXY1(SPApi_SendRadioIsNaviSourceCouldIn)
+PROXY1(SPApi_SendRadioNaviMediaMuteStatus)
+PROXY0(SPApi_SendRadioChangeSource)
+
+// The radio's lists: (1, preset, ?) tunes a preset, (0, row, 0) a station of the list (Ghidra); a preset saved by a
+// long press is not known yet. Three arguments as VestaHome passes them; r0..r3 are passed on as they came.
+extern "C" void proxy_SPApi_SendListItemControl(unsigned a, unsigned b, unsigned c, unsigned d)
+{
+    wchar_t buf[96];
+    wsprintfW(buf, L"SPApi_SendListItemControl %u %u %u pid=%08X", a, b, c, GetCurrentProcessId());
+    logLine(buf);
+    ((void (*)(unsigned, unsigned, unsigned, unsigned))g_real[IDX_SPApi_SendListItemControl])(a, b, c, d);
 }

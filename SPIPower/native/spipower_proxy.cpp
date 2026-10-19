@@ -26,12 +26,14 @@ int g_logging = 0;
 
 static HMODULE s_real = 0;
 
-// Append one line to \SDMMC\SPIPower.log. Always writes (even without the flag)
-// so a fatal attach failure is visible; normal "PROXY OK" heartbeat is emitted
-// only when g_logging is on (the on-device watchdog reads it then).
+// Append one line to \SDMemory\VestaLogs\SPIPower.log (logs only on the SD card:
+// no card, no log). Always writes (even without the flag) so a fatal attach
+// failure is visible; normal "PROXY OK" heartbeat is emitted only when
+// g_logging is on (the on-device watchdog reads it then).
 static void logLine(const wchar_t* s)
 {
-    HANDLE f = CreateFileW(L"\\SDMMC\\SPIPower.log", GENERIC_WRITE, FILE_SHARE_READ,
+    CreateDirectoryW(L"\\SDMemory\\VestaLogs", NULL);
+    HANDLE f = CreateFileW(L"\\SDMemory\\VestaLogs\\SPIPower.log", GENERIC_WRITE, FILE_SHARE_READ,
                            NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE)
         return;
@@ -82,7 +84,7 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID lpvReserved)
             {
                 if (g_shm->magic != MCU_SHM_MAGIC)
                 {
-                    g_shm->version = 1;
+                    g_shm->version = 2;
                     g_shm->magic = MCU_SHM_MAGIC;
                 }
                 InterlockedIncrement((LONG*)&g_shm->attach);
