@@ -1,2 +1,0 @@
-#define IDR_PAYLOAD 101
-IDR_PAYLOAD RCDATA "payload.bin"
