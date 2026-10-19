@@ -28,12 +28,15 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_STDIO
 #define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG   // photos: progressive JPEGs (TJpgDec reads baseline ones), small ones only
+#define STBI_ONLY_BMP
 #define STBI_NO_HDR
 #define STBI_NO_LINEAR
 #define STBI_NO_SIMD
 #define STBI_NO_THREAD_LOCALS
 #define STBI_ASSERT(x) ((void)0)
 #include "stb_image.h"
+#include "photo.h"
 
 #define APP_CLASS L"VestaHome_Wnd"
 
@@ -64,7 +67,7 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_BT, IC_USB, IC_LIST, IC_VOL, IC_SEARCH, IC_SHUFFLE, IC_REPEAT, IC_CALL, IC_HANGUP, IC_WIFI,
             IC_STAR, IC_STAR_F, IC_USER, IC_USERS, IC_CLOCK, IC_KEYPAD, IC_MIC_OFF, IC_HANDOVER, IC_PLAY,
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
-            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_COUNT };
+            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_COUNT };
 
 // Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing.
 static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music", L"phone", L"settings", L"home",
@@ -79,8 +82,8 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_BKSP, A_FILE, A_UP, A_FPREV, A_FNEXT, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_SOON, A_TEST,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_REGPAGE, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
-              A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RBAND, A_RPAGE, A_RLIST, A_RLISTPAGE, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MPAGE, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_THEME, A_LIGHT, A_BRIGHT, A_WGVIS, A_WGMOVE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
+              A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RLISTPAGE, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
+              A_MFILE, A_MUP, A_MPAGE, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_THEME, A_LIGHT, A_BRIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_LICSCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPAGE, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_NRPAGE, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIPAGE, A_WIFIAP };
@@ -92,13 +95,13 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
 // S_SET_CAR: the car section of the settings (the data port, CAN). S_DIAG: diagnostics, opened from "About the
 // system" (as the stock shell's engineering menu from its "Info"), S_TEST_*: its tests. S_WSET_*: widgets' settings.
 enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST, S_AUDIO_BT, S_AUX,
-              S_VIDEO, S_VIDEO_PLAY, S_PHOTO, S_PHOTO_VIEW, S_PHOTO_BAD,
+              S_VIDEO, S_VIDEO_PLAY, S_PHOTO, S_PHOTO_VIEW,
               S_PHONE, S_CONTACTS, S_CONTACT, S_CALLS, S_CALL, S_INCOMING, S_PHONE_OFF,
               S_SETTINGS, S_SET_SOUND, S_SET_BALANCE, S_SET_SCREEN, S_SET_RADIO, S_SET_BT, S_SET_WIFI, S_WIFI_KEYS,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -203,7 +206,10 @@ static void VLog(const wchar_t* fmt, ...)
 }
 
 static wchar_t s_status[96];    // last action result, shown in the top bar
-static int     s_downX;         // where the press started: a horizontal swipe turns the page
+static int     s_downX, s_downY;   // where the press started: a horizontal swipe turns the page
+static bool    s_drag;          // a page follows the finger (DragStart .. DragEnd): no other redraws meanwhile
+static bool    s_listDrag;      // a list follows the finger up / down (the internet radio's stations, the licenses)
+static int     s_listDrag0;     // its scroll when the finger started
 #ifdef UNDER_CE
 static HWND    s_taskbar;
 #endif
@@ -649,16 +655,27 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         FillPoly(dc, x, y, size, v, 3, c);
         break;
     }
-    case IC_ROT_L: {
-        double v[] = { 5, 15, 12, 22, 19, 15 };
-        p.ArcP(25.5, 25.7, 14, 195.3, 492.7);
+    case IC_ROT_L: {   // a picture turned a quarter: its frame, an arrow round its corner (counter-clockwise)
+        double v[] = { 15.7, 22.3, 8.7, 26.3, 4.7, 19.4 };
+        p.Box(19, 21, 41, 43, 3);
+        p.ArcP(30, 32, 22, 290, 195);
         p.Line(v, 3);
         break;
     }
-    case IC_ROT_R: {
-        double v[] = { 43, 15, 36, 22, 29, 15 };
-        p.ArcP(22.5, 25.7, 14, -15.3, -312.7);
+    case IC_ROT_R: {   // the same clockwise
+        double v[] = { 43.3, 19.4, 39.3, 26.3, 32.3, 22.3 };
+        p.Box(7, 21, 29, 43, 3);
+        p.ArcP(18, 32, 22, 250, 345);
         p.Line(v, 3);
+        break;
+    }
+    case IC_GALLERY: {   // the photos: a picture in front of another
+        double back[] = { 13, 13, 13, 7, 43, 7, 43, 31, 37, 31 };
+        double hills[] = { 9, 37, 17, 28, 23, 33, 28, 28, 34, 35 };
+        p.Line(back, 5);
+        p.Box(5, 13, 37, 41, 3);
+        p.Line(hills, 5);
+        p.Circle(13, 20, 3);
         break;
     }
     case IC_WARN: {
@@ -1678,12 +1695,8 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         marksEnd = x0 - 8;
     }
     int marksLeft = StatusMarks(dc, marksEnd, act != IC_NONE ? 540 : 0);
-    bool d;
     Now(s, 8);
-    d = Zone(706, 4, 90, 48, A_SCREEN, S_VOLUME);
-    if (d)
-        R(dc, 706, 4, 90, 48, 10, kOrange);
-    T(dc, 784, 38, s, 26, d ? kInk : kText, 600, AL_END);
+    T(dc, 784, 38, s, 26, kText, 600, AL_END);   // the clock: no action (the volume opens from the speaker)
     int x = 20, right = act != IC_NONE ? 470 : 530;
     if (right > marksLeft - 12)
         right = marksLeft - 12;
@@ -1705,7 +1718,7 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         right = cx - 8;
     }
     if (back != A_NONE && (back != A_BACK || s_histLen > 0)) {
-        d = Zone(0, 0, 64, 56, back);
+        bool d = Zone(0, 0, 64, 56, back);
         R(dc, 8, 8, 48, 40, 8, d ? kOrange : kPanel);
         Ico(dc, IC_BACK, 14, 10, 36, d ? kInk : kText);
         x = 72;
@@ -1873,23 +1886,6 @@ static void Road(HDC dc, int x, int y, int w, int h)   // night road: the video 
     SelectClipRgn(dc, NULL);
 }
 
-static void Landscape(HDC dc, int x, int y, int w, int h)   // mountains at sunset: a photo
-{
-    Clip(dc, x, y, w, h);
-    double hz = y + h * 0.62;
-    double hills[] = { x, hz, x + w * 0.25, y + h * 0.3, x + w * 0.45, y + h * 0.5, x + w * 0.62, y + h * 0.26,
-                       x + w, hz };
-    double path[] = { x + w * 0.45, y + h, x + w * 0.52, hz, x + w * 0.6, y + h };
-    Fill(dc, x, y, x + w, y + h, RGB(0x3a, 0x3f, 0x4a));
-    Fill(dc, x, y + h * 35 / 100, x + w, y + h * 65 / 100, RGB(0x4c, 0x4a, 0x4c));
-    Disc(dc, x + w * 7 / 10, y + h * 36 / 100, h * 9 / 100, RGB(0xe7, 0xa3, 0x6b));
-    PolyD(dc, hills, 5, RGB(0x26, 0x2a, 0x33));
-    Fill(dc, x, (int)hz, x + w, y + h, RGB(0x1d, 0x2a, 0x22));
-    PolyD(dc, path, 3, RGB(0x5b, 0x54, 0x46));
-    SelectClipRgn(dc, NULL);
-}
-
-// Cover of the players: the orange mosaic with the source's sign.
 static void Cover(HDC dc, Icon ic, int x, int y, int s)
 {
     TriFill(x, y, s, s, 14);
@@ -2032,15 +2028,48 @@ static void RadioDock(HDC dc, bool listOn)
     IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_RADIO);
 }
 
-// Radio, a main screen, on the MCU's tuner (s_tun): the frequency, RDS name and text, the presets. FM's 24 presets
-// are three local pages (FM1..FM3: tabs and a swipe, the MCU sends all 24 at once and does not care); УКВ has one.
+// Radio, a main screen, on the MCU's tuner (s_tun): the frequency, RDS name and text, the presets. Four pages of
+// 8 presets as the shell's band button steps them: FM1..FM3 (FM's 24 presets, local pages: the MCU sends all 24 at
+// once and does not care) and УКВ (its band: switched in the MCU, RadioBand). One button named after the page
+// steps them round (as the shell's), a swipe steps to the next / previous, dots under the presets show where.
 // A preset tap tunes it (SPApi_SendListItemControl(1, n)), a long press saves the station there ((1, n, 1), the
-// shell's own, MCU 0x0909); seek - the extended keys; the band button toggles FM / УКВ (RadioBand). Opening the
-// screen with nothing known asks the MCU (0x30, as the shell's screen does).
-static int s_radioPage;          // FM's page 0..2
+// shell's own, MCU 0x0909); seek - the extended keys. Opening the screen with nothing known asks the MCU (0x30,
+// as the shell's screen does).
+enum { kRadioPages = 4, RP_UKV = 3 };
+static int s_radioPage;          // 0..2 FM1..FM3, 3 УКВ
 static int s_bandWant = -1;      // RadioBand: the band asked for, -1 none
 static int s_bandPresses;
 static DWORD s_bandTick;
+static void RadioBand(int want);
+
+// A band switch under way (the MCU not answering for 8 s: given up).
+static bool BandPending()
+{
+    if (s_bandWant >= 0 && GetTickCount() - s_bandTick > 8000)
+        s_bandWant = -1;
+    return s_bandWant >= 0;
+}
+
+// The radio's page to, always (the page is the user's): FM's pages locally; the MCU's band follows the page -
+// switched when it differs, the target changed (or the switch dropped) when one is still under way.
+static void RadioPageTo(int page)
+{
+    Tuner t;
+    TunerGet(&t);
+    page = (page + kRadioPages) % kRadioPages;
+    int want = page == RP_UKV ? 1 : 0;
+    if (BandPending()) {
+        if (want != s_bandWant) {
+            if (t.band == want)
+                s_bandWant = -1;   // left before the band changed: nothing to switch back
+            else
+                RadioBand(want);
+        }
+    } else if (t.band >= 0 && t.band != want) {
+        RadioBand(want);
+    }
+    s_radioPage = page;
+}
 
 static void ScrRadio(HDC dc)
 {
@@ -2049,7 +2078,9 @@ static void ScrRadio(HDC dc)
     static DWORD s_seen;
     if (s_seen != s_screenTick) {   // opened: the page of the preset playing; nothing known - ask
         s_seen = s_screenTick;
-        if (t.cur >= 0 && t.cur < 24 && t.band != 1)
+        if (t.band == 1)
+            s_radioPage = RP_UKV;
+        else if (t.cur >= 0 && t.cur < 24)
             s_radioPage = t.cur / 8;
         if (!t.f10 || !t.presets)
             McuKey(0x30, false);
@@ -2057,11 +2088,20 @@ static void ScrRadio(HDC dc)
     wchar_t f[16], band[8];
     FreqText(t.f10, f, 16);
     bool low = t.band == 1 || (t.band < 0 && t.f10 > 0 && t.f10 < 8750);   // the OIRT band, 65..74 MHz
-    int page = low ? 0 : s_radioPage;
-    if (low)
+    bool pending = BandPending();
+    static int s_lastBand = -2;
+    if (t.band != s_lastBand) {   // the band changed elsewhere (the shell): its page
+        if (!pending && s_lastBand != -2 && t.band >= 0 && (t.band == 1) != (s_radioPage == RP_UKV))
+            s_radioPage = t.band == 1 ? RP_UKV : 0;
+        s_lastBand = t.band;
+    }
+    bool ukv = s_radioPage == RP_UKV;
+    bool ready = ukv == low;            // the MCU is in the page's band (not while it switches)
+    int page = ukv ? 0 : s_radioPage;   // the presets' page in the band
+    if (ukv)
         wcscpy(band, L"УКВ");
     else
-        _snwprintf(band, 8, L"FM %d", page + 1);
+        _snwprintf(band, 8, L"FM%d", page + 1);
     const wchar_t* name = t.ps[0] ? t.ps : RadioName(t, t.f10);
     Frame(dc, L"РАДИО");
     Panel(dc, 16, 64, 768, 128);
@@ -2085,40 +2125,35 @@ static void ScrRadio(HDC dc)
     }
     Button(dc, 16, 200, 80, 52, NULL, B_N, IC_PREV, 18, 30, A_RKEY, 0x13B);    // seek down
     Button(dc, 104, 200, 80, 52, NULL, B_N, IC_FWD, 18, 30, A_RKEY, 0x13C);    // seek up
-    Button(dc, 200, 200, 104, 52, s_bandWant >= 0 ? L"…" : low ? L"УКВ" : L"FM", B_N, IC_NONE, 18, 0, A_RBAND);
-    if (!low)   // FM's pages
-        for (int i = 0; i < 3; i++) {
-            wchar_t tab[8];
-            _snwprintf(tab, 8, L"FM%d", i + 1);
-            Button(dc, 320 + i * 88, 200, 80, 52, tab, i == page ? B_ACT : B_N, IC_NONE, 16, 0, A_RPAGE, i);
-        }
+    wchar_t btn[12];
+    _snwprintf(btn, 12, L"%s%s", band, pending ? L"…" : L"");
+    Button(dc, 200, 200, 120, 52, btn, B_N, IC_NONE, 20, 0, A_RPAGE);   // the next page
     Button(dc, 600, 200, 88, 52, NULL, B_N, IC_LIST, 18, 32, A_SCREEN, S_RADIO_LIST);
     Button(dc, 696, 200, 88, 52, NULL, B_N, IC_GEAR, 18, 32, A_SCREEN, S_SET_RADIO);
     for (int i = 0; i < 8; i++) {   // the page's presets, 4 x 2: the frequency and the name
-        int x = 16 + (i % 4) * 194, y = 264 + (i / 4) * 72, n = page * 8 + i;
-        int pf = n < 24 ? t.preset[n] : 0;
+        int x = 16 + (i % 4) * 194, y = 262 + (i / 4) * 66, n = page * 8 + i;
+        int pf = n < 24 && ready ? t.preset[n] : 0;
         bool have = t.presets > 0 && pf > 0;
-        bool down = Zone(x, y, 182, 64, t.presets > 0 ? A_PRESET : A_NONE, n);
+        bool down = Zone(x, y, 182, 60, t.presets > 0 ? A_PRESET : A_NONE, n);
         bool cur = down || (have && n == t.cur);
         wchar_t num[4], pfs[16];
         _snwprintf(num, 4, L"%d", i + 1);
         FreqText(pf, pfs, 16);
-        R(dc, x, y, 182, 64, 12, cur ? kOrange : kPanel, cur ? CLR_INVALID : kLine);
-        T(dc, x + 166, y + 22, num, 13, cur ? kInk : kDim, cur ? 700 : 600, AL_END);
-        T(dc, x + 14, y + 30, have ? pfs : L"—", 22, cur ? kInk : have ? kText : kDim, 700);
+        R(dc, x, y, 182, 60, 12, cur ? kOrange : kPanel, cur ? CLR_INVALID : kLine);
+        T(dc, x + 166, y + 21, num, 13, cur ? kInk : kDim, cur ? 700 : 600, AL_END);
+        T(dc, x + 14, y + 28, have ? pfs : L"—", 22, cur ? kInk : have ? kText : kDim, 700);
         const wchar_t* nm = have ? RadioName(t, pf) : L"";
-        T(dc, x + 14, y + 54, nm[0] ? nm : have ? L"" : L"удерживать — сохранить", 14, cur ? kInk : kMuted, 600,
+        T(dc, x + 14, y + 51, nm[0] ? nm : have ? L"" : L"удерживать — сохранить", 14, cur ? kInk : kMuted, 600,
           AL_START, 156);
     }
+    PageDots(dc, s_radioPage, kRadioPages);
 }
 
 // The band: the MCU's band key steps FM1 -> FM2 -> FM3 -> УКВ, and only FM <-> УКВ shows in its replies
-// (0x0901's band): pressed again on each reply until the band is the other one, at most 4 times.
-static void RadioBand()
+// (0x0901's band): pressed again on each reply until the band is the one wanted, at most 4 times.
+static void RadioBand(int want)
 {
-    Tuner t;
-    TunerGet(&t);
-    s_bandWant = t.band == 1 ? 0 : 1;
+    s_bandWant = want;
     s_bandPresses = 1;
     s_bandTick = GetTickCount();
     McuKey(0x3B, false);
@@ -2382,62 +2417,8 @@ static void ScrAux(HDC dc)
     Stepper(dc, 560, 296, 224, L"+2", 52);
 }
 
-static void PhotoDock(HDC dc, Screen prev, Screen next)
-{
-    Dock(dc);
-    IconBtn(dc, IC_APPS, 24, 417, 44, kText, A_BACK);
-    IconBtn(dc, IC_PREV, 132, 417, 44, kText, prev == S_NONE ? A_NONE : A_TAB, prev);
-    IconBtn(dc, IC_ROT_L, 244, 417, 44, kText);
-    bool d = Zone(330, 410, 140, 58, A_NONE);   // slide show running: selected
-    R(dc, 330, 410, 140, 58, 10, d ? kOrange : kPanel2);
-    Ico(dc, IC_PLAY, 378, 417, 44, d ? kInk : kOrange);
-    IconBtn(dc, IC_ROT_R, 512, 417, 44, kText);
-    IconBtn(dc, IC_FWD, 624, 417, 44, kText, next == S_NONE ? A_NONE : A_TAB, next);
-    IconBtn(dc, IC_GEAR, 732, 417, 44, kText, A_SCREEN, S_SET_PHOTO);
-}
-
-static void ScrPhoto(HDC dc)
-{
-    Frame(dc, L"МЕДИА · ФОТО · ПУТЕШЕСТВИЯ");
-    MediaTabs(dc, S_PHOTO, IC_PLAY, A_SCREEN, S_PHOTO_VIEW, S_SET_PHOTO);
-    for (int i = 0; i < 8; i++) {
-        int x = 16 + (i % 4) * 194, y = 124 + (i / 4) * 138;
-        bool down = Zone(x, y, 184, 128, i ? A_SCREEN : A_NONE, S_PHOTO_VIEW);
-        if (i == 0) {   // a folder
-            R(dc, x, y, 184, 128, 12, down ? kOrange : kPanel, down ? CLR_INVALID : kLine);
-            Ico(dc, IC_FOLDER, x + 64, y + 22, 56, down ? kInk : kMuted);
-            T(dc, x + 92, y + 112, L"КАМЕРА", 15, down ? kInk : kMuted, 600, AL_MID);
-            continue;
-        }
-        bool cur = down || i == 3;
-        wchar_t name[16];
-        _snwprintf(name, 16, L"IMG_07%02d.JPG", 10 + i);
-        R(dc, x, y, 184, 128, 12, cur ? kOrange : kPanel);
-        Landscape(dc, x + 6, y + 6, 172, 92);
-        T(dc, x + 92, y + 118, name, 14, cur ? kInk : kMuted, 700, AL_MID);
-    }
-}
-
-static void ScrPhotoView(HDC dc)
-{
-    Frame(dc, L"ФОТО · 3 / 24");
-    R(dc, 0, 56, 800, 342, 0, kMargin);
-    Landscape(dc, 172, 56, 456, 342);
-    PhotoDock(dc, S_NONE, S_PHOTO_BAD);
-}
-
-static void ScrPhotoBad(HDC dc)
-{
-    Frame(dc, L"ФОТО · 4 / 24");
-    R(dc, 0, 56, 800, 342, 0, kMargin);
-    Panel(dc, 220, 110, 360, 230);
-    Ico(dc, IC_PHOTO, 360, 140, 80, kOff);
-    Line(dc, 352, 140, 448, 220, 4, kMuted);
-    T(dc, 400, 262, L"ФОРМАТ НЕ ПОДДЕРЖИВАЕТСЯ", 18, kText, 700, AL_MID, 336);
-    T(dc, 400, 292, L"DACHA_2026.HEIC", 17, kMuted, 400, AL_MID);
-    T(dc, 400, 318, L"Пропустить можно стрелками внизу", 15, kDim, 400, AL_MID, 336);
-    PhotoDock(dc, S_PHOTO_VIEW, S_NONE);
-}
+static void ScrPhoto(HDC dc);       // (with the photos' worker, below)
+static void ScrPhotoView(HDC dc);
 
 // Phone, a main screen: the number, recent calls and the way to the contacts on the left, the keypad on the right.
 // Phone: the stock shell's Bluetooth stack through our proxy (btshm.h): the connected phone, its operator, battery
@@ -2847,19 +2828,7 @@ static void ScrSetVideo(HDC dc)
     Toggle(dc, 688, 130, T_VIDEO_MOVING);
 }
 
-static void ScrSetPhoto(HDC dc)
-{
-    static const wchar_t* scale[2] = { L"ВПИСАТЬ", L"ЗАПОЛН." };
-    Settings(dc, S_SET_PHOTO);
-    SetRow(dc, 64, L"Интервал слайд-шоу");
-    Stepper(dc, 560, 68, 200, L"5 С", 48, 18);
-    SetRow(dc, 120, L"Масштаб");
-    Seg(dc, 512, 126, 248, 44, scale, 2, G_PHOTO_SCALE, 15);
-    SetRow(dc, 176, L"Слайд-шоу при открытии");
-    Toggle(dc, 688, 186, T_SLIDES_OPEN);
-    SetRow(dc, 232, L"Автоповорот", NULL, true);
-    Toggle(dc, 688, 242, T_AUTOROTATE);
-}
+static void ScrSetPhoto(HDC dc);   // (with the photos, after the settings' data)
 
 static void CanStatusText(wchar_t* s, int n);
 static void Size(wchar_t* s, int n, unsigned __int64 bytes);
@@ -3245,12 +3214,15 @@ static void ScrIncoming(HDC dc)
     Ico(dc, IC_HANGUP, 519, 322, 48, kInk);
 }
 
+enum { kVolTop = 30 };   // the shell's volume scale (user 2026-10-19)
+
 static void ScrVolume(HDC dc)
 {
     Under(dc, 153);
     Zone(0, 0, 800, 480, A_BACK);
     Panel(dc, 150, 150, 500, 180, 16);
-    // the MCU's volume of the current source, 0..50 (25 bars of 2), as it comes (the hardware knob, the wheel)
+    // the MCU's volume of the current source, 0..30 as the shell's (30 bars, one a step), as it comes (the knob,
+    // the wheel)
     int vol, mute, src;
     bool have = VolGet(&vol, &mute, &src);
     const wchar_t* name = src == 0 ? L"ГРОМКОСТЬ · РАДИО" : src == 6 || src == 7 ? L"ГРОМКОСТЬ · МЕДИА"
@@ -3265,10 +3237,10 @@ static void ScrVolume(HDC dc)
     else
         _snwprintf(s, 16, L"%d", vol);
     T(dc, 618, 222, s, mute ? 28 : 48, mute ? kMuted : kText, 700, AL_END);
-    int lit = have && !mute ? (vol + 1) / 2 : 0;
-    for (int i = 0; i < 25; i++) {
-        int h = 14 + i * 36 / 24;
-        R(dc, 182 + i * 18, 300 - h, 12, h, 2, i < lit ? kOrange : kLine);
+    int lit = have && !mute ? (vol < kVolTop ? vol : kVolTop) : 0;
+    for (int i = 0; i < kVolTop; i++) {
+        int h = 14 + i * 36 / (kVolTop - 1);
+        R(dc, 182 + i * 15, 300 - h, 10, h, 2, i < lit ? kOrange : kLine);
     }
     if (!have)
         T(dc, 182, 316, L"MCU ещё не присылал громкость (нужен proxy)", 13, kDim, 400);
@@ -3331,6 +3303,30 @@ enum { WG_MEDIA, WG_SPEED, WG_RADIO, WG_WEATHER, WG_APPS, WG_TRIP, WG_CLIMATE, W
 static const wchar_t* kWgKey[WG_COUNT] = { L"media", L"speed", L"radio", L"weather", L"apps", L"trip", L"climate",
                                            L"date", L"phone", L"car", L"navi" };
 
+// The user's widgets (VestaWidgets\*.ini on the SD card, UserWidgetsScan): ids after the built-in ones, keys
+// "u.<file name>". A script (MortScript) writes the data file, VestaHome only reads and draws it.
+enum { kWgUser = 8, kWgMax = WG_COUNT + kWgUser };
+struct UserWg {
+    wchar_t  key[40], title[40], dir[MAX_PATH], data[MAX_PATH], tap[MAX_PATH], start[MAX_PATH];
+    Icon     ic;
+    bool     wide, have;
+    int      refresh, state;        // refresh: seconds between reads; state: 0 none, 1 ok, 2 warn, 3 alert
+    DWORD    readTick;
+    FILETIME dataTime;              // the data file's write time last read
+    wchar_t  value[24], unit[24], text[2][96];
+    // HTTPS through VestaHome (UserWgFetch): url, every (s), the raw answer saved to resp, what to take from it
+    // (fields 0 value, 1 unit, 2 text, 3 text2, 4 state: "start|end" markers) and the fixed parts ("%s" = taken)
+    char     url[512];
+    int      every;
+    DWORD    fetchTick;
+    wchar_t  resp[MAX_PATH], from[5][64], fixed[5][96];
+};
+static UserWg s_uw[kWgUser];
+static int    s_uwCount;
+
+static int WgCount() { return WG_COUNT + s_uwCount; }
+static const wchar_t* WgKey(int id) { return id < WG_COUNT ? kWgKey[id] : s_uw[id - WG_COUNT].key; }
+
 struct Cfg {
     int     weatherProv;
     wchar_t weatherKey[W_COUNT][64];   // API key per provider (Open-Meteo needs none)
@@ -3367,8 +3363,14 @@ struct Cfg {
     bool    wifiHold;                  // WifiHold: the vendor's WzcRefresh off
     int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
-    int     homeOrder[16];             // the main screen's widgets (WG_*) in their order
+    int     homeOrder[kWgMax];         // the main screen's widgets (WG_*, then the user's) in their order
+    wchar_t homeRaw[400];              // home.widgets as read: keeps the user widgets not found now (no card)
     int     homeHidden;                // bit 1 << WG_*: hidden
+    wchar_t uiScreen[16], uiSource[8];   // the screen and the source last seen (Resume*): "home", "radio"...
+    wchar_t btLast[18];                // the phone connected last, "A4:E2:87:98:D6:9F"
+    wchar_t photoDir[MAX_PATH];        // the photos' folder last opened
+    int     photoInterval;             // the slide show's seconds
+    bool    photoFill, photoSlides, photoAutoRot;   // fill the screen / the slide show on opening / EXIF turn
     bool    wifiApAuto;                // the access point for a phone, automatically (wifi.cpp WifiApSetup)
     wchar_t wifiApSsid[33], wifiApPass[65];
     bool    rvcInvert;                 // the trajectory bends the other way (the CAN angle's sign)
@@ -3400,6 +3402,8 @@ static void CfgDefaults()
     s_cfg.wifiOn = true;
     s_cfg.wifiHold = true;
     s_cfg.saverMin = 5;
+    s_cfg.photoInterval = 5;
+    s_cfg.photoAutoRot = true;
     for (int i = 0; i < WG_COUNT; i++)
         s_cfg.homeOrder[i] = i;
     s_cfg.homeHidden = 0;
@@ -3421,11 +3425,16 @@ static void SaveCfg();
 static void RadioCacheLoad(const wchar_t* k, const wchar_t* v);   // the tuner's last state, the stations' names
 static int  RadioCacheText(wchar_t* out, int cap);
 
-// "media,speed,-radio,...": the order, "-" hides; unknown names are skipped, widgets not named go to the end.
+// "media,speed,-radio,u.fuel,...": the order, "-" hides; names not known now are skipped (and kept in homeRaw for
+// when they come back), widgets not named go to the end. Again after the user widgets are scanned.
 static void HomeWidgetsLoad(const wchar_t* v)
 {
+    if (v != s_cfg.homeRaw) {
+        wcsncpy(s_cfg.homeRaw, v, 399);
+        s_cfg.homeRaw[399] = 0;
+    }
     int n = 0;
-    bool seen[WG_COUNT] = { false };
+    bool seen[kWgMax] = { false };
     s_cfg.homeHidden = 0;
     while (*v) {
         while (*v == L' ' || *v == L',')
@@ -3436,8 +3445,8 @@ static void HomeWidgetsLoad(const wchar_t* v)
         const wchar_t* e = v;
         while (*e && *e != L',' && *e != L' ')
             e++;
-        for (int i = 0; i < WG_COUNT; i++)
-            if (!seen[i] && (int)wcslen(kWgKey[i]) == e - v && !wcsncmp(kWgKey[i], v, e - v)) {
+        for (int i = 0; i < WgCount(); i++)
+            if (!seen[i] && (int)wcslen(WgKey(i)) == e - v && !wcsncmp(WgKey(i), v, e - v)) {
                 seen[i] = true;
                 s_cfg.homeOrder[n++] = i;
                 if (hide)
@@ -3445,21 +3454,42 @@ static void HomeWidgetsLoad(const wchar_t* v)
             }
         v = e;
     }
-    for (int i = 0; i < WG_COUNT; i++)
+    for (int i = 0; i < WgCount(); i++)
         if (!seen[i])
             s_cfg.homeOrder[n++] = i;
 }
 
+// The order to save: the widgets known now, then the user widgets of homeRaw not found now (the card out).
 static void HomeWidgetsText(wchar_t* out, int cap)
 {
     out[0] = 0;
-    for (int i = 0; i < WG_COUNT; i++) {
+    for (int i = 0; i < WgCount(); i++) {
         int id = s_cfg.homeOrder[i];
-        wchar_t t[16];
-        _snwprintf(t, 16, L"%s%s%s", i ? L"," : L"", s_cfg.homeHidden >> id & 1 ? L"-" : L"", kWgKey[id]);
+        wchar_t t[48];
+        _snwprintf(t, 48, L"%s%s%s", i ? L"," : L"", s_cfg.homeHidden >> id & 1 ? L"-" : L"", WgKey(id));
         if ((int)(wcslen(out) + wcslen(t)) < cap)
             wcscat(out, t);
     }
+    const wchar_t* v = s_cfg.homeRaw;
+    while (*v) {
+        while (*v == L' ' || *v == L',')
+            v++;
+        const wchar_t* b = v;
+        const wchar_t* k = *v == L'-' ? v + 1 : v;
+        const wchar_t* e = k;
+        while (*e && *e != L',' && *e != L' ')
+            e++;
+        bool known = false;
+        for (int i = 0; i < WgCount() && !known; i++)
+            known = (int)wcslen(WgKey(i)) == e - k && !wcsncmp(WgKey(i), k, e - k);
+        if (!known && e - k > 2 && !wcsncmp(k, L"u.", 2) && (int)(wcslen(out) + (e - b) + 2) < cap) {
+            wcscat(out, L",");
+            wcsncat(out, b, e - b);
+        }
+        v = e;
+    }
+    wcsncpy(s_cfg.homeRaw, out, 399);
+    s_cfg.homeRaw[399] = 0;
 }
 
 static void LoadCfg()
@@ -3587,6 +3617,26 @@ static void LoadCfg()
             s_cfg.rvcOwn = CfgBool(v);
         } else if (!wcscmp(k, L"wifi.on")) {
             s_cfg.wifiOn = CfgBool(v);
+        } else if (!wcscmp(k, L"ui.screen")) {
+            wcsncpy(s_cfg.uiScreen, v, 15);
+            s_cfg.uiScreen[15] = 0;
+        } else if (!wcscmp(k, L"photo.dir")) {
+            wcsncpy(s_cfg.photoDir, v, MAX_PATH - 1);
+            s_cfg.photoDir[MAX_PATH - 1] = 0;
+        } else if (!wcscmp(k, L"photo.interval")) {
+            s_cfg.photoInterval = _wtoi(v) < 2 ? 2 : _wtoi(v) > 60 ? 60 : _wtoi(v);
+        } else if (!wcscmp(k, L"photo.fill")) {
+            s_cfg.photoFill = CfgBool(v);
+        } else if (!wcscmp(k, L"photo.slides")) {
+            s_cfg.photoSlides = CfgBool(v);
+        } else if (!wcscmp(k, L"photo.autorotate")) {
+            s_cfg.photoAutoRot = CfgBool(v);
+        } else if (!wcscmp(k, L"bt.last")) {
+            wcsncpy(s_cfg.btLast, v, 17);
+            s_cfg.btLast[17] = 0;
+        } else if (!wcscmp(k, L"ui.source")) {
+            wcsncpy(s_cfg.uiSource, v, 7);
+            s_cfg.uiSource[7] = 0;
         } else if (!wcscmp(k, L"home.widgets")) {
             HomeWidgetsLoad(v);
         } else if (!wcscmp(k, L"screen.theme")) {
@@ -3686,6 +3736,12 @@ static void SaveCfg()
         L"screen.theme=%d\r\nscreen.light=%d\r\n"
         L"# home.widgets: the main screen's widgets in their order, \"-\" before a hidden one\r\n"
         L"home.widgets=%s\r\n"
+        L"# ui.screen / ui.source: the screen and what played when last seen - both come back at the start\r\n"
+        L"ui.screen=%s\r\nui.source=%s\r\n"
+        L"# bt.last: the phone connected last (its address): connected again at the start when the source was BT\r\n"
+        L"bt.last=%s\r\n"
+        L"# photo.*: the photos' folder, the slide show's seconds, fill the screen, the slide show on opening, EXIF turn\r\n"
+        L"photo.dir=%s\r\nphoto.interval=%d\r\nphoto.fill=%d\r\nphoto.slides=%d\r\nphoto.autorotate=%d\r\n"
         L"# wifi.ap.*: the unit's own access point for a phone with its hotspot on 5 GHz (auto: when no known network)\r\n"
         L"wifi.ap.ssid=%s\r\nwifi.ap.pass=%s\r\nwifi.ap.auto=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
@@ -3694,7 +3750,8 @@ static void SaveCfg()
         s_cfg.camOver, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.wifiHold, s_cfg.saverMin, s_cfg.themeMode, s_cfg.lightMode, homeWg,
+        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.wifiHold, s_cfg.saverMin, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.btLast, s_cfg.photoDir, s_cfg.photoInterval, s_cfg.photoFill,
+        s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
     if (n < 0)
         return;
@@ -4201,7 +4258,7 @@ static Hvac     s_hvac = { -999, -1, -1, -1, -1, -1, -1, -1, -1, 0 };
 static volatile LONG s_mcuPosted;
 
 // The sound as the MCU reports it (mcu.log 2026-10-17, PROJECT.md): 0x3101 00 00 <n> = the volume of the current
-// source (0..50: the stock shell has the pictures volume/0..50), 0x3109 00 <0/1> = mute, 0x4904 00 <n> = the
+// source (the stock shell's scale is 0..30 - user 2026-10-19; up to 50 taken), 0x3109 00 <0/1> = mute, 0x4904 00 <n> = the
 // source (00 radio, 06 and 07 the media player - USB, SD, video alike (2026-10-18), 09 Bluetooth). -1 = not seen yet. A change of the volume or the mute opens
 // the volume window (the same values sent again - the tuner repeats them - do not).
 enum { kVolMax = 50, WP_MCU_VOLUME = 1, WP_MCU_MARK = 2, WP_MCU_TUNER = 3, WP_MCU_REBOOT = 4, WP_MCU_SOUND = 5,
@@ -4283,6 +4340,16 @@ enum { kRadioNames = 48 };
 static struct { int f10; wchar_t name[9]; } s_rnames[kRadioNames];
 static int s_rnameCount;
 static bool s_radioDirty;   // to be written (at most every 30 s)
+static bool  s_cfgSoon;      // the ini to be written a minute after the first change not written (CfgSoon):
+static DWORD s_cfgSoonTick;  // at most once a minute, and only when something changed
+
+static void CfgSoon()
+{
+    if (!s_cfgSoon) {
+        s_cfgSoon = true;
+        s_cfgSoonTick = GetTickCount();
+    }
+}
 
 static const wchar_t* RadioName(const Tuner& t, int f10)   // "" when not known
 {
@@ -4957,9 +5024,10 @@ static bool BassLoad()
         VLog(L"плеер: BASS_Init ошибка %d", s_bass.error());
         return false;
     }
-    static const wchar_t* plugins[4] = { L"bass_aac.dll", L"bassflac.dll", L"bassalac.dll", L"bass_mpc.dll" };
+    static const wchar_t* plugins[6] = { L"bass_aac.dll", L"bassflac.dll", L"bassalac.dll", L"bass_mpc.dll",
+                                         L"bassopus.dll", L"basswv.dll" };
     int loaded = 0;
-    for (int i = 0; i < 4 && s_bass.pluginLoad; i++) {
+    for (int i = 0; i < 6 && s_bass.pluginLoad; i++) {
         _snwprintf(path, MAX_PATH, L"%s%s", dir, plugins[i]);
         if (GetFileAttributes(path) != 0xFFFFFFFF && s_bass.pluginLoad(path, BASS_UNICODE_F))
             loaded++;
@@ -4982,12 +5050,12 @@ static bool BassLoad()
 
 static bool IsAudioName(const wchar_t* n)
 {
-    static const wchar_t* ext[12] = { L".mp3", L".mp2", L".mp1", L".ogg", L".wav", L".aac", L".m4a", L".mp4",
-                                      L".flac", L".mpc", L".aif", L".aiff" };
+    static const wchar_t* ext[14] = { L".mp3", L".mp2", L".mp1", L".ogg", L".wav", L".aac", L".m4a", L".mp4",
+                                      L".flac", L".mpc", L".aif", L".aiff", L".opus", L".wv" };
     const wchar_t* dot = wcsrchr(n, L'.');
     if (!dot)
         return false;
-    for (int i = 0; i < 12; i++)
+    for (int i = 0; i < 14; i++)
         if (!_wcsicmp(dot, ext[i]))
             return true;
     return false;
@@ -5025,7 +5093,8 @@ static void FreeNames(wchar_t** v, int* n)
 }
 
 // Folder `dir` ("X\" form): subfolders (with "\" appended, when folders) and audio (or video) files, sorted.
-static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders, bool video = false)
+static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders, int kind = 0)   // 0 audio, 1 video,
+                                                                                               // 2 photos
 {
     wchar_t pat[MAX_PATH];
     _snwprintf(pat, MAX_PATH, L"%s*", dir);
@@ -5037,7 +5106,8 @@ static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders, 
     do {
         bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
         if (fd.cFileName[0] == L'.' || (isDir && !folders) ||
-            (!isDir && !(video ? IsVideoName(fd.cFileName) : IsAudioName(fd.cFileName))) ||
+            (!isDir && !(kind == 2 ? PicIsName(fd.cFileName) : kind ? IsVideoName(fd.cFileName)
+                                                                      : IsAudioName(fd.cFileName))) ||
             (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN))
             continue;
         size_t len = wcslen(fd.cFileName);
@@ -5184,7 +5254,7 @@ static bool PlayerPlay(int i)
     wcscpy(s_cfg.musicDir, s_plDir);
     wcsncpy(s_cfg.musicFile, s_pl[i], MAX_PATH - 1);
     s_cfg.musicFile[MAX_PATH - 1] = 0;
-    SaveCfg();
+    CfgSoon();   // (not at once: every track would write the flash)
     return true;
 }
 
@@ -5490,7 +5560,7 @@ struct NetFile {
 struct NetReady { LONG gen; DWORD chan; NetFile* file; };
 
 static NetStation* s_stations;          // radio.txt, read when the screen is first opened
-static int         s_netCount = -1, s_netPage;
+static int         s_netCount = -1, s_netScroll;   // the list scrolled by (px)
 static int         s_netCur = -1;  // the station chosen
 static bool        s_netOn;        // the radio should play: reconnects while on
 static int         s_netState;     // NR_*
@@ -5953,36 +6023,74 @@ static void ScrNetRadio(HDC dc)
     IconBtn(dc, IC_FWD, 616, 312, 48, kText, A_NRSTEP, 1);
 }
 
-// The stations of radio.txt, kNetRows a page; the current one orange.
+// The stations of radio.txt, a list that scrolls (the finger, or the buttons by kNetRows rows); the current one
+// orange. The rows are cut at the panel, their buttons too (a row half above it must not take the top bar's taps).
+enum { kNetTop = 72, kNetBottom = 386, kNetPitch = 62 };
+
+static int NetScrollMax()
+{
+    int content = s_netCount > 0 ? s_netCount * kNetPitch - 6 + 8 : 0;   // the rows, 4 px above and below
+    return content > kNetBottom - kNetTop ? content - (kNetBottom - kNetTop) : 0;
+}
+
+static void NetScrollTo(int px)
+{
+    int m = NetScrollMax();
+    s_netScroll = px < 0 ? 0 : px > m ? m : px;
+}
+
 static void ScrNetRadioList(HDC dc)
 {
     NetLoadList();
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {   // opened: the station playing in view
+        s_seen = s_screenTick;
+        if (s_netCur >= 0 && (s_netCur * kNetPitch < s_netScroll ||
+                              s_netCur * kNetPitch + kNetPitch > s_netScroll + kNetBottom - kNetTop))
+            NetScrollTo((s_netCur - 2) * kNetPitch);
+    }
+    NetScrollTo(s_netScroll);   // (the list may have changed)
     Frame(dc, L"ИНТЕРНЕТ-РАДИО · СТАНЦИИ");
     Panel(dc, 16, 68, 704, 322);
-    int first = s_netPage * kNetRows, y = 76;
-    for (int i = first; i < s_netCount && i < first + kNetRows; i++, y += 62)
+    int saved = SaveDC(dc);
+    IntersectClipRect(dc, 20, kNetTop, 716, kNetBottom);
+    for (int i = 0; i < s_netCount; i++) {
+        int y = kNetTop + 4 + i * kNetPitch - s_netScroll;
+        if (y + 56 <= kNetTop || y >= kNetBottom)
+            continue;
+        int k0 = kBtnCount;
         ListRow(dc, 24, y, 680, 56, s_stations[i].name, NULL, i == s_netCur ? L_CUR : L_N, IC_RADIO, NULL, NULL,
                 A_NRPICK, i);
+        for (int k = k0; k < kBtnCount; k++) {   // its buttons cut at the panel too
+            RECT& rc = s_btns[k].rc;
+            rc.top = rc.top < kNetTop ? kNetTop : rc.top;
+            rc.bottom = rc.bottom > kNetBottom ? kNetBottom : rc.bottom;
+            if (rc.bottom < rc.top)
+                rc.bottom = rc.top;
+        }
+    }
+    RestoreDC(dc, saved);
     if (s_netCount <= 0)
         T(dc, 40, 114, L"Нет станций: radio.txt рядом с VestaHome", 18, kMuted, 400);
-    int pages = (s_netCount + kNetRows - 1) / kNetRows;
-    if (pages > 1) {
-        wchar_t p[16];
-        _snwprintf(p, 16, L"%d/%d", s_netPage + 1, pages);
-        Button(dc, 728, 68, 56, 96, NULL, s_netPage ? B_N : B_DIS, IC_UP, 18, 30, A_NRPAGE, -1);
-        T(dc, 756, 236, p, 15, kMuted, 600, AL_MID);
-        Button(dc, 728, 294, 56, 96, NULL, s_netPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 30, A_NRPAGE, 1);
+    int m = NetScrollMax();
+    if (m > 0) {
+        Button(dc, 728, 68, 56, 96, NULL, s_netScroll > 0 ? B_N : B_DIS, IC_UP, 18, 30, A_NRPAGE, -1);
+        int view = kNetBottom - kNetTop, content = m + view, track = 114;   // the scroll bar between the buttons
+        int th = track * view / content, ty = 172 + (track - th) * s_netScroll / m;
+        th = th < 16 ? 16 : th;
+        ty = ty + th > 172 + track ? 172 + track - th : ty;
+        R(dc, 753, 172, 6, track, 3, kLine);
+        R(dc, 753, ty, 6, th, 3, kMuted);
+        Button(dc, 728, 294, 56, 96, NULL, s_netScroll < m ? B_N : B_DIS, IC_DOWN, 18, 30, A_NRPAGE, 1);
     }
     Dock(dc);
     IconBtn(dc, IC_RADIO, 600, 417, 44, kText, A_BACK);
     IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_SOUND);
 }
 
-static void NetPage(int dir)
+static void NetPage(int dir)   // the buttons: kNetRows rows up / down
 {
-    int pages = (s_netCount + kNetRows - 1) / kNetRows;
-    s_netPage += dir;
-    s_netPage = s_netPage < 0 ? 0 : s_netPage >= pages ? (pages > 0 ? pages - 1 : 0) : s_netPage;
+    NetScrollTo(s_netScroll + dir * kNetRows * kNetPitch);
 }
 
 // ---- video (Media -> Video): a browser of the volumes' video files, then the player (video.cpp: the shell's
@@ -8570,10 +8678,17 @@ static void WMedia(HDC dc, int x, int y)
         int k = len > 0 ? (int)(pos * 352 / len) : 0;
         R(dc, tx, y + 106, 352, 6, 3, d ? kInk : kLine);
         R(dc, tx, y + 106, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
-    } else {
-        T(dc, tx, y + 70, L"Ничего не играет", 26, fg, 700, AL_START, 352);
-        TWrap(dc, tx, y + 94, s_cfg.musicFile[0] ? s_cfg.musicFile : L"выберите музыку в «Медиа»", 16, mg, 400,
-              352, 1, 0);
+    } else {   // nothing loaded: the last track (dim) to go on with, or a dash
+        wchar_t last[MAX_PATH];
+        const wchar_t* fn = wcsrchr(s_cfg.musicFile, L'\\');
+        wcscpy(last, fn ? fn + 1 : s_cfg.musicFile);
+        wchar_t* dot = wcsrchr(last, L'.');
+        if (dot)
+            *dot = 0;
+        T(dc, tx, y + 70, last[0] ? last : L"—", 26, last[0] ? mg : fg, 700, AL_START, 352);
+        TWrap(dc, tx, y + 94, last[0] ? L"последний трек · ▶ — продолжить" : L"выберите музыку в «Медиа»", 16, mg,
+              400, 352, 1, 0);
+        R(dc, tx, y + 106, 352, 6, 3, d ? kInk : kLine);
     }
     IconBtn(dc, IC_PREV, tx + 60, y + 122, 28, fg, A_PREVTRK);
     PlayBtn(dc, tx + 176, y + 136, 20, 22);
@@ -8631,7 +8746,8 @@ static void WRadio(HDC dc, int x, int y)
     bool d = Widget(dc, x, y, 248, 158, t.f10 > 0 && t.f10 < 8750 ? L"РАДИО · УКВ" : L"РАДИО · FM", IC_RADIO, A_NAV,
                     S_RADIO);
     T(dc, x + 16, y + 88, f, 44, d ? kInk : t.f10 ? kText : kDim, 700);
-    TWrap(dc, x + 16, y + 114, t.ps, 17, d ? kInk : kMuted, 600, 216, 1, 0);
+    // RDS's name, else the one known for the frequency
+    TWrap(dc, x + 16, y + 114, t.ps[0] ? t.ps : RadioName(t, t.f10), 17, d ? kInk : kMuted, 600, 216, 1, 0);
     if (t.presets > 0 && t.cur >= 0) {
         int page = t.cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
         IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_PRESET, page + (t.cur - page + per - 1) % per);
@@ -8863,6 +8979,524 @@ static void WNavi(HDC dc, int x, int y)
           d ? kInk : kDim, 400, 216, 1, 0);
 }
 
+// ---- the user's widgets: VestaWidgets\*.ini on the SD card (the PC: next to the exe), one a widget:
+// (and the HTTPS that VestaHome lends them: url= every= save=, value.from= ... - see UserWgFetch)
+//     title=FUEL  icon=car  wide=0  data=fuel.txt  refresh=10  start=fuel.mscr  tap=fuel.mscr
+// data (default <name>.txt beside the ini) is written by a script (MortScript); VestaHome reads it every refresh
+// seconds when its time changed:  value=7,4  unit=л/100 км  text=...  text2=...  state=ok|warn|alert
+// start= runs once when VestaHome starts (a script that keeps the data fresh), tap= on a tap; .mscr through
+// MortScript.exe, .exe as it is; a relative path is from the ini's folder. UTF-8 or cp1251 (MortScript writes
+// ANSI). A broken file can't harm VestaHome: unknown lines are skipped, no file - "no data".
+static const struct { const wchar_t* name; Icon ic; } kIconNames[] = {
+    { L"music", IC_MUSIC }, { L"radio", IC_RADIO }, { L"phone", IC_PHONE }, { L"gear", IC_GEAR },
+    { L"home", IC_HOME }, { L"car", IC_CAR }, { L"cloud", IC_CLOUD }, { L"nav", IC_NAV }, { L"map", IC_MAP },
+    { L"sd", IC_SD }, { L"usb", IC_USB }, { L"wifi", IC_WIFI }, { L"bt", IC_BT }, { L"info", IC_INFO },
+    { L"clock", IC_CLOCK }, { L"photo", IC_PHOTO }, { L"video", IC_VIDEO }, { L"apps", IC_APPS },
+    { L"warn", IC_WARN }, { L"eye", IC_EYE }, { L"power", IC_POWER }, { L"folder", IC_FOLDER },
+    { L"tasks", IC_TASKS }, { L"star", IC_STAR }, { L"lock", IC_LOCK }, { L"file", IC_FILE } };
+
+static void UserWgDir(wchar_t* dir)
+{
+#ifdef UNDER_CE
+    wcscpy(dir, L"\\SDMemory\\VestaWidgets\\");
+#else
+    _snwprintf(dir, MAX_PATH, L"%sVestaWidgets\\", s_dir);
+#endif
+}
+
+static bool IsUtf8(const unsigned char* p, int n)
+{
+    for (int i = 0; i < n;) {
+        int k = p[i] < 0x80 ? 0 : (p[i] & 0xE0) == 0xC0 ? 1 : (p[i] & 0xF0) == 0xE0 ? 2 : (p[i] & 0xF8) == 0xF0 ? 3 : -1;
+        if (k < 0 || i + k >= n + (k ? 0 : 1))
+            return false;
+        for (int j = 1; j <= k; j++)
+            if ((p[i + j] & 0xC0) != 0x80)
+                return false;
+        i += k + 1;
+    }
+    return true;
+}
+
+// A key=value text file (UTF-8 with or without BOM, else cp1251) into wide text; NULL when missing. free() it.
+static wchar_t* ReadText(const wchar_t* path)
+{
+    DWORD size;
+    char* buf = ReadAll(path, &size);
+    if (!buf)
+        return NULL;
+    const unsigned char* b = (const unsigned char*)buf;
+    int n = (int)size, skip = 0;
+    if (n >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF)
+        skip = 3;
+    UINT cp = IsUtf8(b + skip, n - skip) ? CP_UTF8 : 1251;
+    wchar_t* w = (wchar_t*)malloc((n + 1) * sizeof(wchar_t));
+    if (w) {
+        int k = MultiByteToWideChar(cp, 0, buf + skip, n - skip, w, n);
+        if (k <= 0 && cp == 1251)
+            k = MultiByteToWideChar(CP_ACP, 0, buf + skip, n - skip, w, n);
+        w[k > 0 ? k : 0] = 0;
+    }
+    free(buf);
+    return w;
+}
+
+// The next "key=value" line of text (comments '#' / ';' and blank lines skipped); false at the end.
+static bool NextKeyVal(wchar_t** pos, wchar_t** k, wchar_t** v)
+{
+    while (**pos) {
+        wchar_t* line = *pos;
+        wchar_t* end = line;
+        while (*end && *end != L'\n' && *end != L'\r')
+            end++;
+        *pos = *end ? end + 1 : end;
+        *end = 0;
+        Trim(line);
+        if (!line[0] || line[0] == L'#' || line[0] == L';')
+            continue;
+        wchar_t* eq = wcschr(line, L'=');
+        if (!eq)
+            continue;
+        *eq = 0;
+        *k = line;
+        *v = eq + 1;
+        Trim(*k);
+        Trim(*v);
+        return true;
+    }
+    return false;
+}
+
+// A path of the widget's ini: as it is when absolute, else from the ini's folder.
+static void UserWgPath(const UserWg& w, const wchar_t* v, wchar_t* out)
+{
+    if (v[0] == L'\\' || (v[0] && v[1] == L':'))
+        wcsncpy(out, v, MAX_PATH - 1);
+    else
+        _snwprintf(out, MAX_PATH, L"%s%s", w.dir, v);
+    out[MAX_PATH - 1] = 0;
+}
+
+static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
+{
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%s%s", dir, file);
+    wchar_t* text = ReadText(path);
+    if (!text)
+        return false;
+    memset(w, 0, sizeof(*w));
+    wcsncpy(w->dir, dir, MAX_PATH - 1);
+    wchar_t name[40];
+    wcsncpy(name, file, 39);
+    name[39] = 0;
+    wchar_t* dot = wcsrchr(name, L'.');
+    if (dot)
+        *dot = 0;
+    _snwprintf(w->key, 40, L"u.%s", name);
+    for (wchar_t* c = w->key; *c; c++)   // the key goes into a comma list
+        if (*c == L',' || *c == L' ')
+            *c = L'_';
+    wcsncpy(w->title, name, 39);
+    w->ic = IC_INFO;
+    w->refresh = 10;
+    wchar_t dataName[MAX_PATH];
+    _snwprintf(dataName, MAX_PATH, L"%s.txt", name);
+    UserWgPath(*w, dataName, w->data);
+    wchar_t* pos = text;
+    wchar_t *k, *v;
+    while (NextKeyVal(&pos, &k, &v)) {
+        if (!_wcsicmp(k, L"title")) {
+            wcsncpy(w->title, v, 39);
+            w->title[39] = 0;
+        } else if (!_wcsicmp(k, L"icon")) {
+            for (int i = 0; i < (int)(sizeof(kIconNames) / sizeof(kIconNames[0])); i++)
+                if (!_wcsicmp(v, kIconNames[i].name))
+                    w->ic = kIconNames[i].ic;
+        } else if (!_wcsicmp(k, L"wide")) {
+            w->wide = CfgBool(v);
+        } else if (!_wcsicmp(k, L"data")) {
+            UserWgPath(*w, v, w->data);
+        } else if (!_wcsicmp(k, L"refresh")) {
+            w->refresh = _wtoi(v) < 1 ? 1 : _wtoi(v) > 3600 ? 3600 : _wtoi(v);
+        } else if (!_wcsicmp(k, L"tap")) {
+            if (v[0])
+                UserWgPath(*w, v, w->tap);
+        } else if (!_wcsicmp(k, L"start")) {
+            if (v[0])
+                UserWgPath(*w, v, w->start);
+        } else if (!_wcsicmp(k, L"url")) {
+            WideCharToMultiByte(CP_UTF8, 0, v, -1, w->url, sizeof(w->url), NULL, NULL);
+        } else if (!_wcsicmp(k, L"every")) {
+            w->every = _wtoi(v) < 60 ? 60 : _wtoi(v);   // not more often than once a minute
+        } else if (!_wcsicmp(k, L"save")) {
+            if (v[0])
+                UserWgPath(*w, v, w->resp);
+        } else {
+            static const wchar_t* fields[5] = { L"value", L"unit", L"text", L"text2", L"state" };
+            for (int i = 0; i < 5; i++) {
+                size_t n = wcslen(fields[i]);
+                if (!_wcsnicmp(k, fields[i], n) && !_wcsicmp(k + n, L".from")) {
+                    wcsncpy(w->from[i], v, 63);
+                    w->from[i][63] = 0;
+                } else if (!_wcsicmp(k, fields[i])) {
+                    wcsncpy(w->fixed[i], v, 95);
+                    w->fixed[i][95] = 0;
+                }
+            }
+        }
+    }
+    if (w->url[0]) {
+        if (!w->every)
+            w->every = 600;
+        if (!w->resp[0]) {
+            wchar_t respName[MAX_PATH];
+            _snwprintf(respName, MAX_PATH, L"%s.resp", name);
+            UserWgPath(*w, respName, w->resp);
+        }
+    }
+    CharUpperBuff(w->title, (DWORD)wcslen(w->title));
+    free(text);
+    return true;
+}
+
+// The data file, when its write time changed; true: something to draw anew.
+static bool UserWgRead(UserWg& w)
+{
+    WIN32_FIND_DATA fd;
+    HANDLE f = FindFirstFile(w.data, &fd);
+    if (f == INVALID_HANDLE_VALUE) {
+        bool was = w.have;
+        w.have = false;
+        return was;
+    }
+    FindClose(f);
+    if (w.have && !CompareFileTime(&fd.ftLastWriteTime, &w.dataTime))
+        return false;
+    wchar_t* text = ReadText(w.data);
+    if (!text)
+        return false;
+    w.dataTime = fd.ftLastWriteTime;
+    w.have = true;
+    w.value[0] = w.unit[0] = w.text[0][0] = w.text[1][0] = 0;
+    w.state = 0;
+    wchar_t* pos = text;
+    wchar_t *k, *v;
+    while (NextKeyVal(&pos, &k, &v)) {
+        if (!_wcsicmp(k, L"value"))
+            wcsncpy(w.value, v, 23);
+        else if (!_wcsicmp(k, L"unit"))
+            wcsncpy(w.unit, v, 23);
+        else if (!_wcsicmp(k, L"text"))
+            wcsncpy(w.text[0], v, 95);
+        else if (!_wcsicmp(k, L"text2"))
+            wcsncpy(w.text[1], v, 95);
+        else if (!_wcsicmp(k, L"state"))
+            w.state = !_wcsicmp(v, L"ok") ? 1 : !_wcsicmp(v, L"warn") ? 2 : !_wcsicmp(v, L"alert") ? 3 : 0;
+    }
+    w.value[23] = w.unit[23] = w.text[0][95] = w.text[1][95] = 0;
+    free(text);
+    return true;
+}
+
+// Runs a widget's command: a .mscr through MortScript.exe (looked for beside the widget, on the card, next to
+// VestaHome, in the usual folders), anything else as a program.
+static void UserWgRun(const UserWg& w, const wchar_t* cmd, const wchar_t* why)
+{
+    wchar_t exe[MAX_PATH], args[MAX_PATH + 4];
+    const wchar_t* dot = wcsrchr(cmd, L'.');
+    if (dot && !_wcsicmp(dot, L".mscr")) {
+        wchar_t cand[7][MAX_PATH];
+        _snwprintf(cand[0], MAX_PATH, L"%sMortScript.exe", w.dir);
+        wcscpy(cand[1], L"\\SDMemory\\MortScript\\MortScript.exe");
+        wcscpy(cand[2], L"\\SDMemory\\MortScript.exe");
+        _snwprintf(cand[3], MAX_PATH, L"%sMortScript.exe", s_dir);
+        wcscpy(cand[4], L"\\SDMMC\\MortScript\\MortScript.exe");
+        wcscpy(cand[5], L"\\StorageFlash\\MortScript\\MortScript.exe");
+        wcscpy(cand[6], L"\\ResidentFlash\\MortScript\\MortScript.exe");
+        exe[0] = 0;
+        for (int i = 0; i < 7 && !exe[0]; i++)
+            if (GetFileAttributes(cand[i]) != 0xFFFFFFFF)
+                wcscpy(exe, cand[i]);
+        if (!exe[0]) {
+            VLog(L"виджет %s: %s - нет MortScript.exe (рядом с виджетом, \\SDMemory\\MortScript\\)", w.key, why);
+            return;
+        }
+        _snwprintf(args, MAX_PATH + 4, L"\"%s\"", cmd);
+    } else {
+        wcsncpy(exe, cmd, MAX_PATH - 1);
+        exe[MAX_PATH - 1] = 0;
+        args[0] = 0;
+    }
+    PROCESS_INFORMATION pi;
+#ifdef UNDER_CE
+    BOOL ok = CreateProcess(exe, args[0] ? args : NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+#else
+    STARTUPINFO si;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    wchar_t line[2 * MAX_PATH + 8];
+    _snwprintf(line, 2 * MAX_PATH + 8, L"\"%s\" %s", exe, args);
+    BOOL ok = CreateProcess(exe, line, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+#endif
+    VLog(L"виджет %s: %s - %s %s", w.key, why, cmd, ok ? L"запущен" : L"не запустился");
+    if (ok) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+}
+
+// ---- HTTPS for the widgets: a widget with url= is fetched by VestaHome every every= seconds (one at a time, in a
+// thread of its own; at most 256 KB, 60 s at least between two of the same widget). The answer goes to resp
+// (for a script), and when the widget asks for fields (value.from= "start|end" ...) VestaHome takes them out and
+// writes the data file itself - no script needed. A failure keeps the last data and goes to the log.
+#define WM_APP_UWG (WM_APP + 26)
+enum { kUwgMaxBody = 256 * 1024 };
+static CRITICAL_SECTION s_uwCs;   // s_uw between the scan (the window) and the fetch thread
+static HANDLE s_uwThread;
+
+static void WriteUtf8(const wchar_t* path, const wchar_t* text)
+{
+    int n = WideCharToMultiByte(CP_UTF8, 0, text, -1, NULL, 0, NULL, NULL);
+    char* b = (char*)malloc(n > 0 ? n : 1);
+    if (!b)
+        return;
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, b, n, NULL, NULL);
+    HANDLE f = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD w;
+        WriteFile(f, b, n > 0 ? n - 1 : 0, &w, NULL);
+        CloseHandle(f);
+    }
+    free(b);
+}
+
+// The text between the markers "start|end" of rule in body (the first match), entities &amp; &lt; &gt; &quot;
+// &apos; decoded, trimmed; false: not found.
+static bool TakeBetween(const wchar_t* body, const wchar_t* rule, wchar_t* out, int cap)
+{
+    const wchar_t* bar = wcschr(rule, L'|');
+    if (!bar)
+        return false;
+    wchar_t a[64], b[64];
+    int la = (int)(bar - rule);
+    wcsncpy(a, rule, la);
+    a[la] = 0;
+    wcsncpy(b, bar + 1, 63);
+    b[63] = 0;
+    const wchar_t* p = a[0] ? wcsstr(body, a) : body;
+    if (!p)
+        return false;
+    p += la;
+    const wchar_t* e = b[0] ? wcsstr(p, b) : p + wcslen(p);
+    if (!e)
+        return false;
+    int n = 0;
+    for (const wchar_t* q = p; q < e && n < cap - 1; q++) {
+        static const struct { const wchar_t* ent; wchar_t c; } ents[5] = {
+            { L"&amp;", L'&' }, { L"&lt;", L'<' }, { L"&gt;", L'>' }, { L"&quot;", L'"' }, { L"&apos;", L'\'' } };
+        bool done = false;
+        for (int i = 0; i < 5 && !done; i++)
+            if (!wcsncmp(q, ents[i].ent, wcslen(ents[i].ent))) {
+                out[n++] = ents[i].c;
+                q += wcslen(ents[i].ent) - 1;
+                done = true;
+            }
+        if (!done)
+            out[n++] = *q == L'\r' || *q == L'\n' || *q == L'\t' ? L' ' : *q;
+    }
+    out[n] = 0;
+    Trim(out);
+    return true;
+}
+
+struct UwgJob { wchar_t key[40], resp[MAX_PATH], data[MAX_PATH], from[5][64], fixed[5][96]; char url[512]; };
+
+static void UserWgFetchOne(const UwgJob& j)
+{
+    const char* u = j.url;
+    bool tls = !_strnicmp(u, "https://", 8);
+    if (!tls && _strnicmp(u, "http://", 7)) {
+        VLog(L"виджет %s: url не http:// и не https://", j.key);
+        return;
+    }
+    u += tls ? 8 : 7;
+    char host[128];
+    const char* slash = strchr(u, '/');
+    int hl = slash ? (int)(slash - u) : (int)strlen(u);
+    if (hl <= 0 || hl >= (int)sizeof(host))
+        return;
+    memcpy(host, u, hl);
+    host[hl] = 0;
+    const char* path = slash ? slash : "/";
+    DWORD t0 = GetTickCount();
+    unsigned char* body = NULL;
+    int len = 0, status = 0;
+    int r = HttpGet(host, tls, path, "User-Agent: Mozilla/5.0 (VestaHome)\r\n", &body, &len, &status);
+    if (r != NET_OK || status != 200 || !body) {
+        VLog(L"виджет %s: загрузка %S - %s", j.key, host, r != NET_OK ? NetErrorText(r) : L"ответ не 200");
+        if (r == NET_OK)
+            VLog(L"виджет %s: HTTP %d", j.key, status);
+        free(body);
+        return;
+    }
+    if (len > kUwgMaxBody) {
+        VLog(L"виджет %s: ответ %d байт - больше 256 КБ, отброшен", j.key, len);
+        free(body);
+        return;
+    }
+    HANDLE f = CreateFile(j.resp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);   // the raw answer for a script
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD w;
+        WriteFile(f, body, len, &w, NULL);
+        CloseHandle(f);
+    }
+    bool rules = false;
+    for (int i = 0; i < 5; i++)
+        rules = rules || j.from[i][0];
+    if (rules) {   // the fields taken out: the data file
+        UINT cp = IsUtf8(body, len) ? CP_UTF8 : 1251;
+        wchar_t* w = (wchar_t*)malloc((len + 1) * sizeof(wchar_t));
+        if (w) {
+            int k = MultiByteToWideChar(cp, 0, (const char*)body, len, w, len);
+            w[k > 0 ? k : 0] = 0;
+            static const wchar_t* keys[5] = { L"value", L"unit", L"text", L"text2", L"state" };
+            wchar_t data[1024] = L"# written by VestaHome from the widget's url\r\n", got[96], line[256];
+            for (int i = 0; i < 5; i++) {
+                bool have = j.from[i][0] && TakeBetween(w, j.from[i], got, 96);
+                if (i == 4 && have)   // Yandex's colours
+                    wcscpy(got, !_wcsicmp(got, L"green") ? L"ok" : !_wcsicmp(got, L"yellow") ? L"warn"
+                                : !_wcsicmp(got, L"red") ? L"alert" : got);
+                if (j.fixed[i][0] && wcsstr(j.fixed[i], L"%s"))
+                    _snwprintf(line, 256, j.fixed[i], have ? got : L"—");
+                else if (have)
+                    wcscpy(line, got);
+                else
+                    wcsncpy(line, j.fixed[i], 255);
+                line[255] = 0;
+                if (line[0] && wcslen(data) + wcslen(keys[i]) + wcslen(line) + 4 < 1024) {
+                    wcscat(data, keys[i]);
+                    wcscat(data, L"=");
+                    wcscat(data, line);
+                    wcscat(data, L"\r\n");
+                }
+            }
+            WriteUtf8(j.data, data);
+            free(w);
+        }
+    }
+    VLog(L"виджет %s: загрузка %S - %d байт за %u мс", j.key, host, len, (unsigned)(GetTickCount() - t0));
+    free(body);
+}
+
+static DWORD WINAPI UserWgThread(LPVOID)
+{
+    for (;;) {
+        Sleep(1000);
+        UwgJob j;
+        bool due = false;
+        EnterCriticalSection(&s_uwCs);
+        for (int i = 0; i < s_uwCount && !due; i++) {
+            UserWg& w = s_uw[i];
+            if (!w.url[0] || (w.fetchTick && GetTickCount() - w.fetchTick < (DWORD)w.every * 1000))
+                continue;
+            w.fetchTick = GetTickCount();
+            if (!w.fetchTick)
+                w.fetchTick = 1;
+            wcscpy(j.key, w.key);
+            wcscpy(j.resp, w.resp);
+            wcscpy(j.data, w.data);
+            memcpy(j.from, w.from, sizeof(j.from));
+            memcpy(j.fixed, w.fixed, sizeof(j.fixed));
+            strcpy(j.url, w.url);
+            due = true;
+        }
+        LeaveCriticalSection(&s_uwCs);
+        if (due) {
+            UserWgFetchOne(j);
+            PostMessage(s_wnd, WM_APP_UWG, 0, 0);
+        }
+    }
+    return 0;
+}
+
+static int CmpUserWg(const void* a, const void* b) { return wcscmp(((const UserWg*)a)->key, ((const UserWg*)b)->key); }
+
+// The widgets' folder read (at the start and when a card comes or goes); a widget seen the first time since
+// VestaHome started runs its start= script. The main screen's order is applied again with them.
+static void UserWidgetsScan()
+{
+    static wchar_t s_started[32][40];
+    static int s_startedCount;
+    wchar_t dir[MAX_PATH], pat[MAX_PATH];
+    UserWgDir(dir);
+    _snwprintf(pat, MAX_PATH, L"%s*.ini", dir);
+    if (!s_uwThread)
+        InitializeCriticalSection(&s_uwCs);
+    EnterCriticalSection(&s_uwCs);
+    s_uwCount = 0;
+    WIN32_FIND_DATA fd;
+    HANDLE f = FindFirstFile(pat, &fd);
+    if (f != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && UserWgLoad(dir, fd.cFileName, &s_uw[s_uwCount]))
+                s_uwCount++;
+        } while (s_uwCount < kWgUser && FindNextFile(f, &fd));
+        FindClose(f);
+    }
+    qsort(s_uw, s_uwCount, sizeof(UserWg), CmpUserWg);
+    bool net = false;
+    for (int i = 0; i < s_uwCount; i++)
+        net = net || s_uw[i].url[0];
+    LeaveCriticalSection(&s_uwCs);
+    if (net && !s_uwThread)
+        s_uwThread = CreateThread(NULL, 0, UserWgThread, NULL, 0, NULL);
+    for (int i = 0; i < s_uwCount; i++) {
+        UserWg& w = s_uw[i];
+        UserWgRead(w);
+        bool started = false;
+        for (int k = 0; k < s_startedCount && !started; k++)
+            started = !wcscmp(s_started[k], w.key);
+        if (!started && w.start[0]) {
+            UserWgRun(w, w.start, L"start");
+            if (s_startedCount < 32)
+                wcscpy(s_started[s_startedCount++], w.key);
+        }
+    }
+    if (s_uwCount)
+        VLog(L"виджеты пользователя: %d (%s)", s_uwCount, dir);
+    HomeWidgetsLoad(s_cfg.homeRaw);
+}
+
+static void WUser(HDC dc, int x, int y, int u)
+{
+    const UserWg& w = s_uw[u];
+    int ww = w.wide ? kWgW2 : kWgW;
+    bool d = Widget(dc, x, y, ww, kWgH, w.title, w.ic, w.tap[0] ? A_USERWG : A_NONE, u);
+    COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
+    if (w.state) {
+        static const COLORREF dot[4] = { 0, kOk, kOrange, kStop };
+        Disc(dc, x + ww - 24, y + 21, 7, d ? kInk : dot[w.state]);
+    }
+    if (!w.have) {
+        T(dc, x + 16, y + 84, L"Нет данных", 22, fg, 700, AL_START, ww - 32);
+        const wchar_t* fn = wcsrchr(w.data, L'\\');
+        wchar_t s[MAX_PATH + 32];
+        _snwprintf(s, MAX_PATH + 32, L"скрипт ещё не записал %s", fn ? fn + 1 : w.data);
+        TWrap(dc, x + 16, y + 108, s, 14, mg, 400, ww - 32, 3, 18);
+        return;
+    }
+    if (w.value[0]) {
+        int end = T(dc, x + 16, y + 96, w.value, 44, fg, 700, AL_START, ww - 32);
+        if (w.unit[0] && end + 8 < x + ww - 16)
+            T(dc, end + 8, y + 96, w.unit, 18, mg, 600, AL_START, x + ww - 16 - end - 8);
+        TWrap(dc, x + 16, y + 124, w.text[0], 15, mg, 400, ww - 32, 1, 0);
+        TWrap(dc, x + 16, y + 146, w.text[1], 14, d ? kInk : kDim, 400, ww - 32, 1, 0);
+    } else {
+        int n = TWrap(dc, x + 16, y + 80, w.text[0], 19, fg, 700, ww - 32, 2, 24);
+        TWrap(dc, x + 16, y + 80 + n * 24 + 8, w.text[1], 15, mg, 400, ww - 32, 2, 19);
+    }
+}
+
 struct WidgetDef { const wchar_t* name; bool wide; Icon ic; void (*draw)(HDC dc, int x, int y); };
 static const WidgetDef kWidgets[WG_COUNT] = {
     { L"Сейчас играет", true, IC_MUSIC, WMedia }, { L"Скорость", false, IC_NAV, WSpeed },
@@ -8871,6 +9505,18 @@ static const WidgetDef kWidgets[WG_COUNT] = {
     { L"Климат", false, IC_CAR, WClimate }, { L"Календарь", false, IC_CLOCK, WDate },
     { L"Телефон", false, IC_PHONE, WPhone }, { L"Автомобиль", false, IC_CAR, WCar },
     { L"Навигация", false, IC_NAV, WNavi } };
+
+// A widget by its id (built-in or the user's): the only way to it for the layout, the settings and the screen.
+static const wchar_t* WgName(int id) { return id < WG_COUNT ? kWidgets[id].name : s_uw[id - WG_COUNT].title; }
+static bool WgWide(int id) { return id < WG_COUNT ? kWidgets[id].wide : s_uw[id - WG_COUNT].wide; }
+static Icon WgIcon(int id) { return id < WG_COUNT ? kWidgets[id].ic : s_uw[id - WG_COUNT].ic; }
+static void WgDraw(int id, HDC dc, int x, int y)
+{
+    if (id < WG_COUNT)
+        kWidgets[id].draw(dc, x, y);
+    else
+        WUser(dc, x, y, id - WG_COUNT);
+}
 
 // Shown: not hidden, and the climate only when the car has it (Settings -> Car).
 static bool WgShown(int id)
@@ -8886,12 +9532,12 @@ static int HomeLayout(WgPlace* at)
     bool used[kWgPages][6];
     memset(used, 0, sizeof(used));
     int pages = 1;
-    for (int i = 0; i < WG_COUNT; i++) {
+    for (int i = 0; i < WgCount(); i++) {
         int id = s_cfg.homeOrder[i];
         at[id].page = -1;
         if (!WgShown(id))
             continue;
-        bool wide = kWidgets[id].wide;
+        bool wide = WgWide(id);
         for (int k = 0; k < kWgPages * 6 && at[id].page < 0; k++) {
             int pg = k / 6, c = k % 6;
             if (used[pg][c] || (wide && (c % 3 == 2 || used[pg][c + 1])))
@@ -8911,20 +9557,20 @@ static int HomeLayout(WgPlace* at)
 
 static int HomePages()
 {
-    WgPlace at[WG_COUNT];
+    WgPlace at[kWgMax];
     return HomeLayout(at);
 }
 
 // A widget's rectangle when it is on the page shown (for its own redraws).
 static bool HomeRect(int id, RECT* rc)
 {
-    WgPlace at[WG_COUNT];
+    WgPlace at[kWgMax];
     HomeLayout(at);
     if (at[id].page != s_homePage)
         return false;
     rc->left = at[id].x;
     rc->top = at[id].y;
-    rc->right = at[id].x + (kWidgets[id].wide ? kWgW2 : kWgW);
+    rc->right = at[id].x + (WgWide(id) ? kWgW2 : kWgW);
     rc->bottom = at[id].y + kWgH;
     return true;
 }
@@ -8938,44 +9584,62 @@ static void DrawHome(HDC dc)
     _snwprintf(s, 48, L"%s, %d %s", kDays[t.wDayOfWeek % 7], t.wDay, kMonths[(t.wMonth + 11) % 12]);
     CharUpperBuff(s, 1);
     Frame(dc, s);
-    WgPlace at[WG_COUNT];
+    WgPlace at[kWgMax];
     int pages = HomeLayout(at);
     if (s_homePage >= pages)
         s_homePage = pages - 1;
-    for (int id = 0; id < WG_COUNT; id++)
+    for (int id = 0; id < WgCount(); id++)
         if (at[id].page == s_homePage)
-            kWidgets[id].draw(dc, at[id].x, at[id].y);
+            WgDraw(id, dc, at[id].x, at[id].y);
     bool any = false;
-    for (int id = 0; id < WG_COUNT; id++)
+    for (int id = 0; id < WgCount(); id++)
         any = any || at[id].page >= 0;
     if (!any)
         T(dc, 400, 230, L"Все виджеты скрыты: «Настройки → Общие → Виджеты главной»", 16, kMuted, 400, AL_MID, 740);
     PageDots(dc, s_homePage, pages);
 }
 
-// Settings -> General -> the main screen's widgets: in their order (down the left column, then the right), each
-// with "show" (the eye) and up / down (earlier / later).
+// Settings -> General -> the main screen's widgets: in their order (down the left column, then the right, 12 a
+// page), each with "show" (the eye) and up / down (earlier / later); the user's widgets with their file.
+static int s_setHomePage;
+
 static void ScrSetHome(HDC dc)
 {
+    int pages = (WgCount() + 11) / 12;
+    s_setHomePage = s_setHomePage >= pages ? pages - 1 : s_setHomePage;
     Frame(dc, L"ГЛАВНАЯ · ВИДЖЕТЫ");
     Panel(dc, 16, 64, 768, 336);
-    for (int i = 0; i < WG_COUNT; i++) {
-        int id = s_cfg.homeOrder[i], x = 24 + i / 6 * 380, y = 70 + i % 6 * 54;
+    for (int i = s_setHomePage * 12; i < WgCount() && i < s_setHomePage * 12 + 12; i++) {
+        int id = s_cfg.homeOrder[i], j = i % 12, x = 24 + j / 6 * 380, y = 70 + j % 6 * 54;
         bool shown = !(s_cfg.homeHidden >> id & 1);
-        if (i % 6)
+        if (j % 6)
             Sep(dc, x, y - 2, 368);
-        Ico(dc, kWidgets[id].ic, x + 8, y + 12, 26, shown ? kOrange : kDim);
-        const wchar_t* sub = kWidgets[id].wide ? L"двойной" : NULL;
+        Ico(dc, WgIcon(id), x + 8, y + 12, 26, shown ? kOrange : kDim);
+        const wchar_t* sub = WgWide(id) ? L"двойной" : NULL;
+        wchar_t usub[48];
+        if (id >= WG_COUNT) {
+            _snwprintf(usub, 48, L"свой · %s.ini%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");
+            sub = usub;
+        }
         if (id == WG_CLIMATE && !s_cfg.climate)
             sub = L"нет в машине (Настройки → Автомобиль)";
-        T(dc, x + 46, y + (sub ? 24 : 33), kWidgets[id].name, 18, shown ? kText : kDim, 700, AL_START, 172);
+        T(dc, x + 46, y + (sub ? 24 : 33), WgName(id), 18, shown ? kText : kDim, 700, AL_START, 172);
         if (sub)
             T(dc, x + 46, y + 43, sub, 13, kMuted, 400, AL_START, 172);
         Button(dc, x + 222, y + 7, 44, 40, NULL, i ? B_N : B_DIS, IC_UP, 15, 24, A_WGMOVE, id * 2);
-        Button(dc, x + 270, y + 7, 44, 40, NULL, i < WG_COUNT - 1 ? B_N : B_DIS, IC_DOWN, 15, 24, A_WGMOVE, id * 2 + 1);
+        Button(dc, x + 270, y + 7, 44, 40, NULL, i < WgCount() - 1 ? B_N : B_DIS, IC_DOWN, 15, 24, A_WGMOVE,
+               id * 2 + 1);
         Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, IC_EYE, 15, 24, A_WGVIS, id);
     }
-    T(dc, 412, 390, L"вверх / вниз — раньше / позже; следующие занимают место скрытых", 13, kDim, 400, AL_START, 360);
+    T(dc, 24, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
+                   L"\\SDMemory\\VestaWidgets\\*.ini", 13, kDim, 400, AL_START, 560);
+    if (pages > 1) {
+        wchar_t pg[16];
+        _snwprintf(pg, 16, L"%d / %d", s_setHomePage + 1, pages);
+        Button(dc, 600, 412, 56, 52, NULL, s_setHomePage ? B_N : B_DIS, IC_BACK, 15, 26, A_SHPAGE, -1);
+        T(dc, 692, 444, pg, 15, kMuted, 600, AL_MID);
+        Button(dc, 728, 412, 56, 52, NULL, s_setHomePage + 1 < pages ? B_N : B_DIS, IC_NEXT, 15, 26, A_SHPAGE, 1);
+    }
 }
 
 // The car's systems and the trip, opened from the widgets.
@@ -9377,7 +10041,89 @@ static void ScrInfoMore(HDC dc)
         T(dc, 488, y + 18, right[i][0], 13, kMuted, 400);
         T(dc, 488, y + 37, right[i][1], 15, kText, 700, AL_START, 284);
     }
-    T(dc, 488, 412 + 22, L"Weather data by Open-Meteo.com (CC BY 4.0)", 12, kDim, 400, AL_START, 288);
+    Button(dc, 488, 412, 280, 44, L"ЛИЦЕНЗИИ И СЕРВИСЫ", B_N, IC_INFO, 13, 22, A_SCREEN, S_LICENSES);
+}
+
+// "Details -> Licenses and services": what VestaHome brings that the unit's firmware doesn't have - the libraries
+// and their licenses - and the internet services it uses (Open-Meteo's CC BY 4.0 credit among them). A window
+// over the screen; the text scrolls with the finger or the arrows.
+struct LicItem { const wchar_t* title; const wchar_t* text; };
+static const LicItem kLicenses[] = {
+    { L"БИБЛИОТЕКИ (В СОСТАВЕ VESTAHOME)", NULL },
+    { L"BearSSL 0.6", L"Thomas Pornin · лицензия MIT · bearssl.org. HTTPS: погода Яндекса, база камер." },
+    { L"Корневые сертификаты Mozilla", L"Mozilla CA Certificate Store · MPL 2.0. Проверка серверов HTTPS "
+                                      L"(часть сертификатов, встроена в программу)." },
+    { L"stb_image 2.30", L"Sean Barrett · public domain (или MIT) · github.com/nothings/stb. Значки скина PNG, "
+                         L"фото PNG, BMP и прогрессивные JPEG." },
+    { L"TJpgDec R0.03", L"ChaN · свободная лицензия (с сохранением уведомления об авторстве) · elm-chan.org. "
+                        L"Фото JPEG: уменьшение при чтении." },
+    { L"BASS 2.4.17 (Windows CE)", L"Un4seen Developments · бесплатно для некоммерческого использования · "
+                                   L"un4seen.com. Музыка и интернет-радио." },
+    { L"BASSFLAC 2.4.4, BASSALAC 2.4, BASSOPUS 2.4.2, BASSWV 2.4.7", L"Un4seen Developments · дополнения к BASS. "
+                                                                    L"FLAC, Apple Lossless, Opus, WavPack." },
+    { L"BASS_AAC 2.4.5, BASS_MPC 2.4.1.3", L"MaresWEB · дополнения к BASS. AAC и M4A, Musepack." },
+    { L"tags.dll (18)", L"Дополнение к BASS. Названия, исполнители и альбомы из тегов треков." },
+    { L"СЕРВИСЫ", NULL },
+    { L"Open-Meteo.com", L"Weather data by Open-Meteo.com, CC BY 4.0. Погода по умолчанию, без ключа." },
+    { L"OpenWeatherMap", L"openweathermap.org. Погода, если выбрана и задан свой ключ." },
+    { L"Яндекс Погода", L"yandex.ru/pogoda. Погода, если выбрана и задан свой ключ (тариф «погода для умного "
+                        L"дома», до 30 запросов в день)." },
+    { L"speedcamonline.ru", L"База камер скорости: скачивается по кнопке в настройках камер." },
+    { L"Интернет-радио", L"Потоки станций из radio.txt принадлежат самим станциям." },
+    { L"Свои виджеты", L"Загружают адреса из своих .ini (url=) через HTTPS VestaHome; данные принадлежат их источникам. "
+                       L"Пример probki.ini - баллы Яндекс Пробок (неофициальный адрес export.yandex.ru)." },
+    { L"ИЗ ПРОШИВКИ ГУ (НЕ ВХОДИТ В VESTAHOME)", NULL },
+    { NULL, L"Видео — GStreamer штатного плеера; Bluetooth — стек FLC оболочки; радио, звук и кнопки — MCU через "
+            L"SPIPowerMgr; шрифт Tahoma; Windows CE 6." },
+};
+enum { kLicTop = 104, kLicBottom = 420 };
+static int s_licScroll, s_licHeight;   // the text scrolled by / its height (known after a frame)
+
+static int LicScrollMax()
+{
+    int view = kLicBottom - kLicTop;
+    return s_licHeight > view ? s_licHeight - view : 0;
+}
+
+static void ScrLicenses(HDC dc)
+{
+    Under(dc, 153);
+    Zone(0, 0, 800, 480, A_BACK);   // a tap beside the window closes it
+    Zone(40, 40, 720, 400, A_NONE);
+    Panel(dc, 40, 40, 720, 400, 16);
+    T(dc, 64, 82, L"ЛИЦЕНЗИИ И СЕРВИСЫ", 17, kText, 700);
+    Button(dc, 696, 52, 52, 44, NULL, B_N, IC_CLOSE, 15, 24, A_BACK);
+    Sep(dc, 56, kLicTop - 6, 688);
+    s_licScroll = s_licScroll < 0 ? 0 : s_licScroll > LicScrollMax() ? LicScrollMax() : s_licScroll;
+    int saved = SaveDC(dc);
+    IntersectClipRect(dc, 56, kLicTop, 704, kLicBottom);
+    int y = kLicTop + 8 - s_licScroll;
+    for (int i = 0; i < (int)(sizeof(kLicenses) / sizeof(kLicenses[0])); i++) {
+        const LicItem& it = kLicenses[i];
+        if (!it.text) {   // a section's heading
+            y += i ? 14 : 0;
+            T(dc, 64, y + 14, it.title, 13, kOrange, 700);
+            y += 24;
+            continue;
+        }
+        if (it.title) {
+            T(dc, 64, y + 18, it.title, 17, kText, 700, AL_START, 620);
+            y += 24;
+        }
+        y += TWrap(dc, 64, y + 16, it.text, 14, kMuted, 400, 620, 6, 19) * 19 + 8;
+    }
+    s_licHeight = y + s_licScroll - kLicTop;
+    RestoreDC(dc, saved);
+    if (LicScrollMax() > 0) {   // the arrows and the bar
+        int m = LicScrollMax(), view = kLicBottom - kLicTop;
+        Button(dc, 712, kLicTop, 40, 60, NULL, s_licScroll > 0 ? B_N : B_DIS, IC_UP, 14, 22, A_LICSCROLL, -1);
+        Button(dc, 712, kLicBottom - 60, 40, 60, NULL, s_licScroll < m ? B_N : B_DIS, IC_DOWN, 14, 22, A_LICSCROLL,
+               1);
+        int track = view - 136, th = track * view / s_licHeight, ty = kLicTop + 68 + (track - th) * s_licScroll / m;
+        th = th < 16 ? 16 : th;
+        R(dc, 729, kLicTop + 68, 6, track, 3, kLine);
+        R(dc, 729, ty, 6, th, 3, kMuted);
+    }
 }
 
 // "Request": product info and the BT address, as the stock "Info" asks for them (FUN_00679190); the answers come
@@ -9756,6 +10502,9 @@ static void CfgToControls()
     s_on[T_WIFI] = s_cfg.wifiOn;
     s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
     s_on[T_WIFI_HOLD] = s_cfg.wifiHold;
+    s_on[T_SLIDES_OPEN] = s_cfg.photoSlides;
+    s_on[T_AUTOROTATE] = s_cfg.photoAutoRot;
+    s_seg[G_PHOTO_SCALE] = s_cfg.photoFill ? 1 : 0;
     s_seg[G_VIDEO_SCALE] = s_cfg.videoStretch ? 1 : 0;
     s_seg[G_WPROV] = s_cfg.weatherProv;
     s_seg[G_CAMDIST] = 0;
@@ -9768,7 +10517,7 @@ static bool IsCfgToggle(int id)
 {
     return id == T_GPS_TIME || id == T_W_GPS || id == T_CLIMATE || id == T_CAM_ALERT ||
            id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_RVC_OWN || id == T_WIFI ||
-           id == T_WIFI_AP_AUTO || id == T_WIFI_HOLD;
+           id == T_WIFI_AP_AUTO || id == T_WIFI_HOLD || id == T_SLIDES_OPEN || id == T_AUTOROTATE;
 }
 
 static void ControlsToCfg()
@@ -9785,6 +10534,8 @@ static void ControlsToCfg()
     }
     s_cfg.camWeekly = s_on[T_CAM_WEEKLY];
     s_cfg.videoMoving = s_on[T_VIDEO_MOVING];
+    s_cfg.photoSlides = s_on[T_SLIDES_OPEN];
+    s_cfg.photoAutoRot = s_on[T_AUTOROTATE];
     s_cfg.rvcOwn = s_on[T_RVC_OWN];
     if (s_cfg.wifiOn != s_on[T_WIFI]) {
         s_cfg.wifiOn = s_on[T_WIFI];
@@ -10167,7 +10918,6 @@ static void DrawScreen(HDC dc, Screen s)
     case S_VIDEO_PLAY:  ScrVideoPlay(dc); break;
     case S_PHOTO:       ScrPhoto(dc); break;
     case S_PHOTO_VIEW:  ScrPhotoView(dc); break;
-    case S_PHOTO_BAD:   ScrPhotoBad(dc); break;
     case S_PHONE:       ScrPhone(dc); break;
     case S_CONTACTS:    ScrContacts(dc); break;
     case S_CONTACT:     ScrContact(dc); break;
@@ -10208,6 +10958,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_TEST_MCU:    ScrTestMcu(dc); break;
     case S_TEST_AV:     ScrTestAv(dc); break;
     case S_INFO_MORE:   ScrInfoMore(dc); break;
+    case S_LICENSES:    ScrLicenses(dc); break;
     case S_SET_VOLUME:  ScrSetVolume(dc); break;
     case S_CAMDL:       ScrCamDl(dc); break;
     case S_CAMREG:      ScrCamReg(dc); break;
@@ -10240,6 +10991,8 @@ static DWORD s_areaCount, s_areaMs, s_areaShown;  // the partial ones: drawn, th
 
 static void Redraw()
 {
+    if (s_drag)
+        return;
     SYSTEMTIME t;
     GetLocalTime(&t);
     s_drawnMinute = t.wMinute;
@@ -10265,7 +11018,7 @@ static void Redraw()
 // and only if its pixels are not the same as before does the area go to the screen.
 static void RedrawArea(int l, int t, int r, int b)
 {
-    if (!s_back || l >= r || t >= b)
+    if (!s_back || l >= r || t >= b || s_drag)
         return;
     DWORD t0 = GetTickCount();
     int w = r - l, h = b - t;
@@ -10428,6 +11181,20 @@ static void LogLoad(HWND hwnd)
     s_drawCount = s_drawMs = s_drawMax = s_areaCount = s_areaMs = s_areaShown = 0;
 }
 
+// The band that slides on a page turn: under the top bar, above the bottom bar and above the page dots where
+// they are (they stay in place, the new page's show when it has turned); on the radio only the presets.
+static int SlideTop()
+{
+    return s_screen == S_RADIO ? 258 : 56;
+}
+
+static int SlideBottom()
+{
+    if (Section(s_screen) < 0)
+        return 480;
+    return s_screen == S_HOME || s_screen == S_RADIO || s_screen == S_APPS || s_screen == S_PHOTO ? 392 : 408;
+}
+
 // A page turn: the new page slides in from the right (dir 1) or the left (dir -1) and pushes the old one out,
 // in the band between the top bar and the bottom bar (they stay). The old frame is what s_back holds now; the
 // copy of it lives only for the animation (768 KB).
@@ -10449,7 +11216,7 @@ static void RedrawSlide(int dir)
     HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
     HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, old);
     DrawFrame(dc);
-    int top = 56, bottom = Section(s_screen) >= 0 ? 408 : 480, h = bottom - top;
+    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top;
     BitBlt(hdc, 0, 0, 800, top, dc, 0, 0, SRCCOPY);
     BitBlt(hdc, 0, bottom, 800, 480 - bottom, dc, 0, bottom, SRCCOPY);
     const DWORD kMs = 220;
@@ -10480,6 +11247,144 @@ static void RedrawSlide(int dir)
 }
 
 static int s_slideDir;   // set by an action that turned a page: the next frame slides in
+
+// ---- a page dragged with the finger: once the finger has moved sideways, the page goes with it and its
+// neighbour comes in beside it; let go far enough it turns (the rest slides on), otherwise it slides back. The
+// current frame is copied aside (768 KB, only while dragging), the neighbour is drawn into s_back.
+static bool Swipe(int dir);
+static void BuildButtons();
+static int  s_phPage;   // the photos' page (the photos' part is below)
+static int  PhotoPages();
+static void PhotoStep(int dir);
+static int     s_dragNb, s_dragSide, s_dragX;   // the neighbour in s_back (1 next, -1 previous, 0 none: an end)
+static HBITMAP s_dragOld;
+static unsigned short* s_dragOldBits;
+
+static bool CanSwipe()
+{
+    return s_screen == S_HOME || s_screen == S_APPS || s_screen == S_FILES || s_screen == S_RADIO ||
+           s_screen == S_PHOTO;
+}
+
+// The page beside (dir) drawn into s_back without turning to it (no side effects: the radio's band is not
+// switched); false at an end that does not go round.
+static bool DrawNeighbour(int dir)
+{
+    int hp = s_homePage, rp = s_radioPage, ap = s_page, fp = s_filePage, pp = s_phPage;
+    bool ok = true;
+    if (s_screen == S_PHOTO) {
+        ok = pp + dir >= 0 && pp + dir < PhotoPages();
+        s_phPage += dir;
+    } else if (s_screen == S_HOME) {
+        int n = HomePages();
+        ok = n > 1;
+        s_homePage = (hp + dir + n) % n;
+    } else if (s_screen == S_RADIO) {
+        s_radioPage = (rp + dir + kRadioPages) % kRadioPages;
+    } else if (s_screen == S_APPS) {
+        ok = ap + dir >= 0 && ap + dir < AppsPages();
+        s_page += dir;
+    } else {
+        ok = fp + dir >= 0 && fp + dir < FilePages();
+        s_filePage += dir;
+    }
+    if (ok) {
+        HDC hdc = GetDC(s_wnd);
+        HDC dc = CreateCompatibleDC(hdc);
+        HGDIOBJ ob = SelectObject(dc, s_back);
+        DrawFrame(dc);
+        SelectObject(dc, ob);
+        DeleteDC(dc);
+        ReleaseDC(s_wnd, hdc);
+    }
+    s_homePage = hp;
+    s_radioPage = rp;
+    s_page = ap;
+    s_filePage = fp;
+    s_phPage = pp;
+    return ok;
+}
+
+// The current page at x in the band between the bars, its neighbour beside it (or the background at an end).
+static void DragShow(int x)
+{
+    HDC hdc = GetDC(s_wnd);
+    HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
+    HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, s_dragOld);
+    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top;
+    if (x > 0)
+        BitBlt(hdc, x, top, 800 - x, h, odc, 0, top, SRCCOPY);
+    else
+        BitBlt(hdc, 0, top, 800 + x, h, odc, -x, top, SRCCOPY);
+    if (s_dragNb && x > 0)
+        BitBlt(hdc, 0, top, x, h, dc, 800 - x, top, SRCCOPY);
+    else if (s_dragNb && x < 0)
+        BitBlt(hdc, 800 + x, top, -x, h, dc, 0, top, SRCCOPY);
+    else if (x) {
+        RECT rc = { x > 0 ? 0 : 800 + x, top, x > 0 ? x : 800, bottom };
+        HBRUSH b = CreateSolidBrush(C(kInk));
+        FillRect(hdc, &rc, b);
+        DeleteObject(b);
+    }
+    SelectObject(odc, oo);
+    SelectObject(dc, ob);
+    DeleteDC(odc);
+    DeleteDC(dc);
+    ReleaseDC(s_wnd, hdc);
+}
+
+static void DragStart()
+{
+    KillTimer(s_wnd, TIMER_LONG);
+    s_pressed = -1;
+    Redraw();   // the page without the pressed look
+    s_dragOld = MakeDib(800, 480, &s_dragOldBits);
+    if (!s_dragOld || !s_dragOldBits) {   // no memory: the swipe as before (on letting go)
+        if (s_dragOld)
+            DeleteObject(s_dragOld);
+        s_dragOld = NULL;
+        return;
+    }
+    memcpy(s_dragOldBits, s_backBits, 800 * 480 * 2);
+    s_drag = true;
+    s_dragNb = s_dragSide = s_dragX = 0;
+}
+
+static void DragMove(int dx)
+{
+    int side = dx < 0 ? 1 : -1;
+    if (side != s_dragSide) {
+        s_dragSide = side;
+        s_dragNb = DrawNeighbour(side) ? side : 0;
+    }
+    s_dragX = s_dragNb ? dx : dx / 3;   // at an end: held back
+    DragShow(s_dragX);
+}
+
+// Let go: the page turns (dx past 100 px towards a neighbour) or slides back.
+static void DragEnd(int dx)
+{
+    bool turn = s_dragNb && s_dragNb == (dx < 0 ? 1 : -1) && (dx > 100 || dx < -100);
+    int from = s_dragX, to = turn ? (s_dragNb > 0 ? -800 : 800) : 0;
+    const DWORD kMs = 160;
+    DWORD t0 = GetTickCount();
+    for (;;) {
+        DWORD el = GetTickCount() - t0;
+        double p = el >= kMs ? 1.0 : (double)el / kMs;
+        p = 1 - (1 - p) * (1 - p) * (1 - p);   // ease-out
+        DragShow(from + (int)((to - from) * p));
+        if (el >= kMs)
+            break;
+        Sleep(10);
+    }
+    s_drag = false;
+    DeleteObject(s_dragOld);
+    s_dragOld = NULL;
+    if (turn)
+        Swipe(s_dragNb);   // the page for real (the radio: its band too)
+    BuildButtons();
+    Redraw();
+}
 
 static void Trim(wchar_t* s)
 {
@@ -10538,6 +11443,162 @@ static void Back()
 // A main screen from the bottom bar (or a widget): the history starts over.
 static void RadioOn();
 
+// ---- the screen and the source come back after a restart (the unit off and on): the screen as it was (its
+// section's main one: a settings page -> Settings), and what played - the radio (the MCU's source), our music
+// (the last track), Bluetooth (the phone: when it connects, its music becomes the source and plays). Remembered
+// in the ini at most once a minute (CfgSoon), so going round the screens doesn't wear the flash.
+static const struct { Screen s; const wchar_t* key; } kUiScreens[] = {
+    { S_HOME, L"home" }, { S_RADIO, L"radio" }, { S_AUDIO, L"music" }, { S_NETRADIO, L"netradio" },
+    { S_AUDIO_BT, L"bt" }, { S_AUX, L"aux" }, { S_VIDEO, L"video" }, { S_PHOTO, L"photo" }, { S_PHONE, L"phone" },
+    { S_APPS, L"apps" }, { S_SETTINGS, L"settings" } };
+static DWORD s_bootTick;
+static bool  s_resumed;   // the source has been brought back (or given up)
+
+static const wchar_t* UiScreenKey()
+{
+    Screen root = s_histLen ? s_hist[0] : s_screen;
+    if (Section(root) == 5)
+        root = S_SETTINGS;
+    for (int i = 0; i < (int)(sizeof(kUiScreens) / sizeof(kUiScreens[0])); i++)
+        if (kUiScreens[i].s == root)
+            return kUiScreens[i].key;
+    return NULL;   // not a main screen (a player, a call): the last main one stays
+}
+
+// What plays now: "music" (ours), "radio", "bt", "" (another source: the shell's); NULL - not known yet.
+static const wchar_t* UiSourceKey()
+{
+    if (PlayerPlaying())
+        return L"music";
+    int vol, mute, src;
+    if (!VolGet(&vol, &mute, &src) || src < 0)
+        return NULL;
+    return src == 0 ? L"radio" : src == 9 ? L"bt" : L"";
+}
+
+static void ResumeScreen()   // at the start
+{
+    for (int i = 0; i < (int)(sizeof(kUiScreens) / sizeof(kUiScreens[0])); i++)
+        if (!wcscmp(kUiScreens[i].key, s_cfg.uiScreen)) {
+            s_screen = kUiScreens[i].s;
+            s_screenTick = GetTickCount();
+            if (Section(s_screen) == 2)
+                s_media = s_screen;
+            VLog(L"запуск: экран «%s»", s_cfg.uiScreen);
+        }
+}
+
+// The volume at the start: no louder than 10 (the user, 2026-10-19: the shell's scale 0..30, comfortable 5..15).
+// The shell's volume window sets its "default" volume with SPApi_SendRadioAudioVolData(0, v) (CAudioVolumeDlg::
+// OnTimerDefaultSlot, Ghidra 2026-10-19; beside it UpdateStartedVol - the volume at power-on); whether it moves
+// the volume playing now or only the next start's is to be seen on the unit: the volume the MCU reports after it
+// goes to the log. Once, 10 s after the start (the MCU's link up); then again at 15 s only to log the result.
+enum { kStartVolMax = 10 };
+
+static void StartVolumeTick()
+{
+    static int s_step;   // 0 waiting, 1 sent, 2 done
+    DWORD el = GetTickCount() - s_bootTick;
+    int vol, mute, src;
+    if (s_step == 0 && el >= 10000) {
+        s_step = 2;
+        if (VolGet(&vol, &mute, &src) && vol > kStartVolMax) {
+            McuSend3("SPApi_SendRadioAudioVolData", 0, kStartVolMax, 0);
+            VLog(L"запуск: громкость %d > %d - SendRadioAudioVolData(0, %d)", vol, kStartVolMax, kStartVolMax);
+            s_step = 1;
+        }
+    } else if (s_step == 1 && el >= 15000) {
+        s_step = 2;
+        bool have = VolGet(&vol, &mute, &src);
+        VLog(L"запуск: громкость после команды - %d (MCU %s)", have ? vol : -1,
+             have && vol <= kStartVolMax ? L"убавил сейчас" : L"сейчас не убавил: возможно, только при следующем включении");
+    }
+}
+
+// Once a second from the start: 10 s on (the MCU's link up) the source comes back. Bluetooth: the stack itself
+// connects the last phone at power-on when the shell allows it; not connected after 15 s (and again at 45 s) we
+// connect the one remembered (bt.last) as the shell does (Hf_Connect + Av_Connect, the proxy's BT_CMD_CONNECT),
+// the phone only (no music link) - its music link (Av_Connect); then its music becomes the source (BtMusicOn) and
+// plays (Av_Mute(0) + Av_Play, as the shell's play). Given up after 2 min.
+static void ResumeSourceTick()
+{
+    DWORD el = GetTickCount() - s_bootTick;
+    if (s_resumed || el < 10000)
+        return;
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    if (!wcscmp(s_cfg.uiSource, L"radio")) {
+        VLog(L"запуск: радио (источник MCU %d)", src);
+        RadioOn();
+    } else if (!wcscmp(s_cfg.uiSource, L"music")) {
+        VLog(L"запуск: музыка «%s»", s_cfg.musicFile);
+        if (!s_chan && s_cfg.musicDir[0])
+            PlayerLoadDir(s_cfg.musicDir, s_cfg.musicFile, s_cfg.musicTree);
+    } else if (!wcscmp(s_cfg.uiSource, L"bt")) {
+        static DWORD s_srcAsked;
+        static int s_tries;
+        BtState bt;
+        bool proxy = BtGet(&bt, NULL);
+        bool phone = proxy && bt.av >= 1;   // A2DP connected
+        if (!phone) {
+            if (proxy && ((s_tries == 0 && el >= 15000) || (s_tries == 1 && el >= 45000))) {
+                s_tries++;
+                if (bt.hf >= 1) {   // the phone is there, its music not
+                    VLog(L"запуск: Bluetooth - телефон есть, подключаю музыку (A2DP)");
+                    BtCmd(BT_CMD_AVCONNECT);
+                } else if (s_cfg.btLast[0]) {
+                    VLog(L"запуск: Bluetooth - подключаю телефон %s", s_cfg.btLast);
+                    BtCmdText(BT_CMD_CONNECT, s_cfg.btLast);
+                } else {
+                    VLog(L"запуск: Bluetooth - последний телефон не известен, жду подключения");
+                }
+            }
+            if (el < 120000)
+                return;
+            VLog(L"запуск: Bluetooth - телефон не подключился за 2 мин");
+        } else if (src != 9 && !s_srcAsked) {
+            VLog(L"запуск: Bluetooth - телефон подключён, источник BT");
+            BtMusicOn();
+            s_srcAsked = GetTickCount();
+            return;
+        } else if (src != 9 && GetTickCount() - s_srcAsked < 4000) {
+            return;   // the source still switching
+        } else {
+            VLog(L"запуск: Bluetooth - играть (источник MCU %d)", src);
+            BtCmd(BT_CMD_PLAYON);
+        }
+    }
+    s_resumed = true;
+}
+
+// Once a second: the screen and the source to remember (after the start's resume, not before it), and the phone
+// connected (bt.last).
+static void UiRememberTick()
+{
+    BtState bt;
+    if (BtGet(&bt, NULL) && bt.hf >= 1 && bt.devAddr[0]) {
+        wchar_t a[18];
+        BtText(bt.devAddr, a, 18);
+        if (wcscmp(a, s_cfg.btLast)) {
+            wcscpy(s_cfg.btLast, a);
+            VLog(L"запомнить: телефон %s", a);
+            CfgSoon();
+        }
+    }
+    if (!s_resumed)
+        return;
+    const wchar_t* sc = UiScreenKey();
+    const wchar_t* so = UiSourceKey();
+    if ((sc && wcscmp(sc, s_cfg.uiScreen)) || (so && wcscmp(so, s_cfg.uiSource))) {
+        if (sc)
+            wcscpy(s_cfg.uiScreen, sc);
+        if (so)
+            wcscpy(s_cfg.uiSource, so);
+        VLog(L"запомнить: экран «%s», источник «%s»", s_cfg.uiScreen, s_cfg.uiSource);
+        CfgSoon();
+    }
+}
+
 static void Nav(Screen s)
 {
     if (s == S_RADIO)
@@ -10551,22 +11612,29 @@ static void Nav(Screen s)
         s_media = s;
 }
 
-// A swipe turns the page of the main screen, the programs or the file browser (it doesn't go round);
-// false at the first / last page.
+// A swipe turns the page of the main screen, the radio, the programs or the file browser; the main screen and
+// the radio go round (past the last page the first), the others stop: false at the first / last page.
 static bool Swipe(int dir)
 {
     int was = s_homePage + s_page * 100 + s_filePage * 10000;
     if (s_screen == S_HOME) {
-        s_homePage += dir;
-        s_homePage = s_homePage < 0 ? 0 : s_homePage >= HomePages() ? HomePages() - 1 : s_homePage;
+        int n = HomePages();
+        s_homePage = (s_homePage + dir + n) % n;
     } else if (s_screen == S_APPS) {
         s_page += dir;
         s_page = s_page < 0 ? 0 : s_page >= AppsPages() ? AppsPages() - 1 : s_page;
     } else if (s_screen == S_RADIO) {
-        int was2 = s_radioPage;
-        s_radioPage += dir;
-        s_radioPage = s_radioPage < 0 ? 0 : s_radioPage > 2 ? 2 : s_radioPage;
-        return s_radioPage != was2;
+        RadioPageTo(s_radioPage + dir);   // (round)
+        return true;
+    } else if (s_screen == S_PHOTO) {
+        int to = s_phPage + dir;
+        if (to < 0 || to >= PhotoPages())
+            return false;
+        s_phPage = to;
+        return true;
+    } else if (s_screen == S_PHOTO_VIEW) {
+        PhotoStep(dir);
+        return true;
     } else if (s_screen == S_FILES) {
         s_filePage += dir;
         s_filePage = s_filePage < 0 ? 0 : s_filePage >= FilePages() ? FilePages() - 1 : s_filePage;
@@ -10697,6 +11765,324 @@ static void ScrSetScreen(HDC dc)
     Chevron(dc, 736, 300);
 }
 
+// ---- photos (Media -> Photo): the volumes, folders and pictures as tiles with thumbnails (4 x 2 a page, a swipe
+// turns it), the viewer between the top bar and the dock: previous / next (and a swipe), a quarter turn either
+// way, the slide show. The pictures are decoded by photo.cpp in a thread of their own (a photo takes a second or
+// two on the unit): the viewed one first, then the thumbnails of the page shown; a result posts WM_APP_PHOTO.
+#define WM_APP_PHOTO (WM_APP + 25)
+enum { TIMER_PHOTO = 13, kPhMax = 1000, kPhTiles = 8, kThW = 172, kThH = 92, kPhBoxW = 800, kPhBoxH = 342 };
+static wchar_t  s_phDir[MAX_PATH];   // "" = the volumes
+static wchar_t* s_phs[kPhMax];       // folders ("\" at the end), then pictures
+static int      s_phCount, s_phCur = -1;   // s_phCur: the picture viewed (index in s_phs)
+static bool     s_phRead, s_phShow;  // s_phShow: the slide show runs
+static int      s_phRot;             // the viewer's own quarter turns
+struct PhThumb { wchar_t path[MAX_PATH]; Pic pic; int state; };   // state: 0 wanted, 1 working, 2 done, 3 failed
+static PhThumb  s_th[kPhTiles];
+static wchar_t  s_pvPath[MAX_PATH];  // the viewer's request
+static int      s_pvRot, s_pvState, s_pvErr, s_pvW, s_pvH;   // state: 0 none, 1 wanted, 2 working, 3 done
+static bool     s_pvFill, s_pvAuto;
+static Pic      s_pv;
+static CRITICAL_SECTION s_phCs;
+static HANDLE   s_phEv, s_phThread;
+
+static DWORD WINAPI PhotoThread(LPVOID)
+{
+    for (;;) {
+        WaitForSingleObject(s_phEv, INFINITE);
+        for (;;) {
+            wchar_t path[MAX_PATH];
+            int slot = -1, rot = 0;
+            bool view = false, fill = false, exif = false;
+            EnterCriticalSection(&s_phCs);
+            if (s_pvState == 1) {   // the viewed picture first
+                view = true;
+                wcscpy(path, s_pvPath);
+                rot = s_pvRot;
+                fill = s_pvFill;
+                exif = s_pvAuto;
+                s_pvState = 2;
+            } else {
+                for (int i = 0; i < kPhTiles && slot < 0; i++)
+                    if (s_th[i].path[0] && s_th[i].state == 0) {
+                        slot = i;
+                        wcscpy(path, s_th[i].path);
+                        s_th[i].state = 1;
+                        exif = s_cfg.photoAutoRot;
+                    }
+            }
+            LeaveCriticalSection(&s_phCs);
+            if (!view && slot < 0)
+                break;
+            Pic pic = { 0, 0, NULL };
+            int w = 0, h = 0;
+            int res = view ? PicLoad(path, kPhBoxW, kPhBoxH, fill, rot, exif, &pic, &w, &h)
+                           : PicThumb(path, kThW, kThH, exif, &pic);
+            EnterCriticalSection(&s_phCs);
+            if (view && s_pvState == 2 && !wcscmp(path, s_pvPath) && rot == s_pvRot && fill == s_pvFill) {
+                PicFree(&s_pv);
+                s_pv = pic;
+                s_pvErr = res;
+                s_pvW = w;
+                s_pvH = h;
+                s_pvState = 3;
+                pic.px = NULL;
+            } else if (!view && s_th[slot].state == 1 && !wcscmp(path, s_th[slot].path)) {
+                s_th[slot].pic = pic;
+                s_th[slot].state = res == PIC_OK ? 2 : 3;
+                pic.px = NULL;
+            }
+            LeaveCriticalSection(&s_phCs);
+            PicFree(&pic);   // (a request changed meanwhile: not wanted any more)
+            PostMessage(s_wnd, WM_APP_PHOTO, 0, 0);
+        }
+    }
+    return 0;
+}
+
+static void PhotoWake()
+{
+    if (!s_phThread) {
+        InitializeCriticalSection(&s_phCs);
+        s_phEv = CreateEvent(NULL, FALSE, FALSE, NULL);
+        s_phThread = CreateThread(NULL, 0, PhotoThread, NULL, 0, NULL);
+        VLog(L"поток фото: %s", s_phThread ? L"запущен" : L"не запустился");
+    }
+    if (s_phEv)
+        SetEvent(s_phEv);
+}
+
+static bool PhIsDir(int i)
+{
+    return i >= 0 && i < s_phCount && s_phs[i][wcslen(s_phs[i]) - 1] == L'\\';
+}
+
+static void PhotoOpenDir(const wchar_t* dir)
+{
+    FreeNames(s_phs, &s_phCount);
+    wcsncpy(s_phDir, dir, MAX_PATH - 1);
+    s_phDir[MAX_PATH - 1] = 0;
+    s_phPage = 0;
+    s_phCur = -1;
+    s_phRead = true;
+    s_phCount = s_phDir[0] ? ReadMusicDir(s_phDir, s_phs, kPhMax, true, 2) : ReadVolumes(s_phs);
+    if (s_phDir[0] && wcscmp(s_cfg.photoDir, s_phDir)) {
+        wcscpy(s_cfg.photoDir, s_phDir);
+        CfgSoon();
+    }
+}
+
+static int PhotoTiles()   // the tiles of the folder: "up" first in a folder
+{
+    return s_phCount + (s_phDir[0] ? 1 : 0);
+}
+
+static int PhotoPages()
+{
+    int n = PhotoTiles();
+    return n > 0 ? (n + kPhTiles - 1) / kPhTiles : 1;
+}
+
+// The picture into the frame at x, y (cut at the frame and at the partial redraw's area).
+static void BlitPic(const Pic& p, int x, int y)
+{
+    if (!p.px)
+        return;
+#ifndef UNDER_CE
+    GdiFlush();
+#endif
+    for (int r = 0; r < p.h; r++) {
+        int fy = y + r;
+        if (fy < s_clip.top || fy >= s_clip.bottom)
+            continue;
+        int x0 = x < s_clip.left ? s_clip.left : x, x1 = x + p.w > s_clip.right ? s_clip.right : x + p.w;
+        if (x1 > x0)
+            memcpy(s_backBits + (479 - fy) * 800 + x0, p.px + r * p.w + (x0 - x), (x1 - x0) * 2);
+    }
+}
+
+// The page's thumbnails asked for (the worker makes them); a tile no longer shown lets go of its picture.
+static void PhotoWantThumbs()
+{
+    if (!s_phThread)
+        PhotoWake();
+    bool any = false;
+    EnterCriticalSection(&s_phCs);
+    for (int t = 0; t < kPhTiles; t++) {
+        int k = s_phPage * kPhTiles + t - (s_phDir[0] ? 1 : 0);
+        wchar_t path[MAX_PATH] = L"";
+        if (k >= 0 && k < s_phCount && !PhIsDir(k))
+            _snwprintf(path, MAX_PATH, L"%s%s", s_phDir, s_phs[k]);
+        if (wcscmp(path, s_th[t].path)) {
+            PicFree(&s_th[t].pic);
+            wcscpy(s_th[t].path, path);
+            s_th[t].state = 0;
+            any = any || path[0];
+        }
+    }
+    LeaveCriticalSection(&s_phCs);
+    if (any)
+        PhotoWake();
+}
+
+static void ScrPhoto(HDC dc)
+{
+    if (!s_phRead)
+        PhotoOpenDir(s_cfg.photoDir[0] && GetFileAttributes(s_cfg.photoDir) != 0xFFFFFFFF ? s_cfg.photoDir : L"");
+    if (s_phPage >= PhotoPages())
+        s_phPage = PhotoPages() - 1;
+    wchar_t s[MAX_PATH + 16], folder[MAX_PATH];
+    wcscpy(folder, s_phDir);
+    int fl = (int)wcslen(folder);
+    if (fl && folder[fl - 1] == L'\\')
+        folder[--fl] = 0;
+    const wchar_t* fn = wcsrchr(folder, L'\\');
+    _snwprintf(s, MAX_PATH + 16, L"МЕДИА · ФОТО · %s", !s_phDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
+    Frame(dc, s);
+    MediaTabs(dc, S_PHOTO, IC_PLAY, A_PHPLAY, 0, S_SET_PHOTO);
+    PhotoWantThumbs();
+    int up = s_phDir[0] ? 1 : 0;
+    for (int t = 0; t < kPhTiles; t++) {
+        int k = s_phPage * kPhTiles + t - up, x = 16 + (t % 4) * 194, y = 124 + (t / 4) * 138;
+        if (k >= s_phCount)
+            break;
+        bool down = Zone(x, y, 184, 128, A_PHFILE, k);   // k -1: up
+        bool dir = k < 0 || PhIsDir(k);
+        bool cur = !dir && k == s_phCur;
+        R(dc, x, y, 184, 128, 12, down || cur ? kOrange : kPanel, down || cur ? CLR_INVALID : kLine);
+        wchar_t name[MAX_PATH];
+        if (k < 0)
+            wcscpy(name, L"НАВЕРХ");
+        else {
+            wcscpy(name, s_phs[k]);
+            if (dir && name[0] && name[wcslen(name) - 1] == L'\\')
+                name[wcslen(name) - 1] = 0;
+        }
+        if (dir) {
+            Ico(dc, k < 0 ? IC_UP : IC_FOLDER, x + 64, y + 22, 56, down ? kInk : k < 0 ? kMuted : kOrange);
+        } else {
+            R(dc, x + 6, y + 6, kThW, kThH, 0, kMargin);
+            EnterCriticalSection(&s_phCs);
+            if (s_th[t].state == 2)
+                BlitPic(s_th[t].pic, x + 6, y + 6);
+            else
+                Ico(dc, IC_PHOTO, x + 6 + kThW / 2 - 22, y + 6 + kThH / 2 - 22, 44, s_th[t].state == 3 ? kOff : kDim);
+            LeaveCriticalSection(&s_phCs);
+        }
+        T(dc, x + 92, y + 118, name, 14, down || cur ? kInk : kMuted, 700, AL_MID, 172);
+    }
+    if (!s_phCount)
+        T(dc, 400, 250, s_phDir[0] ? L"Здесь нет папок и фото (JPG, PNG, BMP)" : L"Нет носителей", 18, kMuted, 400,
+          AL_MID);
+    PageDots(dc, s_phPage, PhotoPages());
+}
+
+// The viewer: picture i of the folder asked for (its own turn reset), the slide show's timer as set.
+static void PhotoView(int i)
+{
+    if (i < 0 || i >= s_phCount || PhIsDir(i))
+        return;
+    if (i != s_phCur)
+        s_phRot = 0;
+    s_phCur = i;
+    s_phPage = (i + (s_phDir[0] ? 1 : 0)) / kPhTiles;
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%s%s", s_phDir, s_phs[i]);
+    if (!s_phThread)
+        PhotoWake();
+    EnterCriticalSection(&s_phCs);
+    wcscpy(s_pvPath, path);
+    s_pvRot = s_phRot;
+    s_pvFill = s_cfg.photoFill;
+    s_pvAuto = s_cfg.photoAutoRot;
+    s_pvState = 1;
+    LeaveCriticalSection(&s_phCs);
+    PhotoWake();
+    if (s_phShow)
+        SetTimer(s_wnd, TIMER_PHOTO, s_cfg.photoInterval * 1000, NULL);
+}
+
+static void PhotoStep(int dir)   // the next / previous picture of the folder, round
+{
+    if (s_phCount <= 0)
+        return;
+    int i = s_phCur < 0 ? (dir > 0 ? -1 : s_phCount) : s_phCur;
+    for (int n = 0; n < s_phCount; n++) {
+        i = (i + dir + s_phCount) % s_phCount;
+        if (!PhIsDir(i)) {
+            PhotoView(i);
+            return;
+        }
+    }
+}
+
+static void PhotoShow(bool on)   // the slide show
+{
+    s_phShow = on;
+    if (on)
+        SetTimer(s_wnd, TIMER_PHOTO, s_cfg.photoInterval * 1000, NULL);
+    else
+        KillTimer(s_wnd, TIMER_PHOTO);
+}
+
+static void ScrPhotoView(HDC dc)
+{
+    int n = 0, at = 0;
+    for (int i = 0; i < s_phCount; i++)
+        if (!PhIsDir(i)) {
+            n++;
+            if (i == s_phCur)
+                at = n;
+        }
+    wchar_t s[MAX_PATH + 32];
+    _snwprintf(s, MAX_PATH + 32, L"ФОТО · %d / %d · %s", at, n, s_phCur >= 0 ? s_phs[s_phCur] : L"");
+    Frame(dc, s);
+    R(dc, 0, 56, 800, 342, 0, kMargin);
+    EnterCriticalSection(&s_phCs);
+    int state = s_pvState, err = s_pvErr;
+    if (state == 3 && err == PIC_OK)
+        BlitPic(s_pv, (800 - s_pv.w) / 2, 56 + (342 - s_pv.h) / 2);
+    LeaveCriticalSection(&s_phCs);
+    if (state == 1 || state == 2) {
+        T(dc, 400, 236, L"Загрузка…", 20, kMuted, 600, AL_MID);
+    } else if (state == 3 && err != PIC_OK) {
+        static const wchar_t* why[5] = { L"", L"ФОРМАТ НЕ ПОДДЕРЖИВАЕТСЯ", L"СЛИШКОМ БОЛЬШОЕ ИЗОБРАЖЕНИЕ",
+                                         L"ФАЙЛ НЕ ЧИТАЕТСЯ", L"НЕ ХВАТАЕТ ПАМЯТИ" };
+        Panel(dc, 220, 110, 360, 230);
+        Ico(dc, IC_PHOTO, 360, 140, 80, kOff);
+        Line(dc, 352, 140, 448, 220, 4, kMuted);
+        T(dc, 400, 262, why[err % 5], 18, kText, 700, AL_MID, 336);
+        T(dc, 400, 292, s_phCur >= 0 ? s_phs[s_phCur] : L"", 17, kMuted, 400, AL_MID, 336);
+        T(dc, 400, 318, err == PIC_FORMAT ? L"JPG (не прогрессивный), PNG, BMP" : L"Пропустить можно стрелками внизу",
+          15, kDim, 400, AL_MID, 336);
+    }
+    Dock(dc);
+    IconBtn(dc, IC_GALLERY, 24, 417, 44, kText, A_BACK);
+    IconBtn(dc, IC_PREV, 132, 417, 44, kText, A_PHSTEP, -1);
+    IconBtn(dc, IC_ROT_L, 244, 417, 44, kText, A_PHROT, -1);
+    bool d = Zone(330, 410, 140, 58, A_PHSHOW);   // the slide show: orange while it runs
+    R(dc, 330, 410, 140, 58, 10, d || s_phShow ? kOrange : kPanel2);
+    Ico(dc, s_phShow ? IC_PAUSE : IC_PLAY, 378, 417, 44, d || s_phShow ? kInk : kOrange);
+    IconBtn(dc, IC_ROT_R, 512, 417, 44, kText, A_PHROT, 1);
+    IconBtn(dc, IC_FWD, 624, 417, 44, kText, A_PHSTEP, 1);
+    IconBtn(dc, IC_GEAR, 732, 417, 44, kText, A_SCREEN, S_SET_PHOTO);
+}
+
+static void ScrSetPhoto(HDC dc)
+{
+    static const wchar_t* scale[2] = { L"ВПИСАТЬ", L"ЗАПОЛН." };
+    Settings(dc, S_SET_PHOTO);
+    SetRow(dc, 64, L"Интервал слайд-шоу");
+    wchar_t iv[16];
+    _snwprintf(iv, 16, L"%d С", s_cfg.photoInterval);
+    Stepper(dc, 560, 68, 200, iv, 48, 18, A_PHINT);
+    SetRow(dc, 120, L"Масштаб");
+    Seg(dc, 512, 126, 248, 44, scale, 2, G_PHOTO_SCALE, 15);
+    SetRow(dc, 176, L"Слайд-шоу при открытии");
+    Toggle(dc, 688, 186, T_SLIDES_OPEN);
+    SetRow(dc, 232, L"Автоповорот", NULL, true);
+    Toggle(dc, 688, 242, T_AUTOROTATE);
+}
+
 static void DoAction(const Btn& b)
 {
     if (b.action != A_DELETE)
@@ -10719,16 +12105,61 @@ static void DoAction(const Btn& b)
     case A_CLIPCLEAR:  s_keysText[0] = 0; break;
     case A_NAV:      Nav((Screen)b.arg); break;
     case A_NIGHT:    SetTheme(!s_night); break;   // the bar: the theme (the backlight: in the settings)
+    case A_PHFILE:   // a tile: up, a folder, a picture (the viewer)
+        if (b.arg < 0) {
+            wchar_t d[MAX_PATH];
+            wcscpy(d, s_phDir);
+            ParentDir(d);
+            PhotoOpenDir(d);
+        } else if (PhIsDir(b.arg)) {
+            wchar_t d[MAX_PATH];
+            _snwprintf(d, MAX_PATH, L"%s%s", s_phDir, s_phs[b.arg]);
+            PhotoOpenDir(d);
+        } else {
+            PhotoView(b.arg);
+            Go(S_PHOTO_VIEW, true);
+            PhotoShow(s_cfg.photoSlides);
+        }
+        break;
+    case A_PHPLAY:   // the tab's play: the slide show from the picture viewed (or the first)
+        if (s_phCur < 0)
+            PhotoStep(1);
+        else
+            PhotoView(s_phCur);
+        if (s_phCur >= 0) {
+            Go(S_PHOTO_VIEW, true);
+            PhotoShow(true);
+        }
+        break;
+    case A_PHSTEP:   PhotoStep(b.arg); break;
+    case A_LICSCROLL: s_licScroll += b.arg * 160; break;   // (ScrLicenses keeps it in range)
+    case A_PHROT:    s_phRot = (s_phRot + b.arg + 4) % 4; PhotoView(s_phCur); break;
+    case A_PHSHOW:   PhotoShow(!s_phShow); break;
+    case A_PHINT: {   // the slide show's interval: 2, 3, 5, 10, 15, 30, 60 s
+        static const int iv[7] = { 2, 3, 5, 10, 15, 30, 60 };
+        int k = 0;
+        while (k < 6 && iv[k] < s_cfg.photoInterval)
+            k++;
+        k = k + b.arg < 0 ? 0 : k + b.arg > 6 ? 6 : k + b.arg;
+        s_cfg.photoInterval = iv[k];
+        SaveCfg();
+        break;
+    }
+    case A_USERWG:   // a user widget's tap
+        if (b.arg >= 0 && b.arg < s_uwCount && s_uw[b.arg].tap[0])
+            UserWgRun(s_uw[b.arg], s_uw[b.arg].tap, L"нажатие");
+        break;
+    case A_SHPAGE:   s_setHomePage += b.arg; break;
     case A_WGVIS:
         s_cfg.homeHidden ^= 1 << b.arg;
         SaveCfg();
         break;
     case A_WGMOVE: {   // arg: id * 2 + (1 later, 0 earlier)
         int i = 0;
-        while (i < WG_COUNT && s_cfg.homeOrder[i] != b.arg / 2)
+        while (i < WgCount() && s_cfg.homeOrder[i] != b.arg / 2)
             i++;
         int j = b.arg % 2 ? i + 1 : i - 1;
-        if (i < WG_COUNT && j >= 0 && j < WG_COUNT) {
+        if (i < WgCount() && j >= 0 && j < WgCount()) {
             int t = s_cfg.homeOrder[i];
             s_cfg.homeOrder[i] = s_cfg.homeOrder[j];
             s_cfg.homeOrder[j] = t;
@@ -10761,6 +12192,10 @@ static void DoAction(const Btn& b)
         break;
     case A_SEG:
         s_seg[b.arg / 16] = b.arg % 16;
+        if (b.arg / 16 == G_PHOTO_SCALE) {   // fit / fill: the picture viewed again
+            s_cfg.photoFill = b.arg % 16 == 1;
+            SaveCfg();
+        }
         if (b.arg / 16 == G_SAVER) {
             s_cfg.saverMin = kSaverMins[b.arg % 16 % 5];
             SaveCfg();
@@ -10790,8 +12225,7 @@ static void DoAction(const Btn& b)
     case A_AVDEV:    AvDevNext(); break;
     case A_PRESET:   RadioPreset(b.arg); break;
     case A_RKEY:     RadioKey(b.arg); break;
-    case A_RBAND:    RadioBand(); break;
-    case A_RPAGE:    s_radioPage = b.arg; break;
+    case A_RPAGE:    RadioPageTo(s_radioPage + 1); break;   // the band button: the next page, round
     case A_RLIST:    McuSend3("SPApi_SendListItemControl", 0, b.arg, 0); break;
     case A_RLISTPAGE: s_rlistPage += b.arg; if (s_rlistPage < 0) s_rlistPage = 0; break;
     case A_RSCAN:    RadioScan(); break;
@@ -10887,6 +12321,8 @@ static void DoAction(const Btn& b)
     case A_PAGE:     // the dots go round
         if (s_screen == S_HOME)
             s_homePage = (s_homePage + 1) % HomePages();
+        else if (s_screen == S_RADIO)
+            RadioPageTo(s_radioPage + 1);
         else
             s_page = (s_page + 1) % AppsPages();
         s_slideDir = 1;
@@ -11214,6 +12650,17 @@ static void ExportSkin()
 // VestaLaunch follows our day/night: it asks with this message, 1 = night.
 #define WM_VESTA_NIGHT (WM_APP + 2)
 
+// The list the press started on, which a finger moved up / down scrolls: 1 the internet radio's stations, 2 the
+// licenses' text, 0 none.
+static int ListUnderFinger()
+{
+    if (s_screen == S_NETRADIO_LIST && s_downX < 720 && s_downY >= kNetTop && s_downY < kNetBottom)
+        return 1;
+    if (s_screen == S_LICENSES && s_downX >= 56 && s_downX < 704 && s_downY >= kLicTop && s_downY < kLicBottom)
+        return 2;
+    return 0;
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     switch (msg) {
@@ -11235,6 +12682,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         LoadCfg();
         CfgToControls();
+        s_bootTick = GetTickCount();
+        UserWidgetsScan();   // (after the ini: their places in the order)
+        ResumeScreen();
         WaveDevsLog();
         {
             WSADATA wsa;
@@ -11316,6 +12766,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             VoiceTimer();
             return 0;
         }
+        if (wp == TIMER_PHOTO) {   // the slide show: the next picture once the one shown is there
+            if (s_screen != S_PHOTO_VIEW) {
+                PhotoShow(false);
+                return 0;
+            }
+            if (s_pvState == 3)
+                PhotoStep(1);
+            if (IsWindowVisible(hwnd))
+                Redraw();
+            return 0;
+        }
         if (wp == TIMER_BTSRC) {   // BtMusicOn's second key
             KillTimer(hwnd, TIMER_BTSRC);
             McuKey(0x54, false);
@@ -11361,7 +12822,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 Redraw();   // the time talking
             }
         }
-        if (wp == 1) {   // the screen saver: untouched for its minutes, VestaHome in front, nothing to watch
+        if (wp == 1) {   // the screen saver: untouched for its minutes, VestaHome in front, nothing to watch (video,
+                         // photos, a call)
             DWORD now = GetTickCount();
             bool front = IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd;
             if (!s_lastTouch)
@@ -11377,10 +12839,29 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     Redraw();
                 }
             } else if (s_cfg.saverMin > 0 && front && now - s_lastTouch > (DWORD)s_cfg.saverMin * 60000 &&
-                       s_screen != S_VIDEO_PLAY && s_screen != S_CALL && s_screen != S_INCOMING &&
+                       s_screen != S_VIDEO_PLAY && s_screen != S_PHOTO_VIEW && s_screen != S_CALL &&
+                       s_screen != S_INCOMING &&
                        s_screen != S_REBOOT && s_screen != S_KEYS) {
                 Go(S_SAVER, true);
                 Redraw();
+            }
+        }
+        if (wp == 1) {   // the screen and the source: back at the start, then remembered
+            StartVolumeTick();
+            ResumeSourceTick();
+            UiRememberTick();
+            for (int u = 0; u < s_uwCount; u++) {   // the user widgets' data: re-read as often as each asks
+                UserWg& w = s_uw[u];
+                if (GetTickCount() - w.readTick < (DWORD)w.refresh * 1000)
+                    continue;
+                w.readTick = GetTickCount();
+                RECT wr;
+                if (UserWgRead(w) && s_screen == S_HOME && IsWindowVisible(hwnd) && HomeRect(WG_COUNT + u, &wr))
+                    RedrawArea(wr.left, wr.top, wr.right, wr.bottom);
+            }
+            if (s_cfgSoon && GetTickCount() - s_cfgSoonTick > 60000) {
+                s_cfgSoon = false;
+                SaveCfg();
             }
         }
         if (wp == 1 && s_radioDirty) {   // the radio's cache, at most every 30 s
@@ -11442,6 +12923,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             int m = MediaMask();
             if (m != s_mediaMask) {
                 s_mediaMask = m;
+                UserWidgetsScan();   // the card came or went: its widgets
                 if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
                     Redraw();
             }
@@ -11504,6 +12986,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_APP_PLAYER:   // the track ended (BASS's sync): the next one
         PlayerStep(1, true);
         if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
+            Redraw();
+        return 0;
+    case WM_APP_UWG:   // a widget's url fetched: its data read at the next second
+        for (int u = 0; u < s_uwCount; u++)
+            s_uw[u].readTick = 0;
+        return 0;
+    case WM_APP_PHOTO:   // a picture or a thumbnail decoded
+        if ((s_screen == S_PHOTO || s_screen == S_PHOTO_VIEW) && IsWindowVisible(hwnd) && !s_drag)
             Redraw();
         return 0;
     case WM_APP_NET:   // the internet radio: connected, failed, broken, a new song title
@@ -11659,6 +13149,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_LBUTTONDOWN:
         s_lastTouch = GetTickCount();
         s_downX = (short)LOWORD(lp);
+        s_downY = (short)HIWORD(lp);
         s_pressed = HitTest((short)LOWORD(lp), (short)HIWORD(lp));
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
@@ -11669,7 +13160,36 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SetCapture(hwnd);
         Redraw();
         return 0;
-    case WM_MOUSEMOVE:   // the touch test and the balance point follow the finger
+    case WM_MOUSEMOVE:   // the touch test and the balance point follow the finger, a swiped page, a scrolled list
+        if ((wp & MK_LBUTTON) && ListUnderFinger()) {
+            int dy = (short)HIWORD(lp) - s_downY;
+            if (!s_listDrag && (dy > 12 || dy < -12)) {
+                s_listDrag = true;
+                s_listDrag0 = ListUnderFinger() == 1 ? s_netScroll : s_licScroll;
+                KillTimer(hwnd, TIMER_LONG);
+                s_pressed = -1;
+            }
+            if (s_listDrag) {
+                if (ListUnderFinger() == 1) {
+                    NetScrollTo(s_listDrag0 - dy);
+                    RedrawArea(16, 64, 784, 392);
+                } else {
+                    s_licScroll = s_listDrag0 - dy;
+                    RedrawArea(40, 40, 760, 440);
+                }
+                return 0;
+            }
+        }
+        if ((wp & MK_LBUTTON) && CanSwipe() && !s_btHold &&
+            !(s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY)) {
+            int dx = (short)LOWORD(lp) - s_downX, dy = (short)HIWORD(lp) - s_downY;
+            if (!s_drag && (dx > 24 || dx < -24) && abs(dx) > abs(dy))
+                DragStart();
+            if (s_drag) {
+                DragMove(dx);
+                return 0;
+            }
+        }
         if (s_screen == S_TEST_TOUCH && (wp & MK_LBUTTON) && s_pressed < 0) {
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
             Redraw();
@@ -11698,6 +13218,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         ReleaseCapture();
         int x = (short)LOWORD(lp), dx = x - s_downX;
+        if (s_listDrag) {   // the list scrolled: no tap; the buttons of the new positions
+            s_listDrag = false;
+            s_pressed = -1;
+            Redraw();
+            return 0;
+        }
+        if (s_drag) {
+            s_pressed = -1;
+            DragEnd(dx);
+            return 0;
+        }
         int i = HitTest(x, (short)HIWORD(lp));
         int was = s_pressed;
         s_pressed = -1;
@@ -11706,8 +13237,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
             return 0;
         }
-        if ((s_screen == S_HOME || s_screen == S_APPS || s_screen == S_FILES || s_screen == S_RADIO) &&
-            (dx > 120 || dx < -120)) {
+        if ((s_screen == S_HOME || s_screen == S_APPS || s_screen == S_FILES || s_screen == S_RADIO ||
+             s_screen == S_PHOTO_VIEW) && (dx > 120 || dx < -120)) {
             Redraw();   // the old page without the pressed look: the frame the new one pushes out
             if (Swipe(dx < 0 ? 1 : -1)) {
                 BuildButtons();
@@ -11761,6 +13292,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         VoiceDone();
         return 0;
     case WM_DESTROY:
+        UiRememberTick();   // the screen and the source as they are now, and what waits for the minute's save
+        if (s_cfgSoon) {
+            s_cfgSoon = false;
+            SaveCfg();
+        }
         if (s_voice)
             NaviVoice(false);
         if (s_rvcWnd)

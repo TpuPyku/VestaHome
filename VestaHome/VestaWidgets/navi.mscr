@@ -1,0 +1,12 @@
+# VestaHome widget "Навигация": every 5 s writes navi.txt beside this script - CityGuide running or not.
+# VestaHome starts it once (start= in navi.ini) and only reads navi.txt.
+ErrorLevel ("off")
+Data = SystemPath("ScriptPath") \ "navi.txt"
+While (1)
+    If (ProcExists("CityGuideCE.exe"))
+        WriteFile (Data, "text=CityGuide работает^NL^text2=нажмите, чтобы открыть^NL^state=ok^NL^")
+    Else
+        WriteFile (Data, "text=CityGuide не запущен^NL^text2=нажмите, чтобы запустить^NL^state=warn^NL^")
+    EndIf
+    Sleep (5000)
+EndWhile

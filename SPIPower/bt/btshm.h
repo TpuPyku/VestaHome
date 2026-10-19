@@ -33,7 +33,11 @@
 
 enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT_CMD_PREV, BT_CMD_MEDIAINFO,
        BT_CMD_PLAYSTATUS, BT_CMD_AVSTATE, BT_CMD_FF_PRESS, BT_CMD_FF_RELEASE, BT_CMD_REW_PRESS, BT_CMD_REW_RELEASE,
-       BT_CMD_DIAL /* cmdText */, BT_CMD_ANSWER, BT_CMD_END };
+       BT_CMD_DIAL /* cmdText */, BT_CMD_ANSWER, BT_CMD_END,
+       BT_CMD_CONNECT /* cmdText: "A4:E2:..." - the phone, as the shell connects one: Hf_Connect(addr, 0) +
+                         Av_Connect() */,
+       BT_CMD_AVCONNECT /* Av_Connect(): the music of the phone connected (the shell's, 2 s after asking) */,
+       BT_CMD_PLAYON /* Av_Mute(0) + Av_Play(): the shell's BT music "play" */ };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
 struct BtEvent {

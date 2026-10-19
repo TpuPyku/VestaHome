@@ -43,6 +43,9 @@ PLAN = (
     # short audio/video files for VestaHome's "Diagnostics -> Sound and video" (made by make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDMemory',
         ('TestMedia',)),
+    # the user widgets' examples and their guide (VestaHome reads \SDMemory\VestaWidgets\*.ini)
+    (os.path.join(V, 'VestaHome'), r'SDMemory',
+        ('VestaWidgets',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\LaunchInstall',
         ('LaunchInstall.exe',)),
 )

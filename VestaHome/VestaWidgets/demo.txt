@@ -1,0 +1,7 @@
+# The data a script writes (key=value, UTF-8 or cp1251):
+value=7,4
+unit=л/100 км
+text=первая строка: под числом
+text2=вторая строка: мельче
+# state: ok (green dot), warn (orange), alert (red); without it - no dot
+state=ok

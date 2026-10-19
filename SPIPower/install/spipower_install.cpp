@@ -432,8 +432,9 @@ static const char* kOldProxyMd5[] = {
     "0e0a11692af2409dcca273625078222f",   // 2026-10-15 (v2: shared memory, log on \SDMMC)
     "96f4486b5415e194cabb0363009f4dd2",   // 2026-10-17 (log on the SD card, sound/source calls logged)
     "88eb58021d893cdb8e0edf84b3a5feb0",   // 2026-10-18 (shared memory v2, the shell's calls logged too)
+    "73dd581b44f77bc7e49edd49195d186a",   // 2026-10-19 (the same sources as now, an earlier build)
 };
-static const int   kOldProxyN = 4;
+static const int   kOldProxyN = 5;
 
 static int IsOldProxy(const char* md5)
 {
@@ -1293,6 +1294,7 @@ static int DoVhInstall()
     unsigned long i;
     for (i = 0; i < n && !fail; i++) {
         if (!VhEntry(pl, i, name, MAX_PATH, &data, &len)) { fail = 1; break; }
+        if (!_strnicmp(name, "sd/", 3)) continue;   // for the SD card: step 4
         VhPath(p, name, L"");
         if (!_stricmp(name, kVhKeep) && FileExists(p)) { keep = 1; continue; }
         VhDirsFor(name);
@@ -1315,6 +1317,7 @@ static int DoVhInstall()
     unsigned long done = 0;
     for (i = 0; i < n && !fail; i++, done = i) {
         VhEntry(pl, i, name, MAX_PATH, &data, &len);
+        if (!_strnicmp(name, "sd/", 3)) continue;
         VhPath(p, name, L"");
         VhPath(pn, name, L".new");
         VhPath(pb, name, L".bak");
@@ -1339,10 +1342,55 @@ static int DoVhInstall()
 
     // 3. the old copies go
     for (i = 0; i < n; i++)
-        if (VhEntry(pl, i, name, MAX_PATH, &data, &len)) { VhPath(pb, name, L".bak"); DeleteFile(pb); }
-    _snwprintf(g_status, 4096, L"VestaHome установлен в %s: %u файлов.\n%s"
+        if (VhEntry(pl, i, name, MAX_PATH, &data, &len) && _strnicmp(name, "sd/", 3)) {
+            VhPath(pb, name, L".bak");
+            DeleteFile(pb);
+        }
+
+    // 4. the examples for the SD card ("sd/..." -> \SDMemory\..., a user widget): only the files not there yet -
+    //    the user's edits stay; no card - none (VestaHome reads its widgets from the card only: they write often)
+    int sdNew = 0, sdKept = 0, sdAll = 0;
+    for (i = 0; i < n; i++) {
+        if (!VhEntry(pl, i, name, MAX_PATH, &data, &len) || _strnicmp(name, "sd/", 3))
+            continue;
+        sdAll++;
+        if (!FileExists(L"\\SDMemory"))
+            continue;
+        wchar_t rel[MAX_PATH], t[MAX_PATH], d[MAX_PATH];
+        MultiByteToWideChar(CP_UTF8, 0, name + 3, -1, rel, MAX_PATH);
+        for (wchar_t* c = rel; *c; c++)
+            if (*c == L'/')
+                *c = L'\\';
+        _snwprintf(t, MAX_PATH, L"\\SDMemory\\%s", rel);
+        t[MAX_PATH - 1] = 0;
+        if (FileExists(t)) {
+            sdKept++;
+            continue;
+        }
+        wcscpy(d, t);
+        for (wchar_t* c = d + 10; *c; c++)   // its folders (after "\SDMemory\")
+            if (*c == L'\\') {
+                *c = 0;
+                EnsureDir(d);
+                *c = L'\\';
+            }
+        if (WriteBytes(t, data, len))
+            sdNew++;
+    }
+    wchar_t sdLine[160] = L"";
+    if (sdAll && FileExists(L"\\SDMemory"))
+        _snwprintf(sdLine, 160, L"Пример своего виджета (пробки) — \\SDMemory\\VestaWidgets: новых файлов %d, "
+                   L"ваших оставлено %d.\n", sdNew, sdKept);
+    else if (sdAll)
+        wcscpy(sdLine, L"Пример своего виджета не поставлен: нет SD-карты.\n");
+    {
+        wchar_t m[200];
+        _snwprintf(m, 200, L"vh: sd examples: %d new, %d kept, %d in the payload", sdNew, sdKept, sdAll);
+        LogMsg(m);
+    }
+    _snwprintf(g_status, 4096, L"VestaHome установлен в %s: %u файлов.\n%s%s"
                L"Настройки (VestaHome.ini, пароли Wi-Fi), apps.txt и база камер не тронуты.",
-               kVhDir, (unsigned)(keep ? n - 1 : n), keep ? L"Свой radio.txt оставлен.\n" : L"");
+               kVhDir, (unsigned)(n - sdAll - (keep ? 1 : 0)), keep ? L"Свой radio.txt оставлен.\n" : L"", sdLine);
     LogMsg(g_status);
     return 1;
 }

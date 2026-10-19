@@ -220,7 +220,18 @@ static DWORD WINAPI CmdThread(LPVOID)
             r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Hf_Answer])(0);
         else if (cmd == BT_CMD_END)
             r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Hf_End])(0);
-        else if (cmd == BT_CMD_DIAL) {   // Hf_DialNumber(number, its length, line)
+        else if (cmd == BT_CMD_CONNECT) {   // as NCL_BT connects a device (FUN_100057fc, Ghidra 2026-10-19)
+            char addr[40];
+            CopyText(addr, s_shm->cmdText, 18);
+            r = ((int (*)(char*, int))g_real[IDX_Flc_Bluetooth_Hf_Connect])(addr, 0);
+            int r2 = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Av_Connect])();
+            r = r * 100 + r2;
+        } else if (cmd == BT_CMD_AVCONNECT) {
+            r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Av_Connect])();
+        } else if (cmd == BT_CMD_PLAYON) {   // as NCL_BT's play (FUN_10004a5c): unmute, then play
+            ((int (*)(int))g_real[IDX_Flc_Bluetooth_Av_Mute])(0);
+            r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Av_Play])();
+        } else if (cmd == BT_CMD_DIAL) {   // Hf_DialNumber(number, its length, line)
             char num[40];
             CopyText(num, s_shm->cmdText, 40);
             r = ((int (*)(const char*, unsigned short, int))g_real[IDX_Flc_Bluetooth_Hf_DialNumber])(
