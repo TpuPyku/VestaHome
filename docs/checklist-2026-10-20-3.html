@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверки на ГУ</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  body { font: 10.5pt/1.3 "Segoe UI", Arial, sans-serif; color: #000; background: #fff; margin: 0 auto; max-width: 190mm; }
+  h1 { font-size: 15pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 5mm 0 1.5mm; border-bottom: 1.5pt solid #000; padding-bottom: 0.5mm; page-break-after: avoid; }
+  p, li { margin: 0.8mm 0; }
+  .note { font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1mm; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 0.6pt solid #555; padding: 1mm 1.5mm; vertical-align: top; text-align: left; }
+  th { background: #e6e6e6; font-size: 9.5pt; }
+  td.n { width: 8mm; text-align: center; font-weight: 600; }
+  td.ok { width: 7mm; }
+  td.ok::before { content: ""; display: inline-block; width: 3.2mm; height: 3.2mm; border: 0.8pt solid #000; }
+  td.memo { width: 38mm; }
+</style>
+</head>
+<body>
+
+<h1>Проверки на ГУ — девятый лист</h1>
+<p class="note">Составлено 2026-10-20 по журналам <b>MAIN\HU_logs\2026-10-20-3</b>. ☐ — «сделано», «Заметки» — что увидели. Нужны SD-карта и Bluetooth-телефон; телефон с музыкой.</p>
+
+<h2>1. Установка</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">1</td><td>VestaHomeInstall: «1. VESTAHOME» (proxy те же, что в прошлый раз).</td><td>VestaHome обновлён.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>2. Источники звука</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">2</td><td>Играет радио → Медиа → трек.</td><td>Трек слышно через ~1 с (журнал «источник: путь Bluetooth для нашего звука»). Телефон, если подключён, не заиграл.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">3</td><td>Играет трек → экран «Радио» (без тапа по пресету).</td><td>Трек на паузе, через ~1,5 с играет радио (журнал «радио: клавиши не переключили источник … пресет N», если клавиши не сработали).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">4</td><td>BT → трек; трек → BT (▶ на экране Bluetooth).</td><td>Каждый раз играет одно: трек на паузе при ▶ BT.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">4а</td><td>Медиа → Видео → файл (играло радио).</td><td>Картинка есть (не чёрный экран), звук есть.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">5</td><td>Интернет-радио с радио ГУ; видео с радио ГУ.</td><td>Слышно (тот же путь Bluetooth).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">6</td><td>Играет трек → MODE.</td><td>Трек на паузе, играет то, что выбрал MODE.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>3. Радио</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">7</td><td>Страница «СВ» (в «Настройки → Радио» пункта «СВ» больше нет).</td><td>Включается сама; частоты в кГц. Скан на СВ — записать, работает ли.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">8</td><td>Виджет «Радио», когда играет частота не из пресетов.</td><td>Кнопки ⏮ ⏭ видны, ⏭ — первый пресет.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>4. Звук и камера</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">9</td><td>«Настройки → Звук»: фейдер вперёд / назад.</td><td>Перед и зад на месте.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">10</td><td>Задний ход и обратно (своя камера выкл.), VestaHome был впереди.</td><td>После заднего хода через ~1,5 с снова VestaHome. Затем эквалайзер / баланс / радио — работают ли.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">11</td><td>«Настройки → Автомобиль → ПОКАЗАТЬ» на стоянке (не задний ход).</td><td>Картинка с камеры или чёрный экран (питания нет) — записать; тап закрывает.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>5. Списки, телефон</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">12</td><td>Медиа → Музыка, Видео: папка с файлами на несколько страниц.</td><td>Два столбца, без общей рамки; точки над нижней панелью; при свайпе панель и вкладки стоят.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">13</td><td>«Сопряжённые»: свайп по списку.</td><td>Листается только список, точки под ним.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">14</td><td>Набор номера.</td><td>Каждая клавиша — тон (на «Audio Output» 1).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>9. Что прислать</h2>
+<ul>
+  <li><b>\SDMemory\VestaLogs\</b>: VestaHome.log, SPIPower.log, BTProxy.log, VestaLaunch.log.</li>
+  <li>Этот лист с заметками.</li>
+</ul>
+</body>
+</html>

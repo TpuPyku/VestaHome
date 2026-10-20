@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверки на ГУ</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  body { font: 10.5pt/1.3 "Segoe UI", Arial, sans-serif; color: #000; background: #fff; margin: 0 auto; max-width: 190mm; }
+  h1 { font-size: 15pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 5mm 0 1.5mm; border-bottom: 1.5pt solid #000; padding-bottom: 0.5mm; page-break-after: avoid; }
+  p, li { margin: 0.8mm 0; }
+  .note { font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1mm; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 0.6pt solid #555; padding: 1mm 1.5mm; vertical-align: top; text-align: left; }
+  th { background: #e6e6e6; font-size: 9.5pt; }
+  td.n { width: 8mm; text-align: center; font-weight: 600; }
+  td.ok { width: 7mm; }
+  td.ok::before { content: ""; display: inline-block; width: 3.2mm; height: 3.2mm; border: 0.8pt solid #000; }
+  td.memo { width: 38mm; }
+</style>
+</head>
+<body>
+
+<h1>Проверки на ГУ — восьмой лист</h1>
+<p class="note">Составлено 2026-10-20 по журналам <b>MAIN\HU_logs\2026-10-20-2</b>. ☐ — «сделано», «Заметки» — что увидели. Нужны SD-карта и Bluetooth-телефон; для п. 8 — Note13.</p>
+
+<h2>1. Установка</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">1</td><td>VestaHomeInstall: «1. VESTAHOME», затем «2» (новый proxy MCU и proxy Bluetooth), перезагрузка. Файл <b>\SDMMC\SPIPower.on</b> оставить.</td><td>«СТАТУС»: proxy MCU и Bluetooth — «стоит (текущий)».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">2</td><td>LaunchInstall — новый VestaLaunch.</td><td>Ставится, «Навигация» открывает лаунчер.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>2. Один источник звука</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">3</td><td>Играет радио. Медиа → Музыка → трек.</td><td>Радио замолкает, играет трек (MCU переключился на «медиа»). В журнале «источник: медиа (было 0)». Если вместе с треком заиграла музыка оболочки — записать.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">4</td><td>Играет трек. Открыть «Радио» (или тап по пресету в виджете).</td><td>Трек на паузе, играет радио.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">5</td><td>Играет BT-музыка с телефона. Включить интернет-радио, затем видео.</td><td>BT на паузе; радио (интернет) играет; видео ставит его на паузу. Двух звуков сразу нет.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">6</td><td>Играет трек. Кнопка MODE на панели.</td><td>Трек на паузе (журнал «источник: радио — наши плееры на паузу»).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">7</td><td>«Медиа → Bluetooth» → ▶, когда играл трек.</td><td>Трек на паузе, играет телефон.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>3. Радио</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">8</td><td>Сразу после включения ГУ открыть «Радио».</td><td>Частота и пресеты за 1–2 с (VestaHome будит тюнер, как оболочка при старте). В журнале «радио: тюнер ответил через N с» — записать N.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">9</td><td>Кнопка страниц по кругу: FM1 → FM2 → FM3 → УКВ → СВ → FM1 (СВ должно быть включено в «Настройки → Радио»).</td><td>На СВ — частоты 522…1620 (кГц), свои 8 пресетов; на УКВ не зависает. Не переключилось — страница возвращается на настоящий диапазон и надпись «диапазон не переключился».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">10</td><td>Удерживать пресет (сохранить станцию).</td><td>Подпись на кнопке меняется сразу.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">11</td><td>Виджет «Радио» на главной, когда играет СВ.</td><td>«РАДИО · СВ», частота в кГц.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>4. Списки файлов и галерея</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">12</td><td>Медиа → Музыка → список; Видео; Фото; «Приложения» → изменить → выбор программы.</td><td>Везде одинаково: свайп листает страницы, точки внизу; стрелок нет.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">13</td><td>Фото: свайп по плиткам.</td><td>Едут только плитки; вкладки медиа сверху стоят.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>5. Экран, телефон, звук</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">14</td><td>«Настройки → Экран».</td><td>Пункта «Яркость» нет.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">15</td><td>«Телефон»: удерживать «0».</td><td>Набирается «+».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">16</td><td>«Настройки → Звук»: низкие +6, баланс влево.</td><td>На слух меняется. В SPIPower.log строки «VH CALL SPApi_SendRadioAudioHMLData…» и ответ MCU 0x3102.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>6. Bluetooth</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">17</td><td>«Настройки → Bluetooth → Сопряжённые».</td><td>Полный список (до 16, по 7 на страницу, точки внизу), подключённый — оранжевым.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">18</td><td>«УДАЛИТЬ» у ненужного устройства, «ТОЧНО?».</td><td>Устройство пропало из списка (и из списка оболочки).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>7. Свои виджеты и VestaLaunch</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">19</td><td>Тап по «Пробкам».</td><td>OSMapsCE открывается и остаётся на экране.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">20</td><td>Тап по «Навигации» (путь в navi.ini неверный, CityGuide есть в «Приложениях»).</td><td>Запускается CityGuide (из «Приложений»). Если его там нет — строка «нет CityGuideCE.exe: добавьте в «Приложения»».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">21</td><td>«Навигация» → CityGuide → свернуть его.</td><td>Через ~2 с — лаунчер (не чёрный экран); «назад» в лаунчере — оболочка.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>8. Wi-Fi</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">22</td><td>На Note13 в настройках точки: защита <b>WPA2-Personal</b> (не «WPA2/WPA3»), 2,4 ГГц, без Wi-Fi 6. Подключить ГУ.</td><td>В журнале «связь с MiNote13Pro есть» (имя целиком), затем «адрес … получен за N с». Строка в списке не мигает.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">23</td><td>То же, если не помогло: журнал VestaHome — сколько секунд до «связь потеряна».</td><td></td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>9. Что прислать</h2>
+<ul>
+  <li><b>\SDMemory\VestaLogs\</b>: VestaHome.log, SPIPower.log, BTProxy.log, VestaLaunch.log.</li>
+  <li>Этот лист с заметками.</li>
+</ul>
+</body>
+</html>

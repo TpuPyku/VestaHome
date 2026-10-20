@@ -9,10 +9,64 @@
 #include <windows.h>
 #include "g_proxy.h"
 #include "mcushm.h"
+#include "mcucmd.h"
 
 // The shared ring of MCU messages (mcushm.h), mapped in every process that loads us.
 McuShm* g_shm = 0;
 static HANDLE s_shmMap = 0;
+
+// VestaHome's calls made in the shell (mcucmd.h): only in G3NavHMI.exe.
+static McuCmd* s_cmd = 0;
+static HANDLE  s_cmdEv = 0;
+void ProxyLog(const wchar_t* s);   // intercept.cpp: a line of SPIPower.log (with the flag)
+
+typedef void (*CallFn6)(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
+
+static DWORD WINAPI CmdThread(LPVOID)
+{
+    s_cmd->done = s_cmd->seq;   // what an earlier shell left is not made again
+    s_cmd->ready = (LONG)GetCurrentProcessId();
+    for (;;) {
+        WaitForSingleObject(s_cmdEv, 1000);
+        while (s_cmd->done != s_cmd->seq) {
+            LONG n = s_cmd->done + 1;
+            if (s_cmd->seq - n >= MCU_CMD_SLOTS)   // fallen behind by a whole queue: from the oldest still there
+                n = s_cmd->seq - MCU_CMD_SLOTS + 1;
+            McuCall c = s_cmd->call[n % MCU_CMD_SLOTS];
+            c.name[sizeof(c.name) - 1] = 0;
+            wchar_t w[48];
+            MultiByteToWideChar(CP_ACP, 0, c.name, -1, w, 48);
+            int idx = -1;
+            for (int i = 0; i < PROXY_COUNT && idx < 0; i++)
+                if (!wcscmp(kProxyNames[i], w))
+                    idx = i;
+            if (idx >= 0 && g_real[idx])
+                ((CallFn6)g_real[idx])(c.arg[0], c.arg[1], c.arg[2], c.arg[3], c.arg[4], c.arg[5]);
+            wchar_t b[128];
+            wsprintfW(b, L"VH CALL %s(%u, %u, %u)%s", w, c.arg[0], c.arg[1], c.arg[2], idx < 0 ? L" - no such" : L"");
+            ProxyLog(b);
+            s_cmd->done = n;
+        }
+    }
+    return 0;
+}
+
+static void CmdStart()
+{
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(NULL, exe, MAX_PATH);
+    if (!wcsstr(exe, L"G3NavHMI"))
+        return;
+    HANDLE m = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(McuCmd), MCU_CMD_NAME);
+    if (!m)
+        return;
+    s_cmd = (McuCmd*)MapViewOfFile(m, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(McuCmd));
+    s_cmdEv = CreateEventW(NULL, FALSE, FALSE, MCU_CMD_EVENT);
+    if (!s_cmd || !s_cmdEv)
+        return;
+    s_cmd->magic = MCU_CMD_MAGIC;
+    CloseHandle(CreateThread(NULL, 0, CmdThread, NULL, 0, NULL));   // runs once DllMain has returned
+}
 
 // Pointer table filled from the original DLL at load time (thunks tail-jump
 // into it). C linkage so the symbol name matches armasm's IMPORT. The explicit
@@ -90,6 +144,7 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID lpvReserved)
                 InterlockedIncrement((LONG*)&g_shm->attach);
             }
         }
+        CmdStart();
 
         if (g_logging)
         {

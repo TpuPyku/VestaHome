@@ -162,7 +162,8 @@ static void LogEvent(int* ev)
         for (int i = 0; i < 24 && k < 180; i++)
             k += wsprintfW(b + k, L" %02X", (unsigned)p[i]);
         const char* t = ev[0] == 0x2E && ev[1] > 0 ? (const char*)(ev + 4)   // the first text of a track's info
-                      : ev[0] == 0x0A ? (const char*)ev + 0x16 : NULL;            // the device's name
+                      : ev[0] == 0x0A || (((char*)ev)[6] == ':' && ((char*)ev)[9] == ':')
+                      ? (const char*)ev + 0x16 : NULL;            // the device's name (an address at byte 4)
         if (t) {
             char a[41];
             int i = 0;
@@ -180,12 +181,49 @@ static void LogEvent(int* ev)
     LogLine(b);
 }
 
+// A pairing asked by VestaHome (BT_CMD_PAIR): its address and PIN, and the shell's PIN to put back. The stack's
+// request (its code unknown: an event with that address at byte 4, not a list's 0x08 / 0x09 / 0x0A) is answered
+// by CmdThread - not here, in the SDK's callback.
+static char          s_pairAddr[18], s_oldPin[17];
+static volatile LONG s_pairOn, s_pairAsk;
+static DWORD         s_pairTick;
+
+static void PairWatch(int* ev)
+{
+    if (!s_pairOn || ev[0] == 0x08 || ev[0] == 0x09 || ev[0] == 0x0A)
+        return;
+    __try {
+        if (!_strnicmp((const char*)ev + 4, s_pairAddr, 17)) {
+            s_pairAsk = ev[0];
+            SetEvent(s_cmdEv);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
 static void ProxyCb(int* ev)
 {
     Publish(ev);
     LogEvent(ev);
+    PairWatch(ev);
     if (s_appCb)
         s_appCb(ev);
+}
+
+// The pairing's end: its request answered with our PIN (once), or a minute gone; the shell's PIN back
+static void PairEnd()
+{
+    wchar_t b[96];
+    if (s_pairAsk) {
+        int r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_Pair_Confirm])(1);
+        wsprintfW(b, L"PAIR request ev 0x%02X: Pair_Confirm(1) -> %d", (unsigned)s_pairAsk, r);
+        LogLine(b);
+    }
+    int r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Conn_SetPinCode])(s_oldPin);
+    wsprintfW(b, L"PAIR end: PIN back -> %d", r);
+    LogLine(b);
+    s_pairOn = 0;
+    s_pairAsk = 0;
 }
 
 // VestaHome's commands, carried out in the shell's process by the SDK itself
@@ -194,6 +232,8 @@ static DWORD WINAPI CmdThread(LPVOID)
     LONG done = s_shm ? s_shm->cmdSeq : 0;
     while (s_shm) {
         WaitForSingleObject(s_cmdEv, 1000);
+        if (s_pairOn && (s_pairAsk || GetTickCount() - s_pairTick > 60000))
+            PairEnd();
         LONG n = s_shm->cmdSeq;
         if (n == done)
             continue;
@@ -231,6 +271,37 @@ static DWORD WINAPI CmdThread(LPVOID)
         } else if (cmd == BT_CMD_PLAYON) {   // as NCL_BT's play (FUN_10004a5c): unmute, then play
             ((int (*)(int))g_real[IDX_Flc_Bluetooth_Av_Mute])(0);
             r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Av_Play])();
+        } else if (cmd == BT_CMD_SEARCH) {
+            r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_Search])();
+        } else if (cmd == BT_CMD_SEARCHSTOP) {
+            r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_Cancel_Search])();
+        } else if (cmd == BT_CMD_PAIR) {   // "addr pin": our PIN while it pairs, the shell's kept in s_oldPin
+            char t[40];
+            CopyText(t, s_shm->cmdText, 40);
+            if (s_pairOn)
+                PairEnd();
+            CopyText(s_pairAddr, t, 18);
+            memset(s_oldPin, 0, sizeof(s_oldPin));
+            ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Conn_GetPinCode])(s_oldPin);
+            s_oldPin[16] = 0;
+            if (strlen(t) > 18)
+                ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Conn_SetPinCode])(t + 18);
+            s_pairAsk = 0;
+            s_pairTick = GetTickCount();
+            s_pairOn = 1;
+            r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Conn_Pair])(s_pairAddr);
+        } else if (cmd == BT_CMD_LISTPAIRED || cmd == BT_CMD_UNPAIR) {   // the paired list anew (after a removal)
+            if (cmd == BT_CMD_UNPAIR) {
+                char a[40];
+                CopyText(a, s_shm->cmdText, 18);
+                r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Conn_Delete_Paired])(a);
+            }
+            InterlockedIncrement((LONG*)&s_shm->seq);   // the list from scratch: the events refill it
+            s_shm->st.paired = 0;
+            InterlockedIncrement((LONG*)&s_shm->seq);
+            int r2 = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_List_History])();
+            if (cmd == BT_CMD_LISTPAIRED)
+                r = r2;
         } else if (cmd == BT_CMD_DIAL) {   // Hf_DialNumber(number, its length, line)
             char num[40];
             CopyText(num, s_shm->cmdText, 40);
@@ -287,7 +358,7 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
                 memset(&s_shm->st, 0, sizeof(s_shm->st));
                 s_shm->st.av = s_shm->st.avrcp = s_shm->st.hf = s_shm->st.hfAudio = -1;
                 s_shm->st.battery = s_shm->st.signal = -1;
-                s_shm->version = 3;
+                s_shm->version = 4;
                 s_shm->magic = BT_SHM_MAGIC;
             }
             if (s_shm) {

@@ -23,13 +23,13 @@
 #ifndef BTSHM_H
 #define BTSHM_H
 
-#define BT_SHM_NAME   L"VestaBT3"       // v3 (2026-10-18): + calls, the operator, rewind / fast forward, dialing
-#define BT_CMD_EVENT  L"VestaBT3_Cmd"   // set by VestaHome after writing a command
+#define BT_SHM_NAME   L"VestaBT4"       // v4 (2026-10-20): 16 paired, search / pair / unpair (v3: calls, rewind)
+#define BT_CMD_EVENT  L"VestaBT4_Cmd"   // set by VestaHome after writing a command
 #define BT_SHM_MAGIC  0x54425456        // "VTBT"
 #define BT_EV_SLOTS   64
 #define BT_EV_DATA    64                // the first bytes of each event, for the log and later decoding
 #define BT_TEXT       128               // UTF-8 bytes kept of a name / title
-#define BT_PAIRED     8                 // paired devices kept
+#define BT_PAIRED     16                // paired devices kept
 
 enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT_CMD_PREV, BT_CMD_MEDIAINFO,
        BT_CMD_PLAYSTATUS, BT_CMD_AVSTATE, BT_CMD_FF_PRESS, BT_CMD_FF_RELEASE, BT_CMD_REW_PRESS, BT_CMD_REW_RELEASE,
@@ -37,7 +37,14 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
        BT_CMD_CONNECT /* cmdText: "A4:E2:..." - the phone, as the shell connects one: Hf_Connect(addr, 0) +
                          Av_Connect() */,
        BT_CMD_AVCONNECT /* Av_Connect(): the music of the phone connected (the shell's, 2 s after asking) */,
-       BT_CMD_PLAYON /* Av_Mute(0) + Av_Play(): the shell's BT music "play" */ };
+       BT_CMD_PLAYON /* Av_Mute(0) + Av_Play(): the shell's BT music "play" */,
+       BT_CMD_SEARCH /* Conn_Search(): the devices in sight come as events, the address text at byte 4 */,
+       BT_CMD_SEARCHSTOP /* Conn_Cancel_Search() */,
+       BT_CMD_PAIR /* cmdText: "A4:E2:87:98:D6:9F 1234" - Conn_Pair(addr) with this PIN; the stack's request for it
+                      (an event with the address at byte 4) is answered by the proxy, then the shell's own PIN is
+                      put back */,
+       BT_CMD_LISTPAIRED /* Conn_List_History(): the paired list again (0x08 each, 0x09 the end) */,
+       BT_CMD_UNPAIR /* cmdText: the address - Conn_Delete_Paired(addr), then the list again */ };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
 struct BtEvent {

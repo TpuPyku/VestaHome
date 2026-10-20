@@ -19,6 +19,7 @@
 #include "https.h"
 #include "video.h"
 #include "wifi.h"
+#include "obd.h"
 #include "secret.h"
 #include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
@@ -79,14 +80,15 @@ static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music
 // only change the demo values below. A_PAGE and the rest belong to the programs ("Apps", the shortcut editor).
 enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE, A_SEG, A_KEY, A_DEL, A_PAGE,
               A_RUN, A_ADD, A_EDITMODE, A_FIELD, A_SAVE, A_DELETE, A_CANCEL, A_OK, A_CHAR, A_SHIFT, A_LANG,
-              A_BKSP, A_FILE, A_UP, A_FPREV, A_FNEXT, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_SOON, A_TEST,
+              A_BKSP, A_FILE, A_UP, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_SOON, A_TEST,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_REGPAGE, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
               A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RLISTPAGE, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MPAGE, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_THEME, A_LIGHT, A_BRIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_LICSCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
+              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_LICSCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
-              A_VFILE, A_VUP, A_VPAGE, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
-              A_NRPLAY, A_NRSTEP, A_NRPICK, A_NRPAGE, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIPAGE, A_WIFIAP };
+              A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
+              A_NRPLAY, A_NRSTEP, A_NRPICK, A_NRPAGE, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIPAGE, A_WIFIAP,
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -101,7 +103,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -116,7 +118,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_SAVER, T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SUBTITLES, T_SLIDES_OPEN, T_AUTOROTATE, T_MUTED,
-       T_W_GPS, T_CLIMATE, T_CAM_ALERT, T_CAM_WEEKLY, T_RVC_OWN, T_WIFI_AP_AUTO, T_MS, T_WIFI_HOLD, T_COUNT };
+       T_W_GPS, T_CLIMATE, T_CAM_ALERT, T_CAM_WEEKLY, T_RVC_OWN, T_WIFI_AP_AUTO, T_MS, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, true, false, true, false, true, true, true, true, false,
                               true, false, true, false, true, true };
 enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_FMT, G_PHOTO_SCALE, G_CALLS,
@@ -1751,6 +1753,7 @@ static int Section(Screen s)
         return 4;
     case S_SETTINGS: case S_SET_SOUND: case S_SET_BALANCE: case S_SET_SCREEN: case S_SET_RADIO: case S_SET_BT:
     case S_SET_WIFI: case S_SET_VIDEO: case S_SET_PHOTO: case S_INFO: case S_SET_CAR: case S_SET_VOLUME:
+    case S_SET_OBD: case S_BT_PAIRED:
         return 5;
     default:
         return -1;
@@ -1779,15 +1782,15 @@ static void NavBar(HDC dc, int active)
 }
 
 // Page dots under the content of a paged main screen; tapping them (or swiping) turns the page.
-static void PageDots(HDC dc, int page, int pages)
+static void PageDots(HDC dc, int page, int pages, int cx = 400, int y = 398)
 {
     if (pages < 2)
         return;
-    Zone(280, 392, 240, 16, A_PAGE);
-    int w = 28 + (pages - 1) * 28, dx = 400 - w / 2;
+    Zone(cx - 120, y - 6, 240, 16, A_PAGE);
+    int w = 28 + (pages - 1) * 28, dx = cx - w / 2;
     for (int p = 0; p < pages; p++) {
         int dw = p == page ? 28 : 20;
-        R(dc, dx, 398, dw, 6, 3, p == page ? kOrange : kDim);
+        R(dc, dx, y, dw, 6, 3, p == page ? kOrange : kDim);
         dx += dw + 8;
     }
 }
@@ -1831,13 +1834,14 @@ static void Settings(HDC dc, Screen active)
 {
     static const Tab items[10] = { { IC_GEAR, L"ОБЩИЕ", S_SETTINGS }, { IC_VOL, L"ЗВУК", S_SET_SOUND },
                                   { IC_MOON, L"ЭКРАН", S_SET_SCREEN }, { IC_RADIO, L"РАДИО", S_SET_RADIO },
-                                  { IC_BT, L"ТЕЛЕФОН", S_SET_BT }, { IC_WIFI, L"WI-FI", S_SET_WIFI },
+                                  { IC_BT, L"BLUETOOTH", S_SET_BT }, { IC_WIFI, L"WI-FI", S_SET_WIFI },
                                   { IC_VIDEO, L"ВИДЕО", S_SET_VIDEO }, { IC_PHOTO, L"ФОТО", S_SET_PHOTO },
                                   { IC_CAR, L"АВТОМОБИЛЬ", S_SET_CAR }, { IC_INFO, L"О СИСТЕМЕ", S_INFO } };
     Frame(dc, L"НАСТРОЙКИ");
     for (int i = 0; i < 10; i++) {
         int x = 16 + (i % 2) * 110, y = 64 + (i / 2) * 68;
-        bool on = items[i].to == active || (active == S_SET_BALANCE && items[i].to == S_SET_SOUND);
+        bool on = items[i].to == active || (active == S_SET_BALANCE && items[i].to == S_SET_SOUND) ||
+                  ((active == S_SET_OBD || active == S_BT_PAIRED) && items[i].to == S_SET_BT);
         on = Zone(x, y, 102, 62, items[i].to == active ? A_NONE : A_TAB, items[i].to) || on;
         R(dc, x, y, 102, 62, 10, on ? kOrange : kPanel);
         Ico(dc, items[i].ic, x + 37, y + 7, 28, on ? kInk : kMuted);
@@ -2003,10 +2007,12 @@ static void RadioPreset(int i);
 static bool McuSend3(const char* name, int a, int b, int c);
 static bool VolGet(int* vol, int* mute, int* src);
 
-static void FreqText(int f10, wchar_t* s, int n)   // 9840 -> "98.4", 10625 -> "106.25"
+static void FreqText(int f10, wchar_t* s, int n)   // 9840 -> "98.4", 10625 -> "106.25"; СВ: kHz, 1053 -> "1053"
 {
     if (f10 <= 0)
         wcscpy(s, L"—");
+    else if (f10 < 3000)   // the MW band's kHz (522..1710)
+        _snwprintf(s, n, L"%d", f10);
     else if (f10 % 10)
         _snwprintf(s, n, L"%d.%02d", f10 / 100, f10 % 100);
     else
@@ -2035,18 +2041,56 @@ static void RadioDock(HDC dc, bool listOn)
 // A preset tap tunes it (SPApi_SendListItemControl(1, n)), a long press saves the station there ((1, n, 1), the
 // shell's own, MCU 0x0909); seek - the extended keys. Opening the screen with nothing known asks the MCU (0x30,
 // as the shell's screen does).
-enum { kRadioPages = 4, RP_UKV = 3 };
+static void OursQuiet();
+static void BtQuiet();
+static void MediaSource();
+
+// The tuner's state comes only on a change or when asked (key 0x30). Right after the unit starts the MCU may not
+// answer for 20-30 s (HU 2026-10-20: the radio key at 187 s - nothing, the same at 207 s - the tuner at once).
+// The shell gets it at once at its start: SendRadioNaviVoiceGuidance(0) + SendRadioIsNaviSourceCouldIn(0), and
+// the MCU sends the whole tuner (SPIPower.log 2026-10-20-2, 36.3 s) - so the same first; then, while the radio
+// is wanted and the tuner has not spoken in this run, 0x30 again every 3 s, for a minute.
+static volatile bool s_tunLive;   // a 0x0901 came since the start
+static volatile LONG s_tun0901;   // 0x0901 replies so far: one a band key press (RadioBandStep)
+static DWORD s_radioAsk;          // the radio wanted (RadioOn, its screen), 0 = not
+
+// The source switches and how they are checked (HU 2026-10-20-3): the radio's keys 0x30 + 0x7F switched to the
+// radio only sometimes - a preset (SendListItemControl) always does; SendMediaSourceSelect(5, 3) is acked (0x9101
+// 00 05 06) but the MCU goes "media" only when the shell's own player plays - while the Bluetooth source (09, keys
+// 0x84 + 0x54) is the CE's own audio path too: our waveOut sounds with it (BT -> our music worked). So ours take
+// that path; the radio's keys are checked a moment later and a preset taken if they did nothing.
+static DWORD s_srcByUs;      // we switched the source: the watcher (MODE, the shell) leaves our players alone
+static DWORD s_radioSrcAsk;  // RadioOn's keys sent (checked 1.5 s later)
+static DWORD s_btPathTick;   // the Bluetooth path taken for our player: the phone paused once it is up
+
+// СВ (MW, 2026-10-20): the shell's AM key 0x3A, band 2 in 0x0901 with the frequency in kHz (522, 531, ... a 9 kHz
+// step), 8 presets; 0x3B from it goes back to FM1. The band takes the "СВ" radio setting (0x092E) to be on.
+enum { kRadioPages = 5, RP_UKV = 3, RP_MW = 4 };
+
+static int PageBand(int page)   // the MCU's band of a page: 0 FM, 1 УКВ, 2 СВ
+{
+    return page == RP_UKV ? 1 : page == RP_MW ? 2 : 0;
+}
+
+static int BandPage(int band)   // the first page of a band
+{
+    return band == 1 ? RP_UKV : band == 2 ? RP_MW : 0;
+}
 static int s_radioPage;          // 0..2 FM1..FM3, 3 УКВ
 static int s_bandWant = -1;      // RadioBand: the band asked for, -1 none
 static int s_bandPresses;
 static DWORD s_bandTick;
+static LONG s_bandSeq;           // s_tun0901 at the last press
+static bool s_bandFailed;        // given up with the band not the page's: the page goes back to the band's
 static void RadioBand(int want);
 
 // A band switch under way (the MCU not answering for 8 s: given up).
 static bool BandPending()
 {
-    if (s_bandWant >= 0 && GetTickCount() - s_bandTick > 8000)
+    if (s_bandWant >= 0 && GetTickCount() - s_bandTick > 8000) {
         s_bandWant = -1;
+        s_bandFailed = true;
+    }
     return s_bandWant >= 0;
 }
 
@@ -2057,7 +2101,7 @@ static void RadioPageTo(int page)
     Tuner t;
     TunerGet(&t);
     page = (page + kRadioPages) % kRadioPages;
-    int want = page == RP_UKV ? 1 : 0;
+    int want = PageBand(page);
     if (BandPending()) {
         if (want != s_bandWant) {
             if (t.band == want)
@@ -2078,28 +2122,39 @@ static void ScrRadio(HDC dc)
     static DWORD s_seen;
     if (s_seen != s_screenTick) {   // opened: the page of the preset playing; nothing known - ask
         s_seen = s_screenTick;
-        if (t.band == 1)
-            s_radioPage = RP_UKV;
+        if (t.band == 1 || t.band == 2)
+            s_radioPage = BandPage(t.band);
         else if (t.cur >= 0 && t.cur < 24)
             s_radioPage = t.cur / 8;
-        if (!t.f10 || !t.presets)
+        if (!t.f10 || !t.presets || !s_tunLive) {
             McuKey(0x30, false);
+            if (!s_tunLive)
+                s_radioAsk = GetTickCount();
+        }
     }
     wchar_t f[16], band[8];
     FreqText(t.f10, f, 16);
-    bool low = t.band == 1 || (t.band < 0 && t.f10 > 0 && t.f10 < 8750);   // the OIRT band, 65..74 MHz
+    bool low = t.band == 1 || (t.band < 0 && t.f10 >= 6500 && t.f10 < 8750);   // the OIRT band, 65..74 MHz
+    bool mw = t.band == 2 || (t.band < 0 && t.f10 > 0 && t.f10 < 3000);
     bool pending = BandPending();
+    if (s_bandFailed && !pending) {   // the MCU did not switch: the page of the band it is in
+        s_bandFailed = false;
+        if (t.band >= 0 && t.band != PageBand(s_radioPage)) {
+            s_radioPage = BandPage(t.band);
+            wcscpy(s_status, L"диапазон не переключился - ещё раз");
+        }
+    }
     static int s_lastBand = -2;
     if (t.band != s_lastBand) {   // the band changed elsewhere (the shell): its page
-        if (!pending && s_lastBand != -2 && t.band >= 0 && (t.band == 1) != (s_radioPage == RP_UKV))
-            s_radioPage = t.band == 1 ? RP_UKV : 0;
+        if (!pending && s_lastBand != -2 && t.band >= 0 && t.band != PageBand(s_radioPage))
+            s_radioPage = BandPage(t.band);
         s_lastBand = t.band;
     }
-    bool ukv = s_radioPage == RP_UKV;
-    bool ready = ukv == low;            // the MCU is in the page's band (not while it switches)
-    int page = ukv ? 0 : s_radioPage;   // the presets' page in the band
-    if (ukv)
-        wcscpy(band, L"УКВ");
+    int pb = PageBand(s_radioPage);
+    bool ready = pb == (mw ? 2 : low ? 1 : 0);   // the MCU is in the page's band (not while it switches)
+    int page = pb ? 0 : s_radioPage;              // the presets' page in the band
+    if (pb)
+        wcscpy(band, pb == 1 ? L"УКВ" : L"СВ");
     else
         _snwprintf(band, 8, L"FM%d", page + 1);
     const wchar_t* name = t.ps[0] ? t.ps : RadioName(t, t.f10);
@@ -2114,7 +2169,7 @@ static void ScrRadio(HDC dc)
     Marquee(dc, 300, 156, 460, rt, 17, kMuted, 400);
     if (s_marqOn)
         SetTimer(s_wnd, TIMER_MARQ, kMarqMs, NULL);   // (again: the same timer, restarted)
-    int lo = low ? 6500 : 8750, hi = low ? 7400 : 10800;
+    int lo = mw ? 522 : low ? 6500 : 8750, hi = mw ? 1620 : low ? 7400 : 10800;
     for (int i = 0; i <= 20; i++) {   // tuning scale over x 40..740
         int x = 40 + i * 35, h = i % 2 ? 5 : 8;
         Fill(dc, x - 1, 182 - h, x + 1, 182, kDim);
@@ -2149,29 +2204,42 @@ static void ScrRadio(HDC dc)
     PageDots(dc, s_radioPage, kRadioPages);
 }
 
-// The band: the MCU's band key steps FM1 -> FM2 -> FM3 -> УКВ, and only FM <-> УКВ shows in its replies
-// (0x0901's band): pressed again on each reply until the band is the one wanted, at most 4 times.
+// The band: the MCU's band key 0x3B steps FM1 -> FM2 -> FM3 -> УКВ (СВ -> FM1), and only the band shows in its
+// replies (0x0901's band): pressed again on each reply until the band is the one wanted, at most 4 times; СВ is
+// its own key 0x3A.
 static void RadioBand(int want)
 {
     s_bandWant = want;
     s_bandPresses = 1;
     s_bandTick = GetTickCount();
-    McuKey(0x3B, false);
+    s_bandSeq = s_tun0901;
+    s_bandFailed = false;
+    Tuner t;
+    TunerGet(&t);
+    if (want == 2 && (t.setKnown >> RSET_MW & 1) && !t.set[RSET_MW])
+        McuKey(0xA9, true);   // СВ off in the MCU's settings: on first (kRsetKey[RSET_MW][1]; no switch of ours)
+    McuKey(want == 2 ? 0x3A : 0x3B, false);
 }
 
 static void RadioBandStep(const Tuner& t)   // a tuner reply came
 {
     if (s_bandWant < 0)
         return;
-    if (t.band == s_bandWant || s_bandPresses >= 4 || GetTickCount() - s_bandTick > 8000) {
+    if (s_tun0901 == s_bandSeq)
+        return;   // the press's 0x0901 not here yet (the other replies of a press do not count)
+    s_bandSeq = s_tun0901;
+    if (t.band == s_bandWant) {
         s_bandWant = -1;
         return;
     }
-    if (GetTickCount() - s_bandTick < 250)
-        return;   // the same press's replies
+    if (s_bandPresses >= 4 || GetTickCount() - s_bandTick > 8000) {
+        s_bandWant = -1;
+        s_bandFailed = true;
+        return;
+    }
     s_bandPresses++;
     s_bandTick = GetTickCount();
-    McuKey(0x3B, false);
+    McuKey(s_bandWant == 2 ? 0x3A : 0x3B, false);
 }
 
 static void RadioPresetSave(int i)   // a long press: the station playing goes to preset i (the shell's (1, n, 1))
@@ -2194,16 +2262,23 @@ static void McuKey(int code, bool ext)
         McuSend3(fn, code, 1, 1);
 }
 
+
 // The radio as the MCU's source: the stock shell's main menu "Radio" is key 0x7F. The shell sends 0x30 before
 // every source change (SPIPower.log 2026-10-18); without it our 0x7F was ignored at first - so the same.
+// One source at a time: our players and the phone's music stop.
 static void RadioOn()
 {
+    OursQuiet();
+    BtQuiet();
+    if (!s_tunLive)
+        s_radioAsk = GetTickCount();
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
     if (src == 0)
         return;   // already the radio
     McuKey(0x30, false);
     McuKey(0x7F, false);
+    s_srcByUs = s_radioSrcAsk = GetTickCount();
 }
 
 // The radio screen's keys as the shell's (SPIPower.log 2026-10-18): seek down / up = extended 0x3B / 0x3C,
@@ -2322,6 +2397,8 @@ static int s_btHold;   // ⏮ / ⏭ held: the release command to send when the f
 
 static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x8905), then its BT music key 0x54
 {                         // (HU 2026-10-18-2: 0x54 alone did nothing; after 0x84 the source turned 09)
+    OursQuiet();
+    s_srcByUs = GetTickCount();
     McuKey(0x84, false);
     SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);
 }
@@ -2487,6 +2564,8 @@ static void ScrPhone(HDC dc)
         bool d = Zone(x, y, 124, 56, A_KEY, K_DIAL * 65536 + keys[i]);
         R(dc, x, y, 124, 56, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
         T(dc, x + 62, y + 39, k, 30, d ? kInk : kText, 700, AL_MID);
+        if (keys[i] == L'0')   // held: "+"
+            T(dc, x + 100, y + 38, L"+", 16, d ? kInk : kMuted, 700, AL_MID);
     }
     bool can = on && s_dial[0];
     bool d = Zone(388, 316, 192, 82, can ? A_PHONECALL : A_NONE);
@@ -2654,19 +2733,22 @@ static void ScrSetRadio(HDC dc)
     Tuner t;
     TunerGet(&t);
     Settings(dc, S_SET_RADIO);
-    for (int i = 0; i < RSET_COUNT; i++) {
+    for (int i = 0, k = 0; i < RSET_COUNT; i++) {
+        if (i == RSET_MW)
+            continue;   // СВ: turned on by its page of the radio (2026-10-20, the user)
         bool known = (t.setKnown >> i & 1) != 0;
         if (known)
             s_on[kRsetToggle[i]] = t.set[i] != 0;
-        SetRow(dc, 64 + i * 48, rows[i], NULL, i == RSET_COUNT - 1, A_NONE, 0, 48);
+        SetRow(dc, 64 + k * 48, rows[i], NULL, i == RSET_COUNT - 1, A_NONE, 0, 48);
         if (known)
-            Toggle(dc, 688, 70 + i * 48, kRsetToggle[i]);
+            Toggle(dc, 688, 70 + k * 48, kRsetToggle[i]);
         else
-            T(dc, 760, 96 + i * 48, L"нет данных MCU", 14, kDim, 400, AL_END);
+            T(dc, 760, 96 + k * 48, L"нет данных MCU", 14, kDim, 400, AL_END);
+        k++;
     }
 }
 
-// Settings -> Phone (Bluetooth): the stock shell's Bluetooth stack (FLC SDK in G3NavHMI) owns pairing and the
+// Settings -> Bluetooth (the phone, the OBD adapter): the stock shell's Bluetooth stack (FLC SDK in G3NavHMI) owns pairing and the
 // connected phone; with our proxy of FLC_BLUETOOTH_SDK.dll (btshm.h) VestaHome shows the phone and its links.
 // Pairing and the options (auto-connect, auto-answer) - the next step, through the same proxy.
 static bool McuBtAddr(wchar_t* s, int n);
@@ -2708,14 +2790,178 @@ static void ScrSetBt(HDC dc)
                 wcscat(s, L", ");
             wcsncat(s, nm, 40);
         }
-        SetRow(dc, 288, L"Сопряжённые", s[0] ? s : L"—");
-        SetRow(dc, 344, L"Сопряжение", L"пока в штатной оболочке: Телефон → Bluetooth", true);
+        SetRow(dc, 288, L"Сопряжённые", s[0] ? s : L"—", false, A_SCREEN, S_BT_PAIRED);
+        SetRow(dc, 344, L"OBD-адаптер (проверка)", L"поиск, сопряжение и опрос ELM327", true, A_SCREEN, S_SET_OBD);
     } else {
         SetRow(dc, 176, L"Сопряжение и подключение", L"пока в штатной оболочке: Телефон → Bluetooth", true);
         T(dc, 264, 268, L"Подключённый телефон и его связь появятся здесь с proxy Bluetooth", 15, kMuted, 400,
           AL_START, 500);
         T(dc, 264, 290, L"(VestaHomeInstall, кнопка 2: ставится вместе с proxy MCU).", 15, kMuted, 400, AL_START, 500);
     }
+}
+
+// Settings -> Bluetooth -> paired: the stack's list (asked anew on opening: the proxy's BT_CMD_LISTPAIRED), 7 a
+// page (the dots turn it); "УДАЛИТЬ" asks once more ("ТОЧНО?"), then Conn_Delete_Paired (BT_CMD_UNPAIR).
+enum { kPairedRows = 7 };
+static int s_pairedPage, s_pairedAsk = -1;   // s_pairedAsk: the row whose removal waits for the second press
+
+static void ScrBtPaired(HDC dc)
+{
+    Settings(dc, S_BT_PAIRED);
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {
+        s_seen = s_screenTick;
+        s_pairedAsk = -1;
+        BtCmd(BT_CMD_LISTPAIRED);
+    }
+    BtState bt;
+    if (!BtGet(&bt, NULL)) {
+        SetRow(dc, 64, L"Сопряжённые", L"нужен proxy Bluetooth (VestaHomeInstall, кнопка 2)", true);
+        return;
+    }
+    int n = bt.paired < BT_PAIRED ? bt.paired : BT_PAIRED, pages = (n + kPairedRows - 1) / kPairedRows;
+    if (s_pairedPage >= pages)
+        s_pairedPage = 0;   // (the dots go round)
+    if (!n)
+        SetRow(dc, 64, L"Сопряжённых нет", L"телефон находит ГУ сам: штатная оболочка, Телефон → Bluetooth", true);
+    for (int k = 0; k < kPairedRows; k++) {
+        int i = s_pairedPage * kPairedRows + k, y = 64 + k * 44;
+        if (i >= n)
+            break;
+        wchar_t nm[48], sub[64];
+        BtText(bt.pairedName[i], nm, 48);
+        bool on = !strcmp(bt.pairedAddr[i], bt.devAddr) && bt.hf >= 1;
+        _snwprintf(sub, 64, L"%S%s", bt.pairedAddr[i], on ? L" · подключён" : L"");
+        sub[63] = 0;
+        T(dc, 264, y + 20, nm[0] ? nm : L"без имени", 17, kText, 700, AL_START, 360);
+        T(dc, 264, y + 38, sub, 13, on ? kOrange : kMuted, 400, AL_START, 360);
+        Button(dc, 640, y + 4, 128, 36, s_pairedAsk == i ? L"ТОЧНО?" : L"УДАЛИТЬ", s_pairedAsk == i ? B_SEL : B_N,
+               IC_NONE, 14, 0, A_BTUNPAIR, i);
+        if (k + 1 < kPairedRows && i + 1 < n)
+            Sep(dc, 256, y + 43, 512);
+    }
+    PageDots(dc, s_pairedPage, pages, 512, 386);
+}
+
+static int PairedPages()
+{
+    BtState bt;
+    int n = BtGet(&bt, NULL) ? (bt.paired < BT_PAIRED ? bt.paired : BT_PAIRED) : 0;
+    return n ? (n + kPairedRows - 1) / kPairedRows : 1;
+}
+
+// Settings -> Bluetooth -> OBD (a test, 2026-10-20): an ELM327 adapter found by the stack's search (the proxy's
+// BT_CMD_SEARCH; the devices come as events with their address at byte 4 and name at 0x16), paired with its PIN
+// (BT_CMD_PAIR), then connected over the stack's serial port and asked by ELM327 commands (obd.cpp). Every step
+// shows here and goes to the log.
+enum { kObdFound = 6 };
+struct ObdDev { char addr[18]; char name[48]; };
+static ObdDev s_obdFound[kObdFound];
+static int    s_obdFoundN, s_obdPin;   // s_obdPin: kObdPins
+static wchar_t s_obdAddr[18];        // the adapter chosen (ini obd.addr), "" none
+static LONG   s_obdEvSeen = -1;        // the proxy's events read so far; -1: no search asked
+static DWORD  s_obdSearchTick;
+static const char* const kObdPins[2] = { "1234", "0000" };
+
+static bool ObdScanEvents()
+{
+    BtShm* b = BtShmGet();
+    if (s_obdEvSeen < 0 || !b || b->magic != BT_SHM_MAGIC)
+        return false;
+    bool changed = false;
+    LONG last = b->evSeq;
+    if (last - s_obdEvSeen > BT_EV_SLOTS)
+        s_obdEvSeen = last - BT_EV_SLOTS;
+    for (LONG n = s_obdEvSeen + 1; n <= last; n++) {
+        BtEvent e = b->ev[(n - 1) & (BT_EV_SLOTS - 1)];
+        const char* a = (const char*)e.data;
+        if (e.seq != n || e.code == 0x0A || a[2] != ':' || a[5] != ':' || a[14] != ':')
+            continue;
+        int i = 0;
+        while (i < s_obdFoundN && strncmp(s_obdFound[i].addr, a, 17))
+            i++;
+        if (i == kObdFound)
+            continue;
+        if (i == s_obdFoundN)
+            s_obdFoundN++;
+        memcpy(s_obdFound[i].addr, a, 17);
+        s_obdFound[i].addr[17] = 0;
+        int k = 0;
+        for (; k < 47 && 18 + k < BT_EV_DATA && a[18 + k]; k++)
+            s_obdFound[i].name[k] = a[18 + k];
+        s_obdFound[i].name[k] = 0;
+        VLog(L"obd: ev 0x%02X %S %S", (unsigned)e.code, s_obdFound[i].addr, s_obdFound[i].name);
+        changed = true;
+    }
+    s_obdEvSeen = last;
+    return changed;
+}
+
+static void ScrSetObd(HDC dc)
+{
+    Settings(dc, S_SET_OBD);
+    BtState bt;
+    bool proxy = BtGet(&bt, NULL);
+    ObdInfo o;
+    ObdGet(&o);
+    wchar_t s[160], nm[48];
+    char addr[18];
+    WideCharToMultiByte(CP_ACP, 0, s_obdAddr, -1, addr, 18, NULL, NULL);
+    addr[17] = 0;
+    wcscpy(s, L"не выбран: НАЙТИ, затем нажмите на адаптер");
+    if (addr[0]) {
+        _snwprintf(s, 160, L"%s", s_obdAddr);
+        for (int i = 0; i < s_obdFoundN; i++)
+            if (!strcmp(s_obdFound[i].addr, addr) && s_obdFound[i].name[0]) {
+                BtText(s_obdFound[i].name, nm, 48);
+                _snwprintf(s, 160, L"%s · %s", nm, s_obdAddr);
+            }
+    }
+    s[159] = 0;
+    SetRow(dc, 64, L"OBD-адаптер (ELM327)", s);
+    bool searching = s_obdEvSeen >= 0 && GetTickCount() - s_obdSearchTick < 15000;
+    Button(dc, 656, 70, 112, 44, searching ? L"ПОИСК…" : L"НАЙТИ", !proxy ? B_DIS : searching ? B_SEL : B_N, IC_NONE,
+           15, 0, proxy ? A_OBDSCAN : A_NONE);
+    for (int i = 0; i < s_obdFoundN; i++) {
+        if (s_obdFound[i].name[0])
+            BtText(s_obdFound[i].name, nm, 48);
+        else
+            MultiByteToWideChar(CP_ACP, 0, s_obdFound[i].addr, -1, nm, 48);
+        Button(dc, 256 + (i % 2) * 260, 124 + (i / 2) * 46, 252, 40, nm,
+               !strcmp(s_obdFound[i].addr, addr) ? B_SEL : B_N, IC_NONE, 15, 0, A_OBDPICK, i);
+    }
+    if (!s_obdFoundN)
+        T(dc, 264, 168, !proxy ? L"нужен proxy Bluetooth (VestaHomeInstall, кнопка 2)"
+                     : searching ? L"ищу устройства (около 10 с)…"
+                     : L"адаптер в разъём OBD, зажигание включено, затем НАЙТИ", 15, kMuted, 400, AL_START, 500);
+    T(dc, 264, 296, L"PIN", 15, kMuted, 700);
+    for (int i = 0; i < 2; i++) {
+        wchar_t p[8];
+        MultiByteToWideChar(CP_ACP, 0, kObdPins[i], -1, p, 8);
+        Button(dc, 304 + i * 88, 270, 80, 40, p, i == s_obdPin ? B_SEL : B_N, IC_NONE, 15, 0, A_OBDPIN, i);
+    }
+    bool can = addr[0] != 0;
+    bool busy = o.state == OBD_CONNECTING || o.state == OBD_ON;
+    Button(dc, 488, 270, 136, 40, L"СОПРЯЧЬ", can && proxy ? B_N : B_DIS, IC_NONE, 15, 0,
+           can && proxy ? A_OBDPAIR : A_NONE);
+    Button(dc, 632, 270, 136, 40, busy ? L"ОТКЛЮЧИТЬ" : L"ПОДКЛЮЧИТЬ", can || busy ? (busy ? B_SEL : B_N) : B_DIS,
+           IC_NONE, 15, 0, can || busy ? A_OBDCONN : A_NONE);
+    int y = 336, first = 1;   // four lines fit, or the values and three
+    if (o.state == OBD_ON) {
+        wchar_t v[3][16];
+        _snwprintf(v[0], 16, o.rpm >= 0 ? L"%d" : L"—", o.rpm);
+        _snwprintf(v[1], 16, o.speed >= 0 ? L"%d" : L"—", o.speed);
+        _snwprintf(v[2], 16, o.coolant != -1 ? L"%d" : L"—", o.coolant);
+        _snwprintf(s, 160, L"обороты %s · скорость %s км/ч · ОЖ %s °C · %s", v[0], v[1], v[2],
+                   o.volt[0] ? o.volt : L"—");
+        s[159] = 0;
+        T(dc, 264, y, s, 17, kOrange, 700, AL_START, 504);
+        y += 22;
+        first = 2;
+    }
+    for (int i = first; i < kObdLines; i++, y += 18)
+        if (o.lines[i][0])
+            T(dc, 264, y, o.lines[i], 13, kMuted, 400, AL_START, 504);
 }
 
 // Settings -> Wi-Fi (wifi.cpp: Windows CE's WZC): the state, the networks in sight (strongest first, kWifiRows a
@@ -2805,8 +3051,6 @@ static void ScrSetWifi(HDC dc)
                A_WIFIAP);
         T(dc, 466, 378, L"авто", 15, kMuted, 600);
         Toggle(dc, 520, 354, T_WIFI_AP_AUTO);
-        T(dc, 610, 378, L"держать", 15, kMuted, 600);   // the connection: no WzcRefresh restarts (Xiaomi)
-        Toggle(dc, 696, 354, T_WIFI_HOLD);
     }
     if (pages > 1) {
         _snwprintf(s, 16, L"%d/%d", s_wifiPage + 1, pages);
@@ -3360,7 +3604,6 @@ struct Cfg {
     bool    videoMoving;               // the picture also while the car moves
     bool    rvcOwn;                    // the rear view camera shown by VestaHome (rvc.cpp), not by the shell
     bool    wifiOn;                    // the Wi-Fi radio (wifi.cpp WifiEnable)
-    bool    wifiHold;                  // WifiHold: the vendor's WzcRefresh off
     int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
     int     homeOrder[kWgMax];         // the main screen's widgets (WG_*, then the user's) in their order
@@ -3400,7 +3643,6 @@ static void CfgDefaults()
     s_cfg.camOver = -1;
     s_cfg.beepDev = 1;   // "Audio Output" 1: heard over the radio (HU 2026-10-18-2)
     s_cfg.wifiOn = true;
-    s_cfg.wifiHold = true;
     s_cfg.saverMin = 5;
     s_cfg.photoInterval = 5;
     s_cfg.photoAutoRot = true;
@@ -3634,6 +3876,9 @@ static void LoadCfg()
         } else if (!wcscmp(k, L"bt.last")) {
             wcsncpy(s_cfg.btLast, v, 17);
             s_cfg.btLast[17] = 0;
+        } else if (!wcscmp(k, L"obd.addr")) {
+            wcsncpy(s_obdAddr, v, 17);
+            s_obdAddr[17] = 0;
         } else if (!wcscmp(k, L"ui.source")) {
             wcsncpy(s_cfg.uiSource, v, 7);
             s_cfg.uiSource[7] = 0;
@@ -3645,8 +3890,6 @@ static void LoadCfg()
             s_cfg.lightMode = _wtoi(v) % 3;
         } else if (!wcscmp(k, L"screen.saver")) {
             s_cfg.saverMin = _wtoi(v) < 0 ? 0 : _wtoi(v) > 60 ? 60 : _wtoi(v);
-        } else if (!wcscmp(k, L"wifi.hold")) {
-            s_cfg.wifiHold = CfgBool(v);
         } else if (!wcscmp(k, L"wifi.ap.auto")) {
             s_cfg.wifiApAuto = CfgBool(v);
         } else if (!wcscmp(k, L"wifi.ap.ssid") && v[0]) {
@@ -3727,8 +3970,6 @@ static void SaveCfg()
         L"video.dir=%s\r\nvideo.file=%s\r\nvideo.stretch=%d\r\nvideo.moving=%d\r\nradio.station=%s\r\n"
         L"# rvc.own: the rear view camera by VestaHome (without the stock shell); rvc.invert: the trajectory mirrored\r\n"
         L"rvc.own=%d\r\nrvc.invert=%d\r\nwifi.on=%d\r\n"
-        L"# wifi.hold: the vendor's WzcRefresh off - it restarted the search every 6 s while a phone gave the address\r\n"
-        L"wifi.hold=%d\r\n"
         L"# screen.saver: the clock after this many minutes untouched (0 = never)\r\n"
         L"screen.saver=%d\r\n"
         L"# screen.theme / screen.light: our colours and maps / the unit's backlight: 0 by sunrise and sunset (GPS, else\r\n"
@@ -3740,6 +3981,8 @@ static void SaveCfg()
         L"ui.screen=%s\r\nui.source=%s\r\n"
         L"# bt.last: the phone connected last (its address): connected again at the start when the source was BT\r\n"
         L"bt.last=%s\r\n"
+        L"# obd.addr: the OBD-II Bluetooth adapter (ELM327; Settings -> Bluetooth -> OBD)\r\n"
+        L"obd.addr=%s\r\n"
         L"# photo.*: the photos' folder, the slide show's seconds, fill the screen, the slide show on opening, EXIF turn\r\n"
         L"photo.dir=%s\r\nphoto.interval=%d\r\nphoto.fill=%d\r\nphoto.slides=%d\r\nphoto.autorotate=%d\r\n"
         L"# wifi.ap.*: the unit's own access point for a phone with its hotspot on 5 GHz (auto: when no known network)\r\n"
@@ -3750,7 +3993,7 @@ static void SaveCfg()
         s_cfg.camOver, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.wifiHold, s_cfg.saverMin, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.btLast, s_cfg.photoDir, s_cfg.photoInterval, s_cfg.photoFill,
+        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.saverMin, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.btLast, s_obdAddr, s_cfg.photoDir, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
     if (n < 0)
@@ -4590,7 +4833,7 @@ static void McuTake(const McuMsg& m)
     } else if (m.id == 0x3105 && p[1] <= 16 && p[2] <= 16) {
         sound = s_mcuSnd.bal != p[1] - 8 || s_mcuSnd.fad != p[2] - 8;
         s_mcuSnd.bal = p[1] - 8;
-        s_mcuSnd.fad = p[2] - 8;
+        s_mcuSnd.fad = 8 - p[2];   // (the MCU's fader is ours reversed: BalanceSend)
     }
     static bool s_infoInit;
     if (!s_infoInit) {
@@ -4610,7 +4853,9 @@ static void McuTake(const McuMsg& m)
             s_tun.fTick = GetTickCount();
         }
         s_tun.f10 = f;
-        s_tun.band = p[1] ? 1 : 0;
+        s_tun.band = p[1] <= 2 ? p[1] : 0;
+        s_tunLive = true;
+        s_tun0901++;
         break;
     }
     case 0x0904: if (p[1] < 8) s_tun.flags[p[1]] = p[2]; break;
@@ -4630,6 +4875,10 @@ static void McuTake(const McuMsg& m)
             for (int k = 0; k < 8 && p[2] + k < 24; k++)
                 s_tun.preset[p[2] + k] = p[5 + 2 * k] << 8 | p[6 + 2 * k];
         }
+        break;
+    case 0x0909:   // a preset saved: 00 01 <preset> <frequency BE> (no new 0x0908 follows - HU 2026-10-20)
+        if (p[1] == 1 && p[2] < 24 && m.len >= 5)
+            s_tun.preset[p[2]] = p[3] << 8 | p[4];
         break;
     case 0x090B: McuText(p + 3, 8, s_tun.ps, true); break;
     case 0x0931: if (p[3] < 2) McuText(p + 4, 32, s_tun.rt[p[3]], false); break;   // 2 x 32 = 64, RDS's RT
@@ -4843,6 +5092,49 @@ typedef void (*SpmFn6)(unsigned int, unsigned int, unsigned int, unsigned int, u
 static HMODULE s_spm;
 static int     s_spmTried;
 
+// The calls other than keys are made in the shell by our proxy (SPIPower/native/mcucmd.h, keep identical): from
+// this process the audio ones never reached the MCU (no 0x3102.. replies, SPIPower.log 2026-10-17..20).
+#define MCU_CMD_NAME   L"VestaMCUCmd"
+#define MCU_CMD_EVENT  L"VestaMCUCmd_Ev"
+#define MCU_CMD_MAGIC  0x44434D56
+#define MCU_CMD_SLOTS  16
+struct McuCall { char name[48]; unsigned int arg[6]; };
+struct McuCmd {
+    DWORD         magic;
+    volatile LONG ready, seq, done;
+    McuCall       call[MCU_CMD_SLOTS];
+};
+
+static bool McuViaShell(const char* name, int a, int b, int c, int d, int e, int f)
+{
+    static McuCmd* s_mc;
+    static HANDLE  s_mcEv;
+    if (!s_mc) {
+        HANDLE m = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(McuCmd), MCU_CMD_NAME);
+        if (m)
+            s_mc = (McuCmd*)MapViewOfFile(m, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(McuCmd));
+        s_mcEv = CreateEvent(NULL, FALSE, FALSE, MCU_CMD_EVENT);
+    }
+    if (!s_mc || s_mc->magic != MCU_CMD_MAGIC || !s_mc->ready || !s_mcEv)
+        return false;   // an older proxy: from here, as before
+    LONG n = s_mc->seq + 1;
+    McuCall& k = s_mc->call[n % MCU_CMD_SLOTS];
+    strncpy(k.name, name, sizeof(k.name) - 1);
+    k.name[sizeof(k.name) - 1] = 0;
+    unsigned int v[6] = { (unsigned)a & 0xFF, (unsigned)b & 0xFF, (unsigned)c & 0xFF, (unsigned)d & 0xFF,
+                          (unsigned)e & 0xFF, (unsigned)f & 0xFF };
+    memcpy(k.arg, v, sizeof(v));
+    s_mc->seq = n;
+    SetEvent(s_mcEv);
+    VLog(L"mcu (через оболочку): %S(%d, %d, %d)", name, a, b, c);
+    return true;
+}
+
+static bool McuIsKey(const char* name)
+{
+    return !strcmp(name, "SPApi_SendKeyEvent") || !strcmp(name, "SPApi_SendExtendKeyEvent");
+}
+
 static FARPROC SpmProc(const char* name)
 {
 #ifdef UNDER_CE
@@ -4865,6 +5157,8 @@ static FARPROC SpmProc(const char* name)
 
 static bool McuSend2(const char* name, int a, int b)
 {
+    if (!McuIsKey(name) && McuViaShell(name, a, b, 0, 0, 0, 0))
+        return true;
     SpmFn2 f = (SpmFn2)SpmProc(name);
     if (!f) {
         wcscpy(s_status, L"MCU: только на ГУ (нет SPIPowerMgr.dll)");
@@ -4877,6 +5171,8 @@ static bool McuSend2(const char* name, int a, int b)
 
 static bool McuSend3(const char* name, int a, int b, int c)
 {
+    if (!McuIsKey(name) && McuViaShell(name, a, b, c, 0, 0, 0))
+        return true;
     SpmFn6 fn = (SpmFn6)SpmProc(name);   // three byte arguments in r0..r2; the rest is not read
     if (!fn)
         return false;
@@ -4887,6 +5183,8 @@ static bool McuSend3(const char* name, int a, int b, int c)
 
 static bool McuSend6(const char* name, int a, int b, int c, int d, int e, int f)
 {
+    if (McuViaShell(name, a, b, c, d, e, f))
+        return true;
     SpmFn6 fn = (SpmFn6)SpmProc(name);
     if (!fn)
         return false;   // the PC, or no SPIPowerMgr: only the local clock
@@ -4939,7 +5237,7 @@ struct BassFileProcs { BassFileCloseProc close; BassFileLenProc length; BassFile
 typedef DWORD (WINAPI *BassStreamUserFn)(DWORD, DWORD, const BassFileProcs*, void*);
 enum { BASS_UNICODE_F = 0x80000000, BASS_SYNC_END_F = 2, BASS_SYNC_STALL_F = 6, BASS_ACTIVE_PLAYING_F = 1,
        BASS_ACTIVE_PAUSED_F = 3, BASS_STREAMFILE_BUFFER_F = 1, BASS_STREAM_BLOCK_F = 0x100000,
-       kPlMax = 400, kMusRows = 5, kMusMax = 400 };
+       kPlMax = 400, kMusRows = 5, kMusCols = 2, kMusMax = 400 };
 
 static struct {
     int              state;   // 0 not loaded yet, 1 ready, -1 no bass.dll, -2 BASS_Init failed
@@ -5250,6 +5548,7 @@ static bool PlayerPlay(int i)
     if (s_bass.setSync)
         s_bass.setSync(s_chan, BASS_SYNC_END_F, 0, PlayerEnd, NULL);
     s_bass.play(s_chan, FALSE);
+    MediaSource();
     PlayerReadTags();
     wcscpy(s_cfg.musicDir, s_plDir);
     wcsncpy(s_cfg.musicFile, s_pl[i], MAX_PATH - 1);
@@ -5332,6 +5631,7 @@ static void PlayerToggle()
         NetStop();
         VidPauseForAudio();
         s_bass.play(s_chan, a == 0);   // stopped at the end: from the start
+        MediaSource();
     }
 }
 
@@ -5439,7 +5739,15 @@ static void ScrAudio(HDC dc)
     IconBtn(dc, IC_REPEAT, 726, 316, 40, s_cfg.repeat ? kOrange : kDim, A_REPEAT);
 }
 
-// Media -> list: the volumes, then folders and audio files; a file plays its folder from it.
+// The file lists' pages (music, video): rows a page less the "Наверх" row inside a folder.
+static int MusPages()
+{
+    int per = kMusRows * kMusCols - (s_musDir[0] ? 1 : 0);   // "Наверх" takes the first cell of every page
+    return s_musCount ? (s_musCount + per - 1) / per : 1;
+}
+
+// Media -> list: the volumes, then folders and audio files; a file plays its folder from it. Pages: a swipe and
+// the dots, as everywhere (2026-10-20, the user: one way for every file list, no arrows).
 static void ScrAudioList(HDC dc)
 {
     if (!s_musCount && !s_musDir[0])
@@ -5452,15 +5760,16 @@ static void ScrAudioList(HDC dc)
     const wchar_t* fn = wcsrchr(folder, L'\\');
     _snwprintf(s, MAX_PATH + 16, L"МУЗЫКА · %s", !s_musDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
     Frame(dc, s);
-    Panel(dc, 16, 68, 704, 322);
-    int y = 76, first = s_musPage * kMusRows;
+    if (s_musPage >= MusPages())
+        s_musPage = MusPages() - 1;
+    int cell = 0;   // cells in columns: 5 down, then the second column
     if (s_musDir[0]) {
-        ListRow(dc, 24, y, 680, 56, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_MUP);
-        y += 62;
+        ListRow(dc, 16, 66, 380, 56, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_MUP);
+        cell = 1;
     }
-    int rows = s_musDir[0] ? kMusRows - 1 : kMusRows;
-    first = s_musPage * rows;
-    for (int i = first; i < s_musCount && i < first + rows; i++, y += 62) {
+    int per = kMusRows * kMusCols - cell, first = s_musPage * per;
+    for (int i = first; i < s_musCount && i < first + per; i++, cell++) {
+        int x = 16 + cell / kMusRows * 388, y = 66 + cell % kMusRows * 62;
         const wchar_t* n = s_mus[i];
         bool isDir = n[wcslen(n) - 1] == L'\\';
         bool cur = !isDir && s_chan && s_plCur >= 0 && !_wcsicmp(s_plDir, s_musDir) && !_wcsicmp(n, s_pl[s_plCur]);
@@ -5468,20 +5777,13 @@ static void ScrAudioList(HDC dc)
         s[MAX_PATH] = 0;
         if (isDir && s[0] && s[wcslen(s) - 1] == L'\\')
             s[wcslen(s) - 1] = 0;
-        ListRow(dc, 24, y, 680, 56, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_MUSIC, NULL, NULL, A_MFILE, i,
+        ListRow(dc, x, y, 380, 56, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_MUSIC, NULL, NULL, A_MFILE, i,
                 isDir ? kOrange : CLR_INVALID);   // folders orange, tracks muted
     }
     if (!s_musCount)
         T(dc, 40, s_musDir[0] ? 176 : 114, s_musDir[0] ? L"Здесь нет папок и музыки" : L"Нет носителей", 18, kMuted,
           400);
-    int pages = (s_musCount + rows - 1) / rows;
-    if (pages > 1) {
-        wchar_t p[16];
-        _snwprintf(p, 16, L"%d/%d", s_musPage + 1, pages);
-        Button(dc, 728, 68, 56, 96, NULL, s_musPage ? B_N : B_DIS, IC_UP, 18, 30, A_MPAGE, -1);
-        T(dc, 756, 236, p, 15, kMuted, 600, AL_MID);
-        Button(dc, 728, 294, 56, 96, NULL, s_musPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 30, A_MPAGE, 1);
-    }
+    PageDots(dc, s_musPage, MusPages(), 400, 382);
     Dock(dc);
     Button(dc, 16, 410, 200, 58, L"НОСИТЕЛИ", B_N, IC_FOLDER, 16, 28, A_MUP, 1);
     if (s_musDir[0])   // this folder and everything under it, in path order
@@ -5889,6 +6191,7 @@ static void NetPlay(int i)
     wcscpy(s_cfg.radioStation, s_stations[i].name);
     SaveCfg();
     VLog(L"радио: %s", s_stations[i].name);
+    MediaSource();
     NetConnect();
 }
 
@@ -6099,7 +6402,7 @@ static void NetPage(int dir)   // the buttons: kNetRows rows up / down
 // hidden (the sound goes on) unless the setting allows it. The playlist = the videos of the file's folder.
 #define WM_APP_VIDTAP (WM_APP + 23)
 #define VIDEO_CLASS L"VestaHome_Video"
-enum { TIMER_VIDEO = 7, kVidMax = 400, kVidRows = 4 };
+enum { TIMER_VIDEO = 7, kVidMax = 400, kVidRows = 4, kVidCols = 2 };
 static HWND     s_vidWnd;             // the picture
 static wchar_t  s_vidDir[MAX_PATH];   // the browser's folder, "" = the volumes
 static wchar_t* s_vids[kVidMax];      // its entries: folders ("\" at the end), then videos
@@ -6240,6 +6543,7 @@ static bool VidPlay(int i)
     }
     VLog(L"видео: %s", path);
     s_vidState = VID_PLAYING;
+    MediaSource();
     SetTimer(s_wnd, TIMER_VIDEO, 250, NULL);
     wcscpy(s_cfg.videoDir, s_vpDir);
     wcsncpy(s_cfg.videoFile, s_vp[i], MAX_PATH - 1);
@@ -6309,10 +6613,47 @@ static void VidToggle()
         NetStop();
         VideoPause(false);
         s_vidState = VID_PLAYING;
+        MediaSource();
     } else if (s_cfg.videoDir[0]) {   // nothing open: the last video
         VidLoadDir(s_cfg.videoDir, s_cfg.videoFile);
     }
 }
+
+// ---- one source at a time (HU 2026-10-20: the radio stayed on under our music, Bluetooth played with it). The
+// radio and Bluetooth music are the MCU's own sources; ours (music, internet radio, video) sound through waveOut
+// only while the MCU's source is "media" (0x4904 06/07) - turned on as the shell's "USB music" does it:
+// SendMediaSourceSelect(5, 3) after its 0x30.
+static void OursQuiet()   // the radio or Bluetooth takes over: our players stop (pause)
+{
+    NetStop();
+    if (PlayerPlaying())
+        s_bass.pause(s_chan);
+    VidPauseForAudio();
+}
+
+static void BtQuiet()   // the phone's music paused (inaudible under another source, it would still stream)
+{
+    BtState bt;
+    if (BtGet(&bt, NULL) && bt.av == 2)
+        BtCmd(BT_CMD_PAUSE);
+}
+
+static void MediaSource()   // one of our players starts
+{
+    BtQuiet();
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    if (src == 6 || src == 7 || src == 9)
+        return;   // media, or Bluetooth's path: ours sound
+    // Straight to Bluetooth's path: SendMediaSourceSelect never made it "media" by itself, and it woke the shell's
+    // media player - with it our video stayed black, sound only (HU 2026-10-20-3; the picture was there on the
+    // 18th, before the call): the hardware overlay is one.
+    VLog(L"источник: путь Bluetooth для нашего звука (было %d)", src);
+    McuKey(0x84, false);
+    SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);
+    s_srcByUs = s_btPathTick = GetTickCount();
+}
+
 
 static void VidStep(int dir)
 {
@@ -6376,7 +6717,13 @@ static void VidTick()
     }
 }
 
-// Media -> video: the volumes, then folders and videos; a file plays its folder from it.
+static int VidPages()
+{
+    int per = kVidRows * kVidCols - (s_vidDir[0] ? 1 : 0);
+    return s_vidCount ? (s_vidCount + per - 1) / per : 1;
+}
+
+// Media -> video: the volumes, then folders and videos; a file plays its folder from it. Pages: a swipe, the dots.
 static void ScrVideo(HDC dc)
 {
     if (!s_vidRead)
@@ -6390,14 +6737,16 @@ static void ScrVideo(HDC dc)
     _snwprintf(s, MAX_PATH + 16, L"МЕДИА · ВИДЕО · %s", !s_vidDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
     Frame(dc, s);
     MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
-    Panel(dc, 16, 120, 704, 280);
-    int y = 126;
+    if (s_vidPage >= VidPages())
+        s_vidPage = VidPages() - 1;
+    int cell = 0;
     if (s_vidDir[0]) {
-        ListRow(dc, 24, y, 680, 60, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_VUP);
-        y += 68;
+        ListRow(dc, 16, 120, 380, 60, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_VUP);
+        cell = 1;
     }
-    int rows = s_vidDir[0] ? kVidRows - 1 : kVidRows, first = s_vidPage * rows;
-    for (int i = first; i < s_vidCount && i < first + rows; i++, y += 68) {
+    int per = kVidRows * kVidCols - cell, first = s_vidPage * per;
+    for (int i = first; i < s_vidCount && i < first + per; i++, cell++) {
+        int x = 16 + cell / kVidRows * 388, y = 120 + cell % kVidRows * 66;
         const wchar_t* n = s_vids[i];
         bool isDir = n[wcslen(n) - 1] == L'\\';
         bool cur = !isDir && s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) && !_wcsicmp(n, s_vp[s_vpCur]);
@@ -6405,19 +6754,12 @@ static void ScrVideo(HDC dc)
         s[MAX_PATH] = 0;
         if (isDir && s[0] && s[wcslen(s) - 1] == L'\\')
             s[wcslen(s) - 1] = 0;
-        ListRow(dc, 24, y, 680, 60, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_VIDEO, NULL, NULL, A_VFILE, i,
+        ListRow(dc, x, y, 380, 60, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_VIDEO, NULL, NULL, A_VFILE, i,
                 isDir ? kOrange : CLR_INVALID);
     }
     if (!s_vidCount)
         T(dc, 40, s_vidDir[0] ? 236 : 168, s_vidDir[0] ? L"Здесь нет папок и видео" : L"Нет носителей", 18, kMuted, 400);
-    int pages = (s_vidCount + rows - 1) / rows;
-    if (pages > 1) {
-        wchar_t p[16];
-        _snwprintf(p, 16, L"%d/%d", s_vidPage + 1, pages);
-        Button(dc, 728, 120, 56, 116, NULL, s_vidPage ? B_N : B_DIS, IC_UP, 18, 30, A_VPAGE, -1);
-        T(dc, 756, 266, p, 15, kMuted, 600, AL_MID);
-        Button(dc, 728, 284, 56, 116, NULL, s_vidPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 30, A_VPAGE, 1);
-    }
+    PageDots(dc, s_vidPage, VidPages());
 }
 
 // The player: the picture (our child window) between the top bar and the dock: the bar (a tap seeks), the
@@ -6475,6 +6817,7 @@ enum { TIMER_RVC = 8, kRvcMs = 250 };
 static HWND s_rvcWnd;
 static int  s_rvcAngle;   // the angle drawn, tenths of a degree
 static bool s_rvcValid;
+static bool s_rvcManual;  // the camera shown by hand ("Настройки -> Автомобиль"), a tap closes it
 #ifndef UNDER_CE
 static bool s_rvcFake;    // PC test build: R toggles a "reverse"
 #endif
@@ -6492,6 +6835,9 @@ static LRESULT CALLBACK RvcProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_ERASEBKGND:
         return 1;
+    case WM_LBUTTONUP:   // the camera shown by hand: a tap closes it (RvcTick hides the window)
+        s_rvcManual = false;
+        return 0;
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
@@ -6558,13 +6904,45 @@ static void RvcHide()
         Redraw();
 }
 
+// The shell's own camera (ours off): after the reverse its window stays in front - VestaHome, if it was in front
+// before the reverse, comes back 1.5 s after it (HU 2026-10-20).
+static void RvcAfterShell(int rev)
+{
+    static int s_seen = -1;
+    static DWORD s_front, s_off;
+    static bool s_wasFront;
+    DWORD now = GetTickCount();
+    if (GetForegroundWindow() == s_wnd && IsWindowVisible(s_wnd))
+        s_front = now;
+    if (rev != s_seen) {
+        if (rev == 1)
+            s_wasFront = s_front && now - s_front < 3000;
+        else if (s_seen == 1 && !s_cfg.rvcOwn && s_wasFront)
+            s_off = now;
+        s_seen = rev;
+    }
+    if (s_off && now - s_off > 1500) {
+        s_off = 0;
+        if (GetForegroundWindow() != s_wnd) {
+            VLog(L"камера: задний ход кончился - VestaHome снова впереди");
+            ShowWindow(s_wnd, SW_SHOW);
+#ifdef UNDER_CE
+            SetWindowPos(s_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+#endif
+            SetForegroundWindow(s_wnd);
+            Redraw();
+        }
+    }
+}
+
 static void RvcTick()
 {
     int rev = RvcReverse();
 #ifndef UNDER_CE
     rev = s_rvcFake ? 1 : 0;
 #endif
-    bool want = s_cfg.rvcOwn && rev == 1;
+    RvcAfterShell(rev);
+    bool want = (s_cfg.rvcOwn && rev == 1) || s_rvcManual;
     if (want && !s_rvcWnd)
         RvcShow();
     else if (!want && s_rvcWnd)
@@ -7144,6 +7522,49 @@ static void BeepPlay()
     waveOutWrite(s_beepOut, &s_beepHdr, sizeof(s_beepHdr));
 }
 
+// The keypad's tones (DTMF, 120 ms) on "Audio Output" 1 - the user's choice (2026-10-20), as the beep's device.
+static HWAVEOUT s_dtmfOut;
+static WAVEHDR  s_dtmfHdr;
+static short    s_dtmf[11025 * 12 / 100];
+
+static void DtmfPlay(wchar_t k)
+{
+    static const wchar_t* keys = L"123456789*0#";
+    static const int row[4] = { 697, 770, 852, 941 }, col[3] = { 1209, 1336, 1477 };
+    const wchar_t* at = wcschr(keys, k == L'+' ? L'0' : k);
+    if (!at || !k)
+        return;
+    int i = (int)(at - keys), f1 = row[i / 3], f2 = col[i % 3];
+    if (s_dtmfOut) {
+        waveOutReset(s_dtmfOut);
+        waveOutUnprepareHeader(s_dtmfOut, &s_dtmfHdr, sizeof(s_dtmfHdr));
+        waveOutClose(s_dtmfOut);
+        s_dtmfOut = NULL;
+    }
+    WAVEFORMATEX wf;
+    memset(&wf, 0, sizeof(wf));
+    wf.wFormatTag = WAVE_FORMAT_PCM;
+    wf.nChannels = 1;
+    wf.nSamplesPerSec = 11025;
+    wf.wBitsPerSample = 16;
+    wf.nBlockAlign = 2;
+    wf.nAvgBytesPerSec = 22050;
+    if (waveOutOpen(&s_dtmfOut, 1, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+        s_dtmfOut = NULL;
+        return;
+    }
+    int n = sizeof(s_dtmf) / sizeof(s_dtmf[0]);
+    for (int j = 0; j < n; j++) {
+        double a = j < 110 ? j / 110.0 : j > n - 110 ? (n - j) / 110.0 : 1.0;   // 10 ms in and out: no clicks
+        s_dtmf[j] = (short)(a * 5000 * (sin(j * 2 * 3.14159265 * f1 / 11025) + sin(j * 2 * 3.14159265 * f2 / 11025)));
+    }
+    memset(&s_dtmfHdr, 0, sizeof(s_dtmfHdr));
+    s_dtmfHdr.lpData = (LPSTR)s_dtmf;
+    s_dtmfHdr.dwBufferLength = sizeof(s_dtmf);
+    waveOutPrepareHeader(s_dtmfOut, &s_dtmfHdr, sizeof(s_dtmfHdr));
+    waveOutWrite(s_dtmfOut, &s_dtmfHdr, sizeof(s_dtmfHdr));
+}
+
 // Diagnostics -> "Sound and video": the beep over the radio and short test files (VestaHome/tools/
 // make_testmedia.py -> Tests\SDMemory\TestMedia) played by our own players. The folder: TestMedia on the SD card,
 // a USB disk or next to the exe.
@@ -7438,7 +7859,7 @@ struct App {
 enum { TIMER_WAIT = 3, TIMER_GUARD = 4, kWaitMs = 20000, kGuardMs = 500, kMaxRaised = 16 };
 enum { TIMER_LONG = 6, kLongMs = 600 };   // a long press (the keyboard's text field)
 static DWORD s_waitPid;
-static int   s_waitApp = -1;
+static int   s_waitApp = -1;   // -2: a program not in the list (a widget's tap=), found by s_waitPid
 static DWORD s_waitTick;
 static HWND  s_raised[kMaxRaised];   // windows we made topmost; dropped again when the program closes
 static int   s_raisedCount;
@@ -7809,7 +8230,8 @@ static BOOL CALLBACK EnumApp(HWND h, LPARAM lp)
 {
     if (h == s_wnd || !IsWindowVisible(h) || GetParent(h))
         return TRUE;
-    const App& a = s_apps[s_waitApp];
+    static const App none = App();
+    const App& a = s_waitApp >= 0 ? s_apps[s_waitApp] : none;
     bool match;
     if (a.wclass[0] || a.wtitle[0]) {
         wchar_t cls[64] = L"", title[96] = L"";
@@ -7912,7 +8334,7 @@ static void RaiseWindow(HWND h)
 
 static void OnWaitTimer()
 {
-    if (s_waitApp < 0) {
+    if (s_waitApp == -1) {
         KillTimer(s_wnd, TIMER_WAIT);
         return;
     }
@@ -7925,7 +8347,7 @@ static void OnWaitTimer()
         s_waitApp = -1;
     } else if (GetTickCount() - s_waitTick > kWaitMs) {
         KillTimer(s_wnd, TIMER_WAIT);
-        _snwprintf(s_status, 96, L"окно не найдено: %s", s_apps[s_waitApp].name);
+        _snwprintf(s_status, 96, L"окно не найдено: %s", s_waitApp >= 0 ? s_apps[s_waitApp].name : L"программа");
         s_waitApp = -1;
     }
 }
@@ -8386,22 +8808,18 @@ static void DrawFiles(HDC dc)
     int first = s_filePage * kFilesPerPage;
     for (int k = 0; k < kFilesPerPage && first + k < s_fileCount; k++) {
         const FileEnt& f = s_files[first + k];
-        int x = 16 + (k / 5) * 388, y = 96 + (k % 5) * 60;
-        bool d = Zone(x, y, 380, 54, A_FILE, first + k);
-        R(dc, x, y, 380, 54, 10, d ? kOrange : kPanel);
-        Ico(dc, f.dir ? IC_FOLDER : IC_FILE, x + 14, y + 12, 30, d ? kInk : f.dir ? kOrange : kMuted);   // folders stand out
-        T(dc, x + 58, y + 34, f.name, 18, d ? kInk : kText, 700, AL_START, 310);
+        int x = 16 + (k / 5) * 388, y = 96 + (k % 5) * 56;
+        bool d = Zone(x, y, 380, 50, A_FILE, first + k);
+        R(dc, x, y, 380, 50, 10, d ? kOrange : kPanel);
+        Ico(dc, f.dir ? IC_FOLDER : IC_FILE, x + 14, y + 10, 30, d ? kInk : f.dir ? kOrange : kMuted);   // folders stand out
+        T(dc, x + 58, y + 32, f.name, 18, d ? kInk : kText, 700, AL_START, 310);
     }
     if (s_fileCount == 0)
         T(dc, 400, 240, s_filesFor == F_ICON ? L"Здесь нет папок и иконок" : s_filesFor == F_CAMS ?
           L"Здесь нет папок и .txt" : L"Здесь нет папок и программ", 22, kText, 700, AL_MID);
+    PageDots(dc, s_filePage, FilePages(), 400, 382);
     Dock(dc);
     Button(dc, 16, 410, 120, 58, NULL, B_N, IC_UP, 18, 0, A_UP);
-    Button(dc, 148, 410, 120, 58, NULL, B_N, IC_BACK, 18, 0, A_FPREV);
-    wchar_t s[16];
-    _snwprintf(s, 16, L"%d / %d", s_filePage + 1, FilePages());
-    T(dc, 400, 448, s, 22, kText, 700, AL_MID);
-    Button(dc, 532, 410, 120, 58, NULL, B_N, IC_NEXT, 18, 0, A_FNEXT);
     Button(dc, 664, 410, 120, 58, L"ОТМЕНА", B_N, IC_NONE, 18, 0, A_CANCEL);
 }
 
@@ -8743,15 +9161,17 @@ static void WRadio(HDC dc, int x, int y)
     TunerGet(&t);
     wchar_t f[16];
     FreqText(t.f10, f, 16);
-    bool d = Widget(dc, x, y, 248, 158, t.f10 > 0 && t.f10 < 8750 ? L"РАДИО · УКВ" : L"РАДИО · FM", IC_RADIO, A_NAV,
+    bool d = Widget(dc, x, y, 248, 158, t.band == 2 || (t.f10 > 0 && t.f10 < 3000) ? L"РАДИО · СВ"
+                    : t.band == 1 || (t.f10 >= 6500 && t.f10 < 8750) ? L"РАДИО · УКВ" : L"РАДИО · FM", IC_RADIO, A_NAV,
                     S_RADIO);
     T(dc, x + 16, y + 88, f, 44, d ? kInk : t.f10 ? kText : kDim, 700);
     // RDS's name, else the one known for the frequency
     TWrap(dc, x + 16, y + 114, t.ps[0] ? t.ps : RadioName(t, t.f10), 17, d ? kInk : kMuted, 600, 216, 1, 0);
-    if (t.presets > 0 && t.cur >= 0) {
-        int page = t.cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
-        IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_PRESET, page + (t.cur - page + per - 1) % per);
-        IconBtn(dc, IC_FWD, x + 82, y + 124, 26, d ? kInk : kText, A_PRESET, page + (t.cur - page + 1) % per);
+    if (t.presets > 0) {   // previous / next preset (none playing: from the first)
+        int cur = t.cur >= 0 && t.cur < 24 ? t.cur : 0, page = cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
+        IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_PRESET, page + (cur - page + per - 1) % per);
+        IconBtn(dc, IC_FWD, x + 82, y + 124, 26, d ? kInk : kText, A_PRESET,
+                t.cur >= 0 ? page + (cur - page + 1) % per : cur);
     }
 }
 
@@ -9226,6 +9646,28 @@ static void UserWgRun(const UserWg& w, const wchar_t* cmd, const wchar_t* why)
         wcsncpy(exe, cmd, MAX_PATH - 1);
         exe[MAX_PATH - 1] = 0;
         args[0] = 0;
+        // A program: as from "Приложения" (VestaHome waits for its window and brings it up, otherwise VestaHome
+        // stayed over it - HU 2026-10-20). Its path wrong (an example's ini): the one of that file name there.
+        const wchar_t* fn = wcsrchr(exe, L'\\');
+        fn = fn ? fn + 1 : exe;
+        bool there = GetFileAttributes(exe) != 0xFFFFFFFF;
+        int app = -1;
+        for (int i = 0; i < s_appCount && app < 0; i++) {
+            const wchar_t* an = wcsrchr(s_apps[i].path, L'\\');
+            an = an ? an + 1 : s_apps[i].path;
+            if (!_wcsicmp(s_apps[i].path, exe) || (!there && !_wcsicmp(an, fn)))
+                app = i;
+        }
+        if (app >= 0) {
+            VLog(L"виджет %s: %s - %s (из «Приложений»)", w.key, why, s_apps[app].path);
+            RunApp(app);
+            return;
+        }
+        if (!there) {
+            VLog(L"виджет %s: %s - нет %s (и в «Приложениях» нет %s)", w.key, why, exe, fn);
+            _snwprintf(s_status, 96, L"нет %s: добавьте в «Приложения»", fn);
+            return;
+        }
     }
     PROCESS_INFORMATION pi;
 #ifdef UNDER_CE
@@ -9242,6 +9684,12 @@ static void UserWgRun(const UserWg& w, const wchar_t* cmd, const wchar_t* why)
     if (ok) {
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
+        if (!args[0]) {   // a program (not a script): its window brought up when it comes
+            s_waitApp = -2;
+            s_waitPid = pi.dwProcessId;
+            s_waitTick = GetTickCount();
+            SetTimer(s_wnd, TIMER_WAIT, 300, NULL);
+        }
     }
 }
 
@@ -9843,8 +10291,8 @@ static void ScrSetCar(HDC dc)
     Chevron(dc, 728, 216);
     SetRow(dc, 256, L"Климат-контроль в машине", L"виджет «Климат» вместо календаря", false, A_NONE, 0, H);
     Toggle(dc, 688, 262, T_CLIMATE);
-    SetRow(dc, 304, L"Камера заднего хода — своя", L"видео и разметка VestaHome (когда нет оболочки)", true,
-           A_NONE, 0, H);
+    SetRow(dc, 304, L"Камера заднего хода — своя", L"видео и разметка VestaHome", true, A_NONE, 0, H);
+    Button(dc, 552, 310, 124, 40, L"ПОКАЗАТЬ", B_N, IC_NONE, 14, 0, A_RVCVIEW);   // by hand; a tap closes it
     Toggle(dc, 688, 310, T_RVC_OWN);
     T(dc, 264, 372, L"CAN-модуль даёт скорость и угол руля; климат, наружная температура,", 14, kDim, 400,
       AL_START, 504);
@@ -10177,7 +10625,8 @@ static void EqPresetSet(int p)
 static void BalanceSend()
 {
     s_sndSentTick = GetTickCount();
-    if (McuSend2("SPApi_SendRadioAudioBalanceFaderData", s_cfg.balance + 8, s_cfg.fader + 8))
+    // the MCU's fader runs the other way from our screen's (HU 2026-10-20: front and rear were swapped)
+    if (McuSend2("SPApi_SendRadioAudioBalanceFaderData", s_cfg.balance + 8, 8 - s_cfg.fader))
         wcscpy(s_status, L"баланс → MCU");
 }
 
@@ -10501,7 +10950,6 @@ static void CfgToControls()
     s_on[T_RVC_OWN] = s_cfg.rvcOwn;
     s_on[T_WIFI] = s_cfg.wifiOn;
     s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
-    s_on[T_WIFI_HOLD] = s_cfg.wifiHold;
     s_on[T_SLIDES_OPEN] = s_cfg.photoSlides;
     s_on[T_AUTOROTATE] = s_cfg.photoAutoRot;
     s_seg[G_PHOTO_SCALE] = s_cfg.photoFill ? 1 : 0;
@@ -10517,7 +10965,7 @@ static bool IsCfgToggle(int id)
 {
     return id == T_GPS_TIME || id == T_W_GPS || id == T_CLIMATE || id == T_CAM_ALERT ||
            id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_RVC_OWN || id == T_WIFI ||
-           id == T_WIFI_AP_AUTO || id == T_WIFI_HOLD || id == T_SLIDES_OPEN || id == T_AUTOROTATE;
+           id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE;
 }
 
 static void ControlsToCfg()
@@ -10540,10 +10988,6 @@ static void ControlsToCfg()
     if (s_cfg.wifiOn != s_on[T_WIFI]) {
         s_cfg.wifiOn = s_on[T_WIFI];
         WifiEnable(s_cfg.wifiOn);
-    }
-    if (s_cfg.wifiHold != s_on[T_WIFI_HOLD]) {
-        s_cfg.wifiHold = s_on[T_WIFI_HOLD];
-        WifiHold(s_cfg.wifiHold);
     }
     if (s_cfg.wifiApAuto != s_on[T_WIFI_AP_AUTO]) {
         s_cfg.wifiApAuto = s_on[T_WIFI_AP_AUTO];
@@ -10932,6 +11376,8 @@ static void DrawScreen(HDC dc, Screen s)
     case S_SET_RADIO:   ScrSetRadio(dc); break;
     case S_SET_BT:      ScrSetBt(dc); break;
     case S_SET_WIFI:    ScrSetWifi(dc); break;
+    case S_SET_OBD:     ScrSetObd(dc); break;
+    case S_BT_PAIRED:   ScrBtPaired(dc); break;
     case S_SET_VIDEO:   ScrSetVideo(dc); break;
     case S_SET_PHOTO:   ScrSetPhoto(dc); break;
     case S_INFO:        ScrInfo(dc); break;
@@ -11183,16 +11629,26 @@ static void LogLoad(HWND hwnd)
 
 // The band that slides on a page turn: under the top bar, above the bottom bar and above the page dots where
 // they are (they stay in place, the new page's show when it has turned); on the radio only the presets.
-static int SlideTop()
+static int SlideTop()   // under what stays: the radio's frequency panel, the media tabs
 {
-    return s_screen == S_RADIO ? 258 : 56;
+    return s_screen == S_RADIO ? 258 : s_screen == S_PHOTO || s_screen == S_VIDEO ? 116 : 56;
+}
+
+static int SlideLeft()   // right of what stays: the settings' tiles
+{
+    return s_screen == S_BT_PAIRED ? 244 : 0;
 }
 
 static int SlideBottom()
 {
+    if (s_screen == S_AUDIO_LIST || s_screen == S_FILES)
+        return 378;   // over their dots and dock
+    if (s_screen == S_BT_PAIRED)
+        return 382;
     if (Section(s_screen) < 0)
         return 480;
-    return s_screen == S_HOME || s_screen == S_RADIO || s_screen == S_APPS || s_screen == S_PHOTO ? 392 : 408;
+    return s_screen == S_HOME || s_screen == S_RADIO || s_screen == S_APPS || s_screen == S_PHOTO ||
+           s_screen == S_VIDEO ? 392 : 408;   // the dots stay
 }
 
 // A page turn: the new page slides in from the right (dir 1) or the left (dir -1) and pushes the old one out,
@@ -11216,22 +11672,23 @@ static void RedrawSlide(int dir)
     HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
     HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, old);
     DrawFrame(dc);
-    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top;
+    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top, l = SlideLeft(), sw = 800 - l;
     BitBlt(hdc, 0, 0, 800, top, dc, 0, 0, SRCCOPY);
     BitBlt(hdc, 0, bottom, 800, 480 - bottom, dc, 0, bottom, SRCCOPY);
+    BitBlt(hdc, 0, top, l, h, dc, 0, top, SRCCOPY);
     const DWORD kMs = 220;
     DWORD t0 = GetTickCount();
     for (;;) {
         DWORD el = GetTickCount() - t0;
         double p = el >= kMs ? 1.0 : (double)el / kMs;
         p = 1 - (1 - p) * (1 - p) * (1 - p);   // ease-out
-        int off = (int)(800 * p + 0.5);
+        int off = (int)(sw * p + 0.5);
         if (dir > 0) {
-            BitBlt(hdc, 0, top, 800 - off, h, odc, off, top, SRCCOPY);
-            BitBlt(hdc, 800 - off, top, off, h, dc, 0, top, SRCCOPY);
+            BitBlt(hdc, l, top, sw - off, h, odc, l + off, top, SRCCOPY);
+            BitBlt(hdc, 800 - off, top, off, h, dc, l, top, SRCCOPY);
         } else {
-            BitBlt(hdc, off, top, 800 - off, h, odc, 0, top, SRCCOPY);
-            BitBlt(hdc, 0, top, off, h, dc, 800 - off, top, SRCCOPY);
+            BitBlt(hdc, l + off, top, sw - off, h, odc, l, top, SRCCOPY);
+            BitBlt(hdc, l, top, off, h, dc, 800 - off, top, SRCCOPY);
         }
         if (el >= kMs)
             break;
@@ -11263,18 +11720,28 @@ static unsigned short* s_dragOldBits;
 static bool CanSwipe()
 {
     return s_screen == S_HOME || s_screen == S_APPS || s_screen == S_FILES || s_screen == S_RADIO ||
-           s_screen == S_PHOTO;
+           s_screen == S_PHOTO || s_screen == S_AUDIO_LIST || s_screen == S_VIDEO || s_screen == S_BT_PAIRED;
 }
 
 // The page beside (dir) drawn into s_back without turning to it (no side effects: the radio's band is not
 // switched); false at an end that does not go round.
 static bool DrawNeighbour(int dir)
 {
-    int hp = s_homePage, rp = s_radioPage, ap = s_page, fp = s_filePage, pp = s_phPage;
+    int hp = s_homePage, rp = s_radioPage, ap = s_page, fp = s_filePage, pp = s_phPage, mp = s_musPage,
+        vp = s_vidPage, bp = s_pairedPage;
     bool ok = true;
-    if (s_screen == S_PHOTO) {
+    if (s_screen == S_BT_PAIRED) {
+        ok = PairedPages() > 1;
+        s_pairedPage = (bp + dir + PairedPages()) % PairedPages();
+    } else if (s_screen == S_PHOTO) {
         ok = pp + dir >= 0 && pp + dir < PhotoPages();
         s_phPage += dir;
+    } else if (s_screen == S_AUDIO_LIST) {
+        ok = mp + dir >= 0 && mp + dir < MusPages();
+        s_musPage += dir;
+    } else if (s_screen == S_VIDEO) {
+        ok = vp + dir >= 0 && vp + dir < VidPages();
+        s_vidPage += dir;
     } else if (s_screen == S_HOME) {
         int n = HomePages();
         ok = n > 1;
@@ -11302,6 +11769,9 @@ static bool DrawNeighbour(int dir)
     s_page = ap;
     s_filePage = fp;
     s_phPage = pp;
+    s_musPage = mp;
+    s_vidPage = vp;
+    s_pairedPage = bp;
     return ok;
 }
 
@@ -11311,17 +11781,17 @@ static void DragShow(int x)
     HDC hdc = GetDC(s_wnd);
     HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
     HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, s_dragOld);
-    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top;
+    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top, l = SlideLeft(), w = 800 - l;
     if (x > 0)
-        BitBlt(hdc, x, top, 800 - x, h, odc, 0, top, SRCCOPY);
+        BitBlt(hdc, l + x, top, w - x, h, odc, l, top, SRCCOPY);
     else
-        BitBlt(hdc, 0, top, 800 + x, h, odc, -x, top, SRCCOPY);
+        BitBlt(hdc, l, top, w + x, h, odc, l - x, top, SRCCOPY);
     if (s_dragNb && x > 0)
-        BitBlt(hdc, 0, top, x, h, dc, 800 - x, top, SRCCOPY);
+        BitBlt(hdc, l, top, x, h, dc, 800 - x, top, SRCCOPY);
     else if (s_dragNb && x < 0)
-        BitBlt(hdc, 800 + x, top, -x, h, dc, 0, top, SRCCOPY);
+        BitBlt(hdc, 800 + x, top, -x, h, dc, l, top, SRCCOPY);
     else if (x) {
-        RECT rc = { x > 0 ? 0 : 800 + x, top, x > 0 ? x : 800, bottom };
+        RECT rc = { x > 0 ? l : 800 + x, top, x > 0 ? l + x : 800, bottom };
         HBRUSH b = CreateSolidBrush(C(kInk));
         FillRect(hdc, &rc, b);
         DeleteObject(b);
@@ -11365,7 +11835,7 @@ static void DragMove(int dx)
 static void DragEnd(int dx)
 {
     bool turn = s_dragNb && s_dragNb == (dx < 0 ? 1 : -1) && (dx > 100 || dx < -100);
-    int from = s_dragX, to = turn ? (s_dragNb > 0 ? -800 : 800) : 0;
+    int w = 800 - SlideLeft(), from = s_dragX, to = turn ? (s_dragNb > 0 ? -w : w) : 0;
     const DWORD kMs = 160;
     DWORD t0 = GetTickCount();
     for (;;) {
@@ -11632,6 +12102,18 @@ static bool Swipe(int dir)
             return false;
         s_phPage = to;
         return true;
+    } else if (s_screen == S_BT_PAIRED) {
+        if (PairedPages() < 2)
+            return false;
+        s_pairedPage = (s_pairedPage + dir + PairedPages()) % PairedPages();
+        return true;
+    } else if (s_screen == S_AUDIO_LIST || s_screen == S_VIDEO) {
+        int& pg = s_screen == S_VIDEO ? s_vidPage : s_musPage;
+        int to = pg + dir;
+        if (to < 0 || to >= (s_screen == S_VIDEO ? VidPages() : MusPages()))
+            return false;
+        pg = to;
+        return true;
     } else if (s_screen == S_PHOTO_VIEW) {
         PhotoStep(dir);
         return true;
@@ -11726,8 +12208,8 @@ static void NightAuto(bool force)
         SetLight(s_cfg.lightMode == 0 ? n != 0 : s_cfg.lightMode == 2);
 }
 
-// Settings -> Screen: the theme's and the backlight's day / night, the current backlight's brightness, the screen
-// saver, the touch calibration.
+// Settings -> Screen: the theme's and the backlight's day / night, the screen saver, the touch calibration. (No
+// brightness: the display takes only the day and the night levels - HU 2026-10-20, the user.)
 static void ScrSetScreen(HDC dc)
 {
     static const wchar_t* saver[5] = { L"ВЫКЛ", L"1", L"3", L"5", L"10" };
@@ -11749,20 +12231,13 @@ static void ScrSetScreen(HDC dc)
         Button(dc, 560, y + 6, 96, 44, L"ДЕНЬ", mode == 1 ? B_SEL : B_N, IC_SUN, 15, 22, act, 1);
         Button(dc, 664, y + 6, 104, 44, L"НОЧЬ", mode == 2 ? B_SEL : B_N, IC_MOON, 15, 22, act, 2);
     }
-    wchar_t v[16];
-    if (s_bright > 0)
-        _snwprintf(v, 16, L"%d / 10", s_bright);
-    else
-        wcscpy(v, L"—");
-    SetRow(dc, 176, L"Яркость", light < 0 ? L"текущей подсветки" : light ? L"ночной подсветки" : L"дневной подсветки");
-    Stepper(dc, 560, 182, 208, v, 44, 18, A_BRIGHT);
-    SetRow(dc, 232, L"Заставка, мин", L"часы и дата без касаний");
+    SetRow(dc, 176, L"Заставка, мин", L"часы и дата без касаний");
     for (int i = 0; i < 5; i++)
         if (kSaverMins[i] == s_cfg.saverMin)
             s_seg[G_SAVER] = i;
-    Seg(dc, 456, 238, 312, 44, saver, 5, G_SAVER, 14);
-    SetRow(dc, 288, L"Калибровка экрана", L"системные перекрестья", true, A_CALIBRATE);
-    Chevron(dc, 736, 300);
+    Seg(dc, 456, 182, 312, 44, saver, 5, G_SAVER, 14);
+    SetRow(dc, 232, L"Калибровка экрана", L"системные перекрестья", true, A_CALIBRATE);
+    Chevron(dc, 736, 244);
 }
 
 // ---- photos (Media -> Photo): the volumes, folders and pictures as tiles with thumbnails (4 x 2 a page, a swipe
@@ -11770,6 +12245,7 @@ static void ScrSetScreen(HDC dc)
 // way, the slide show. The pictures are decoded by photo.cpp in a thread of their own (a photo takes a second or
 // two on the unit): the viewed one first, then the thumbnails of the page shown; a result posts WM_APP_PHOTO.
 #define WM_APP_PHOTO (WM_APP + 25)
+#define WM_APP_OBD (WM_APP + 27)
 enum { TIMER_PHOTO = 13, kPhMax = 1000, kPhTiles = 8, kThW = 172, kThH = 92, kPhBoxW = 800, kPhBoxH = 342 };
 static wchar_t  s_phDir[MAX_PATH];   // "" = the volumes
 static wchar_t* s_phs[kPhMax];       // folders ("\" at the end), then pictures
@@ -12173,13 +12649,6 @@ static void DoAction(const Btn& b)
         SaveCfg();
         NightAuto(true);
         break;
-    case A_BRIGHT: {   // the current mode's backlight, as the shell's slider
-        int v = (s_bright > 0 ? s_bright : 5) + b.arg;
-        v = v < 1 ? 1 : v > 10 ? 10 : v;
-        if (McuSend3("SPApi_SysSendRadioBackLight", v, 0, 0))
-            s_bright = v;
-        break;
-    }
     case A_SCREEN:   Go((Screen)b.arg, true); break;
     case A_TAB:      Go((Screen)b.arg, false); break;
     case A_BACK:     Back(); break;
@@ -12223,14 +12692,23 @@ static void DoAction(const Btn& b)
     case A_REPEAT:   s_cfg.repeat = !s_cfg.repeat; SaveCfg(); break;
     case A_AVTEST:   AvTestRun(b.arg); break;
     case A_AVDEV:    AvDevNext(); break;
-    case A_PRESET:   RadioPreset(b.arg); break;
+    case A_PRESET:   RadioOn(); RadioPreset(b.arg); break;
     case A_RKEY:     RadioKey(b.arg); break;
     case A_RPAGE:    RadioPageTo(s_radioPage + 1); break;   // the band button: the next page, round
     case A_RLIST:    McuSend3("SPApi_SendListItemControl", 0, b.arg, 0); break;
     case A_RLISTPAGE: s_rlistPage += b.arg; if (s_rlistPage < 0) s_rlistPage = 0; break;
     case A_RSCAN:    RadioScan(); break;
     case A_BTMUSIC:  BtMusicOn(); break;
-    case A_BTCMD:    BtCmd(b.arg); break;
+    case A_BTCMD:
+        if (b.arg == BT_CMD_PLAYPAUSE || b.arg == BT_CMD_PLAY) {   // the phone's music: the source too, ours stop
+            int vol, mute, src;
+            VolGet(&vol, &mute, &src);
+            OursQuiet();
+            if (src != 9)
+                BtMusicOn();
+        }
+        BtCmd(b.arg);
+        break;
     case A_REBOOTNO: McuKey(0x5A, false); Back(); break;
     case A_MFILE:    MusicPick(b.arg); break;
     case A_PHONECALL:
@@ -12258,10 +12736,8 @@ static void DoAction(const Btn& b)
             wcscpy(s_status, L"здесь и глубже нет музыки");
         break;
     case A_MUP:      MusicUp(b.arg != 0); break;
-    case A_MPAGE:    s_musPage += b.arg; if (s_musPage < 0) s_musPage = 0; break;
     case A_VFILE:    VidPick(b.arg); break;
     case A_VUP:      VidUp(b.arg != 0); break;
-    case A_VPAGE:    s_vidPage += b.arg; if (s_vidPage < 0) s_vidPage = 0; break;
     case A_VPLAY:    VidToggle(); break;
     case A_VPREV:    VidStep(-1); break;
     case A_VNEXT:    VidStep(1); break;
@@ -12274,6 +12750,64 @@ static void DoAction(const Btn& b)
     case A_WIFINET:  WifiTap(b.arg); break;
     case A_WIFIFORGET: WifiForgetTap(b.arg); break;
     case A_WIFISCAN: WifiScan(); break;
+    case A_OBDSCAN:   // the stack's search; its devices are read from the proxy's events from now on
+        s_obdFoundN = 0;
+        s_obdEvSeen = BtShmGet() ? BtShmGet()->evSeq : -1;
+        s_obdSearchTick = GetTickCount();
+        VLog(L"obd: поиск устройств");
+        BtCmd(BT_CMD_SEARCH);
+        Redraw();
+        break;
+    case A_OBDPICK:
+        if (b.arg >= 0 && b.arg < s_obdFoundN) {
+            MultiByteToWideChar(CP_ACP, 0, s_obdFound[b.arg].addr, -1, s_obdAddr, 18);
+            s_obdAddr[17] = 0;
+            SaveCfg();
+        }
+        Redraw();
+        break;
+    case A_OBDPIN: s_obdPin = b.arg; Redraw(); break;
+    case A_RVCVIEW:   // the camera's picture now, whatever the gear (powered only in reverse? - to be seen)
+        s_rvcManual = true;
+        VLog(L"камера: показать вручную");
+        RvcTick();
+        break;
+    case A_BTUNPAIR: {   // the first press asks, the second removes
+        BtState bt;
+        if (b.arg != s_pairedAsk) {
+            s_pairedAsk = b.arg;
+        } else if (BtGet(&bt, NULL) && b.arg < bt.paired && b.arg < BT_PAIRED) {
+            wchar_t a[18];
+            BtText(bt.pairedAddr[b.arg], a, 18);
+            VLog(L"bt: удалить сопряжение %s", a);
+            BtCmdText(BT_CMD_UNPAIR, a);
+            s_pairedAsk = -1;
+        }
+        Redraw();
+        break;
+    }
+    case A_OBDPAIR: {
+        wchar_t t[40];
+        _snwprintf(t, 40, L"%s %S", s_obdAddr, kObdPins[s_obdPin]);
+        t[39] = 0;
+        VLog(L"obd: сопряжение %s", t);
+        BtCmdText(BT_CMD_PAIR, t);
+        break;
+    }
+    case A_OBDCONN: {
+        ObdInfo o;
+        ObdGet(&o);
+        if (o.state == OBD_CONNECTING || o.state == OBD_ON) {
+            ObdStop();
+        } else {
+            char a[18];
+            WideCharToMultiByte(CP_ACP, 0, s_obdAddr, -1, a, 18, NULL, NULL);
+            a[17] = 0;
+            ObdConnect(a);
+        }
+        Redraw();
+        break;
+    }
     case A_WIFIAP: {   // the access point by hand: on until pressed again
         WifiInfo w;
         WifiGet(&w);
@@ -12315,6 +12849,8 @@ static void DoAction(const Btn& b)
         } else if (b.action == A_KEY && n < cap) {
             text[n] = (wchar_t)(b.arg % 65536);
             text[n + 1] = 0;
+            if (field == K_DIAL)
+                DtmfPlay(text[n]);
         }
         break;
     }
@@ -12323,6 +12859,16 @@ static void DoAction(const Btn& b)
             s_homePage = (s_homePage + 1) % HomePages();
         else if (s_screen == S_RADIO)
             RadioPageTo(s_radioPage + 1);
+        else if (s_screen == S_AUDIO_LIST)
+            s_musPage = (s_musPage + 1) % MusPages();
+        else if (s_screen == S_VIDEO)
+            s_vidPage = (s_vidPage + 1) % VidPages();
+        else if (s_screen == S_PHOTO)
+            s_phPage = (s_phPage + 1) % PhotoPages();
+        else if (s_screen == S_FILES)
+            s_filePage = (s_filePage + 1) % FilePages();
+        else if (s_screen == S_BT_PAIRED)
+            s_pairedPage++;   // (ScrBtPaired wraps it)
         else
             s_page = (s_page + 1) % AppsPages();
         s_slideDir = 1;
@@ -12351,8 +12897,6 @@ static void DoAction(const Btn& b)
     case A_BKSP:     KeyBack(); break;
     case A_FILE:     PickFile(b.arg); break;
     case A_UP:       UpDir(); break;
-    case A_FPREV:    Swipe(-1); break;
-    case A_FNEXT:    Swipe(1); break;
     case A_MINIMIZE: MinimizeHome(); break;
     case A_CALIBRATE: Calibrate(); break;
     case A_SOON:     wcscpy(s_status, b.arg ? L"нужно чтение GPS (NMEA)" : L"нужен протокол MCU"); break;
@@ -12704,10 +13248,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SaveCfg();
         }
         WifiEnable(s_cfg.wifiOn);
-        if (s_cfg.wifiHold)
-            WifiHold(true);   // (off is the firmware's own state: nothing to do)
         WifiApSetup(s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
         WifiStart(hwnd, WM_APP_WIFI, VLog);
+        ObdInit(hwnd, WM_APP_OBD, VLog);
         for (int i = 0; i < s_cfg.wifiCount; i++)
             if (!s_cfg.wifiLocked[i])
                 WifiRemember(s_cfg.wifiSsid[i], s_cfg.wifiPass[i]);
@@ -12726,6 +13269,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_btHold = s_btns[s_pressed].arg == BT_CMD_NEXT ? BT_CMD_FF_RELEASE : BT_CMD_REW_RELEASE;
                 BtCmd(s_btns[s_pressed].arg == BT_CMD_NEXT ? BT_CMD_FF_PRESS : BT_CMD_REW_PRESS);
                 return 0;   // the button stays pressed until the finger goes up
+            }
+            if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEY) {   // "0" held on the keypad: "+"
+                int n = (int)wcslen(s_dial);
+                if (n < 19) {
+                    s_dial[n] = L'+';
+                    s_dial[n + 1] = 0;
+                    DtmfPlay(L'0');
+                }
+                s_pressed = -1;   // the release does not add the "0"
+                Redraw();
+                return 0;
             }
             if (s_pressed >= 0 && s_btns[s_pressed].action == A_PRESET) {   // held on a preset: save it
                 RadioPresetSave(s_btns[s_pressed].arg);
@@ -12872,7 +13426,55 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 SaveCfg();
             }
         }
-        if (wp == 1 && (s_screen == S_AUDIO_BT || s_screen == S_SET_BT) && IsWindowVisible(hwnd)) {
+        if (wp == 1 && s_radioAsk) {   // the tuner silent since the start: asked again (s_tunLive)
+            static DWORD s_asked;
+            DWORD now = GetTickCount();
+            if (s_tunLive || now - s_radioAsk > 60000) {
+                VLog(L"радио: тюнер %s через %lu с", s_tunLive ? L"ответил" : L"не ответил", (now - s_radioAsk) / 1000);
+                s_radioAsk = 0;
+            } else if (now - s_asked >= 3000) {
+                static bool s_woken;
+                if (!s_woken) {   // as the shell at its start
+                    s_woken = true;
+                    McuSend3("SPApi_SendRadioNaviVoiceGuidance", 0, 0, 0);
+                    McuSend3("SPApi_SendRadioIsNaviSourceCouldIn", 0, 0, 0);
+                }
+                s_asked = now;
+                McuKey(0x30, false);
+            }
+        }
+        if (wp == 1) {   // the source: our switches checked; changed elsewhere (MODE, the shell) - ours stop
+            static int s_srcSeen = -2;
+            int vol, mute, src;
+            VolGet(&vol, &mute, &src);
+            DWORD now = GetTickCount();
+            if (s_radioSrcAsk && now - s_radioSrcAsk > 1500) {
+                s_radioSrcAsk = 0;
+                if (src != 0) {   // the keys did not do it: a preset does (the one playing, else the first)
+                    Tuner t;
+                    TunerGet(&t);
+                    int n = t.cur >= 0 && t.cur < 24 ? t.cur : 0;
+                    VLog(L"радио: клавиши не переключили источник (%d) - пресет %d", src, n + 1);
+                    McuSend3("SPApi_SendListItemControl", 1, n, 0);
+                    s_srcByUs = now;
+                }
+            }
+            if (s_btPathTick && now - s_btPathTick > 3000) {   // the BT key may start the phone: it is paused
+                s_btPathTick = 0;
+                BtQuiet();
+            }
+            if (src != s_srcSeen) {
+                if (s_srcSeen != -2 && (src == 0 || src == 9) && now - s_srcByUs > 6000) {
+                    VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
+                    OursQuiet();
+                }
+                s_srcSeen = src;
+            }
+        }
+        if (wp == 1 && s_screen == S_SET_OBD && IsWindowVisible(hwnd) && ObdScanEvents())
+            Redraw();   // the search's devices
+        if (wp == 1 && (s_screen == S_AUDIO_BT || s_screen == S_SET_BT || s_screen == S_BT_PAIRED) &&
+            IsWindowVisible(hwnd)) {
             BtState bt;   // the Bluetooth screens follow the proxy's state
             LONG seq = 0;
             static LONG s_btSeen;
@@ -13018,6 +13620,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
         return 0;
     }
+    case WM_APP_OBD:   // the OBD thread's step or values
+        if (s_screen == S_SET_OBD && IsWindowVisible(hwnd))
+            Redraw();
+        return 0;
     case WM_APP_VIDTAP:   // a tap on the picture: the whole screen and back
         s_vidFull = !s_vidFull;
         Redraw();
@@ -13154,6 +13760,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
         if (s_pressed >= 0 && (s_btns[s_pressed].action == A_KEYFIELD || s_btns[s_pressed].action == A_PRESET ||
+                               (s_btns[s_pressed].action == A_KEY && s_btns[s_pressed].arg == K_DIAL * 65536 + L'0') ||
                                (s_btns[s_pressed].action == A_BTCMD &&
                                 (s_btns[s_pressed].arg == BT_CMD_NEXT || s_btns[s_pressed].arg == BT_CMD_PREV))))
             SetTimer(hwnd, TIMER_LONG, s_btns[s_pressed].action == A_PRESET ? 1200 : kLongMs, NULL);
@@ -13304,6 +13911,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         VideoStop();
         NetStop();
         WifiStop();
+        ObdStop();
         GpsStopThread();
         McuStopThread();
         HttpCloseAll();

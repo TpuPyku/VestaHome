@@ -432,9 +432,10 @@ static const char* kOldProxyMd5[] = {
     "0e0a11692af2409dcca273625078222f",   // 2026-10-15 (v2: shared memory, log on \SDMMC)
     "96f4486b5415e194cabb0363009f4dd2",   // 2026-10-17 (log on the SD card, sound/source calls logged)
     "88eb58021d893cdb8e0edf84b3a5feb0",   // 2026-10-18 (shared memory v2, the shell's calls logged too)
-    "73dd581b44f77bc7e49edd49195d186a",   // 2026-10-19 (the same sources as now, an earlier build)
+    "73dd581b44f77bc7e49edd49195d186a",   // 2026-10-19 (the same sources, an earlier build)
+    "4bc80501c25e9a4e895dedf41df56fd8",   // 2026-10-19 (before VestaHome's calls made in the shell)
 };
-static const int   kOldProxyN = 5;
+static const int   kOldProxyN = 6;
 
 static int IsOldProxy(const char* md5)
 {

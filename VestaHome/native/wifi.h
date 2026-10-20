@@ -50,10 +50,6 @@ void WifiEnable(bool on);
 // raises it, waits for a phone, then goes back to a client and joins the phone's hotspot (a known network).
 void WifiApSetup(const wchar_t* ssid, const wchar_t* pass, bool autoOn);
 void WifiApManual(bool on);   // by hand: the access point until switched off
-// Hold the connection: the vendor's health service WzcRefresh restarts WZC every 6 s while not connected - also
-// while a phone's hotspot is slow to give an address (Xiaomi, HU 2026-10-18). on: it is switched off (registry +
-// the service restarted), off: back on. Applied by the Wi-Fi thread; also before WifiStart.
-void WifiHold(bool on);
 // 0..4 bars from dBm
 int  WifiBars(int rssi);
 

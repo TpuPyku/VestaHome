@@ -39,6 +39,11 @@ static void logLine(const wchar_t* s)
     CloseHandle(f);
 }
 
+void ProxyLog(const wchar_t* s)   // for spipower_proxy.cpp (the shell's calls for VestaHome)
+{
+    logLine(s);
+}
+
 // ---- inbound: rmtObjectSkeleton vtable wrap (P3) ---------------------------
 // interpretCommand calls skel->vtable[1](&buf[1]) with the message buffer
 // [id_hi][id_lo][len][payload...]. We swap each skeleton's vtable for a wrapper

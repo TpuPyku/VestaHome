@@ -27,7 +27,7 @@ struct IntfEntry {
     ULONG   mediaType, physicalMediaType;
     INT     infraMode, authMode, wepStatus;
     DWORD   ctlFlags, capabilities;
-    RawData ssid;                // NDIS_802_11_SSID
+    RawData ssid;                // the SSID's bytes (len = their number; not an NDIS_802_11_SSID)
     RawData bssid;
     RawData bssidList;           // WZC_802_11_CONFIG_LIST: the visible networks
     RawData prefList;            // WZC_802_11_CONFIG_LIST: the preferred networks
@@ -111,7 +111,6 @@ static WifiLogFn  s_log;
 static wchar_t    s_guid[64];          // the adapter
 static volatile bool s_wantOn = true;  // WifiEnable
 static volatile bool s_wantAp, s_apAuto;   // WifiApManual, WifiApSetup
-static volatile int  s_hold = -1;          // WifiHold: 1 / 0 asked, -1 nothing (yet)
 static char       s_apSsid[33], s_apPass[65];   // under s_cs
 static wchar_t    s_apSsidW[33], s_apPassW[65]; // the same for the screens
 
@@ -542,39 +541,6 @@ static void RadioPower(bool on)
 #endif
 }
 
-// WzcRefresh on / off: "Enabled" of its settings, then the health service (WHE1:, WdkHealthSvc.dll, which reads
-// them when it starts) stopped and started again. The registry is reset on boot: applied on every start.
-static void HoldApply(bool hold)
-{
-#ifdef UNDER_CE
-    HKEY k;
-    DWORD v = hold ? 0 : 1, rr = (DWORD)-1;
-    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Qualnetics\\WdkHealthSvc\\WzcRefresh", 0, NULL, 0, 0, NULL, &k,
-                       NULL) == ERROR_SUCCESS) {
-        rr = RegSetValueEx(k, L"Enabled", 0, REG_DWORD, (const BYTE*)&v, sizeof(v));
-        RegCloseKey(k);
-    }
-    typedef HANDLE (*GetSvcFn)(LPWSTR, LPWSTR, DWORD*);
-    typedef BOOL (*SvcIoFn)(HANDLE, DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD, LPOVERLAPPED);
-    HMODULE c = GetModuleHandle(L"coredll.dll");
-    GetSvcFn getSvc = (GetSvcFn)GetProcAddress(c, L"GetServiceHandle");
-    SvcIoFn svcIo = (SvcIoFn)GetProcAddress(c, L"ServiceIoControl");
-    BOOL stop = FALSE, start = FALSE;
-    if (getSvc && svcIo) {
-        HANDLE h = getSvc((LPWSTR)L"WHE1:", NULL, NULL);
-        if (h && h != INVALID_HANDLE_VALUE) {
-            DWORD got = 0;
-            const DWORD kStop = 0x01040008, kStart = 0x01040004;   // IOCTL_SERVICE_STOP / _START (service.h)
-            stop = svcIo(h, kStop, NULL, 0, NULL, 0, &got, NULL);
-            Sleep(300);
-            start = svcIo(h, kStart, NULL, 0, NULL, 0, &got, NULL);
-        }
-    }
-    Log(L"wifi: удержание подключения %s (WzcRefresh Enabled=%lu: %lu; служба: стоп %d, старт %d)",
-        hold ? L"вкл" : L"выкл", v, rr, stop, start);
-#endif
-}
-
 static DWORD WINAPI WifiThread(LPVOID)
 {
     Log(L"поток Wi-Fi: id %08X", (unsigned)GetCurrentThreadId());
@@ -696,12 +662,17 @@ static DWORD WINAPI WifiThread(LPVOID)
             haveAdapter = false;
             continue;
         }
-        bool connected = e.mediaState == 1 && e.ssid.data && e.ssid.len >= sizeof(ULONG) &&
-                         ((Ssid*)e.ssid.data)->len > 0;
+        // rdSSID holds the name's bytes alone (read as NDIS_802_11_SSID its first 4 bytes went for the length:
+        // "Redmi" showed as "i", HU 2026-10-20)
+        bool connected = e.mediaState == 1 && e.ssid.data && e.ssid.len > 0;
         w.ssid[0] = 0;
         w.rssi = 0;
-        if (connected)
-            SsidText(*(Ssid*)e.ssid.data, w.ssid);
+        if (connected) {
+            Ssid cs;
+            cs.len = e.ssid.len < 32 ? e.ssid.len : 32;
+            memcpy(cs.ssid, e.ssid.data, cs.len);
+            SsidText(cs, w.ssid);
+        }
         int seen = 0;
         WlanConfig* list = ListItems(e.bssidList, &seen);
         w.count = 0;
@@ -786,10 +757,6 @@ static DWORD WINAPI WifiThread(LPVOID)
             s_refresh(NULL, INTF_ALL, &e, &outFlags);
         s_delete(&e);
 
-        if (s_hold >= 0) {
-            HoldApply(s_hold != 0);
-            s_hold = -1;
-        }
         {   // the connection's steps into the log: up, the address, lost
             DWORD now = GetTickCount();
             if (connected && !linkTick) {
@@ -940,13 +907,6 @@ void WifiApSetup(const wchar_t* ssid, const wchar_t* pass, bool autoOn)
     if (s_thread)
         LeaveCriticalSection(&s_cs);
     s_apAuto = autoOn;
-    if (s_thread)
-        SetEvent(s_wake);
-}
-
-void WifiHold(bool on)
-{
-    s_hold = on ? 1 : 0;
     if (s_thread)
         SetEvent(s_wake);
 }
