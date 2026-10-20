@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверки на ГУ</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  body { font: 10.5pt/1.3 "Segoe UI", Arial, sans-serif; color: #000; background: #fff; margin: 0 auto; max-width: 190mm; }
+  h1 { font-size: 15pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 5mm 0 1.5mm; border-bottom: 1.5pt solid #000; padding-bottom: 0.5mm; page-break-after: avoid; }
+  p, li { margin: 0.8mm 0; }
+  .note { font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1mm; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 0.6pt solid #555; padding: 1mm 1.5mm; vertical-align: top; text-align: left; }
+  th { background: #e6e6e6; font-size: 9.5pt; }
+  td.n { width: 8mm; text-align: center; font-weight: 600; }
+  td.ok { width: 7mm; }
+  td.ok::before { content: ""; display: inline-block; width: 3.2mm; height: 3.2mm; border: 0.8pt solid #000; }
+  td.memo { width: 38mm; }
+</style>
+</head>
+<body>
+
+<h1>Проверки на ГУ — седьмой лист</h1>
+<p class="note">Составлено 2026-10-20 (после коммита VestaHome 3006d19). Новое с 18-го и то, что с прошлого листа ещё не подтверждено. ☐ — «сделано», «Заметки» — что увидели. Нужны: SD-карта с <b>Tests\SDMemory</b> (TestMedia, VestaWidgets), телефон по Bluetooth, для п. 31 — <b>MortScript.exe</b> в <b>\SDMemory\MortScript\</b>.</p>
+
+<h2>1. Установка</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">1</td><td>Новый <b>VestaHomeInstall.exe</b> → «1. VESTAHOME».</td><td>«VestaHome установлен…» и строка «Пример своего виджета (пробки) — \SDMemory\VestaWidgets: новых файлов 2».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">2</td><td>«2. PROXY MCU» (обновит и proxy Bluetooth) → перезагрузка с SD.</td><td>«СТАТУС»: proxy MCU и Bluetooth proxy — «стоит (текущий)»; Bluetooth оболочки работает.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">3</td><td>«О системе → Подробнее → ЛИЦЕНЗИИ И СЕРВИСЫ».</td><td>Окно со списком, прокрутка пальцем и стрелками; BASS 2.4.17; закрывается крестиком и тапом мимо.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>2. Запуск как в прошлый раз</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">4</td><td>Включить радио, открыть «Главную», подождать <b>1 мин</b>, выключить зажигание, включить.</td><td>Открывается главная, через ~10 с играет радио.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">5</td><td>Включить музыку (Медиа → Музыка), открыть «Радио» (экран), 1 мин, выкл./вкл.</td><td>Открывается экран «Радио», играет тот же трек.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">6</td><td>Играет музыка с телефона (BT), 1 мин, выкл./вкл.</td><td>Телефон подключается (сам или VestaHome через 15–45 с), источник BT, музыка играет. В журнале «запуск: Bluetooth …».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">7</td><td>«Фото» → «Главная» → закрыть VestaHome («Выход») → открыть.</td><td>Открывается главная (не фото).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">8</td><td>Громкость ~20, выкл./вкл.</td><td>Громкость 10 сразу или со следующего включения. В журнале «запуск: громкость после команды – …».</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>3. Экран и заставка</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">9</td><td>«Настройки → Экран → Подсветка»: НОЧЬ, потом ДЕНЬ.</td><td>Подсветка ГУ меняется как кнопкой оболочки; тема VestaHome — нет.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">10</td><td>Кнопка «НОЧЬ/ДЕНЬ» в нижнем баре VestaHome и в OSMapsCE.</td><td>Меняется только тема (VestaHome и карта), подсветка остаётся; программы следуют друг за другом.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">11</td><td>«Тема» и «Подсветка» — АВТО; вечером до/после заката.</td><td>Строка «восход … · закат …»; после заката сами в ночь, утром в день.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">12</td><td>«Яркость» ‹ / › днём и ночью.</td><td>Подсветка меняется, 1–10, у каждого режима своя.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">13</td><td>«Заставка, мин» → 1, не трогать минуту (на главной).</td><td>Тёмный фон с X и оранжевыми ходовыми огнями, часы, дата, погода в две строки (иконка + температура, описание); тап — назад.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">14</td><td>Открыть фото на просмотр и не трогать 1+ мин.</td><td>Заставка не включается.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">15</td><td>«Калибровка экрана».</td><td>Системные перекрестья; после — касания точные.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>4. Радио</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">16</td><td>Кнопка страниц (надпись FM1) нажимать по кругу.</td><td>FM1 → FM2 → FM3 → УКВ → FM1; на УКВ диапазон переключается («УКВ…» на секунду); точки под пресетами показывают страницу.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">17</td><td>Свайп по пресетам влево/вправо, медленно.</td><td>Едут только пресеты (частота и кнопки стоят), за пальцем; по кругу.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">18</td><td>Быстро: FM3 → УКВ → сразу FM1.</td><td>Не застревает на УКВ, страницы листаются дальше.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">19</td><td>Виджет «Радио» на главной до прихода RDS.</td><td>Под частотой — имя станции из списка (а не пусто).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>5. Главная и виджеты</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">20</td><td>Свайп по главной медленно, отпустить на середине; затем до конца.</td><td>Страница едет за пальцем, соседняя рядом; точки стоят на месте; короткий — возврат, длинный — листает, по кругу.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">21</td><td>«Настройки → Общие → Виджеты главной»: скрыть «Скорость», переставить вверх/вниз.</td><td>Следующие сдвигаются на освободившиеся места; двойные — ровно 2 одинарных + отступ.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">22</td><td>Виджет «Навигация».</td><td>Запускает OSMapsCE.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">23</td><td>Виджет «Сейчас играет» после запуска, ничего не играет.</td><td>Приглушённо — последний трек и «▶ — продолжить» (или «—»).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">24</td><td>Тап по часам в верхнем баре; тап по значку динамика.</td><td>Часы — ничего; динамик — окно громкости, 30 делений.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">25</td><td>Длинные тексты в виджетах (GPS без NMEA, ошибка погоды).</td><td>Не вылезают за плитку: перенос или «…».</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>6. Свои виджеты</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">26</td><td>После п. 1 — главная, последняя страница.</td><td>Виджет «ПРОБКИ»: балл, подпись Яндекса, «Яндекс Пробки · ЧЧ:ММ», цветная точка. В журнале «виджет u.probki: загрузка … N байт за M мс» — <b>записать M</b>.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">27</td><td>В <b>\SDMemory\VestaWidgets\probki.ini</b> поменять region на свой город, перезапустить VestaHome.</td><td>Данные своего города (для Тольятти — «—»: Яндекс там баллы не считает).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">28</td><td>Тап по «Пробкам».</td><td>Открывается OSMapsCE.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">29</td><td>Скопировать <b>Tests\SDMemory\VestaWidgets</b> целиком, перезапустить VestaHome.</td><td>Ещё «ПРИМЕР» (7,4 л/100 км, зелёная точка) и «НАВИГАЦИЯ»; в настройках — «свой · …ini».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">30</td><td>Вынуть SD и вставить обратно.</td><td>Свои виджеты пропадают и возвращаются на свои места.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">31</td><td>С MortScript.exe в \SDMemory\MortScript\: «НАВИГАЦИЯ», запустить/закрыть CityGuide.</td><td>«CityGuide работает / не запущен» за ~5 с; русские буквы читаются (если «???» — записать). Тап запускает CityGuide.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>7. Медиа</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">32</td><td>Интернет-радио → список станций.</td><td>Играющая видна сразу; прокрутка пальцем; нижняя стрелка — вниз; полоса справа; после прокрутки станция не переключилась.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">33</td><td>Музыка MP3, FLAC, M4A с SD; интернет-радио (BASS 2.4.17).</td><td>Играет как раньше, названия из тегов. Хуже — записать (вернём 2.4.12).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">34</td><td>Медиа → Фото → \SDMemory\TestMedia\Photos.</td><td>Плитки с миниатюрами; IMG_0001 — повёрнута («ВЕРХ» справа вверху); IMG_0004 — значок ошибки. <b>Сколько секунд строилась страница</b>.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">35</td><td>Открыть IMG_0001_phone, листать ← → и свайпом до broken.jpg и BMP.</td><td>IMG_0001 стоит вертикально; IMG_0004 — «СЛИШКОМ БОЛЬШОЕ»; broken — часть картинки, без сбоя. <b>Сколько секунд открывается IMG_0001</b>.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">36</td><td>Повороты ⟲ ⟳, слайд-шоу (кнопка в центре), «к списку» (значок двух снимков).</td><td>Значки понятные; поворот на четверть; слайд-шоу идёт по интервалу из настроек.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">37</td><td>Фото со своего телефона (12 Мп).</td><td>Открываются, миниатюры есть; VestaHome не падает (журнал «нагрузка:» — память).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>8. VestaLaunch</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">38</td><td>«Навигация» → CityGuide → свернуть его кнопкой CityGuide.</td><td>Через ~2 с — экраны оболочки, не чёрное окно; тап по чёрному (если успел) — тоже выход. Журнал VestaLaunch: «without a window for 2000 ms».</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>9. С прошлого листа — ещё не подтверждено</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">39</td><td>«Телефон»: набрать номер, позвонить; входящий звонок.</td><td>Экран вызова с номером и временем; входящий — окно с ответом/отклонением.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">40</td><td>BT-музыка: удерживать ⏭ / ⏮ 3 с.</td><td>Перемотка, ползунок движется.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">41</td><td>Медиа → Список → папка с подпапками → «ИГРАТЬ ВСЁ».</td><td>Играет всё по папкам, «трек N из M».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">42</td><td>«Настройки → Звук»: низкие +6; баланс влево.</td><td>На слух изменилось.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">43</td><td>«ЗВУК И ВИДЕО» → «ПИСК ПОВЕРХ РАДИО».</td><td>Радио тише, писк слышен, радио возвращается.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">44</td><td>Wi-Fi: подключиться к точке Xiaomi (2,4 ГГц), открыть OSMapsCE на 5 мин. («держать» убрано — оно перезагружало ГУ).</td><td>Адрес получен, связь держится. Если рвётся — журнал VestaHome: «связь есть», «адрес … за N с», «связь потеряна через N с».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">45</td><td>«ТОЧКА ГУ», телефон ищет сеть VestaHome.</td><td>Сеть видна, телефон подключается.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>9а. OBD-адаптер (новое, проверка)</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">46</td><td>VestaHomeInstall: «1. VESTAHOME», затем «2» (новый proxy Bluetooth: поиск и сопряжение), перезагрузка. Файл <b>\SDMMC\SPIPower.on</b> оставить — без него нет BTProxy.log.</td><td>В установщике proxy Bluetooth «стоит (текущий)».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">47</td><td>Адаптер в разъём OBD, зажигание вкл. «Настройки → Bluetooth → OBD-адаптер (проверка)» → «НАЙТИ», ждать 10–15 с.</td><td>Появились кнопки найденных устройств, среди них адаптер (OBDII, V-LINK…). Если пусто — BTProxy.log покажет, что пришло.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">48</td><td>Нажать на адаптер, PIN 1234, «СОПРЯЧЬ», ждать 30 с. Не вышло — PIN 0000 и ещё раз.</td><td>В BTProxy.log «PAIR request … Pair_Confirm(1)» и «PAIR end: PIN back».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">49</td><td>«ПОДКЛЮЧИТЬ» (двигатель заведён — для оборотов).</td><td>Строки: адрес записан, порт открыт, «подключение: есть», «ATZ → ELM327 v…», затем обороты · скорость · ОЖ · напряжение.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">50</td><td>«ОТКЛЮЧИТЬ»; затем музыка с телефона и звонок.</td><td>Телефон работает как раньше.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>10. Что прислать</h2>
+<ul>
+  <li><b>\SDMemory\VestaLogs\</b>: VestaHome.log, VestaLaunch.log, SPIPower.log, BTProxy.log, VestaHomeInstall.log, OSMapsCE.log.</li>
+  <li><b>\SDMemory\VestaWidgets\</b>: probki.txt, probki.resp, navi.txt (если был п. 31).</li>
+  <li>Фото экрана, если что-то выглядит не так.</li>
+  <li>Этот лист с заметками.</li>
+</ul>
+
+</body>
+</html>

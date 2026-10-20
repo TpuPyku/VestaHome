@@ -13,6 +13,8 @@ VestaHome/VestaHome/VestaHome.ini
 VestaHome/VestaHome/*.tmp
 VestaHome/VestaHome/*.nmea
 VestaHome/VestaHome/speedcam/*
+# the user widgets next to the PC build (a test copy of VestaWidgets/ with its fetched data)
+VestaHome/VestaHome/VestaWidgets/
 # third-party BASS (un4seen) next to the PC build: x86 DLLs for VestaHomePC.exe, not ours;
 # the HU's ARM set comes from MAIN/SinglePlayer through make_tests.py
 VestaHome/VestaHome/bass/
