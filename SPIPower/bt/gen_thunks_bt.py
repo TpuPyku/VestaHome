@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'native'))
 from gen_thunks import parse_exports
 
-INTERCEPT = {'Flc_Bluetooth_Init'}
+INTERCEPT = {'Flc_Bluetooth_Init', 'Flc_Bluetooth_PbapClient_PullPhonebook'}
 
 
 def main():

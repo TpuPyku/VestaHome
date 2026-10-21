@@ -1,0 +1,728 @@
+﻿// vh_userwidgets.inc - part of home.cpp (included there, in order): the user's widgets and their HTTPS.
+
+// ---- the user's widgets: VestaWidgets\*.ini on the SD card (the PC: next to the exe), one a widget:
+// (and the HTTPS that VestaHome lends them: url= every= save=, value.from= ... - see UserWgFetch)
+//     title=FUEL  icon=car  wide=0  data=fuel.txt  refresh=10  start=fuel.mscr  tap=fuel.mscr
+// data (default <name>.txt beside the ini) is written by a script (MortScript); VestaHome reads it every refresh
+// seconds when its time changed:  value=7,4  unit=л/100 км  text=...  text2=...  state=ok|warn|alert
+// start= runs once when VestaHome starts (a script that keeps the data fresh), tap= on a tap; .mscr through
+// MortScript.exe, .exe as it is; a relative path is from the ini's folder. UTF-8 or cp1251 (MortScript writes
+// ANSI). A broken file can't harm VestaHome: unknown lines are skipped, no file - "no data".
+static const struct { const wchar_t* name; Icon ic; } kIconNames[] = {
+    { L"music", IC_MUSIC }, { L"radio", IC_RADIO }, { L"phone", IC_PHONE }, { L"gear", IC_GEAR },
+    { L"home", IC_HOME }, { L"car", IC_CAR }, { L"cloud", IC_CLOUD }, { L"nav", IC_NAV }, { L"map", IC_MAP },
+    { L"sd", IC_SD }, { L"usb", IC_USB }, { L"wifi", IC_WIFI }, { L"bt", IC_BT }, { L"info", IC_INFO },
+    { L"clock", IC_CLOCK }, { L"photo", IC_PHOTO }, { L"video", IC_VIDEO }, { L"apps", IC_APPS },
+    { L"warn", IC_WARN }, { L"eye", IC_EYE }, { L"power", IC_POWER }, { L"folder", IC_FOLDER },
+    { L"tasks", IC_TASKS }, { L"star", IC_STAR }, { L"lock", IC_LOCK }, { L"file", IC_FILE } };
+
+static void UserWgDir(wchar_t* dir)
+{
+#ifdef UNDER_CE
+    wcscpy(dir, L"\\SDMemory\\VestaWidgets\\");
+#else
+    _snwprintf(dir, MAX_PATH, L"%sVestaWidgets\\", s_dir);
+#endif
+}
+
+static bool IsUtf8(const unsigned char* p, int n)
+{
+    for (int i = 0; i < n;) {
+        int k = p[i] < 0x80 ? 0 : (p[i] & 0xE0) == 0xC0 ? 1 : (p[i] & 0xF0) == 0xE0 ? 2 : (p[i] & 0xF8) == 0xF0 ? 3 : -1;
+        if (k < 0 || i + k >= n + (k ? 0 : 1))
+            return false;
+        for (int j = 1; j <= k; j++)
+            if ((p[i + j] & 0xC0) != 0x80)
+                return false;
+        i += k + 1;
+    }
+    return true;
+}
+
+// A key=value text file (UTF-8 with or without BOM, else cp1251) into wide text; NULL when missing. free() it.
+static wchar_t* ReadText(const wchar_t* path)
+{
+    DWORD size;
+    char* buf = ReadAll(path, &size);
+    if (!buf)
+        return NULL;
+    const unsigned char* b = (const unsigned char*)buf;
+    int n = (int)size, skip = 0;
+    if (n >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF)
+        skip = 3;
+    UINT cp = IsUtf8(b + skip, n - skip) ? CP_UTF8 : 1251;
+    wchar_t* w = (wchar_t*)malloc((n + 1) * sizeof(wchar_t));
+    if (w) {
+        int k = MultiByteToWideChar(cp, 0, buf + skip, n - skip, w, n);
+        if (k <= 0 && cp == 1251)
+            k = MultiByteToWideChar(CP_ACP, 0, buf + skip, n - skip, w, n);
+        w[k > 0 ? k : 0] = 0;
+    }
+    free(buf);
+    return w;
+}
+
+// The next "key=value" line of text (comments '#' / ';' and blank lines skipped); false at the end.
+static bool NextKeyVal(wchar_t** pos, wchar_t** k, wchar_t** v)
+{
+    while (**pos) {
+        wchar_t* line = *pos;
+        wchar_t* end = line;
+        while (*end && *end != L'\n' && *end != L'\r')
+            end++;
+        *pos = *end ? end + 1 : end;
+        *end = 0;
+        Trim(line);
+        if (!line[0] || line[0] == L'#' || line[0] == L';')
+            continue;
+        wchar_t* eq = wcschr(line, L'=');
+        if (!eq)
+            continue;
+        *eq = 0;
+        *k = line;
+        *v = eq + 1;
+        Trim(*k);
+        Trim(*v);
+        return true;
+    }
+    return false;
+}
+
+// A path of the widget's ini: as it is when absolute, else from the ini's folder.
+static void UserWgPath(const UserWg& w, const wchar_t* v, wchar_t* out)
+{
+    if (v[0] == L'\\' || (v[0] && v[1] == L':'))
+        wcsncpy(out, v, MAX_PATH - 1);
+    else
+        _snwprintf(out, MAX_PATH, L"%s%s", w.dir, v);
+    out[MAX_PATH - 1] = 0;
+}
+
+static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
+{
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%s%s", dir, file);
+    wchar_t* text = ReadText(path);
+    if (!text)
+        return false;
+    memset(w, 0, sizeof(*w));
+    wcsncpy(w->dir, dir, MAX_PATH - 1);
+    wchar_t name[40];
+    wcsncpy(name, file, 39);
+    name[39] = 0;
+    wchar_t* dot = wcsrchr(name, L'.');
+    if (dot)
+        *dot = 0;
+    _snwprintf(w->key, 40, L"u.%s", name);
+    for (wchar_t* c = w->key; *c; c++)   // the key goes into a comma list
+        if (*c == L',' || *c == L' ')
+            *c = L'_';
+    wcsncpy(w->title, name, 39);
+    w->ic = IC_INFO;
+    w->refresh = 10;
+    wchar_t dataName[MAX_PATH];
+    _snwprintf(dataName, MAX_PATH, L"%s.txt", name);
+    UserWgPath(*w, dataName, w->data);
+    wchar_t* pos = text;
+    wchar_t *k, *v;
+    while (NextKeyVal(&pos, &k, &v)) {
+        if (!_wcsicmp(k, L"title")) {
+            wcsncpy(w->title, v, 39);
+            w->title[39] = 0;
+        } else if (!_wcsicmp(k, L"icon")) {
+            for (int i = 0; i < (int)(sizeof(kIconNames) / sizeof(kIconNames[0])); i++)
+                if (!_wcsicmp(v, kIconNames[i].name))
+                    w->ic = kIconNames[i].ic;
+        } else if (!_wcsicmp(k, L"wide")) {
+            w->wide = CfgBool(v);
+        } else if (!_wcsicmp(k, L"data")) {
+            UserWgPath(*w, v, w->data);
+        } else if (!_wcsicmp(k, L"refresh")) {
+            w->refresh = _wtoi(v) < 1 ? 1 : _wtoi(v) > 3600 ? 3600 : _wtoi(v);
+        } else if (!_wcsicmp(k, L"tap")) {
+            if (v[0])
+                UserWgPath(*w, v, w->tap);
+        } else if (!_wcsicmp(k, L"start")) {
+            if (v[0])
+                UserWgPath(*w, v, w->start);
+        } else if (!_wcsicmp(k, L"url")) {
+            WideCharToMultiByte(CP_UTF8, 0, v, -1, w->url, sizeof(w->url), NULL, NULL);
+        } else if (!_wcsicmp(k, L"every")) {
+            w->every = _wtoi(v) < 60 ? 60 : _wtoi(v);   // not more often than once a minute
+        } else if (!_wcsicmp(k, L"save")) {
+            if (v[0])
+                UserWgPath(*w, v, w->resp);
+        } else {
+            static const wchar_t* fields[5] = { L"value", L"unit", L"text", L"text2", L"state" };
+            for (int i = 0; i < 5; i++) {
+                size_t n = wcslen(fields[i]);
+                if (!_wcsnicmp(k, fields[i], n) && !_wcsicmp(k + n, L".from")) {
+                    wcsncpy(w->from[i], v, 63);
+                    w->from[i][63] = 0;
+                } else if (!_wcsicmp(k, fields[i])) {
+                    wcsncpy(w->fixed[i], v, 95);
+                    w->fixed[i][95] = 0;
+                }
+            }
+        }
+    }
+    if (w->url[0]) {
+        if (!w->every)
+            w->every = 600;
+        if (!w->resp[0]) {
+            wchar_t respName[MAX_PATH];
+            _snwprintf(respName, MAX_PATH, L"%s.resp", name);
+            UserWgPath(*w, respName, w->resp);
+        }
+    }
+    CharUpperBuff(w->title, (DWORD)wcslen(w->title));
+    free(text);
+    return true;
+}
+
+// The data file, when its write time changed; true: something to draw anew.
+static bool UserWgRead(UserWg& w)
+{
+    WIN32_FIND_DATA fd;
+    HANDLE f = FindFirstFile(w.data, &fd);
+    if (f == INVALID_HANDLE_VALUE) {
+        bool was = w.have;
+        w.have = false;
+        return was;
+    }
+    FindClose(f);
+    if (w.have && !CompareFileTime(&fd.ftLastWriteTime, &w.dataTime))
+        return false;
+    wchar_t* text = ReadText(w.data);
+    if (!text)
+        return false;
+    w.dataTime = fd.ftLastWriteTime;
+    w.have = true;
+    w.value[0] = w.unit[0] = w.text[0][0] = w.text[1][0] = 0;
+    w.state = 0;
+    wchar_t* pos = text;
+    wchar_t *k, *v;
+    while (NextKeyVal(&pos, &k, &v)) {
+        if (!_wcsicmp(k, L"value"))
+            wcsncpy(w.value, v, 23);
+        else if (!_wcsicmp(k, L"unit"))
+            wcsncpy(w.unit, v, 23);
+        else if (!_wcsicmp(k, L"text"))
+            wcsncpy(w.text[0], v, 95);
+        else if (!_wcsicmp(k, L"text2"))
+            wcsncpy(w.text[1], v, 95);
+        else if (!_wcsicmp(k, L"state"))
+            w.state = !_wcsicmp(v, L"ok") ? 1 : !_wcsicmp(v, L"warn") ? 2 : !_wcsicmp(v, L"alert") ? 3 : 0;
+    }
+    w.value[23] = w.unit[23] = w.text[0][95] = w.text[1][95] = 0;
+    free(text);
+    return true;
+}
+
+// Runs a widget's command: a .mscr through MortScript.exe (looked for beside the widget, on the card, next to
+// VestaHome, in the usual folders), anything else as a program.
+static void UserWgRun(const UserWg& w, const wchar_t* cmd, const wchar_t* why)
+{
+    wchar_t exe[MAX_PATH], args[MAX_PATH + 4];
+    const wchar_t* dot = wcsrchr(cmd, L'.');
+    if (dot && !_wcsicmp(dot, L".mscr")) {
+        wchar_t cand[7][MAX_PATH];
+        _snwprintf(cand[0], MAX_PATH, L"%sMortScript.exe", w.dir);
+        wcscpy(cand[1], L"\\SDMemory\\MortScript\\MortScript.exe");
+        wcscpy(cand[2], L"\\SDMemory\\MortScript.exe");
+        _snwprintf(cand[3], MAX_PATH, L"%sMortScript.exe", s_dir);
+        wcscpy(cand[4], L"\\SDMMC\\MortScript\\MortScript.exe");
+        wcscpy(cand[5], L"\\StorageFlash\\MortScript\\MortScript.exe");
+        wcscpy(cand[6], L"\\ResidentFlash\\MortScript\\MortScript.exe");
+        exe[0] = 0;
+        for (int i = 0; i < 7 && !exe[0]; i++)
+            if (GetFileAttributes(cand[i]) != 0xFFFFFFFF)
+                wcscpy(exe, cand[i]);
+        if (!exe[0]) {
+            VLog(L"виджет %s: %s - нет MortScript.exe (рядом с виджетом, \\SDMemory\\MortScript\\)", w.key, why);
+            return;
+        }
+        _snwprintf(args, MAX_PATH + 4, L"\"%s\"", cmd);
+    } else {
+        wcsncpy(exe, cmd, MAX_PATH - 1);
+        exe[MAX_PATH - 1] = 0;
+        args[0] = 0;
+        // A program: as from "Приложения" (VestaHome waits for its window and brings it up, otherwise VestaHome
+        // stayed over it - HU 2026-10-20). Its path wrong (an example's ini): the one of that file name there.
+        const wchar_t* fn = wcsrchr(exe, L'\\');
+        fn = fn ? fn + 1 : exe;
+        bool there = GetFileAttributes(exe) != 0xFFFFFFFF;
+        int app = -1;
+        for (int i = 0; i < s_appCount && app < 0; i++) {
+            const wchar_t* an = wcsrchr(s_apps[i].path, L'\\');
+            an = an ? an + 1 : s_apps[i].path;
+            if (!_wcsicmp(s_apps[i].path, exe) || (!there && !_wcsicmp(an, fn)))
+                app = i;
+        }
+        if (app >= 0) {
+            VLog(L"виджет %s: %s - %s (из «Приложений»)", w.key, why, s_apps[app].path);
+            RunApp(app);
+            return;
+        }
+        if (!there) {
+            VLog(L"виджет %s: %s - нет %s (и в «Приложениях» нет %s)", w.key, why, exe, fn);
+            _snwprintf(s_status, 96, L"нет %s: добавьте в «Приложения»", fn);
+            return;
+        }
+    }
+    PROCESS_INFORMATION pi;
+#ifdef UNDER_CE
+    BOOL ok = CreateProcess(exe, args[0] ? args : NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+#else
+    STARTUPINFO si;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    wchar_t line[2 * MAX_PATH + 8];
+    _snwprintf(line, 2 * MAX_PATH + 8, L"\"%s\" %s", exe, args);
+    BOOL ok = CreateProcess(exe, line, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+#endif
+    VLog(L"виджет %s: %s - %s %s", w.key, why, cmd, ok ? L"запущен" : L"не запустился");
+    if (ok) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        if (!args[0]) {   // a program (not a script): its window brought up when it comes
+            s_waitApp = -2;
+            s_waitPid = pi.dwProcessId;
+            s_waitTick = GetTickCount();
+            SetTimer(s_wnd, TIMER_WAIT, 300, NULL);
+        }
+    }
+}
+
+// ---- HTTPS for the widgets: a widget with url= is fetched by VestaHome every every= seconds (one at a time, in a
+// thread of its own; at most 256 KB, 60 s at least between two of the same widget). The answer goes to resp
+// (for a script), and when the widget asks for fields (value.from= "start|end" ...) VestaHome takes them out and
+// writes the data file itself - no script needed. A failure keeps the last data and goes to the log.
+#define WM_APP_UWG (WM_APP + 26)
+enum { kUwgMaxBody = 256 * 1024 };
+static CRITICAL_SECTION s_uwCs;   // s_uw between the scan (the window) and the fetch thread
+static HANDLE s_uwThread;
+
+static void WriteUtf8(const wchar_t* path, const wchar_t* text)
+{
+    int n = WideCharToMultiByte(CP_UTF8, 0, text, -1, NULL, 0, NULL, NULL);
+    char* b = (char*)malloc(n > 0 ? n : 1);
+    if (!b)
+        return;
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, b, n, NULL, NULL);
+    HANDLE f = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD w;
+        WriteFile(f, b, n > 0 ? n - 1 : 0, &w, NULL);
+        CloseHandle(f);
+    }
+    free(b);
+}
+
+// The text between the markers "start|end" of rule in body (the first match), entities &amp; &lt; &gt; &quot;
+// &apos; decoded, trimmed; false: not found.
+static bool TakeBetween(const wchar_t* body, const wchar_t* rule, wchar_t* out, int cap)
+{
+    const wchar_t* bar = wcschr(rule, L'|');
+    if (!bar)
+        return false;
+    wchar_t a[64], b[64];
+    int la = (int)(bar - rule);
+    wcsncpy(a, rule, la);
+    a[la] = 0;
+    wcsncpy(b, bar + 1, 63);
+    b[63] = 0;
+    const wchar_t* p = a[0] ? wcsstr(body, a) : body;
+    if (!p)
+        return false;
+    p += la;
+    const wchar_t* e = b[0] ? wcsstr(p, b) : p + wcslen(p);
+    if (!e)
+        return false;
+    int n = 0;
+    for (const wchar_t* q = p; q < e && n < cap - 1; q++) {
+        static const struct { const wchar_t* ent; wchar_t c; } ents[5] = {
+            { L"&amp;", L'&' }, { L"&lt;", L'<' }, { L"&gt;", L'>' }, { L"&quot;", L'"' }, { L"&apos;", L'\'' } };
+        bool done = false;
+        for (int i = 0; i < 5 && !done; i++)
+            if (!wcsncmp(q, ents[i].ent, wcslen(ents[i].ent))) {
+                out[n++] = ents[i].c;
+                q += wcslen(ents[i].ent) - 1;
+                done = true;
+            }
+        if (!done)
+            out[n++] = *q == L'\r' || *q == L'\n' || *q == L'\t' ? L' ' : *q;
+    }
+    out[n] = 0;
+    Trim(out);
+    return true;
+}
+
+struct UwgJob { wchar_t key[40], resp[MAX_PATH], data[MAX_PATH], from[5][64], fixed[5][96]; char url[512]; };
+
+static void UserWgFetchOne(const UwgJob& j)
+{
+    const char* u = j.url;
+    bool tls = !_strnicmp(u, "https://", 8);
+    if (!tls && _strnicmp(u, "http://", 7)) {
+        VLog(L"виджет %s: url не http:// и не https://", j.key);
+        return;
+    }
+    u += tls ? 8 : 7;
+    char host[128];
+    const char* slash = strchr(u, '/');
+    int hl = slash ? (int)(slash - u) : (int)strlen(u);
+    if (hl <= 0 || hl >= (int)sizeof(host))
+        return;
+    memcpy(host, u, hl);
+    host[hl] = 0;
+    const char* path = slash ? slash : "/";
+    DWORD t0 = GetTickCount();
+    unsigned char* body = NULL;
+    int len = 0, status = 0;
+    int r = HttpGet(host, tls, path, "User-Agent: Mozilla/5.0 (VestaHome)\r\n", &body, &len, &status);
+    if (r != NET_OK || status != 200 || !body) {
+        VLog(L"виджет %s: загрузка %S - %s", j.key, host, r != NET_OK ? NetErrorText(r) : L"ответ не 200");
+        if (r == NET_OK)
+            VLog(L"виджет %s: HTTP %d", j.key, status);
+        free(body);
+        return;
+    }
+    if (len > kUwgMaxBody) {
+        VLog(L"виджет %s: ответ %d байт - больше 256 КБ, отброшен", j.key, len);
+        free(body);
+        return;
+    }
+    HANDLE f = CreateFile(j.resp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);   // the raw answer for a script
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD w;
+        WriteFile(f, body, len, &w, NULL);
+        CloseHandle(f);
+    }
+    bool rules = false;
+    for (int i = 0; i < 5; i++)
+        rules = rules || j.from[i][0];
+    if (rules) {   // the fields taken out: the data file
+        UINT cp = IsUtf8(body, len) ? CP_UTF8 : 1251;
+        wchar_t* w = (wchar_t*)malloc((len + 1) * sizeof(wchar_t));
+        if (w) {
+            int k = MultiByteToWideChar(cp, 0, (const char*)body, len, w, len);
+            w[k > 0 ? k : 0] = 0;
+            static const wchar_t* keys[5] = { L"value", L"unit", L"text", L"text2", L"state" };
+            wchar_t data[1024] = L"# written by VestaHome from the widget's url\r\n", got[96], line[256];
+            for (int i = 0; i < 5; i++) {
+                bool have = j.from[i][0] && TakeBetween(w, j.from[i], got, 96);
+                if (i == 4 && have)   // Yandex's colours
+                    wcscpy(got, !_wcsicmp(got, L"green") ? L"ok" : !_wcsicmp(got, L"yellow") ? L"warn"
+                                : !_wcsicmp(got, L"red") ? L"alert" : got);
+                if (j.fixed[i][0] && wcsstr(j.fixed[i], L"%s"))
+                    _snwprintf(line, 256, j.fixed[i], have ? got : L"—");
+                else if (have)
+                    wcscpy(line, got);
+                else
+                    wcsncpy(line, j.fixed[i], 255);
+                line[255] = 0;
+                if (line[0] && wcslen(data) + wcslen(keys[i]) + wcslen(line) + 4 < 1024) {
+                    wcscat(data, keys[i]);
+                    wcscat(data, L"=");
+                    wcscat(data, line);
+                    wcscat(data, L"\r\n");
+                }
+            }
+            WriteUtf8(j.data, data);
+            free(w);
+        }
+    }
+    VLog(L"виджет %s: загрузка %S - %d байт за %u мс", j.key, host, len, (unsigned)(GetTickCount() - t0));
+    free(body);
+}
+
+static DWORD WINAPI UserWgThread(LPVOID)
+{
+    for (;;) {
+        Sleep(1000);
+        UwgJob j;
+        bool due = false;
+        EnterCriticalSection(&s_uwCs);
+        for (int i = 0; i < s_uwCount && !due; i++) {
+            UserWg& w = s_uw[i];
+            if (!w.url[0] || (w.fetchTick && GetTickCount() - w.fetchTick < (DWORD)w.every * 1000))
+                continue;
+            w.fetchTick = GetTickCount();
+            if (!w.fetchTick)
+                w.fetchTick = 1;
+            wcscpy(j.key, w.key);
+            wcscpy(j.resp, w.resp);
+            wcscpy(j.data, w.data);
+            memcpy(j.from, w.from, sizeof(j.from));
+            memcpy(j.fixed, w.fixed, sizeof(j.fixed));
+            strcpy(j.url, w.url);
+            due = true;
+        }
+        LeaveCriticalSection(&s_uwCs);
+        if (due) {
+            UserWgFetchOne(j);
+            PostMessage(s_wnd, WM_APP_UWG, 0, 0);
+        }
+    }
+    return 0;
+}
+
+static int CmpUserWg(const void* a, const void* b) { return wcscmp(((const UserWg*)a)->key, ((const UserWg*)b)->key); }
+
+// The widgets' folder read (at the start and when a card comes or goes); a widget seen the first time since
+// VestaHome started runs its start= script. The main screen's order is applied again with them.
+static void UserWidgetsScan()
+{
+    static wchar_t s_started[32][40];
+    static int s_startedCount;
+    wchar_t dir[MAX_PATH], pat[MAX_PATH];
+    UserWgDir(dir);
+    _snwprintf(pat, MAX_PATH, L"%s*.ini", dir);
+    if (!s_uwThread)
+        InitializeCriticalSection(&s_uwCs);
+    EnterCriticalSection(&s_uwCs);
+    s_uwCount = 0;
+    WIN32_FIND_DATA fd;
+    HANDLE f = FindFirstFile(pat, &fd);
+    if (f != INVALID_HANDLE_VALUE) {
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && UserWgLoad(dir, fd.cFileName, &s_uw[s_uwCount]))
+                s_uwCount++;
+        } while (s_uwCount < kWgUser && FindNextFile(f, &fd));
+        FindClose(f);
+    }
+    qsort(s_uw, s_uwCount, sizeof(UserWg), CmpUserWg);
+    bool net = false;
+    for (int i = 0; i < s_uwCount; i++)
+        net = net || s_uw[i].url[0];
+    LeaveCriticalSection(&s_uwCs);
+    if (net && !s_uwThread)
+        s_uwThread = CreateThread(NULL, 0, UserWgThread, NULL, 0, NULL);
+    for (int i = 0; i < s_uwCount; i++) {
+        UserWg& w = s_uw[i];
+        UserWgRead(w);
+        bool started = false;
+        for (int k = 0; k < s_startedCount && !started; k++)
+            started = !wcscmp(s_started[k], w.key);
+        if (!started && w.start[0]) {
+            UserWgRun(w, w.start, L"start");
+            if (s_startedCount < 32)
+                wcscpy(s_started[s_startedCount++], w.key);
+        }
+    }
+    if (s_uwCount)
+        VLog(L"виджеты пользователя: %d (%s)", s_uwCount, dir);
+    HomeWidgetsLoad(s_cfg.homeRaw);
+}
+
+static void WUser(HDC dc, int x, int y, int u)
+{
+    const UserWg& w = s_uw[u];
+    int ww = w.wide ? kWgW2 : kWgW;
+    bool d = Widget(dc, x, y, ww, kWgH, w.title, w.ic, w.tap[0] ? A_USERWG : A_NONE, u);
+    COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
+    if (w.state) {
+        static const COLORREF dot[4] = { 0, kOk, kOrange, kStop };
+        Disc(dc, x + ww - 24, y + 21, 7, d ? kInk : dot[w.state]);
+    }
+    if (!w.have) {
+        T(dc, x + 16, y + 84, L"Нет данных", 22, fg, 700, AL_START, ww - 32);
+        const wchar_t* fn = wcsrchr(w.data, L'\\');
+        wchar_t s[MAX_PATH + 32];
+        _snwprintf(s, MAX_PATH + 32, L"скрипт ещё не записал %s", fn ? fn + 1 : w.data);
+        TWrap(dc, x + 16, y + 108, s, 14, mg, 400, ww - 32, 3, 18);
+        return;
+    }
+    if (w.value[0]) {
+        int end = T(dc, x + 16, y + 96, w.value, 44, fg, 700, AL_START, ww - 32);
+        if (w.unit[0] && end + 8 < x + ww - 16)
+            T(dc, end + 8, y + 96, w.unit, 18, mg, 600, AL_START, x + ww - 16 - end - 8);
+        TWrap(dc, x + 16, y + 124, w.text[0], 15, mg, 400, ww - 32, 1, 0);
+        TWrap(dc, x + 16, y + 146, w.text[1], 14, d ? kInk : kDim, 400, ww - 32, 1, 0);
+    } else {
+        int n = TWrap(dc, x + 16, y + 80, w.text[0], 19, fg, 700, ww - 32, 2, 24);
+        TWrap(dc, x + 16, y + 80 + n * 24 + 8, w.text[1], 15, mg, 400, ww - 32, 2, 19);
+    }
+}
+
+struct WidgetDef { const wchar_t* name; bool wide; Icon ic; void (*draw)(HDC dc, int x, int y); };
+static const WidgetDef kWidgets[WG_COUNT] = {
+    { L"Сейчас играет", true, IC_MUSIC, WMedia }, { L"Скорость", false, IC_NAV, WSpeed },
+    { L"Радио", false, IC_RADIO, WRadio }, { L"Погода", false, IC_CLOUD, WWeather },
+    { L"Приложения", false, IC_APPS, WFavorites }, { L"Поездка", true, IC_CLOCK, WTrip },
+    { L"Климат", false, IC_CAR, WClimate }, { L"Календарь", false, IC_CLOCK, WDate },
+    { L"Телефон", false, IC_PHONE, WPhone }, { L"Автомобиль", false, IC_CAR, WCar },
+    { L"Навигация", false, IC_NAV, WNavi } };
+
+// A widget by its id (built-in or the user's): the only way to it for the layout, the settings and the screen.
+static const wchar_t* WgName(int id) { return id < WG_COUNT ? kWidgets[id].name : s_uw[id - WG_COUNT].title; }
+static bool WgWide(int id) { return id < WG_COUNT ? kWidgets[id].wide : s_uw[id - WG_COUNT].wide; }
+static Icon WgIcon(int id) { return id < WG_COUNT ? kWidgets[id].ic : s_uw[id - WG_COUNT].ic; }
+static void WgDraw(int id, HDC dc, int x, int y)
+{
+    if (id < WG_COUNT)
+        kWidgets[id].draw(dc, x, y);
+    else
+        WUser(dc, x, y, id - WG_COUNT);
+}
+
+// Shown: not hidden, and the climate only when the car has it (Settings -> Car).
+static bool WgShown(int id)
+{
+    return !(s_cfg.homeHidden >> id & 1) && (id != WG_CLIMATE || s_cfg.climate);
+}
+
+// Where each shown widget goes: in their order, each into the first free place (a double needs two free cells
+// side by side in a row), so the later ones close up the gaps. page < 0: not placed. Returns the pages.
+struct WgPlace { int page, x, y; };
+static int HomeLayout(WgPlace* at)
+{
+    bool used[kWgPages][6];
+    memset(used, 0, sizeof(used));
+    int pages = 1;
+    for (int i = 0; i < WgCount(); i++) {
+        int id = s_cfg.homeOrder[i];
+        at[id].page = -1;
+        if (!WgShown(id))
+            continue;
+        bool wide = WgWide(id);
+        for (int k = 0; k < kWgPages * 6 && at[id].page < 0; k++) {
+            int pg = k / 6, c = k % 6;
+            if (used[pg][c] || (wide && (c % 3 == 2 || used[pg][c + 1])))
+                continue;
+            used[pg][c] = true;
+            if (wide)
+                used[pg][c + 1] = true;
+            at[id].page = pg;
+            at[id].x = 16 + c % 3 * (kWgW + kWgGap);
+            at[id].y = 64 + c / 3 * (kWgH + kWgGap);
+            if (pg + 1 > pages)
+                pages = pg + 1;
+        }
+    }
+    return pages;
+}
+
+static int HomePages()
+{
+    WgPlace at[kWgMax];
+    return HomeLayout(at);
+}
+
+// A widget's rectangle when it is on the page shown (for its own redraws).
+static bool HomeRect(int id, RECT* rc)
+{
+    WgPlace at[kWgMax];
+    HomeLayout(at);
+    if (at[id].page != s_homePage)
+        return false;
+    rc->left = at[id].x;
+    rc->top = at[id].y;
+    rc->right = at[id].x + (WgWide(id) ? kWgW2 : kWgW);
+    rc->bottom = at[id].y + kWgH;
+    return true;
+}
+
+// The main screen: the date as the title, the widgets of the page, the page dots.
+static void DrawHome(HDC dc)
+{
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    wchar_t s[48];
+    _snwprintf(s, 48, L"%s, %d %s", kDays[t.wDayOfWeek % 7], t.wDay, kMonths[(t.wMonth + 11) % 12]);
+    CharUpperBuff(s, 1);
+    Frame(dc, s);
+    WgPlace at[kWgMax];
+    int pages = HomeLayout(at);
+    if (s_homePage >= pages)
+        s_homePage = pages - 1;
+    for (int id = 0; id < WgCount(); id++)
+        if (at[id].page == s_homePage)
+            WgDraw(id, dc, at[id].x, at[id].y);
+    bool any = false;
+    for (int id = 0; id < WgCount(); id++)
+        any = any || at[id].page >= 0;
+    if (!any)
+        T(dc, 400, 230, L"Все виджеты скрыты: «Настройки → Общие → Виджеты главной»", 16, kMuted, 400, AL_MID, 740);
+    PageDots(dc, s_homePage, pages);
+}
+
+// Settings -> General -> the main screen's widgets: in their order (down the left column, then the right, 12 a
+// page), each with "show" (the eye) and up / down (earlier / later); the user's widgets with their file.
+static int s_setHomePage;
+
+static void ScrSetHome(HDC dc)
+{
+    int pages = (WgCount() + 11) / 12;
+    s_setHomePage = s_setHomePage >= pages ? pages - 1 : s_setHomePage;
+    Frame(dc, L"ГЛАВНАЯ · ВИДЖЕТЫ");
+    Panel(dc, 16, 64, 768, 336);
+    for (int i = s_setHomePage * 12; i < WgCount() && i < s_setHomePage * 12 + 12; i++) {
+        int id = s_cfg.homeOrder[i], j = i % 12, x = 24 + j / 6 * 380, y = 70 + j % 6 * 54;
+        bool shown = !(s_cfg.homeHidden >> id & 1);
+        if (j % 6)
+            Sep(dc, x, y - 2, 368);
+        Ico(dc, WgIcon(id), x + 8, y + 12, 26, shown ? kOrange : kDim);
+        const wchar_t* sub = WgWide(id) ? L"двойной" : NULL;
+        wchar_t usub[48];
+        if (id >= WG_COUNT) {
+            _snwprintf(usub, 48, L"свой · %s.ini%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");
+            sub = usub;
+        }
+        if (id == WG_CLIMATE && !s_cfg.climate)
+            sub = L"нет в машине (Настройки → Автомобиль)";
+        T(dc, x + 46, y + (sub ? 24 : 33), WgName(id), 18, shown ? kText : kDim, 700, AL_START, 172);
+        if (sub)
+            T(dc, x + 46, y + 43, sub, 13, kMuted, 400, AL_START, 172);
+        Button(dc, x + 222, y + 7, 44, 40, NULL, i ? B_N : B_DIS, IC_UP, 15, 24, A_WGMOVE, id * 2);
+        Button(dc, x + 270, y + 7, 44, 40, NULL, i < WgCount() - 1 ? B_N : B_DIS, IC_DOWN, 15, 24, A_WGMOVE,
+               id * 2 + 1);
+        Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, IC_EYE, 15, 24, A_WGVIS, id);
+    }
+    T(dc, 24, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
+                   L"\\SDMemory\\VestaWidgets\\*.ini", 13, kDim, 400, AL_START, 560);
+    if (pages > 1) {
+        wchar_t pg[16];
+        _snwprintf(pg, 16, L"%d / %d", s_setHomePage + 1, pages);
+        Button(dc, 600, 412, 56, 52, NULL, s_setHomePage ? B_N : B_DIS, IC_BACK, 15, 26, A_SHPAGE, -1);
+        T(dc, 692, 444, pg, 15, kMuted, 600, AL_MID);
+        Button(dc, 728, 412, 56, 52, NULL, s_setHomePage + 1 < pages ? B_N : B_DIS, IC_NEXT, 15, 26, A_SHPAGE, 1);
+    }
+}
+
+// The car's systems and the trip, opened from the widgets.
+static void ScrCar(HDC dc)
+{
+    static const wchar_t* sys[6][2] = { { L"Двигатель", L"в норме" }, { L"Тормозная система", L"в норме" },
+                                        { L"ABS / ESP", L"в норме" }, { L"Подушки безопасности", L"в норме" },
+                                        { L"Аккумулятор", L"14,2 В" }, { L"Охлаждающая жидкость", L"90 °C" } };
+    static const wchar_t* trip[5][2] = { { L"Средний расход", L"7,4 л/100 км" }, { L"Запас хода", L"420 км" },
+                                         { L"Пробег поездки", L"34,5 км" }, { L"Время в пути", L"0:42" },
+                                         { L"Средняя скорость", L"49 км/ч" } };
+    Frame(dc, L"АВТОМОБИЛЬ");
+    Panel(dc, 16, 68, 376, 396);
+    Disc(dc, 44, 102, 10, kOk);
+    T(dc, 64, 110, L"ОШИБОК НЕТ", 22, kText, 700);
+    T(dc, 32, 138, L"проверено сегодня в 12:04", 15, kMuted, 400);
+    for (int i = 0; i < 6; i++) {
+        int y = 152 + i * 50;
+        T(dc, 32, y + 32, sys[i][0], 17, kText, 600, AL_START, 220);
+        T(dc, 376, y + 32, sys[i][1], 17, i < 4 ? kOk : kText, 700, AL_END);
+        if (i < 5)
+            Sep(dc, 32, y + 49, 344);
+    }
+    Panel(dc, 408, 68, 376, 300);
+    T(dc, 424, 100, L"ПОЕЗДКА", 14, kMuted, 700);
+    for (int i = 0; i < 5; i++) {
+        int y = 112 + i * 50;
+        T(dc, 424, y + 32, trip[i][0], 17, kMuted, 400);
+        T(dc, 768, y + 32, trip[i][1], 17, kText, 700, AL_END);
+        if (i < 4)
+            Sep(dc, 424, y + 49, 344);
+    }
+    Panel(dc, 408, 380, 376, 84);
+    Ico(dc, IC_GEAR, 424, 402, 40, kOrange);
+    T(dc, 480, 416, L"ТО через 3 200 км", 19, kText, 700);
+    T(dc, 480, 442, L"или 41 день · масло и фильтры", 15, kMuted, 400, AL_START, 290);
+}

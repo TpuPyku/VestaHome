@@ -251,10 +251,173 @@
 | 0x7D | расш. | оболочка при старте (ответ 0x7901) |
 | 0xB1 | обычная | оболочка при старте (ответ 0x7901 00 04) |
 
+## Обработчики в оболочке (Ghidra, 2026-10-21)
+
+`SPApi_SetSkelonton(id, объект)` — 17 скелетов. Обработчик — слот 1 таблицы виртуальных функций объекта (для 3 и 18 — подобъект `+8`); на входе `[код hi][код lo][длина][данные…]`, т. е. `p[4]` — второй байт данных (первый почти всегда 00). Скрипт `SPIPower/ghidra_scripts/SkelHandlers.java` (аргументы `id:таблица`).
+
+| Скелет | Класс | Коды |
+|---|---|---|
+| 1 | радио (`Receiver`, `CRadio…`) | 0x0901–0x0932 |
+| 2 | ? (окна оболочки) | 0x1101–0x1114 |
+| 3 | `CPanelManager` | 0x1901 (01 — окно 0x2A6, 02 — 0x2AD) |
+| 4 | ? (окна) | 0x2101–0x210B, 0x2402–0x240A |
+| 5 | ? (окна) | 0x2901–0x290B |
+| 6 | `CAudio` | 0x3101–0x3120 |
+| 7 | `CClock` | 0x3901–0x3903 |
+| 8 | `CSystem` | 0x4101–0x4140 |
+| 9 | `CInputTrigger` | 0x4902–0x4908, 0x4C01–0x4C02 |
+| 11, 16 | — | обработчик пустой |
+| 12 | `CHvac` (климат) | 0x6102–0x6120 |
+| 13 | `CAuxiliary` | 0x6902–0x6904 |
+| 14 | ? | 0x7101–0x712E |
+| 15 | `CEngineering` | 0x7901–0x7939 |
+| 17 | `BTPhone` | 0x8901–0x8906, 0x8A01 |
+| 18 | `CMedia` | 0x9101, 0x9103, 0x9201 |
+
+Почти все коды — «запомнить значение и поднять событие интерфейса» (`BCEventApi_RaiseId`). **Сама оболочка что-то делает или отвечает MCU** только на эти. Без оболочки это делать нам: пустышке или VestaHome.
+
+| Код | Что делает оболочка |
+|---|---|
+| `0x3901` | **часы от MCU:** `p[4]` час, `p[5]` мин, `p[6]` с, `p[7]` год − 2000, `p[8]` месяц, `p[9]` день → `SetLocalTime` (`CClock::SetSystemTimeFromRadio`; если время не берётся из другого источника). `0x3902` — флаг, `0x3903` 00 — окно 0x2BE. |
+| `0x310E` | **запрос маршрута звука:** `p[4]` = источник 5 → `SV_AudioSetRoute(3)`, 6–10 → `SV_AudioSetRoute(2)`; затем `SPApi_SendRadioDeMuteCurrentSource(источник)`. Без ответа MCU, видимо, держит звук приглушённым. |
+| `0x310B` | `p[5]` = 0 → окно (0/3 — 0x2CE, 1 — 0x2D0, 4 — 0x2CF). |
+| `0x8906` | **«можно переключить канал BT»:** если не было приглушения радио — `SV_AudioSetRoute(маршрут BT)` + `SPApi_SendRadioBTAudioChannelChoiceStatus(1)`, иначе `BTApi_PrivacyAndSpeaker()`. Начало рукопожатия — при выборе маршрута BT: если текущий (`SV_AudioGetRoute`) другой → `…ChoiceStatus(0)`, MCU отвечает 0x8906. |
+| `0x8A01` | запрос состояния BT → `SPApi_SendBTOpenStatus(BTApi_GetOpenStatus() == 1)`. |
+| `0x9201` | **запрос наличия медиа:** `p[4]` 0 — SD, 1 — USB → `SPApi_SendMediaAvailability(носитель, 2 / 1 / 0, 0)` (2 и 1 — по состоянию менеджера карты, 0 — нет). |
+| `0x9101`, `0x9103` | смена медиаисточника от MCU (SD/USB, музыка/видео) — только события интерфейса. |
+| `0x4101` | **задний ход:** каждый раз `SPApi_SendRadioReceivedRVCStatus(1)`; при входе — яркость/контраст/насыщенность видео 0x40, `SV_TouchDisable()`, экран был погашен → `SPApi_SendRadioNaviTFTOpenClose(1)` + `SV_BacklightOn(0)`. Если камерой уже занят Main.exe (событие), оболочка её не трогает, но ответ шлёт. |
+| `0x4131` | тип камеры: 1 — задняя (`SV_VideoSelectChannel(0)`), 3 — правая (`SV_VideoInputDisable` → канал 1 → `SV_VideoInputEnable(0)`). |
+| `0x4C01` | **кнопки панели и руля:** `p[4]` кнопка, `p[5]` 0 нажата / 1 отпущена, `p[6]` 1 короткое / 2 долгое / 3 повтор. 7 (долгое) — экран выкл/вкл: `SPApi_SendRadioNaviTFTOpenClose(0/1)` + `SV_BacklightOff/On(0)`; 0x12 — «Телефон» (`SendKeyEvent(0x5F)` или `SendBTEnterPhoneStatus(0)`); 0x14 — отклонить/завершить звонок; 6/0xE, 8–0xB, 0x16, 0x24, 0x3C, 0x3D — следующий/предыдущий/перемотка/режимы (события). В журналах были 0x0B, 0x0A, 0x06. |
+| `0x4C02` | `p[4]` 3: `p[5]` 0/1 → действия плеера. |
+| `0x4908` | `p[4]` 0/1 → плеер (пауза/продолжение?). |
+| `0x7922` | BT-адрес от MCU записывается в настройки (инженерное). |
+| `0x7938` / `0x7939` | имя / пароль Wi-Fi от MCU (инженерное). |
+
+Если плеер оболочки «в исключении» (флаг), `CInputTrigger` и `CMedia` игнорируют всё — «disable hardkey, and then reboot».
+
+### Все вызовы клавиш в оболочке (`CallSites.java`, 525 вызовов)
+
+Почти каждая клавиша идёт парой (нажата `,0,0` + отпущена `,1,1`), отсюда «×2». Класс со знаком «?» — по соседней функции (своей строки у вызывающей нет).
+
+| Код | Вид | Откуда (класс оболочки: вызовов) |
+|---|---|---|
+| 0x06 | обычная | CRadioMainDlg? ×2 |
+| 0x07 | обычная | CRadioMainDlg? ×2 |
+| 0x13 | обычная | CLogoMovieDlg? ×4, CRVCDiagnositicDlg? ×2, CPowerManager? ×2, CSetupCommomDlg ×2 |
+| 0x1A | обычная | CAudioEffectDlg? ×2 |
+| 0x1B | обычная | CAudioEffectDlg? ×2 |
+| 0x1C | обычная | CAudioEffectDlg? ×2 |
+| 0x1D | обычная | CAudioEffectDlg? ×2 |
+| 0x1E | обычная | CAudioEffectDlg? ×2 |
+| 0x1F | обычная | CAudioEffectDlg? ×2 |
+| 0x20 | обычная | CAudioFieldDlg ×2 |
+| 0x21 | обычная | CAudioFieldDlg ×2 |
+| 0x22 | обычная | CAudioFieldDlg ×2 |
+| 0x23 | обычная | CAudioFieldDlg ×2 |
+| 0x2B | обычная | CAudioVolumeDlg ×2 |
+| 0x2D | обычная | CAudioVolumeDlg ×2 |
+| 0x30 | обычная | CSetupConfirmInfoDlg ×6, CMainDialog? ×4, CVideoPlayDlg ×4, CBTLinkmanListDlg? ×4, CRadioTip? ×2, CRVCDiagnositicDlg? ×2, … (+7) |
+| 0x3A | обычная | CRadioMainDlg? ×2 |
+| 0x3B | обычная | CRadioMainDlg? ×2 |
+| 0x3B | расш. | CRadioMainDlg? ×2 |
+| 0x3C | обычная | CRadioMainDlg? ×2, CRadioListDlg? ×2 |
+| 0x3C | расш. | CRadioMainDlg? ×2 |
+| 0x3E | обычная | CRadioMainDlg? ×2 |
+| 0x3E | расш. | CPowerManager? ×2 |
+| 0x3F | обычная | CRadioListDlg? ×2 |
+| 0x40 | расш. | CSetupMapInfoDlg? ×2 |
+| 0x41 | расш. | CSetupMapInfoDlg? ×2 |
+| 0x42 | расш. | CAudioFieldDlg ×4, CSetupMapInfoDlg? ×2 |
+| 0x52 | расш. | CAudioVolumeDlg ×2 |
+| 0x53 | расш. | CAudioVolumeDlg ×2 |
+| 0x54 | обычная | CPowerManager? ×2, CSetUpBTMenuDlg ×2, CBTLinkmanListDlg ×2, CBTDialUpDalg ×2 |
+| 0x54 | расш. | CSetUpDisplayDlg? ×2, CEngSysStatus? ×2, CSetupCommomDlg ×2 |
+| 0x59 | расш. | CSetupCommomDlg ×2 |
+| 0x5A | обычная | CBTTipDlg ×2, CRadioTip? ×2, CRDSTipDlg ×2 |
+| 0x5A | расш. | CSetupCommomDlg ×2 |
+| 0x5C | обычная | CPowerManager? ×2, CSetUpBTMenuDlg ×2, CBTLinkmanListDlg ×2, CBTDialUpDalg ×2 |
+| 0x5D | обычная | CPowerManager? ×2, CSetUpBTMenuDlg ×2, CBTLinkmanListDlg ×2, CBTDialUpDalg ×2 |
+| 0x5F | обычная | CBTDialUpDlg? ×4, CPowerManager? ×2, CSetUpBTMenuDlg ×2, CBTLinkmanListDlg ×2, CBTDialUpDalg ×2, CInputTrigger ×2 |
+| 0x63 | обычная | CMapSelectDlg? ×2, CMapDlg? ×2, CMainDialog? ×2 |
+| 0x64 | обычная | CSetupMapModeDlg ×2, CSetUpDisplayDlg ×2, CMainDialog? ×2, CRadioMainDlg? ×2, CRadioListDlg? ×2 |
+| 0x65 | обычная | CSetupMapModeDlg ×2, CSetUpDisplayDlg ×2, CMainDialog? ×2, CRadioMainDlg? ×2, CRadioListDlg? ×2 |
+| 0x69 | расш. | CAudioEffectDlg? ×4 |
+| 0x6A | расш. | CAudioEffectDlg? ×4 |
+| 0x6B | расш. | CAudioEffectDlg? ×4 |
+| 0x6C | расш. | CAudioEffectDlg? ×4 |
+| 0x6D | обычная | CRVCDiagnositicDlg? ×2, CAudioVolumeDlg ×2, CSetupCommomDlg ×2, CPowerManager? ×2 |
+| 0x6D | расш. | CAudioEffectDlg? ×4 |
+| 0x6E | расш. | CAudioEffectDlg? ×4 |
+| 0x71 | обычная | CSetupCommomDlg ×2 |
+| 0x71 | расш. | CMusicBaseDlg |
+| 0x7D | расш. | CSetUpSystemDlg ×2 |
+| 0x7E | обычная | CCMp3ListDlg? ×4 |
+| 0x7F | обычная | CLogoMovieDlg? ×2 |
+| 0x80 | обычная | CLogoMovieDlg? ×2 |
+| 0x82 | обычная | CLogoMovieDlg? ×2 |
+| 0x83 | обычная | CLogoMovieDlg? ×2 |
+| 0x84 | обычная | CLogoMovieDlg? ×2 |
+| 0x85 | обычная | CNaviInterface ×2 |
+| 0x86 | расш. | CRDSSetupDlg ×2 |
+| 0x87 | расш. | CRDSSetupDlg ×2 |
+| 0x88 | расш. | CRDSSetupDlg ×2 |
+| 0x89 | расш. | CRDSSetupDlg ×2 |
+| 0x8A | расш. | CRDSSetupDlg ×2 |
+| 0x8B | расш. | CRDSSetupDlg ×2 |
+| 0x8E | расш. | CRDSSetupDlg ×2 |
+| 0x8F | расш. | CRDSSetupDlg ×2 |
+| 0x90 | обычная | CAudioVolumeDlg ×2, CSetupCommomDlg ×2, CPowerManager? ×2 |
+| 0x90 | расш. | CRVCDiagnositicDlg? ×2, CRadioMainDlg? ×2 |
+| 0x91 | обычная | CMusicBaseDlg? ×2, CLogoMovieDlg? ×2 |
+| 0x93 | обычная | CSetUpDisplayDlg ×2, CAudioEffectDlg? ×2 |
+| 0x94 | обычная | CSetUpDisplayDlg ×2, CAudioEffectDlg? ×2 |
+| 0x95 | обычная | CAudioVolumeDlg ×2 |
+| 0x96 | обычная | CAudioVolumeDlg ×2 |
+| 0x97 | обычная | CSetupTimeDlg? ×14, CSetUpBTMenuDlg ×12, CSetupMapInfoDlg? ×10, CClock? ×6, CSetUpDisplayDlg? ×6, CRvcDlg? ×6, … (+12) |
+| 0x98 | обычная | CFactorysettingDlg ×2, CSetUpSystemDlg? ×2 |
+| 0x9B | обычная | CLogoMovieDlg? ×2, CPowerManager? ×2, CSetupCommomDlg ×2 |
+| 0x9E | расш. | CAudioVolumeDlg ×4, CSkinBaseDialog? ×2, CMainDialog? ×2 |
+| 0x9F | расш. | CRVCDiagnositicDlg? ×2 |
+| 0xA0 | расш. | CRVCDiagnositicDlg? ×2, CVideoPlayDlg ×2 |
+| 0xA1 | расш. | CPicturePreviewDlg? ×2, CRVCDiagnositicDlg? ×2 |
+| 0xA3 | расш. | CMusicBaseDlg |
+| 0xA4 | расш. | CRadioMainDlg? ×2, CRadioListDlg? ×2 |
+| 0xA5 | обычная | CBTLinkmanListDlg? ×4, CMusicBaseDlg ×2, CSetUpBTMenuDlg ×2, CBTLinkmanListDlg ×2, CRVCDiagnositicDlg? ×2, CBTCallRecordsDlg ×2, … (+2) |
+| 0xA5 | расш. | CRadioListDlg? ×2 |
+| 0xA6 | расш. | CRadioListDlg? ×2 |
+| 0xA7 | расш. | CRDSSetupDlg ×2 |
+| 0xA8 | обычная | CPicturePreviewDlg? ×2 |
+| 0xA8 | расш. | CRDSSetupDlg ×2 |
+| 0xA9 | обычная | CRadioMainDlg? ×2 |
+| 0xA9 | расш. | CRDSSetupDlg ×2 |
+| 0xAA | расш. | CRDSSetupDlg ×2 |
+| 0xAB | расш. | CRDSSetupDlg ×2 |
+| 0xAC | обычная | CMainDialog? ×2 |
+| 0xAC | расш. | CRDSSetupDlg ×2 |
+| 0xAD | расш. | CBTLinkmanListDlg ×2, CBTDialUpDalg ×2 |
+| 0xAE | расш. | CBTLinkmanListDlg ×2 |
+| 0xAF | обычная | CPowerManager? ×2, CSetUpBTMenuDlg ×2, CBTLinkmanListDlg ×2, CBTDialUpDalg ×2 |
+| 0xAF | расш. | CSetUpSystemDlg? ×2 |
+| 0xB0 | обычная | CVideoPlayDlg? ×2 |
+| 0xB0 | расш. | CSetUpSystemDlg? ×2 |
+| 0xB1 | расш. | CLogoMovieDlg ×2 |
+| 0xB2 | расш. | CEngMacTestDlg? ×2 |
+| 0xB3 | расш. | CEngMacTestDlg? ×2 |
+| 0xB4 | расш. | CAudioVolumeDlg? ×2 |
+| 0xB5 | расш. | CAudioVolumeDlg? ×2 |
+| 0xB8 | обычная | CSetupConfirmInfoDlg ×2 |
+| 0xB9 | обычная | CSetupConfirmInfoDlg ×2 |
+| 0xC1 | обычная | CEngSysStatus? ×2 |
+| 0xC2 | обычная | CEngSysStatus? ×2 |
+| 0xE4 | обычная | CAudioFieldDlg ×2, CAudioEffectDlg ×2, CPowerManager? ×2 |
+| 0xE5 | обычная | CAudioVolumeDlg ×2, CSetupCommomDlg ×2, CPowerManager? ×2 |
+| 0xE6 | обычная | CMusicBaseDlg ×2, CRVCDiagnositicDlg? ×2, CAuxAudioDlg? ×2, CAudioFieldDlg ×2, CPowerManager? ×2, CVideoPlayDlg ×2 |
+| перем. | обычная | CVideoPlayDlg? ×4, CEngMacTestDlg? ×2 |
+| перем. | расш. | CVideoPlayDlg? ×12, CEngMacTestDlg? ×4, CMusicBaseDlg |
+
 ## Не сделано (PLAN.md)
 
 - Функции без кода (—): что делают (инициализация, `RegisterAspectCallBack`, питание, подсветка, `SpeakerTest`…).
-- Входящие, которых в журналах не было: обработчики скелетов в G3NavHMI (что оболочка делает с каждым кодом).
-- Полная таблица клавиш: все вызовы `SendKeyEvent` в G3NavHMI с постоянным кодом и экран/кнопка, откуда.
+- События `BCEventApi_RaiseId` (0x10D…0x20D): какое окно или виджет оболочки на что отвечает — для неизвестных входящих («?» выше).
+- Скелеты 2, 4, 5, 14: чьи (окна? климат-контроль?) и что значат их коды.
 - Для каждой группы — доходит ли из процесса VestaHome.
-

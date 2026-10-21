@@ -4,3 +4,4 @@
 102 RCDATA "..\\out\\SPIPowerMgr.dll"
 103 RCDATA "..\\rescue\\drill\\SwDnl_drill.upg"
 104 RCDATA "..\\out\\FLC_BLUETOOTH_SDK.dll"
+105 RCDATA "..\\..\\VestaStub\\VestaStub\\VestaStub.exe"

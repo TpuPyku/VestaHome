@@ -1,0 +1,190 @@
+﻿// vh_sources.inc - part of home.cpp (included there, in order): one sound source at a time, the beep, the keypad tones.
+
+// ---- one source at a time (HU 2026-10-20: the radio stayed on under our music, Bluetooth played with it). The
+// radio and Bluetooth music are the MCU's own sources; ours (music, internet radio, video) sound through waveOut
+// only while the MCU's source is "media" (0x4904 06/07) - turned on as the shell's "USB music" does it:
+// SendMediaSourceSelect(5, 3) after its 0x30.
+static void OursQuiet()   // the radio or Bluetooth takes over: our players stop (pause)
+{
+    NetStop();
+    if (PlayerPlaying())
+        s_bass.pause(s_chan);
+    VidPauseForAudio();
+}
+
+static void BtQuiet()   // the phone's music paused (inaudible under another source, it would still stream)
+{
+    BtState bt;
+    if (BtGet(&bt, NULL) && bt.av == 2)
+        BtCmd(BT_CMD_PAUSE);
+}
+
+static void MediaSource()   // one of our players starts
+{
+    BtQuiet();
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    if (src == 6 || src == 7 || src == 9)
+        return;   // media, or Bluetooth's path: ours sound
+    // Straight to Bluetooth's path: SendMediaSourceSelect never made it "media" by itself, and it woke the shell's
+    // media player - with it our video stayed black, sound only (HU 2026-10-20-3; the picture was there on the
+    // 18th, before the call): the hardware overlay is one.
+    VLog(L"источник: путь Bluetooth для нашего звука (было %d)", src);
+    McuKey(0x84, false);
+    SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);
+    s_srcByUs = s_btPathTick = GetTickCount();
+}
+
+
+static void VidStep(int dir)
+{
+    if (s_vpCount > 0)
+        VidPlay((s_vpCur + dir + s_vpCount) % s_vpCount);
+}
+
+static void VidSeek(int k)   // k of 20 along the bar
+{
+    double pos, len;
+    if (VideoTimes(&pos, &len) && len > 0)
+        VideoSeek(len * k / 20);
+}
+
+static int CarKmh()
+{
+    Gps g;
+    GpsGet(&g);
+    if (g.carTick && GetTickCount() - g.carTick < 3000)
+        return g.carSpeed;
+    return GpsFresh(g, 5000) ? (int)g.speedKmh : 0;
+}
+
+// Every 250 ms while a video is open: its bus, the end (the next file of the folder), the car's speed; the
+// player's bar once a second.
+static void VidTick()
+{
+    if (s_vidState == VID_NONE || s_vidState == VID_ERROR) {
+        KillTimer(s_wnd, TIMER_VIDEO);
+        return;
+    }
+    int was = s_vidState;
+    if (!s_vidParked)   // parked: no pipeline, only the speed is watched (to come back when the car stops)
+        s_vidState = VideoPoll(s_vidMsg, 160);
+    if (s_vidSeekTo > 0 && s_vidState == VID_PLAYING) {   // back from parking: the position once it can seek
+        double pos, len;
+        if (VideoTimes(&pos, &len) && len > 0) {
+            VideoSeek(s_vidSeekTo);
+            s_vidSeekTo = 0;
+        }
+    }
+    if (s_vidState == VID_ENDED && was != VID_ENDED && s_vpCur + 1 < s_vpCount) {
+        VidPlay(s_vpCur + 1);
+        return;
+    }
+    int kmh = CarKmh();
+    bool moving = !s_cfg.videoMoving && (s_vidMoving ? kmh >= 3 : kmh >= 8);   // a margin against flicker
+    bool redraw = moving != s_vidMoving || s_vidState != was;
+    s_vidMoving = moving;
+    static DWORD s_barTick;
+    bool bar = false;
+    if (s_screen == S_VIDEO_PLAY && GetTickCount() - s_barTick >= 1000) {
+        s_barTick = GetTickCount();
+        bar = true;
+    }
+    if (IsWindowVisible(s_wnd) && GetForegroundWindow() == s_wnd) {
+        if (redraw)
+            Redraw();
+        else if (bar && !s_vidFull)
+            RedrawArea(0, 398, 800, 480);   // the bar and the times
+    }
+}
+
+static int VidPages()
+{
+    int per = kVidRows * kVidCols - (s_vidDir[0] ? 1 : 0);
+    return s_vidCount ? (s_vidCount + per - 1) / per : 1;
+}
+
+// Media -> video: the volumes, then folders and videos; a file plays its folder from it. Pages: a swipe, the dots.
+static void ScrVideo(HDC dc)
+{
+    if (!s_vidRead)
+        VidOpenDir(s_cfg.videoDir[0] && GetFileAttributes(s_cfg.videoDir) != 0xFFFFFFFF ? s_cfg.videoDir : L"");
+    wchar_t s[MAX_PATH + 16], folder[MAX_PATH];
+    wcscpy(folder, s_vidDir);
+    int fl = (int)wcslen(folder);
+    if (fl && folder[fl - 1] == L'\\')
+        folder[--fl] = 0;
+    const wchar_t* fn = wcsrchr(folder, L'\\');
+    _snwprintf(s, MAX_PATH + 16, L"МЕДИА · ВИДЕО · %s", !s_vidDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
+    Frame(dc, s);
+    MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
+    if (s_vidPage >= VidPages())
+        s_vidPage = VidPages() - 1;
+    int cell = 0;
+    if (s_vidDir[0]) {
+        ListRow(dc, 16, 120, 380, 60, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_VUP);
+        cell = 1;
+    }
+    int per = kVidRows * kVidCols - cell, first = s_vidPage * per;
+    for (int i = first; i < s_vidCount && i < first + per; i++, cell++) {
+        int x = 16 + cell / kVidRows * 388, y = 120 + cell % kVidRows * 66;
+        const wchar_t* n = s_vids[i];
+        bool isDir = n[wcslen(n) - 1] == L'\\';
+        bool cur = !isDir && s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) && !_wcsicmp(n, s_vp[s_vpCur]);
+        wcsncpy(s, n, MAX_PATH);
+        s[MAX_PATH] = 0;
+        if (isDir && s[0] && s[wcslen(s) - 1] == L'\\')
+            s[wcslen(s) - 1] = 0;
+        ListRow(dc, x, y, 380, 60, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_VIDEO, NULL, NULL, A_VFILE, i,
+                isDir ? kOrange : CLR_INVALID);
+    }
+    if (!s_vidCount)
+        T(dc, 40, s_vidDir[0] ? 236 : 168, s_vidDir[0] ? L"Здесь нет папок и видео" : L"Нет носителей", 18, kMuted, 400);
+    PageDots(dc, s_vidPage, VidPages());
+}
+
+// The player: the picture (our child window) between the top bar and the dock: the bar (a tap seeks), the
+// list, previous, play / pause, next, the whole screen, the settings.
+static void ScrVideoPlay(HDC dc)
+{
+    const wchar_t* name = s_vpCur >= 0 ? s_vp[s_vpCur] : NULL;
+    wchar_t s[MAX_PATH + 16];
+    _snwprintf(s, MAX_PATH + 16, L"ВИДЕО · %s", name ? name : L"НЕТ ФАЙЛА");
+    s[MAX_PATH + 15] = 0;
+    Frame(dc, s);
+    Fill(dc, 0, 56, 800, 398, RGB(0, 0, 0));
+    if (s_vidState == VID_ERROR || s_vidState == VID_NONE) {
+        T(dc, 400, 210, s_vidState == VID_ERROR ? L"ВИДЕО НЕ ИГРАЕТ" : L"НИЧЕГО НЕ ОТКРЫТО", 22, kText, 700, AL_MID, 720);
+        T(dc, 400, 244, s_vidState == VID_ERROR ? s_vidMsg : L"Выберите файл в «Медиа → Видео»", 16, kMuted, 400,
+          AL_MID, 720);
+    } else if (s_vidMoving) {
+        T(dc, 400, 210, L"В ДВИЖЕНИИ — ПАУЗА", 22, kText, 700, AL_MID, 720);
+        T(dc, 400, 244, L"Картинка вернётся на остановке (или включите её в настройках видео)", 16, kMuted, 400,
+          AL_MID, 720);
+    }
+    Dock(dc);
+    double pos = 0, len = 0;
+    bool have = (s_vidState == VID_PLAYING || s_vidState == VID_PAUSED || s_vidState == VID_ENDED) &&
+                VideoTimes(&pos, &len);
+    int k = len > 0 ? (int)(pos * 640 / len) : 0;
+    R(dc, 80, 404, 640, 6, 3, kLine);
+    if (have) {
+        R(dc, 80, 404, k > 6 ? k : 6, 6, 3, kOrange);
+        Disc(dc, 80 + k, 407, 8, kText);
+        for (int z = 0; z < 20; z++)
+            Zone(80 + z * 32, 392, 33, 28, A_VSEEK, z);
+    }
+    Mmss(s, 16, pos);
+    T(dc, 16, 414, s, 15, kMuted, 600);
+    Mmss(s, 16, len);
+    T(dc, 784, 414, s, 15, kMuted, 600, AL_END);
+    IconBtn(dc, IC_LIST, 24, 430, 40, kText, A_BACK);
+    IconBtn(dc, IC_HOME, 124, 430, 40, kText, A_NAV, S_HOME);
+    IconBtn(dc, IC_PREV, 236, 430, 40, kText, A_VPREV);
+    bool down = Zone(376, 426, 48, 48, A_VPLAY);
+    Disc(dc, 400, 450, 24, down ? kFacet : kOrange);
+    Ico(dc, s_vidState == VID_PLAYING ? IC_PAUSE : IC_PLAY, 384, 434, 32, kInk);
+    IconBtn(dc, IC_FWD, 524, 430, 40, kText, A_VNEXT);
+    IconBtn(dc, IC_VIDEO, 632, 430, 40, s_vidFull ? kOrange : kText, A_VFULL);
+    IconBtn(dc, IC_GEAR, 736, 430, 40, kText, A_SCREEN, S_SET_VIDEO);
+}

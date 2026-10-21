@@ -8,13 +8,15 @@
 extern McuShm* g_shm;   // spipower_proxy.cpp: the shared ring, NULL if the mapping failed
 
 // The flag \SDMMC\SPIPower.on is read in DllMain, but the shell loads us at boot, possibly before the cards are
-// mounted (2026-10-17: no line of the shell's at all): while it reads "off", it is looked at again every 10 s.
+// mounted (2026-10-17: no line of the shell's at all): it is looked at again every 10 s, both ways - with
+// \SDMMC\VestaLogs.off, VestaHome's switch of all our logs ("Diagnostics -> Logs", 2026-10-21).
 static int LogOn()
 {
     static DWORD s_checked;
-    if (!g_logging && GetTickCount() - s_checked > 10000) {
+    if (GetTickCount() - s_checked > 10000) {
         s_checked = GetTickCount();
-        g_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF;
+        g_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF &&
+                    GetFileAttributesW(L"\\SDMMC\\VestaLogs.off") == 0xFFFFFFFF;
     }
     return g_logging;
 }
@@ -39,9 +41,14 @@ static void logLine(const wchar_t* s)
     CloseHandle(f);
 }
 
-void ProxyLog(const wchar_t* s)   // for spipower_proxy.cpp (the shell's calls for VestaHome)
+void ProxyLog(const wchar_t* s)   // for spipower_proxy.cpp (the shell's calls for VestaHome, the call journal)
 {
     logLine(s);
+}
+
+extern "C" int ProxyLogOn()
+{
+    return LogOn();
 }
 
 // ---- inbound: rmtObjectSkeleton vtable wrap (P3) ---------------------------

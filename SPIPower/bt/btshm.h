@@ -19,6 +19,7 @@
 //                                        0x2E track info: ev[1] items, item i = ev[2 + i*0x42] AVRCP attribute
 //   0x30 AVRCP: ev[1] 1 connected, 0 not      (1 title, 2 artist, 3 album, 4 track no., 5 tracks, 6 genre,
 //                                              7 duration ms), its UTF-8 text at ev + 4 + i*0x42
+//   0x38 PBAP: ev[1] 2 connected, 0 not   0x39 a pull's entries start   0x3A one entry (BtPb)   0x3B they end
 // State: written under a sequence lock (seq odd while writing); a reader copies it between two equal even seqs.
 #ifndef BTSHM_H
 #define BTSHM_H
@@ -44,7 +45,11 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
                       (an event with the address at byte 4) is answered by the proxy, then the shell's own PIN is
                       put back */,
        BT_CMD_LISTPAIRED /* Conn_List_History(): the paired list again (0x08 each, 0x09 the end) */,
-       BT_CMD_UNPAIR /* cmdText: the address - Conn_Delete_Paired(addr), then the list again */ };
+       BT_CMD_UNPAIR /* cmdText: the address - Conn_Delete_Paired(addr), then the list again */,
+       BT_CMD_SPPADDR /* cmdText: the address - Flc_Bluetooth_Spp_SetAddr(addr) (the serial port's device) */,
+       BT_CMD_PBAP_PULL /* cmdText: "<storage> <list>" (0 the phone / 1 SIM, BT_PB_*): a list of the connected phone
+                           into BtPb - PbapClient_Connect first if PBAP is not connected; cmdResult -2 = another
+                           pull runs (ask again later) */ };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
 struct BtEvent {
@@ -89,6 +94,36 @@ struct BtShm {
     volatile LONG cmdDone;              // the proxy: the cmdSeq it carried out
     int           cmdResult;            // what the SDK function returned (0 = ok)
     BtEvent       ev[BT_EV_SLOTS];
+};
+
+// The phone book and the call lists (PBAP, Ghidra 2026-10-21, PROJECT.md): every pull - the shell's own or
+// VestaHome's (BT_CMD_PBAP_PULL) - lands here, its list told by the PullPhonebook call (intercepted); an entry is
+// the SDK's event 0x3A, already parsed. VestaHome's pulls are hidden from the shell (its book stays its own).
+// VestaHome copies the entries out once state is BT_PBS_DONE (seq: +1 at each pull's end).
+#define BT_PB_NAME  L"VestaBTPB1"
+#define BT_PB_MAX   1000
+#define BT_PB_NUMS  3
+enum { BT_PB_OCH, BT_PB_MCH, BT_PB_PB, BT_PB_CCH, BT_PB_ICH };   // dialled, missed, the book, all calls, received
+enum { BT_PBS_IDLE, BT_PBS_CONNECTING, BT_PBS_PULLING, BT_PBS_DONE, BT_PBS_FAILED };
+enum { BT_PBC_MISSED, BT_PBC_RECEIVED, BT_PBC_DIALLED };          // ev[0x4E] of a call (NCL_BT's mapping)
+
+struct BtPbEntry {
+    char          name[64];                   // UTF-8 (ev + 4)
+    char          num[BT_PB_NUMS][24];        // the first numbers (the SDK's six lists ev[0x41..0x46], in order)
+    unsigned char numKind[BT_PB_NUMS];        // which of the six (the TEL types; which is which - not known yet)
+    unsigned char callType;                   // BT_PBC_* (the call lists)
+    char          time[20];                   // the call's "20261021T153000" (ev + 0x11C)
+};
+
+struct BtPb {
+    DWORD         magic;
+    volatile LONG seq;                        // +1 when a pull ends (done or failed)
+    int           storage, list;              // the pull running / the last one
+    int           state;                      // BT_PBS_*
+    int           count, total;               // entries kept / seen
+    int           pbap;                       // 0x38 ev[1]: 2 connected, 0 not, -1 none yet
+    DWORD         tick;                       // the state's last change
+    BtPbEntry     e[BT_PB_MAX];
 };
 
 #endif

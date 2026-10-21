@@ -28,13 +28,15 @@ static int Failed()   // stands in for every export when the original is missing
 }
 
 // \SDMemory\VestaLogs\BTProxy.log, only while \SDMMC\SPIPower.on exists (the MCU proxy's flag; the shell loads us
-// at boot, maybe before the cards are mounted: looked at again every 10 s)
+// at boot, maybe before the cards are mounted: looked at again every 10 s, both ways - with \SDMMC\VestaLogs.off,
+// VestaHome's switch of all our logs)
 static int LogOn()
 {
     static DWORD s_checked;
-    if (!s_logging && GetTickCount() - s_checked > 10000) {
+    if (GetTickCount() - s_checked > 10000) {
         s_checked = GetTickCount();
-        s_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF;
+        s_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF &&
+                    GetFileAttributesW(L"\\SDMMC\\VestaLogs.off") == 0xFFFFFFFF;
     }
     return s_logging;
 }
@@ -201,13 +203,189 @@ static void PairWatch(int* ev)
     }
 }
 
+// ---- the phone book and the call lists (PBAP, btshm.h BtPb). The shell starts a pull itself when PBAP connects
+// (NCL_BT, event 0x38) and files every entry into its own book, so VestaHome's pulls are hidden from it: their events
+// 0x38..0x3E do not reach its callback, and the pull is started in our callback, before the shell's (as NCL_BT
+// itself does) - the shell's own pull is then refused by the SDK (one at a time).
+static BtPb*         s_pb;
+static HANDLE        s_pbMap;
+static int           s_pbStorage, s_pbList;     // VestaHome's pull asked for
+static volatile LONG s_pbConnecting, s_pbSession, s_pbOurs, s_pbDisc;
+static DWORD         s_pbConnTick;
+
+typedef int (*PullFn)(int, int, short, short, char);
+
+static void PbState(int state)
+{
+    s_pb->state = state;
+    s_pb->tick = GetTickCount();
+    if (state == BT_PBS_DONE || state == BT_PBS_FAILED)
+        InterlockedIncrement((LONG*)&s_pb->seq);
+}
+
+extern "C" int proxy_Flc_Bluetooth_PbapClient_PullPhonebook(int storage, int list, short from, short to, char photo)
+{
+    int r = ((PullFn)g_real[IDX_Flc_Bluetooth_PbapClient_PullPhonebook])(storage, list, from, to, photo);
+    if (s_pb && r == 2) {   // started (the SDK's "pending"): its entries come next
+        s_pb->storage = storage;
+        s_pb->list = list;
+        s_pb->count = s_pb->total = 0;
+        PbState(BT_PBS_PULLING);
+    }
+    wchar_t b[96];
+    wsprintfW(b, L"PBAP pull %d/%d %d..%d%s -> %d", storage, list, (int)from, (int)to, s_pbOurs ? L" (VH)" : L"", r);
+    LogLine(b);
+    return r;
+}
+
+static void PbapPull()   // VestaHome's pull, PBAP connected
+{
+    s_pbOurs = 1;
+    int r = proxy_Flc_Bluetooth_PbapClient_PullPhonebook(s_pbStorage, s_pbList, 0,
+                                                         s_pbList == BT_PB_PB ? BT_PB_MAX - 1 : 49, 0);
+    if (r != 2) {
+        s_pbOurs = 0;
+        PbState(BT_PBS_FAILED);
+        if (s_pbSession) {   // connected for this pull only
+            s_pbDisc = 1;
+            SetEvent(s_cmdEv);
+        }
+    }
+}
+
+static void PbEntry(int* ev)
+{
+    s_pb->total++;
+    if (s_pb->count >= BT_PB_MAX)
+        return;
+    BtPbEntry& e = s_pb->e[s_pb->count];
+    memset(&e, 0, sizeof(e));
+    CopyText(e.name, (const char*)ev + 4, sizeof(e.name));
+    typedef int (*CountFn)(int);
+    typedef void** (*GetFn)(int, int);
+    int k = 0;
+    for (int l = 0; l < 6 && k < BT_PB_NUMS; l++) {   // the six lists of numbers
+        int h = ev[0x41 + l];
+        if (!h)
+            continue;
+        int n = ((CountFn)g_real[IDX_LIST_Count])(h);
+        for (int i = 0; i < n && k < BT_PB_NUMS; i++) {
+            void** it = ((GetFn)g_real[IDX_LIST_Get])(h, i);
+            if (it && *it) {
+                CopyText(e.num[k], (const char*)*it, sizeof(e.num[k]));
+                e.numKind[k++] = (unsigned char)l;
+            }
+        }
+    }
+    CopyText(e.time, (const char*)(ev + 0x47), sizeof(e.time));
+    e.callType = (unsigned char)ev[0x4E];
+    s_pb->count++;
+}
+
+// A PBAP event: into BtPb; true = VestaHome's, not for the shell
+static bool PbEvent(int* ev)
+{
+    if (!s_pb)
+        return false;
+    bool ours = s_pbOurs || s_pbSession;
+    __try {
+        switch (ev[0]) {
+        case 0x38:
+            s_pb->pbap = ev[1];
+            if (ev[1] == 2 && s_pbConnecting) {   // connected for VestaHome: its pull, the shell not told
+                s_pbConnecting = 0;
+                s_pbSession = 1;
+                PbapPull();
+                return true;
+            }
+            if (ev[1] == 0) {
+                if (s_pb->state == BT_PBS_PULLING || s_pb->state == BT_PBS_CONNECTING)
+                    PbState(BT_PBS_FAILED);
+                s_pbConnecting = s_pbSession = s_pbOurs = 0;
+            }
+            return ours;
+        case 0x39:
+            if (s_pb->state == BT_PBS_PULLING)
+                s_pb->count = s_pb->total = 0;
+            return s_pbOurs != 0;
+        case 0x3A:
+            if (s_pb->state == BT_PBS_PULLING)
+                PbEntry(ev);
+            return s_pbOurs != 0;
+        case 0x3B:
+            if (s_pb->state == BT_PBS_PULLING)
+                PbState(BT_PBS_DONE);
+            if (s_pbOurs) {
+                s_pbOurs = 0;
+                if (s_pbSession) {   // connected for this pull only: disconnected again (not in the callback)
+                    s_pbDisc = 1;
+                    SetEvent(s_cmdEv);
+                }
+                return true;
+            }
+            return ours;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        LogLine(L"PBAP event: exception");
+    }
+    return ours;
+}
+
 static void ProxyCb(int* ev)
 {
     Publish(ev);
     LogEvent(ev);
     PairWatch(ev);
-    if (s_appCb)
+    bool hide = ev[0] >= 0x38 && ev[0] <= 0x3E && PbEvent(ev);
+    if (s_appCb && !hide)
         s_appCb(ev);
+}
+
+// BT_CMD_PBAP_PULL in the command thread: pull now if PBAP is connected, else connect (the pull follows in the
+// callback, PbEvent)
+static int PbapCmd(const char* t)
+{
+    if (!s_pb)
+        return -1;
+    s_pbStorage = t[0] == '1' ? 1 : 0;
+    s_pbList = atoi(t + 1);
+    if (s_pbOurs || s_pbConnecting || (s_pb->state == BT_PBS_PULLING && GetTickCount() - s_pb->tick < 60000))
+        return -2;   // a pull runs (the shell's or ours)
+    int st = 0;
+    ((int (*)(int*))g_real[IDX_Flc_Bluetooth_PbapClient_GetState])(&st);
+    if (st == 2) {
+        PbapPull();
+        return s_pb->state == BT_PBS_FAILED ? 1 : 0;
+    }
+    char addr[18];
+    CopyText(addr, s_shm->st.devAddr, 18);   // (written in this process, by the callback)
+    if (!addr[0])
+        return 3;   // no phone connected
+    s_pbConnecting = 1;
+    s_pbConnTick = GetTickCount();
+    PbState(BT_PBS_CONNECTING);
+    int r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_PbapClient_Connect])(addr);
+    if (r != 0) {
+        s_pbConnecting = 0;
+        PbState(BT_PBS_FAILED);
+    }
+    return r;
+}
+
+static void PbapTick()   // the command thread, every second at most: our session's end, a connect that never came
+{
+    if (s_pbDisc) {
+        s_pbDisc = 0;
+        int r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_PbapClient_Disconnect])();
+        wchar_t b[48];
+        wsprintfW(b, L"PBAP disconnect -> %d", r);
+        LogLine(b);
+    }
+    if (s_pbConnecting && GetTickCount() - s_pbConnTick > 20000) {
+        s_pbConnecting = 0;
+        PbState(BT_PBS_FAILED);
+        LogLine(L"PBAP connect: no answer in 20 s");
+    }
 }
 
 // The pairing's end: its request answered with our PIN (once), or a minute gone; the shell's PIN back
@@ -234,6 +412,7 @@ static DWORD WINAPI CmdThread(LPVOID)
         WaitForSingleObject(s_cmdEv, 1000);
         if (s_pairOn && (s_pairAsk || GetTickCount() - s_pairTick > 60000))
             PairEnd();
+        PbapTick();
         LONG n = s_shm->cmdSeq;
         if (n == done)
             continue;
@@ -302,6 +481,14 @@ static DWORD WINAPI CmdThread(LPVOID)
             int r2 = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_List_History])();
             if (cmd == BT_CMD_LISTPAIRED)
                 r = r2;
+        } else if (cmd == BT_CMD_SPPADDR) {
+            char a[40];
+            CopyText(a, s_shm->cmdText, 18);
+            r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Spp_SetAddr])(a);
+        } else if (cmd == BT_CMD_PBAP_PULL) {
+            char t[40];
+            CopyText(t, s_shm->cmdText, 40);
+            r = PbapCmd(t);
         } else if (cmd == BT_CMD_DIAL) {   // Hf_DialNumber(number, its length, line)
             char num[40];
             CopyText(num, s_shm->cmdText, 40);
@@ -364,6 +551,14 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
             if (s_shm) {
                 InterlockedIncrement((LONG*)&s_shm->attach);
                 s_shm->origOk = s_real != NULL;
+            }
+        }
+        s_pbMap = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(BtPb), BT_PB_NAME);
+        if (s_pbMap) {
+            s_pb = (BtPb*)MapViewOfFile(s_pbMap, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(BtPb));
+            if (s_pb && s_pb->magic != BT_SHM_MAGIC) {   // a new mapping comes zeroed
+                s_pb->pbap = -1;
+                s_pb->magic = BT_SHM_MAGIC;
             }
         }
         s_cmdEv = CreateEventW(NULL, FALSE, FALSE, BT_CMD_EVENT);

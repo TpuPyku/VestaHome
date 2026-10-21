@@ -107,6 +107,10 @@ static const wchar_t* kBackupSub = L"SPIPower_backup";
 static const wchar_t* kFlag      = L"\\SDMMC\\SPIPower.on";     // written/read by the proxy
 static const wchar_t* kShell     = L"G3NavHMI.exe";
 static const wchar_t* kShellPath = L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe";
+// the stub in place of the shell (VestaStub/): the shell renamed beside it, the stub's failed-start counter
+static const wchar_t* kShellOrig = L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe";
+static const wchar_t* kStubCnt   = L"\\ResidentFlash\\navigation\\app\\VestaStub.cnt";
+static const wchar_t* kStubExe   = L"VestaStub.exe";   // embedded (resource 105), staged on the SD for the boot run
 static const wchar_t* kMain      = L"Main.exe";
 static const wchar_t* kMainPath  = L"\\ResidentFlash\\Main.exe";
 static const wchar_t* kAppLaunch = L"AppLauncher.exe";
@@ -146,6 +150,7 @@ static const int      kSdCandN   = 2;
 static wchar_t g_dll[MAX_PATH];
 static wchar_t g_orig[MAX_PATH];
 static wchar_t g_btDll[MAX_PATH], g_btOrig[MAX_PATH], g_btProxySrc[MAX_PATH];
+static wchar_t g_stubSrc[MAX_PATH];
 static wchar_t g_ownDir[MAX_PATH];
 static wchar_t g_proxySrc[MAX_PATH];
 static wchar_t g_backupDir[MAX_PATH];
@@ -169,6 +174,7 @@ static const wchar_t* SdRoot();            // defined below
 static int SameFile(const wchar_t* a, const wchar_t* b);   // defined below (boot mode)
 static void ProxyCleanup(wchar_t* rep, int cap);           // defined below (complete removal)
 static void BtRollback();                                  // defined below (the Bluetooth proxy)
+static int IsStubFile(const wchar_t* path);                // defined below (the stub in place of the shell)
 
 static void SetPaths()
 {
@@ -191,6 +197,7 @@ static void SetPaths()
     Join(g_btDll, kAppDir, kBtDll);
     Join(g_btOrig, kAppDir, kBtOrig);
     Join(g_btProxySrc, g_srcDir[0] ? g_srcDir : g_ownDir, kBtDll);
+    Join(g_stubSrc, g_srcDir[0] ? g_srcDir : g_ownDir, kStubExe);
 
     // the second backup copy goes to the real SD card when one is mounted
     const wchar_t* sd = SdRoot();
@@ -434,8 +441,10 @@ static const char* kOldProxyMd5[] = {
     "88eb58021d893cdb8e0edf84b3a5feb0",   // 2026-10-18 (shared memory v2, the shell's calls logged too)
     "73dd581b44f77bc7e49edd49195d186a",   // 2026-10-19 (the same sources, an earlier build)
     "4bc80501c25e9a4e895dedf41df56fd8",   // 2026-10-19 (before VestaHome's calls made in the shell)
+    "2ea883191fe13f4480381dd905897829",   // 2026-10-20 (VestaHome's calls in the shell; before the call journal)
+    "04b3ecab9eef88fa35fc97f1b0ac7573",   // 2026-10-21 (the call journal; its log only with the flag)
 };
-static const int   kOldProxyN = 6;
+static const int   kOldProxyN = 8;
 
 static int IsOldProxy(const char* md5)
 {
@@ -1414,6 +1423,7 @@ static void VhStart()
 #define IDR_PROXY 102
 #define IDR_DRILL 103
 #define IDR_BTPROXY 104
+#define IDR_STUB 105
 static const wchar_t* kTmpDir = L"\\Temp\\VestaHomeInstall";
 
 static void ExtractProxy()
@@ -1442,6 +1452,13 @@ static void ExtractProxy()
     len = r ? SizeofResource(NULL, r) : 0;
     data = r ? (const unsigned char*)LockResource(LoadResource(NULL, r)) : NULL;
     Join(p, kTmpDir, kBtDll);
+    if (data && len && (!WriteBytes(p, data, len) || !SameBytes(p, data, len)))
+        DeleteFile(p);
+    // the stub in place of the shell (resource 105)
+    r = FindResource(NULL, MAKEINTRESOURCE(IDR_STUB), RT_RCDATA);
+    len = r ? SizeofResource(NULL, r) : 0;
+    data = r ? (const unsigned char*)LockResource(LoadResource(NULL, r)) : NULL;
+    Join(p, kTmpDir, kStubExe);
     if (data && len && (!WriteBytes(p, data, len) || !SameBytes(p, data, len)))
         DeleteFile(p);
 }
@@ -1580,6 +1597,26 @@ static void DoStatus()
                          : Md5Is(g_btDll, kBtFactoryMd5) ? L"нет (заводская SDK)"
                          : FileExists(g_btOrig) ? L"стоит (другая версия)" : L"SDK не заводская 4120";
         _snwprintf(line, 512, L"\nBluetooth proxy: %s", t);
+        AppendStr(g_status, 4096, line);
+    }
+
+    {   // the stub in place of the shell
+        int cnt = -1;
+        HANDLE h = CreateFile(kStubCnt, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (h != INVALID_HANDLE_VALUE) {
+            char b[16] = { 0 };
+            DWORD got = 0;
+            ReadFile(h, b, sizeof(b) - 1, &got, NULL);
+            CloseHandle(h);
+            cnt = atoi(b);
+        }
+        if (!IsStubFile(kShellPath))
+            wcscpy(line, L"\nПустышка: нет (G3NavHMI.exe — штатная оболочка)");
+        else if (cnt >= 3)
+            _snwprintf(line, 512, L"\nПустышка: стоит, ВЫКЛЮЧЕНА — VestaHome 3 раза подряд не проработал 3 мин "
+                                  L"(запускается штатная; снова включить — поставить пустышку ещё раз)");
+        else
+            _snwprintf(line, 512, L"\nПустышка: стоит, неудачных запусков подряд %d из 3", cnt < 0 ? 0 : cnt);
         AppendStr(g_status, 4096, line);
     }
 
@@ -1754,11 +1791,100 @@ static int SameFile(const wchar_t* a, const wchar_t* b)
 }
 
 // verb: "install", "install p2" or "rollback" (written as the job, parsed like the CLI)
+// ---------------------------------------------------------------- the stub (VestaStub)
+// VestaStub.exe goes in place of G3NavHMI.exe (the shell renamed G3NavHMI_orig.exe beside it): it starts VestaHome
+// and falls back to the shell. The shell's exe is busy while it runs, so the swap is a boot job like the proxy's
+// ("stub on" / "stub off"): BootRun does it before the shell is started. Ours = small and with the counter's name
+// inside (any version of the stub).
+static int IsStubFile(const wchar_t* path)
+{
+    HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    static unsigned char buf[65536];
+    DWORD got = 0, size = GetFileSize(h, NULL);
+    int ours = 0;
+    if (size < sizeof(buf) && ReadFile(h, buf, size, &got, NULL)) {
+        static const wchar_t kSig[] = L"VestaStub.cnt";
+        DWORD n = sizeof(kSig) - sizeof(wchar_t);
+        for (DWORD i = 0; i + n <= got && !ours; i++)
+            ours = !memcmp(buf + i, kSig, n);
+    }
+    CloseHandle(h);
+    return ours;
+}
+
+static int DoStubOn()   // the boot run: the shell is not running
+{
+    if (!FileExists(g_stubSrc)) {
+        _snwprintf(g_status, 512, L"stub: нет %s — пустышка не поставлена", g_stubSrc);
+        return 0;
+    }
+    int update = IsStubFile(kShellPath);
+    if (!update) {
+        if (FileExists(kShellOrig)) {   // a shell beside it already, and in its place not ours: do not guess
+            wcscpy(g_status, L"stub: отказ — G3NavHMI_orig.exe уже есть, а G3NavHMI.exe не пустышка");
+            return 0;
+        }
+        if (!MoveFile(kShellPath, kShellOrig)) {
+            _snwprintf(g_status, 512, L"stub: G3NavHMI.exe не переименован (%u)", (unsigned)GetLastError());
+            return 0;
+        }
+    }
+    wchar_t tmp[MAX_PATH];
+    Join(tmp, kAppDir, L"VestaStub.new");
+    DeleteFile(tmp);
+    if (!MyCopyFile(g_stubSrc, tmp) || !SameFile(g_stubSrc, tmp) || (update && !DeleteFile(kShellPath))
+        || !MoveFile(tmp, kShellPath)) {
+        DeleteFile(tmp);
+        if (!update)
+            MoveFile(kShellOrig, kShellPath);   // the shell back where it was
+        wcscpy(g_status, L"stub: копия пустышки не встала — оболочка оставлена как была");
+        return 0;
+    }
+    DeleteFile(kStubCnt);   // a fresh start
+    wcscpy(g_status, update ? L"stub: пустышка обновлена" : L"stub: пустышка поставлена, оболочка — G3NavHMI_orig.exe");
+    return 1;
+}
+
+static int DoStubOff()   // the boot run (or the rescue): the shell back in place
+{
+    if (!IsStubFile(kShellPath)) {
+        if (!FileExists(kShellPath) && FileExists(kShellOrig) && MoveFile(kShellOrig, kShellPath)) {
+            wcscpy(g_status, L"stub: оболочка возвращена (пустышки не было)");
+            return 1;
+        }
+        wcscpy(g_status, L"stub: пустышки нет — делать нечего");
+        return 1;
+    }
+    if (!FileExists(kShellOrig)) {   // without the shell the HU would be left with nothing
+        wcscpy(g_status, L"stub: отказ — нет G3NavHMI_orig.exe, пустышка оставлена");
+        return 0;
+    }
+    wchar_t old[MAX_PATH];
+    Join(old, kAppDir, L"VestaStub.old");
+    DeleteFile(old);
+    if (!MoveFile(kShellPath, old) || !MoveFile(kShellOrig, kShellPath)) {
+        if (!FileExists(kShellPath))
+            MoveFile(old, kShellPath);
+        _snwprintf(g_status, 512, L"stub: оболочка не возвращена (%u)", (unsigned)GetLastError());
+        return 0;
+    }
+    DeleteFile(old);
+    DeleteFile(kStubCnt);
+    wcscpy(g_status, L"stub: пустышка снята, оболочка G3NavHMI.exe на месте");
+    return 1;
+}
+
 static void DoBootArm(const char* verb, int force)
 {
     SetPaths();
     LogMsg(L"--- boot arm ---");
     int isRollback = (strcmp(verb, "rollback") == 0);
+    int isStub = (strncmp(verb, "stub", 4) == 0), stubOn = (strcmp(verb, "stub on") == 0);
+    if (isStub && !stubOn && !IsStubFile(kShellPath)) {
+        wcscpy(g_status, L"Пустышка не установлена — на месте G3NavHMI.exe штатная оболочка.");
+        return;
+    }
 
     // Main.exe looks for the updater only at \SDMemory\SwDnl.exe (../MAIN.md §4)
     const wchar_t* sd = SdRoot();
@@ -1781,7 +1907,18 @@ static void DoBootArm(const char* verb, int force)
         }
     }
 
-    if (isRollback) {
+    if (isStub) {
+        wchar_t vh[MAX_PATH];
+        Join(vh, kVhDir, kVhExe);
+        if (stubOn && !FileExists(vh)) {
+            wcscpy(g_status, L"Отказ: VestaHome не установлен (\\SDMMC\\VestaHome) — сначала кнопка 1.");
+            return;
+        }
+        if (stubOn && !FileExists(g_stubSrc)) {
+            _snwprintf(g_status, 512, L"Ошибка: нет пустышки VestaStub.exe (%s) — установщик повреждён?", g_stubSrc);
+            return;
+        }
+    } else if (isRollback) {
         if (!FileExists(g_orig)) {
             wcscpy(g_status, L"Отказ: нет \\ResidentFlash\\navigation\\app\\SPIPowerMgr_orig.dll — возвращать нечего.");
             return;
@@ -1820,7 +1957,14 @@ static void DoBootArm(const char* verb, int force)
 
     Join(dir, sd, kBootSub);
     EnsureDir(dir);
-    if (!isRollback) {
+    if (stubOn) {
+        Join(p, dir, kStubExe);
+        if (!MyCopyFile(g_stubSrc, p) || !SameFile(g_stubSrc, p)) {
+            DeleteFile(p);
+            _snwprintf(g_status, 512, L"Ошибка: копия пустышки на SD не совпала (%s)", p);
+            return;
+        }
+    } else if (!isStub && !isRollback) {
         char md5[33];
         Join(p, dir, kDll);
         if (!MyCopyFile(g_proxySrc, p) || !FileMd5(p, md5, NULL) || !HexEq(md5, kProxyMd5)) {
@@ -1859,11 +2003,13 @@ static void DoBootArm(const char* verb, int force)
             L"Заряжено на следующую загрузку: %s.\nSD: %s (наш SwDnl.exe), %s\\ (задание%s)\n"
             L"флаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
             L"Перезагрузите ГУ, НЕ вынимая SD. Вместо оболочки запустится наш SwDnl.exe: снимет флаг, "
-            L"остановит Main.exe и %s, затем ГУ перезагрузится ещё раз (или поднимет оболочку сама).\n"
+            L"%s, затем ГУ перезагрузится ещё раз (или поднимет оболочку сама).\n"
             L"После загрузки — кнопка СТАТУС; журнал: VestaHomeInstall.log (VestaLogs на SD-карте) и %s\\%s.\n"
             L"Передумали до перезагрузки — кнопка ОТМЕНИТЬ ЗАДАНИЕ.",
-            wjob, dstExe, dir, isRollback ? L"" : L" + proxy",
-            isRollback ? L"вернёт заводскую DLL" : L"поставит proxy", dir, kBootLog);
+            wjob, dstExe, dir, isRollback || isStub ? (stubOn ? L" + пустышка" : L"") : L" + proxy",
+            stubOn ? L"поставит пустышку вместо G3NavHMI.exe" : isStub ? L"вернёт штатную оболочку на место"
+            : isRollback ? L"остановит Main.exe и вернёт заводскую DLL" : L"остановит Main.exe и поставит proxy",
+            dir, kBootLog);
     }
 }
 
@@ -1945,7 +2091,9 @@ static void BootRun()
 
         logging = (strstr(jb, "p2") || strstr(jb, "p3")) ? 1 : 0;
         force   = strstr(jb, "force") ? 1 : 0;
-        if (strstr(jb, "rollback")) {
+        if (strstr(jb, "stub")) {   // Main.exe is left alone: the shell (now the stub or back) starts below
+            rc = strstr(jb, "stub on") ? DoStubOn() : DoStubOff();
+        } else if (strstr(jb, "rollback")) {
             rc = Rollback();
             if (rc) wcscpy(g_status, L"boot: rollback done, factory DLL back, shell restarted");
         } else if (strstr(jb, "install")) {
@@ -1966,12 +2114,19 @@ static void BootRun()
         // Main.exe after three failed shell starts -> put the factory DLL back ourselves
         // (the factory .upg route would hit the DLL Main.exe holds). Otherwise it is not ours.
         char md5[33];
+        int stub = IsStubFile(kShellPath);
+        if (stub) {   // the stub in place of the shell: it goes first (the shell failed to start - maybe it)
+            LogMsg(L"boot: no job, the stub is in place -> taking it off");
+            DeleteFile(kSwFlag);
+            DoStubOff();
+            LogMsg(g_status);
+        }
         if (FileMd5(g_dll, md5, NULL) && (HexEq(md5, kProxyMd5) || IsOldProxy(md5)) && FileExists(g_orig)) {
             LogMsg(L"boot: no job, the proxy is in place -> the shell failed to start, rolling back");
             DeleteFile(kSwFlag);
             if (Rollback()) wcscpy(g_status, L"boot: rescue rollback done");
             LogMsg(g_status);
-        } else {
+        } else if (!stub) {
             LogMsg(L"boot: no job, not our proxy -> factory updater");
             HandOver();
             return;
@@ -2000,17 +2155,20 @@ static void BootRun()
 #define C_FACET  RGB(0xc2,0x4a,0x0b)
 
 struct Btn { RECT rc; const wchar_t* label; int id; };
-enum { B_STATUS, B_INSTALL, B_DRILLOFF, B_ROLLBACK, B_EXIT, B_VH, B_VH_DEL, B_DRILL, B_TESTOFF };
+enum { B_STATUS, B_INSTALL, B_DRILLOFF, B_ROLLBACK, B_EXIT, B_VH, B_VH_DEL, B_DRILL, B_TESTOFF, B_STUB, B_STUB_DEL };
 
 // In the order of a first install: 1. VestaHome (no reboot), 2. the proxy (with its log; the boot path, a reboot);
-// then the complete removal of each; the status, cancelling an armed job, exit. Below, apart ("Сервис"): the test
-// of the rescue path (drill: the package is embedded too) and taking it off. FORCE - the command line only.
-enum { kBtnN = 9, kServiceY = 428 };
+// then the complete removal of each; 3. the stub in place of the shell (the boot path) and taking it off; the
+// status, cancelling an armed job, exit. Below, apart ("Сервис"): the test of the rescue path (drill: the package is
+// embedded too) and taking it off. FORCE - the command line only.
+enum { kBtnN = 11, kServiceY = 428 };
 static const Btn g_btns[kBtnN] = {
-    { {  24, 266, 396, 306 }, L"1. VESTAHOME: УСТАНОВИТЬ / ОБНОВИТЬ", B_VH },
-    { { 404, 266, 776, 306 }, L"2. PROXY MCU: УСТАНОВИТЬ / ОБНОВИТЬ", B_INSTALL },
-    { {  24, 314, 396, 354 }, L"УДАЛИТЬ VESTAHOME",    B_VH_DEL   },
-    { { 404, 314, 776, 354 }, L"УДАЛИТЬ PROXY MCU",    B_ROLLBACK },
+    { {  24, 218, 396, 258 }, L"1. VESTAHOME: УСТАНОВИТЬ / ОБНОВИТЬ", B_VH },
+    { { 404, 218, 776, 258 }, L"2. PROXY MCU: УСТАНОВИТЬ / ОБНОВИТЬ", B_INSTALL },
+    { {  24, 266, 396, 306 }, L"УДАЛИТЬ VESTAHOME",    B_VH_DEL   },
+    { { 404, 266, 776, 306 }, L"УДАЛИТЬ PROXY MCU",    B_ROLLBACK },
+    { {  24, 314, 396, 354 }, L"3. ПУСТЫШКА: УСТАНОВИТЬ", B_STUB  },
+    { { 404, 314, 776, 354 }, L"УДАЛИТЬ ПУСТЫШКУ",     B_STUB_DEL },
     { {  24, 362, 266, 402 }, L"СТАТУС",               B_STATUS   },
     { { 274, 362, 526, 402 }, L"ОТМЕНИТЬ ЗАДАНИЕ",     B_DRILLOFF },
     { { 534, 362, 776, 402 }, L"ВЫХОД",                B_EXIT     },
@@ -2101,16 +2259,16 @@ static void Paint(HDC dc)
     FillC(dc, &full, C_INK);
 
     TextL(dc, 24, 12, L"VestaHome + proxy SPIPowerMgr.dll (прошивка 4120)", C_TEXT, g_fontB);
-    TextL(dc, 24, 50, L"Сначала 1, потом 2. SD-карта в слоте. Прошивка не 4120 — proxy не встанет (отчёт ниже).",
+    TextL(dc, 24, 50, L"Сначала 1, потом 2, по желанию 3. SD-карта в слоте. Прошивка не 4120 — proxy не встанет.",
           C_MUTED, g_fontS);
 
-    RECT box = { 20, 76, 780, 256 };
+    RECT box = { 20, 76, 780, 208 };
     FillC(dc, &box, C_PANEL);
     FrameC(dc, &box, C_LINE);
-    DrawBlock(dc, 30, 84, 740, 250, g_status[0] ? g_status : L"(нет данных)",
+    DrawBlock(dc, 30, 84, 740, 202, g_status[0] ? g_status : L"(нет данных)",
               g_busy ? C_MUTED : C_TEXT, g_fontS);
 
-    if (g_busy) TextL(dc, 24, 250, L"идёт операция, подождите...", C_ORANGE, g_fontS);
+    if (g_busy) TextL(dc, 30, 184, L"идёт операция, подождите...", C_ORANGE, g_fontS);
 
     // the service group, apart from the user's buttons
     RECT sep = { 24, kServiceY - 14, 776, kServiceY - 13 };
@@ -2197,6 +2355,16 @@ static void RunAction(int id)
             return;
     }
 
+    if (id == B_STUB && !Confirm(L"Поставить пустышку вместо штатной оболочки при следующей загрузке?\n"
+                                 L"После загрузки вместо G3NavHMI запустится VestaHome. Штатная оболочка остаётся рядом "
+                                 L"(G3NavHMI_orig.exe) и запустится сама, если VestaHome 3 раза подряд не проработает 3 мин, "
+                                 L"если его нет или в корне SD/USB лежит файл VestaStub.off.\n"
+                                 L"Потом перезагрузите ГУ, НЕ вынимая SD-карту."))
+        return;
+    if (id == B_STUB_DEL && !Confirm(L"Убрать пустышку и вернуть штатную оболочку при следующей загрузке?\n"
+                                     L"Потом перезагрузите ГУ, НЕ вынимая SD-карту."))
+        return;
+
     if (id == B_DRILL && !Confirm(L"Тест восстановления: зарядить заводской загрузочный апдейтер безобидным пакетом?\n"
                                   L"Нужна перезагрузка ГУ, SD-карту не вынимать. Потом — «СНЯТЬ ТЕСТ»."))
         return;
@@ -2208,6 +2376,8 @@ static void RunAction(int id)
     else if (id == B_DRILL)    DoDrill(0);
     else if (id == B_DRILLOFF || id == B_TESTOFF) DoDrillOff();
     else if (id == B_ROLLBACK) DoBootArm("rollback", 0);
+    else if (id == B_STUB)     DoBootArm("stub on", 0);
+    else if (id == B_STUB_DEL) DoBootArm("stub off", 0);
 
     g_busy = 0;
     LogMsg(g_status);
@@ -2319,8 +2489,10 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
         DoDrillOff();
     } else if (wcsstr(a, L"boot")) {
         if (wcsstr(a, L"rollback"))     DoBootArm("rollback", 0);
+        else if (wcsstr(a, L"stub-on")) DoBootArm("stub on", 0);
+        else if (wcsstr(a, L"stub-off")) DoBootArm("stub off", 0);
         else if (wcsstr(a, L"install")) DoBootArm(logging ? "install p2" : "install", force);
-        else wcscpy(g_status, L"Способ: VestaHomeInstall.exe boot install [p2|p3] [force] | boot rollback | boot-off");
+        else wcscpy(g_status, L"Способ: VestaHomeInstall.exe boot install [p2|p3] [force] | boot rollback | boot stub-on | boot stub-off | boot-off");
     } else if (wcsstr(a, L"vh-remove")) {
         DoVhUninstall();
     } else if (wcsstr(a, L"vh")) {

@@ -24,6 +24,7 @@ static ObdLogFn       s_log;
 static HANDLE         s_thread;
 static volatile bool  s_stop;
 static char           s_devAddr[18];
+static ObdSppAddrFn   s_sppAddr;
 
 static void Changed()
 {
@@ -179,6 +180,8 @@ static void Answer(const char* cmd, const char* r, char* last, int cap)
 static DWORD WINAPI ObdThread(LPVOID)
 {
     SetState(OBD_CONNECTING);
+    if (s_sppAddr)
+        Say(L"адрес через SDK оболочки (Spp_SetAddr): %d", s_sppAddr(s_devAddr));
     HKEY k;
     DWORD disp;
     LONG rr = RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\BT\\XCBTSER1", 0, NULL, 0, kRegAll, NULL, &k, &disp);
@@ -200,9 +203,19 @@ static DWORD WINAPI ObdThread(LPVOID)
     COMMTIMEOUTS to = { MAXDWORD, 0, 300, 0, 2000 };
     BOOL tok = SetCommTimeouts(h, &to);
     Say(L"порт %s открыт, состояние %ld%s", port, (long)PortState(h), tok ? L"" : L", без таймаутов");
-    DWORD t0 = GetTickCount(), got = 0;
-    BOOL ok = DeviceIoControl(h, IOCTL_BT_CONNECT, NULL, 0, NULL, 0, &got, NULL);
-    Say(L"подключение: %s за %lu мс, состояние %ld", ok ? L"есть" : L"нет", GetTickCount() - t0, (long)PortState(h));
+    // The stack: up to 5 s for its device chooser, then the address of XCBTSER1, then the link (an adapter holds
+    // one link: a phone still connected to it refuses ours). Three tries, each with its error into the log.
+    DWORD got = 0;
+    BOOL ok = FALSE;
+    for (int t = 1; t <= 3 && !ok && !s_stop; t++) {
+        DWORD t0 = GetTickCount();
+        ok = DeviceIoControl(h, IOCTL_BT_CONNECT, NULL, 0, NULL, 0, &got, NULL);
+        DWORD err = ok ? 0 : GetLastError();
+        Say(L"подключение %d: %s за %lu мс, ошибка %lu, состояние %ld", t, ok ? L"есть" : L"нет", GetTickCount() - t0,
+            err, (long)PortState(h));
+        if (!ok && t < 3)
+            Sleep(2000);
+    }
     if (!ok || s_stop) {
         CloseHandle(h);
         SetState(s_stop ? OBD_IDLE : OBD_FAILED);
@@ -261,6 +274,11 @@ void ObdInit(HWND notify, UINT msg, ObdLogFn log)
     s_msg = msg;
     s_log = log;
     s_info.rpm = s_info.speed = s_info.coolant = -1;
+}
+
+void ObdSetSppAddrFn(ObdSppAddrFn fn)
+{
+    s_sppAddr = fn;
 }
 
 void ObdStop()

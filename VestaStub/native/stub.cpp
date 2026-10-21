@@ -1,0 +1,391 @@
+﻿// VestaStub: the stand-in for the stock shell (Windows CE / ARM, VS2005 -- no C++11).
+//
+// Put in place of \ResidentFlash\navigation\app\G3NavHMI.exe; the original is renamed G3NavHMI_orig.exe in the
+// same folder. At the boot it starts VestaHome instead of the stock shell and watches it:
+//   - VestaHome not there, or the flag VestaStub.off on the SD card / USB disk -> the original shell;
+//   - the counter VestaStub.cnt (beside us) counts the starts of VestaHome that did not live 3 minutes: +1 before
+//     each start, 0 once it has run 3 minutes (so at most two writes to the flash per boot); at 3 the original
+//     shell is started instead - the stub is off until the counter is deleted (or set to 0);
+//   - VestaHome fell (an exit code that is not 0) -> started again (the counter above stops a loop);
+//   - VestaHome closed itself (code 0) -> the original shell.
+// While VestaHome runs, a second copy of ours ("G3NavHMI.exe /mcu", McuHost) does for the MCU what the stock shell
+// did (Ghidra 2026-10-21, docs/MCU.md "Обработчики в оболочке"): it registers the skeletons - without them the MCU's
+// messages reach nobody, VestaHome's ring included - and answers the messages the shell answered. A process of its
+// own: the watchdog never loads SPIPowerMgr.dll. It falls - started again (3 times); VestaStub.nomcu on the SD card /
+// USB disk - not started (a test without it). It goes before the original shell is started.
+// The log only on removable media: \SDMemory\VestaLogs\VestaStub.log (no card, no log; \SDMMC\VestaLogs.off - none).
+// The PC build (testing) maps the HU's paths "\X\..." to "<exe folder>\hu\X\..." and takes the 3 minutes from
+// the environment variable VESTASTUB_OKMS.
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+static const int kMaxFails = 3;
+static wchar_t s_dir[MAX_PATH];   // our folder, with the trailing '\'
+
+static void HuPath(wchar_t* out, const wchar_t* p)   // a path on the HU
+{
+#ifdef UNDER_CE
+    wcsncpy(out, p, MAX_PATH - 1);
+#else
+    _snwprintf(out, MAX_PATH - 1, L"%shu%s", s_dir, p);
+#endif
+    out[MAX_PATH - 1] = 0;
+}
+
+static bool There(const wchar_t* p)
+{
+    return GetFileAttributes(p) != 0xFFFFFFFF;
+}
+
+static void Log(const wchar_t* fmt, ...)
+{
+    wchar_t dir[MAX_PATH], path[MAX_PATH];
+    HuPath(path, L"\\SDMMC\\VestaLogs.off");   // VestaHome's switch of all our logs ("Diagnostics -> Logs")
+    if (There(path))
+        return;
+    HuPath(dir, L"\\SDMemory\\VestaLogs");
+    HuPath(path, L"\\SDMemory\\VestaLogs\\VestaStub.log");
+    CreateDirectory(dir, NULL);   // fails without the card: no log then
+    HANDLE f = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    wchar_t w[300];
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    int k = _snwprintf(w, 40, L"%04d-%02d-%02d %02d:%02d:%02d ", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                       t.wSecond);
+    va_list a;
+    va_start(a, fmt);
+    _vsnwprintf(w + k, 296 - k, fmt, a);
+    va_end(a);
+    w[296] = 0;
+    wcscat(w, L"\r\n");
+    char b[600];
+    int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, b, sizeof(b), NULL, NULL);
+    DWORD wr;
+    SetFilePointer(f, 0, NULL, FILE_END);
+    if (n > 1)
+        WriteFile(f, b, n - 1, &wr, NULL);
+    CloseHandle(f);
+}
+
+static int ReadCount()
+{
+    wchar_t p[MAX_PATH];
+    _snwprintf(p, MAX_PATH - 1, L"%sVestaStub.cnt", s_dir);
+    p[MAX_PATH - 1] = 0;
+    HANDLE f = CreateFile(p, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return 0;
+    char b[16] = { 0 };
+    DWORD n = 0;
+    ReadFile(f, b, sizeof(b) - 1, &n, NULL);
+    CloseHandle(f);
+    return atoi(b);
+}
+
+static void WriteCount(int c)
+{
+    wchar_t p[MAX_PATH];
+    _snwprintf(p, MAX_PATH - 1, L"%sVestaStub.cnt", s_dir);
+    p[MAX_PATH - 1] = 0;
+    HANDLE f = CreateFile(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) {
+        Log(L"счётчик не записан (%u)", GetLastError());
+        return;
+    }
+    char b[16];
+    DWORD n = 0;
+    _itoa(c, b, 10);
+    WriteFile(f, b, strlen(b), &n, NULL);
+    CloseHandle(f);
+}
+
+static HANDLE Start(const wchar_t* exe, const wchar_t* args)
+{
+    PROCESS_INFORMATION pi;
+    memset(&pi, 0, sizeof(pi));
+#ifdef UNDER_CE
+    if (!CreateProcess(exe, args && args[0] ? (LPWSTR)args : NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi))
+        return 0;
+#else
+    STARTUPINFO si;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    wchar_t cl[MAX_PATH * 2];
+    _snwprintf(cl, MAX_PATH * 2 - 1, L"\"%s\" %s", exe, args ? args : L"");
+    cl[MAX_PATH * 2 - 1] = 0;
+    if (!CreateProcess(exe, cl, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+        return 0;
+#endif
+    CloseHandle(pi.hThread);
+    return pi.hProcess;
+}
+
+// ---- the MCU's host (McuHost, in "G3NavHMI.exe /mcu")
+// A skeleton is an object whose vtable's slot 1 SPIPowerMgr calls with the message [code hi][code lo][len][data..]
+// (slot 0: its destructor, never called); a hand-made table - the same call on ARM and in the PC build.
+typedef int (*SpFn0)(void);
+typedef int (*SpFn1)(int);
+typedef int (*SpFn2)(int, void*);
+typedef int (*SpFn3)(int, int, int);
+static SpFn1 s_spDeMute, s_spRvc, s_svRoute;
+static SpFn3 s_spMedia;
+
+struct Skel {
+    void** vtbl;
+    int    id;
+};
+
+static void SkelDtor(void*)
+{
+}
+
+static bool DirThere(const wchar_t* hu)
+{
+    wchar_t p[MAX_PATH];
+    HuPath(p, hu);
+    DWORD a = GetFileAttributes(p);
+    return a != 0xFFFFFFFF && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// What the shell itself does on a message (the rest only fed its screens). p[3] is the data's first byte (almost
+// always 00), p[4] the second.
+static void SkelHandle(void* self, unsigned char* p)
+{
+    int code = p[0] << 8 | p[1];
+    switch (code) {
+    case 0x3901: {   // the MCU's clock: hour, minute, second, year - 2000, month, day -> the system's (CClock)
+        SYSTEMTIME t;
+        memset(&t, 0, sizeof(t));
+        t.wHour = p[4];
+        t.wMinute = p[5];
+        t.wSecond = p[6];
+        t.wYear = (WORD)(2000 + p[7]);
+        t.wMonth = p[8];
+        t.wDay = p[9];
+        if (t.wHour < 24 && t.wMinute < 60 && t.wSecond < 60 && t.wMonth >= 1 && t.wMonth <= 12 && t.wDay >= 1 &&
+            t.wDay <= 31 && p[7] >= 20) {
+            SetLocalTime(&t);
+            Log(L"mcu: часы %02d:%02d:%02d %02d.%02d.%04d", t.wHour, t.wMinute, t.wSecond, t.wDay, t.wMonth, t.wYear);
+        }
+        break;
+    }
+    case 0x310E: {   // the MCU asks for a source's sound path: the route (5 - 3, 6..10 - 2), then "unmute it"
+        int src = p[4], route = src == 5 ? 3 : src >= 6 && src <= 10 ? 2 : -1;
+        if (route < 0)
+            break;
+        if (s_svRoute)
+            s_svRoute(route);
+        if (s_spDeMute)
+            s_spDeMute(src);
+        Log(L"mcu: звук источника %d -> маршрут %d", src, route);
+        break;
+    }
+    case 0x4101:   // the reversing camera on / off: acknowledged (the picture is VestaHome's)
+        if (s_spRvc)
+            s_spRvc(p[4] ? 1 : 0);
+        Log(L"mcu: задний ход %d", p[4]);
+        break;
+    case 0x9201: {   // is there media on the SD card (0) / the USB disk (1)? The shell answers 1 when its card
+                     // manager has found files, 2 in a state not known yet; here: 1 = the card is there
+        int dev = p[4];
+        if (dev > 1)
+            break;
+        int has = DirThere(dev ? L"\\USBDevice" : L"\\SDMemory") ? 1 : 0;
+        if (s_spMedia)
+            s_spMedia(dev, has, 0);
+        Log(L"mcu: медиа %s -> %d", dev ? L"USB" : L"SD", has);
+        break;
+    }
+    }
+}
+
+static void* s_skelVtbl[2] = { (void*)SkelDtor, (void*)SkelHandle };
+
+static FARPROC Proc(HMODULE m, const char* name)   // CE's GetProcAddress takes the name in UTF-16
+{
+#ifdef UNDER_CE
+    wchar_t w[64];
+    MultiByteToWideChar(CP_ACP, 0, name, -1, w, 64);
+    return GetProcAddress(m, w);
+#else
+    return GetProcAddress(m, name);
+#endif
+}
+
+static int McuHost()
+{
+    wchar_t p[MAX_PATH];
+    _snwprintf(p, MAX_PATH - 1, L"%sSPIPowerMgr.dll", s_dir);   // the proxy (or the factory DLL), by full path
+    p[MAX_PATH - 1] = 0;
+    HMODULE sp = LoadLibrary(p);
+    if (!sp) {
+        Log(L"mcu: нет %s (%u)", p, GetLastError());
+        return 1;
+    }
+    SpFn0 load = (SpFn0)Proc(sp, "SPApi_LoadRadioEngine");
+    SpFn0 inited = (SpFn0)Proc(sp, "SPApi_IsInitialized");
+    SpFn0 init = (SpFn0)Proc(sp, "SPApi_InitializeRadioEngine");
+    SpFn2 skel = (SpFn2)Proc(sp, "SPApi_SetSkelonton");
+    s_spDeMute = (SpFn1)Proc(sp, "SPApi_SendRadioDeMuteCurrentSource");
+    s_spRvc = (SpFn1)Proc(sp, "SPApi_SendRadioReceivedRVCStatus");
+    s_spMedia = (SpFn3)Proc(sp, "SPApi_SendMediaAvailability");
+    HMODULE sv = LoadLibrary(L"desay_sdk_api.dll");
+    s_svRoute = sv ? (SpFn1)Proc(sv, "SV_AudioSetRoute") : NULL;
+    if (!load || !inited || !init || !skel) {
+        Log(L"mcu: в SPIPowerMgr.dll нет нужных функций");
+        return 1;
+    }
+    load();   // as the shell starts it (FUN_00677740)
+    if (!inited())
+        init();
+    static const int kIds[] = { 1, 6, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 17, 16, 18, 15 };   // the shell's order
+    static Skel skels[sizeof(kIds) / sizeof(kIds[0])];
+    for (int i = 0; i < (int)(sizeof(kIds) / sizeof(kIds[0])); i++) {
+        skels[i].vtbl = s_skelVtbl;
+        skels[i].id = kIds[i];
+        skel(kIds[i], &skels[i]);
+    }
+    Log(L"mcu: скелеты зарегистрированы (%d), маршрут звука %s", (int)(sizeof(kIds) / sizeof(kIds[0])),
+        s_svRoute ? L"есть" : L"НЕТ");
+    for (;;)
+        Sleep(60000);
+}
+
+static HANDLE s_mcuHost;   // the MCU's host process
+static int    s_hostStarts;
+
+static void HostStart(const wchar_t* self)
+{
+    wchar_t p[MAX_PATH];
+    HuPath(p, L"\\SDMemory\\VestaStub.nomcu");
+    bool off = There(p);
+    HuPath(p, L"\\USBDevice\\VestaStub.nomcu");
+    off = off || There(p);
+    if (off) {
+        Log(L"mcu: флаг VestaStub.nomcu — хост MCU не запускается");
+        s_hostStarts = 3;
+        return;
+    }
+    if (s_hostStarts >= 3) {
+        Log(L"mcu: хост MCU упал 3 раза — дальше без него");
+        return;
+    }
+    s_hostStarts++;
+    s_mcuHost = Start(self, L"/mcu");
+}
+
+static void HostStop()
+{
+    if (!s_mcuHost)
+        return;
+    TerminateProcess(s_mcuHost, 0);
+    WaitForSingleObject(s_mcuHost, 2000);
+    CloseHandle(s_mcuHost);
+    s_mcuHost = 0;
+}
+
+static int RunOriginal(const wchar_t* args, const wchar_t* why)
+{
+    HostStop();   // the shell registers its own skeletons
+    wchar_t orig[MAX_PATH];
+    _snwprintf(orig, MAX_PATH - 1, L"%sG3NavHMI_orig.exe", s_dir);
+    orig[MAX_PATH - 1] = 0;
+    HANDLE h = Start(orig, args);
+    Log(L"оригинальная оболочка (%s): %s", why, h ? L"запущена" : L"НЕ ЗАПУЩЕНА");
+    if (h)
+        CloseHandle(h);
+    return 0;
+}
+
+static bool FindVesta(wchar_t* exe)
+{
+    static const wchar_t* kCand[] = { L"\\SDMMC\\VestaHome\\VestaHome.exe", L"\\SDMemory\\VestaHome\\VestaHome.exe",
+                                      L"\\ResidentFlash\\VestaHome\\VestaHome.exe" };
+    for (int i = 0; i < (int)(sizeof(kCand) / sizeof(kCand[0])); i++) {
+        HuPath(exe, kCand[i]);
+        if (There(exe))
+            return true;
+    }
+    return false;
+}
+
+#ifdef UNDER_CE
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
+#else
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
+#endif
+{
+    GetModuleFileName(NULL, s_dir, MAX_PATH);
+    wchar_t* slash = wcsrchr(s_dir, L'\\');
+    if (slash)
+        slash[1] = 0;
+    DWORD okMs = 180000;   // VestaHome alive this long: not a failed start
+#ifndef UNDER_CE
+    const char* e = getenv("VESTASTUB_OKMS");
+    if (e)
+        okMs = (DWORD)atoi(e);
+#endif
+    if (args && wcsstr(args, L"/mcu"))
+        return McuHost();
+    Log(L"=== VestaStub");
+
+    wchar_t p[MAX_PATH];
+    HuPath(p, L"\\SDMemory\\VestaStub.off");
+    if (There(p))
+        return RunOriginal(args, L"флаг VestaStub.off на SD");
+    HuPath(p, L"\\USBDevice\\VestaStub.off");
+    if (There(p))
+        return RunOriginal(args, L"флаг VestaStub.off на USB");
+    wchar_t vh[MAX_PATH], self[MAX_PATH];
+    if (!FindVesta(vh))
+        return RunOriginal(args, L"нет VestaHome.exe");
+    GetModuleFileName(NULL, self, MAX_PATH);
+    HostStart(self);
+
+    for (;;) {
+        int fails = ReadCount();
+        if (fails >= kMaxFails)
+            return RunOriginal(args, L"VestaHome не прожил 3 минуты 3 раза подряд; заново - удалить VestaStub.cnt");
+        WriteCount(fails + 1);   // counted as failed until it has lived okMs
+        HANDLE h = Start(vh, NULL);
+        if (!h) {
+            Log(L"VestaHome не запустился (%u): %s", GetLastError(), vh);
+            continue;   // counted: the third time gives the original
+        }
+        Log(L"VestaHome запущен (%d-я попытка): %s", fails + 1, vh);
+        bool lived = false;
+        DWORD t0 = GetTickCount();
+        for (;;) {   // VestaHome and the MCU's host: the host falls - again
+            HANDLE w[2] = { h, s_mcuHost };
+            DWORD left = lived ? INFINITE : GetTickCount() - t0 >= okMs ? 0 : okMs - (GetTickCount() - t0);
+            DWORD r = WaitForMultipleObjects(s_mcuHost ? 2 : 1, w, FALSE, left);
+            if (r == WAIT_TIMEOUT) {
+                lived = true;
+                WriteCount(0);
+                Log(L"VestaHome работает %u с: счётчик сброшен", okMs / 1000);
+            } else if (r == WAIT_OBJECT_0 + 1) {
+                DWORD hc = 0;
+                GetExitCodeProcess(s_mcuHost, &hc);
+                CloseHandle(s_mcuHost);
+                s_mcuHost = 0;
+                Log(L"mcu: хост MCU завершился (код %08X)", hc);
+                HostStart(self);
+            } else {
+                break;
+            }
+        }
+        DWORD code = 1;
+        GetExitCodeProcess(h, &code);
+        CloseHandle(h);
+        if (code == 0) {   // closed itself (or a second copy that found the first)
+            if (!lived)
+                WriteCount(0);
+            return RunOriginal(args, L"VestaHome закрылся сам");
+        }
+        Log(L"VestaHome упал (код %08X): снова", code);
+        Sleep(1000);
+    }
+}

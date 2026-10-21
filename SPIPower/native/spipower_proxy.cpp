@@ -15,6 +15,59 @@
 McuShm* g_shm = 0;
 static HANDLE s_shmMap = 0;
 
+// ---- the call journal (2026-10-21, the shell's replacement, step 0): every export that is not intercepted calls
+// ProxyNote first (thunks.s). Into SPIPower.log (with the flag): a call whose arguments differ from that
+// function's last ones ("CALL name(r0, r1, r2, r3) pid"; the same again only counted), and once a minute how many
+// times each function was called - a periodic one may be what the MCU waits for from the shell.
+static CRITICAL_SECTION s_noteCs;
+static bool  s_noteReady;
+static DWORD s_noteLast[PROXY_COUNT][4], s_noteCount[PROXY_COUNT], s_noteSame[PROXY_COUNT], s_noteMinute;
+static bool  s_noteSeen[PROXY_COUNT];
+extern "C" int ProxyLogOn();   // intercept.cpp: the flag \SDMMC\SPIPower.on (looked at again every 10 s)
+void ProxyLog(const wchar_t* s);
+
+extern "C" void ProxyNote(int idx, const DWORD* a)
+{
+    if (!s_noteReady || idx < 0 || idx >= PROXY_COUNT || !ProxyLogOn())
+        return;
+    EnterCriticalSection(&s_noteCs);
+    wchar_t b[200];
+    s_noteCount[idx]++;
+    if (s_noteSeen[idx] && !memcmp(s_noteLast[idx], a, sizeof(s_noteLast[idx]))) {
+        s_noteSame[idx]++;
+    } else {
+        if (s_noteSame[idx]) {
+            wsprintfW(b, L"CALL %s: the same %u times more", kProxyNames[idx], s_noteSame[idx]);
+            ProxyLog(b);
+        }
+        wsprintfW(b, L"CALL %s(%08X, %08X, %08X, %08X) pid=%08X", kProxyNames[idx], a[0], a[1], a[2], a[3],
+                  GetCurrentProcessId());
+        ProxyLog(b);
+        memcpy(s_noteLast[idx], a, sizeof(s_noteLast[idx]));
+        s_noteSeen[idx] = true;
+        s_noteSame[idx] = 0;
+    }
+    DWORD now = GetTickCount();
+    if (!s_noteMinute)
+        s_noteMinute = now;
+    if (now - s_noteMinute >= 60000) {   // the minute's counts
+        s_noteMinute = now;
+        int k = wsprintfW(b, L"CALLS 60s pid=%08X:", GetCurrentProcessId());
+        for (int i = 0; i < PROXY_COUNT; i++) {
+            if (!s_noteCount[i])
+                continue;
+            if (k > 140) {
+                ProxyLog(b);
+                k = wsprintfW(b, L"CALLS 60s pid=%08X:", GetCurrentProcessId());
+            }
+            k += wsprintfW(b + k, L" %s=%u", kProxyNames[i], s_noteCount[i]);
+            s_noteCount[i] = 0;
+        }
+        ProxyLog(b);
+    }
+    LeaveCriticalSection(&s_noteCs);
+}
+
 // VestaHome's calls made in the shell (mcucmd.h): only in G3NavHMI.exe.
 static McuCmd* s_cmd = 0;
 static HANDLE  s_cmdEv = 0;
@@ -104,6 +157,8 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID lpvReserved)
     if (fdwReason == DLL_PROCESS_ATTACH)
     {
         g_logging = (GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF);
+        InitializeCriticalSection(&s_noteCs);   // before any export can be called
+        s_noteReady = true;
 
         // Load the original DLL from our own folder (by full path) so the loader's
         // search path can never pick a wrong/absent copy and brick the shell.

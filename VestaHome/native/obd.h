@@ -20,6 +20,10 @@ struct ObdInfo {
 typedef void (*ObdLogFn)(const wchar_t* fmt, ...);
 
 void ObdInit(HWND notify, UINT msg, ObdLogFn log);   // msg is posted when ObdInfo changed
+// The address also given the way the shell's SDK does it (Flc_Bluetooth_Spp_SetAddr, through the Bluetooth proxy):
+// the stack first asks its device chooser for 5 s, only then reads XCBTSER1. Returns the SDK's result, -1 none.
+typedef int (*ObdSppAddrFn)(const char* addr);
+void ObdSetSppAddrFn(ObdSppAddrFn fn);
 void ObdConnect(const char* addr);                   // "A4:E2:87:98:D6:9F": connect and poll until ObdStop
 void ObdStop();
 void ObdGet(ObdInfo* out);
