@@ -475,9 +475,8 @@ static void DoAction(const Btn& b)
         break;
     case A_UWEDIT:   // a user widget's .ini (Home -> widgets)
         if (b.arg >= 0 && b.arg < s_uwCount) {
-            wchar_t dir[MAX_PATH], path[MAX_PATH];
-            UserWgDir(dir);
-            _snwprintf(path, MAX_PATH, L"%s%s", dir, s_uw[b.arg].file);
+            wchar_t path[MAX_PATH];
+            _snwprintf(path, MAX_PATH, L"%s%s", s_uw[b.arg].dir, s_uw[b.arg].file);   // its folder (SD or SDMMC)
             path[MAX_PATH - 1] = 0;
             TeOpen(path, S_SET_HOME, true);
         }
@@ -647,6 +646,28 @@ static void DoAction(const Btn& b)
         Redraw();
         break;
     case A_OBDPIN: s_obdPin = b.arg; Redraw(); break;
+    case A_PNPICK:   // a new phone picked (Bluetooth -> Paired -> + new)
+        if (b.arg >= 0 && b.arg < s_obdFoundN) {
+            strncpy(s_pnAddr, s_obdFound[b.arg].addr, 17);
+            s_pnAddr[17] = 0;
+        }
+        break;
+    case A_PNPAIR: {
+        wchar_t t[40];
+        _snwprintf(t, 40, L"%S %S", s_pnAddr, kObdPins[s_obdPin]);
+        t[39] = 0;
+        VLog(L"bt: сопряжение телефона %s", t);
+        BtCmdText(BT_CMD_PAIR, t);
+        break;
+    }
+    case A_PNCONN: {
+        wchar_t t[20];
+        _snwprintf(t, 20, L"%S", s_pnAddr);
+        t[19] = 0;
+        VLog(L"bt: подключить %s", t);
+        BtCmdText(BT_CMD_CONNECT, t);
+        break;
+    }
     case A_RVCVIEW:   // the camera's picture now, whatever the gear (powered only in reverse? - to be seen)
         s_rvcManual = true;
         VLog(L"камера: показать вручную");

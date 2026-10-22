@@ -1879,7 +1879,7 @@ static int Section(Screen s)
         return 4;
     case S_SETTINGS: case S_SET_SOUND: case S_SET_BALANCE: case S_SET_SCREEN: case S_SET_RADIO: case S_SET_BT:
     case S_SET_WIFI: case S_SET_VIDEO: case S_SET_PHOTO: case S_INFO: case S_SET_CAR: case S_SET_VOLUME:
-    case S_SET_OBD: case S_BT_PAIRED:
+    case S_SET_OBD: case S_BT_PAIRED: case S_BT_PAIRNEW:
         return 5;
     default:
         return -1;
@@ -1966,7 +1966,8 @@ static void Settings(HDC dc, Screen active)
     for (int i = 0; i < 10; i++) {
         int x = 16 + (i % 2) * 110, y = 64 + (i / 2) * 68;
         bool on = items[i].to == active || (active == S_SET_BALANCE && items[i].to == S_SET_SOUND) ||
-                  ((active == S_SET_OBD || active == S_BT_PAIRED) && items[i].to == S_SET_BT);
+                  ((active == S_SET_OBD || active == S_BT_PAIRED || active == S_BT_PAIRNEW) &&
+                   items[i].to == S_SET_BT);
         on = Zone(x, y, 102, 62, items[i].to == active ? A_NONE : A_TAB, items[i].to) || on;
         R(dc, x, y, 102, 62, 10, on ? kOrange : kPanel);
         Ico(dc, items[i].ic, x + 37, y + 7, 28, on ? kInk : kMuted);

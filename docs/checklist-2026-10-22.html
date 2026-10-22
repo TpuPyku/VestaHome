@@ -28,10 +28,10 @@
 <h2>1. Установка (VestaHomeInstall из Tests\SDMemory\VestaHomeInstall)</h2>
 <table>
 <tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
-<tr><td class="n">1</td><td>«1. VESTAHOME».</td><td>Вопроса «Запустить?» нет. Был запущен VestaHome (без пустышки) — запустился снова сам.</td><td class="ok"></td><td class="memo"></td></tr>
-<tr><td class="n">2</td><td>«2. PROXY MCU» (ставит и proxy Bluetooth), перезагрузка, не вынимая SD.</td><td>«СТАТУС»: оба proxy новые.</td><td class="ok"></td><td class="memo"></td></tr>
-<tr><td class="n">3</td><td>«3. ПУСТЫШКА: УСТАНОВИТЬ» (новая: ждёт обновления VH), перезагрузка.</td><td>После загрузки сразу VestaHome.</td><td class="ok"></td><td class="memo"></td></tr>
-<tr><td class="n">4</td><td>Под пустышкой ещё раз «1. VESTAHOME».</td><td>VestaHome закрылся и через несколько секунд вернулся; штатная оболочка не появилась.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">1</td><td>Установщик: обе отметки → «УСТАНОВИТЬ / ОБНОВИТЬ».</td><td>Вопроса «Запустить?» нет; VestaHome обновлён; отчёт: заряжено «stub on install p2».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">2</td><td>Перезагрузка, не вынимая SD.</td><td>После загрузки сразу VestaHome. «СТАТУС»: proxy новые, пустышка на месте.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">3</td><td>Ещё раз «УСТАНОВИТЬ / ОБНОВИТЬ» (обе отметки).</td><td>Задание только для proxy (пустышка та же); снять его — «ОТМЕНИТЬ ЗАДАНИЕ».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">4</td><td>Снять отметку proxy → «УСТАНОВИТЬ / ОБНОВИТЬ».</td><td>VestaHome закрылся и через несколько секунд вернулся (пустышка ждала); штатная оболочка не появилась; перезагрузка не нужна.</td><td class="ok"></td><td class="memo"></td></tr>
 </table>
 
 <h2>2. Без штатной оболочки: кнопки, сброс</h2>
@@ -70,6 +70,7 @@
 <tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
 <tr><td class="n">21</td><td>Телефон не подключён → «ПОДКЛЮЧИТЬ».</td><td>Подключается последний телефон.</td><td class="ok"></td><td class="memo"></td></tr>
 <tr><td class="n">22</td><td>Контакты (разрешить доступ на телефоне): поиск, «ТЕЛ./SIM», звёздочка → «Избранное», звонок.</td><td>Книга грузится, кириллица верная, поиск по части имени / номера.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">22а</td><td>«Bluetooth → Сопряжённые → + НОВЫЙ ТЕЛЕФОН»: второй телефон (видимый) → НАЙТИ → выбрать → СОПРЯЧЬ → подтвердить на телефоне → ПОДКЛЮЧИТЬ.</td><td>Телефон в «Сопряжённых», подключён. Работает ли под пустышкой — записать.</td><td class="ok"></td><td class="memo"></td></tr>
 <tr><td class="n">23</td><td>«Настройки → Bluetooth»: автосоединение / автоответ, перезагрузка.</td><td>Значения сохранились?</td><td class="ok"></td><td class="memo"></td></tr>
 </table>
 
@@ -96,6 +97,7 @@
 <table>
 <tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
 <tr><td class="n">33</td><td>«Виджеты главной» → строка своего виджета → изменить строку (курсор пальцем), СОХРАНИТЬ.</td><td>Клавиатура не пропадает; рядом `.ini.bak`; виджет перечитан.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">33а</td><td>Свой виджет в <b>\SDMMC\VestaWidgets</b> (скопировать probki.ini), SD-карту вынуть, перезапустить VestaHome.</td><td>Виджет работает без карты; его ответ — в \Temp\VestaWidgets.</td><td class="ok"></td><td class="memo"></td></tr>
 <tr><td class="n">34</td><td>«Общие → Формат времени» 12.</td><td>Часы 12-часовые.</td><td class="ok"></td><td class="memo"></td></tr>
 <tr><td class="n">35</td><td>OSMapsCE стоя 5 минут (журнал `stat:`).</td><td>Кадров мало; часы, стрелка и спутники обновляются.</td><td class="ok"></td><td class="memo"></td></tr>
 <tr><td class="n">36</td><td>«Диагностика → Журналы» выкл на 1 минуту, затем вкл.</td><td>Журналы не растут, потом снова пишутся.</td><td class="ok"></td><td class="memo"></td></tr>

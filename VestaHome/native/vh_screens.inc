@@ -1155,7 +1155,7 @@ static void ScrSetBt(HDC dc)
 
 // Settings -> Bluetooth -> paired: the stack's list (asked anew on opening: the proxy's BT_CMD_LISTPAIRED), 7 a
 // page (the dots turn it); "УДАЛИТЬ" asks once more ("ТОЧНО?"), then Conn_Delete_Paired (BT_CMD_UNPAIR).
-enum { kPairedRows = 7 };
+enum { kPairedRows = 6 };   // under them: "+ НОВЫЙ ТЕЛЕФОН"
 static int s_pairedPage, s_pairedAsk = -1;   // s_pairedAsk: the row whose removal waits for the second press
 
 static void ScrBtPaired(HDC dc)
@@ -1176,7 +1176,8 @@ static void ScrBtPaired(HDC dc)
     if (s_pairedPage >= pages)
         s_pairedPage = 0;   // (the dots go round)
     if (!n)
-        SetRow(dc, 64, L"Сопряжённых нет", L"телефон находит ГУ сам: штатная оболочка, Телефон → Bluetooth", true);
+        SetRow(dc, 64, L"Сопряжённых нет", L"новый телефон — кнопка ниже", true);
+    Button(dc, 256, 340, 220, 40, L"+ НОВЫЙ ТЕЛЕФОН", B_N, IC_NONE, 15, 0, A_SCREEN, S_BT_PAIRNEW);
     for (int k = 0; k < kPairedRows; k++) {
         int i = s_pairedPage * kPairedRows + k, y = 64 + k * 44;
         if (i >= n)
@@ -1335,6 +1336,49 @@ static void ScrSetObd(HDC dc)
             T(dc, 264, y, o.lines[i], 13, kMuted, 400, AL_START, 504);
 }
 
+// Settings -> Bluetooth -> Paired -> "+ НОВЫЙ ТЕЛЕФОН" (2026-10-22, the user: pairing in VestaHome): the stack's
+// search (the OBD's: the same list of devices in sight), a phone picked, paired from here with a PIN (BT_CMD_PAIR;
+// a phone with secure pairing shows a code to confirm - the proxy confirms on our side), then connected as the shell
+// connects one (BT_CMD_CONNECT). Without the proxy - nothing to do here.
+static char s_pnAddr[18];   // the phone picked
+
+static void ScrBtPairNew(HDC dc)
+{
+    Settings(dc, S_BT_PAIRNEW);
+    BtState bt;
+    bool proxy = BtGet(&bt, NULL);
+    bool searching = s_obdEvSeen >= 0 && GetTickCount() - s_obdSearchTick < 15000;
+    SetRow(dc, 64, L"Новый телефон", searching ? L"ищу устройства (около 10 с)…"
+                   : L"на телефоне — Bluetooth и видимость");
+    Button(dc, 656, 70, 112, 44, searching ? L"ПОИСК…" : L"НАЙТИ", !proxy ? B_DIS : searching ? B_SEL : B_N, IC_NONE,
+           15, 0, proxy ? A_OBDSCAN : A_NONE);
+    wchar_t nm[48];
+    for (int i = 0; i < s_obdFoundN; i++) {
+        if (s_obdFound[i].name[0])
+            BtText(s_obdFound[i].name, nm, 48);
+        else
+            MultiByteToWideChar(CP_ACP, 0, s_obdFound[i].addr, -1, nm, 48);
+        Button(dc, 256 + (i % 2) * 260, 124 + (i / 2) * 46, 252, 40, nm,
+               !strcmp(s_obdFound[i].addr, s_pnAddr) ? B_SEL : B_N, IC_NONE, 15, 0, A_PNPICK, i);
+    }
+    if (!proxy)
+        T(dc, 264, 168, L"Установите proxy Bluetooth", 15, kMuted, 400, AL_START, 500);
+    else if (!s_obdFoundN && !searching)
+        T(dc, 264, 168, L"Устройства не найдены", 15, kMuted, 400, AL_START, 500);
+    bool can = proxy && s_pnAddr[0];
+    T(dc, 264, 296, L"PIN", 15, kMuted, 700);
+    for (int i = 0; i < 2; i++) {
+        wchar_t p[8];
+        MultiByteToWideChar(CP_ACP, 0, kObdPins[i], -1, p, 8);
+        Button(dc, 304 + i * 88, 270, 80, 40, p, i == s_obdPin ? B_SEL : B_N, IC_NONE, 15, 0, A_OBDPIN, i);
+    }
+    Button(dc, 488, 270, 136, 40, L"СОПРЯЧЬ", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNPAIR : A_NONE);
+    Button(dc, 632, 270, 136, 40, L"ПОДКЛЮЧИТЬ", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNCONN : A_NONE);
+    T(dc, 264, 340, L"Телефон спросит подтверждение (код или PIN выше) — согласитесь.", 14, kDim, 400, AL_START,
+      504);
+    T(dc, 264, 360, L"Потом «ПОДКЛЮЧИТЬ»; телефон появится в «Сопряжённых».", 14, kDim, 400, AL_START, 504);
+}
+
 // Settings -> Wi-Fi (wifi.cpp: Windows CE's WZC): the state, the networks in sight (strongest first, kWifiRows a
 // page) with their signal and security; a tap connects (a new secured one asks its password on the keyboard),
 // "Забыть" drops a known one. The known networks live in VestaHome.ini: WZC forgets them on every boot.
@@ -1430,8 +1474,8 @@ static void ScrSetWifi(HDC dc)
         bool apOn = w.state == WIFI_AP && !w.apAuto;
         Button(dc, 256, 352, 196, 40, apOn ? L"ТОЧКА ДОСТУПА: ВКЛ" : L"ТОЧКА ДОСТУПА", apOn ? B_SEL : B_N, IC_NONE,
                14, 0, A_WIFIAP);
-        T(dc, 464, 378, L"Фикс Xiaomi", 14, kMuted, 600);
-        Toggle(dc, 520, 354, T_WIFI_AP_AUTO);
+        T(dc, 466, 378, L"Фикс Xiaomi", 14, kMuted, 600);
+        Toggle(dc, 572, 354, T_WIFI_AP_AUTO);
     }
     if (pages > 1) {
         _snwprintf(s, 16, L"%d/%d", s_wifiPage + 1, pages);

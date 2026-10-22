@@ -1879,9 +1879,11 @@ static void DoBootArm(const char* verb, int force)
 {
     SetPaths();
     LogMsg(L"--- boot arm ---");
-    int isRollback = (strcmp(verb, "rollback") == 0);
-    int isStub = (strncmp(verb, "stub", 4) == 0), stubOn = (strcmp(verb, "stub on") == 0);
-    if (isStub && !stubOn && !IsStubFile(kShellPath)) {
+    // a job may have two parts (2026-10-22, one "install" button): the stub's ("stub on" / "stub off") and the
+    // proxy's ("install p2" / "rollback"); the boot run does the stub first
+    int isRollback = strstr(verb, "rollback") != NULL, isInstall = strstr(verb, "install") != NULL;
+    int isStub = strstr(verb, "stub") != NULL, stubOn = strstr(verb, "stub on") != NULL;
+    if (isStub && !stubOn && !isRollback && !isInstall && !IsStubFile(kShellPath)) {
         wcscpy(g_status, L"Пустышка не установлена — на месте G3NavHMI.exe штатная оболочка.");
         return;
     }
@@ -1907,7 +1909,7 @@ static void DoBootArm(const char* verb, int force)
         }
     }
 
-    if (isStub) {
+    if (isStub) {   // (the proxy's checks below, when it has a part too)
         wchar_t vh[MAX_PATH];
         Join(vh, kVhDir, kVhExe);
         if (stubOn && !FileExists(vh)) {
@@ -1918,12 +1920,13 @@ static void DoBootArm(const char* verb, int force)
             _snwprintf(g_status, 512, L"Ошибка: нет пустышки VestaStub.exe (%s) — установщик повреждён?", g_stubSrc);
             return;
         }
-    } else if (isRollback) {
+    }
+    if (isRollback) {
         if (!FileExists(g_orig)) {
             wcscpy(g_status, L"Отказ: нет \\ResidentFlash\\navigation\\app\\SPIPowerMgr_orig.dll — возвращать нечего.");
             return;
         }
-    } else {
+    } else if (isInstall) {
         if (!FileExists(g_proxySrc)) {
             _snwprintf(g_status, 512, L"Ошибка: нет proxy SPIPowerMgr.dll (%s) — установщик повреждён?", g_proxySrc);
             return;
@@ -1964,7 +1967,8 @@ static void DoBootArm(const char* verb, int force)
             _snwprintf(g_status, 512, L"Ошибка: копия пустышки на SD не совпала (%s)", p);
             return;
         }
-    } else if (!isStub && !isRollback) {
+    }
+    if (isInstall) {
         char md5[33];
         Join(p, dir, kDll);
         if (!MyCopyFile(g_proxySrc, p) || !FileMd5(p, md5, NULL) || !HexEq(md5, kProxyMd5)) {
@@ -1999,17 +2003,19 @@ static void DoBootArm(const char* verb, int force)
         wjob[n] = 0;
         _snwprintf(m, 128, L"boot: armed, job \"%s\", SwUpdate.flag = 0x02", wjob);
         LogMsg(m);
+        wchar_t what[160];   // the parts, in the boot run's order
+        _snwprintf(what, 160, L"%s%s%s", stubOn ? L"поставит пустышку вместо G3NavHMI.exe"
+                   : isStub ? L"вернёт штатную оболочку на место" : L"", isStub && (isRollback || isInstall) ? L", затем " : L"",
+                   isRollback ? L"вернёт заводскую SPIPowerMgr.dll" : isInstall ? L"поставит proxy MCU и Bluetooth" : L"");
+        what[159] = 0;
         _snwprintf(g_status, 4096,
-            L"Заряжено на следующую загрузку: %s.\nSD: %s (наш SwDnl.exe), %s\\ (задание%s)\n"
+            L"Заряжено на следующую загрузку: %s.\nSD: %s (наш SwDnl.exe), %s\\ (задание%s%s)\n"
             L"флаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
             L"Перезагрузите ГУ, НЕ вынимая SD. Вместо оболочки запустится наш SwDnl.exe: снимет флаг, "
             L"%s, затем ГУ перезагрузится ещё раз (или поднимет оболочку сама).\n"
             L"После загрузки — кнопка СТАТУС; журнал: VestaHomeInstall.log (VestaLogs на SD-карте) и %s\\%s.\n"
             L"Передумали до перезагрузки — кнопка ОТМЕНИТЬ ЗАДАНИЕ.",
-            wjob, dstExe, dir, isRollback || isStub ? (stubOn ? L" + пустышка" : L"") : L" + proxy",
-            stubOn ? L"поставит пустышку вместо G3NavHMI.exe" : isStub ? L"вернёт штатную оболочку на место"
-            : isRollback ? L"остановит Main.exe и вернёт заводскую DLL" : L"остановит Main.exe и поставит proxy",
-            dir, kBootLog);
+            wjob, dstExe, dir, stubOn ? L" + пустышка" : L"", isInstall ? L" + proxy" : L"", what, dir, kBootLog);
     }
 }
 
@@ -2091,9 +2097,13 @@ static void BootRun()
 
         logging = (strstr(jb, "p2") || strstr(jb, "p3")) ? 1 : 0;
         force   = strstr(jb, "force") ? 1 : 0;
-        if (strstr(jb, "stub")) {   // Main.exe is left alone: the shell (now the stub or back) starts below
+        rc = 0;
+        if (strstr(jb, "stub")) {   // first (only files renamed): the shell (now the stub or back) starts below
             rc = strstr(jb, "stub on") ? DoStubOn() : DoStubOff();
-        } else if (strstr(jb, "rollback")) {
+            if (strstr(jb, "rollback") || strstr(jb, "install"))
+                LogMsg(g_status);   // the proxy's part follows
+        }
+        if (strstr(jb, "rollback")) {
             rc = Rollback();
             if (rc) wcscpy(g_status, L"boot: rollback done, factory DLL back, shell restarted");
         } else if (strstr(jb, "install")) {
@@ -2104,7 +2114,7 @@ static void BootRun()
                 LogMsg(L"boot: no reset -> starting Main.exe on the new DLL");
                 RestartShell();
             }
-        } else {
+        } else if (!strstr(jb, "stub")) {
             rc = 0;
             wcscpy(g_status, L"boot: unknown job");
         }
@@ -2155,26 +2165,26 @@ static void BootRun()
 #define C_FACET  RGB(0xc2,0x4a,0x0b)
 
 struct Btn { RECT rc; const wchar_t* label; int id; };
-enum { B_STATUS, B_INSTALL, B_DRILLOFF, B_ROLLBACK, B_EXIT, B_VH, B_VH_DEL, B_DRILL, B_TESTOFF, B_STUB, B_STUB_DEL };
+enum { B_STATUS, B_DRILLOFF, B_EXIT, B_DRILL, B_TESTOFF, B_TICK_VH, B_TICK_PROXY, B_SETUP, B_REMOVE };
 
-// In the order of a first install: 1. VestaHome (no reboot), 2. the proxy (with its log; the boot path, a reboot);
-// then the complete removal of each; 3. the stub in place of the shell (the boot path) and taking it off; the
-// status, cancelling an armed job, exit. Below, apart ("Сервис"): the test of the rescue path (drill: the package is
-// embedded too) and taking it off. FORCE - the command line only.
-enum { kBtnN = 11, kServiceY = 428 };
+// (2026-10-22, the user: too many buttons, no room left for the log) Two ticks - VestaHome with the stub in place
+// of the shell, and the proxies (MCU + Bluetooth) - and two actions on what is ticked: УСТАНОВИТЬ / ОБНОВИТЬ
+// (VestaHome at once; the stub and the proxies one boot job, the stub first) and УДАЛИТЬ ОТМЕЧЕННОЕ. Then the
+// status, cancelling an armed job, exit; below, small ("Сервис"): the test of the rescue path and taking it off.
+// FORCE - the command line only.
+enum { kBtnN = 9, kTickY = 300, kServiceY = 444 };
 static const Btn g_btns[kBtnN] = {
-    { {  24, 218, 396, 258 }, L"1. VESTAHOME: УСТАНОВИТЬ / ОБНОВИТЬ", B_VH },
-    { { 404, 218, 776, 258 }, L"2. PROXY MCU: УСТАНОВИТЬ / ОБНОВИТЬ", B_INSTALL },
-    { {  24, 266, 396, 306 }, L"УДАЛИТЬ VESTAHOME",    B_VH_DEL   },
-    { { 404, 266, 776, 306 }, L"УДАЛИТЬ PROXY MCU",    B_ROLLBACK },
-    { {  24, 314, 396, 354 }, L"3. ПУСТЫШКА: УСТАНОВИТЬ", B_STUB  },
-    { { 404, 314, 776, 354 }, L"УДАЛИТЬ ПУСТЫШКУ",     B_STUB_DEL },
-    { {  24, 362, 266, 402 }, L"СТАТУС",               B_STATUS   },
-    { { 274, 362, 526, 402 }, L"ОТМЕНИТЬ ЗАДАНИЕ",     B_DRILLOFF },
-    { { 534, 362, 776, 402 }, L"ВЫХОД",                B_EXIT     },
-    { { 274, kServiceY, 526, kServiceY + 40 }, L"ТЕСТ ВОССТ.", B_DRILL   },
-    { { 534, kServiceY, 776, kServiceY + 40 }, L"СНЯТЬ ТЕСТ",  B_TESTOFF },
+    { {  24, kTickY, 396, kTickY + 40 }, L"VestaHome + пустышка", B_TICK_VH },
+    { { 404, kTickY, 776, kTickY + 40 }, L"Proxy MCU + Bluetooth", B_TICK_PROXY },
+    { {  24, 348, 396, 388 }, L"УСТАНОВИТЬ / ОБНОВИТЬ", B_SETUP  },
+    { { 404, 348, 776, 388 }, L"УДАЛИТЬ ОТМЕЧЕННОЕ",    B_REMOVE },
+    { {  24, 396, 266, 436 }, L"СТАТУС",               B_STATUS   },
+    { { 274, 396, 526, 436 }, L"ОТМЕНИТЬ ЗАДАНИЕ",     B_DRILLOFF },
+    { { 534, 396, 776, 436 }, L"ВЫХОД",                B_EXIT     },
+    { { 404, kServiceY, 586, kServiceY + 30 }, L"ТЕСТ ВОССТ.", B_DRILL   },
+    { { 594, kServiceY, 776, kServiceY + 30 }, L"СНЯТЬ ТЕСТ",  B_TESTOFF },
 };
+static int g_tickVh = 1, g_tickProxy = 1;   // what the actions touch
 static HFONT g_font, g_fontB, g_fontS;
 static HWND  g_hwnd  = NULL;
 static int   g_press = -1;
@@ -2259,28 +2269,33 @@ static void Paint(HDC dc)
     FillC(dc, &full, C_INK);
 
     TextL(dc, 24, 12, L"VestaHome + proxy SPIPowerMgr.dll (прошивка 4120)", C_TEXT, g_fontB);
-    TextL(dc, 24, 50, L"Сначала 1, потом 2, по желанию 3. SD-карта в слоте. Прошивка не 4120 — proxy не встанет.",
+    TextL(dc, 24, 46, L"Отметьте, что ставить или удалять. SD-карта в слоте. Прошивка не 4120 — proxy не встанет.",
           C_MUTED, g_fontS);
 
-    RECT box = { 20, 76, 780, 208 };
+    RECT box = { 20, 70, 780, 292 };
     FillC(dc, &box, C_PANEL);
     FrameC(dc, &box, C_LINE);
-    DrawBlock(dc, 30, 84, 740, 202, g_status[0] ? g_status : L"(нет данных)",
+    DrawBlock(dc, 30, 78, 740, 286, g_status[0] ? g_status : L"(нет данных)",
               g_busy ? C_MUTED : C_TEXT, g_fontS);
 
-    if (g_busy) TextL(dc, 30, 184, L"идёт операция, подождите...", C_ORANGE, g_fontS);
+    if (g_busy) TextL(dc, 30, 268, L"идёт операция, подождите...", C_ORANGE, g_fontS);
 
-    // the service group, apart from the user's buttons
-    RECT sep = { 24, kServiceY - 14, 776, kServiceY - 13 };
-    FillC(dc, &sep, C_LINE);
-    TextL(dc, 24, kServiceY + 10, L"Сервис:", C_MUTED, g_fontS);
+    TextL(dc, 24, kServiceY + 6, L"Удаляется только отмеченное.  Сервис:", C_MUTED, g_fontS);
 
     for (int i = 0; i < kBtnN; i++) {
         RECT r = g_btns[i].rc;
         int pressed = (g_press == i);
+        int tick = g_btns[i].id == B_TICK_VH ? g_tickVh : g_btns[i].id == B_TICK_PROXY ? g_tickProxy : -1;
+        if (tick >= 0) {   // a tick: its box and the label beside it
+            RECT b = { r.left + 8, r.top + 6, r.left + 36, r.top + 34 };
+            FillC(dc, &b, tick ? C_ORANGE : C_INK);
+            FrameC(dc, &b, pressed ? C_ORANGE : C_LINE);
+            TextL(dc, r.left + 48, r.top + 8, g_btns[i].label, C_TEXT, g_font);
+            continue;
+        }
         FillC(dc, &r, pressed ? C_ORANGE : C_PANEL);
         FrameC(dc, &r, pressed ? C_FACET : C_LINE);
-        TextC(dc, &r, g_btns[i].label, C_TEXT, g_font);
+        TextC(dc, &r, g_btns[i].label, C_TEXT, g_btns[i].id == B_DRILL || g_btns[i].id == B_TESTOFF ? g_fontS : g_font);
     }
 }
 
@@ -2311,66 +2326,91 @@ static void RunAction(int id)
         return;
     }
 
-    // VestaHome: plain file work while everything runs (no reboot)
-    if (id == B_VH || id == B_VH_DEL) {
-        if (id == B_VH && !Confirm(L"Установить / обновить VestaHome в \\SDMMC\\VestaHome?\n"
-                                   L"Запущенный VestaHome будет закрыт. Настройки, пароли Wi-Fi и база камер сохранятся."))
+    if (id == B_TICK_VH || id == B_TICK_PROXY) {
+        if (id == B_TICK_VH)
+            g_tickVh = !g_tickVh;
+        else
+            g_tickProxy = !g_tickProxy;
+        InvalidateRect(g_hwnd, NULL, TRUE);
+        return;
+    }
+
+    if (id == B_SETUP || id == B_REMOVE) {
+        if (!g_tickVh && !g_tickProxy) {
+            wcscpy(g_status, L"Ничего не отмечено: отметьте VestaHome и / или proxy.");
+            InvalidateRect(g_hwnd, NULL, TRUE);
             return;
-        if (id == B_VH_DEL && !Confirm(L"Удалить VestaHome полностью (\\SDMMC\\VestaHome)?\n"
-                                       L"Удалятся и его настройки, пароли Wi-Fi, ярлыки и база камер."))
+        }
+        SetPaths();
+        int stub = IsStubFile(kShellPath);
+        // the stub's part only when it changes something: the same stub in place - VestaHome alone, no reboot
+        int stubJob = g_tickVh && (id == B_SETUP ? !(stub && SameFile(kShellPath, g_stubSrc)) : stub);
+        int proxyJob = g_tickProxy;
+        if (id == B_REMOVE && proxyJob) {   // the factory DLL in place already: only the leftovers, no job
+            char md5[33];
+            if (!(FileMd5(g_dll, md5, NULL) && (HexEq(md5, kProxyMd5) || IsOldProxy(md5)))) {
+                proxyJob = 0;
+                ProxyCleanup(g_status, 4096);
+                LogMsg(g_status);
+            }
+        }
+        wchar_t msg[1024];
+        if (id == B_SETUP)
+            _snwprintf(msg, 1024, L"Установить / обновить отмеченное?\n%s%s%s%s",
+                       g_tickVh ? L"• VestaHome — сейчас (настройки, пароли Wi-Fi и база камер сохранятся; "
+                                  L"запущенный будет закрыт и запустится снова).\n" : L"",
+                       stubJob ? L"• Пустышка вместо штатной оболочки — при следующей загрузке (оболочка остаётся "
+                                 L"рядом и вернётся сама, если VestaHome 3 раза подряд не проработает 3 мин).\n" : L"",
+                       proxyJob ? L"• Proxy MCU и Bluetooth — при следующей загрузке.\n" : L"",
+                       stubJob || proxyJob ? L"Потом перезагрузите ГУ, НЕ вынимая SD-карту." : L"");
+        else
+            _snwprintf(msg, 1024, L"Удалить отмеченное?\n%s%s%s%s",
+                       g_tickVh ? L"• VestaHome полностью (\\SDMMC\\VestaHome: и настройки, пароли Wi-Fi, ярлыки, "
+                                  L"база камер) — сейчас.\n" : L"",
+                       stubJob ? L"• Пустышка: штатная оболочка вернётся на место при следующей загрузке.\n" : L"",
+                       proxyJob ? L"• Proxy MCU и Bluetooth: заводские DLL вернутся при следующей загрузке "
+                                  L"(после неё нажмите «Удалить» ещё раз — уберёт SwDnl.exe с SD-карты).\n" : L"",
+                       stubJob || proxyJob ? L"Потом перезагрузите ГУ, НЕ вынимая SD-карту." : L"");
+        msg[1023] = 0;
+        if (!Confirm(msg))
             return;
         g_busy = 1;
         InvalidateRect(g_hwnd, NULL, TRUE);
         UpdateWindow(g_hwnd);
-        // No "start it?" (the user 2026-10-22): a running VestaHome comes back by itself - under the stub the stub
-        // starts the new one when this mutex is gone (VestaStub: UpdateRunning), else we do; a first install starts
-        // at the boot (the stub) or by hand.
-        int was = ProcExists(kVhExe) == 1;
-        HANDLE upd = id == B_VH ? CreateMutex(NULL, TRUE, L"VestaHomeUpdate") : NULL;
-        int ok = id == B_VH ? DoVhInstall() : DoVhUninstall();
-        if (upd)
-            CloseHandle(upd);
-        g_busy = 0;
-        InvalidateRect(g_hwnd, NULL, TRUE);
-        if (id == B_VH && ok && was && !IsStubFile(kShellPath))
-            VhStart();
-        return;
-    }
-
-    // the proxy: install / remove at the next boot (BOOT MODE at the top) - the live swap cannot kill the
-    // running shell and the HU resets in the middle of it. Always with its log (the flag; the file only on SD).
-    if (id == B_INSTALL) {
-        if (!Confirm(L"Установить / обновить proxy MCU (SPIPowerMgr.dll) при следующей загрузке?\n"
-                     L"На SD-карту будет записан SwDnl.exe (этот установщик) и proxy, заряжен флаг обновления.\n"
-                     L"Потом перезагрузите ГУ, НЕ вынимая SD-карту."))
-            return;
-    } else if (id == B_ROLLBACK) {
-        char md5[33];
-        SetPaths();
-        int ours = FileMd5(g_dll, md5, NULL) && (HexEq(md5, kProxyMd5) || IsOldProxy(md5));
-        if (!ours) {   // the factory DLL is already in place: only the leftovers
-            wcscpy(g_status, L"Proxy не установлен — стоит заводская SPIPowerMgr.dll. Убираю остатки:");
-            ProxyCleanup(g_status, 4096);
-            LogMsg(g_status);
-            InvalidateRect(g_hwnd, NULL, TRUE);
-            return;
+        wchar_t vhRes[1024] = L"";
+        int ok = 1;
+        if (g_tickVh) {   // VestaHome: plain file work while everything runs
+            // No "start it?" (the user 2026-10-22): a running VestaHome comes back by itself - under the stub the
+            // stub starts the new one when this mutex is gone (VestaStub: UpdateRunning), else we do; a first
+            // install starts at the boot (the stub).
+            int was = ProcExists(kVhExe) == 1;
+            HANDLE upd = id == B_SETUP ? CreateMutex(NULL, TRUE, L"VestaHomeUpdate") : NULL;
+            ok = id == B_SETUP ? DoVhInstall() : DoVhUninstall();
+            if (upd)
+                CloseHandle(upd);
+            if (id == B_SETUP && ok && was && !stub)
+                VhStart();
+            wcsncpy(vhRes, g_status, 1023);
+            vhRes[1023] = 0;
         }
-        if (!Confirm(L"Удалить proxy MCU полностью при следующей загрузке?\n"
-                     L"Вернётся заводская SPIPowerMgr.dll, копии и флаг журнала будут убраны.\n"
-                     L"Потом перезагрузите ГУ, НЕ вынимая SD-карту; после загрузки нажмите эту кнопку ещё раз — "
-                     L"она уберёт SwDnl.exe с SD-карты."))
-            return;
+        if (ok && (stubJob || proxyJob)) {
+            char verb[48];
+            _snprintf(verb, 48, "%s%s%s", stubJob ? (id == B_SETUP ? "stub on" : "stub off") : "",
+                      stubJob && proxyJob ? " " : "", proxyJob ? (id == B_SETUP ? "install p2" : "rollback") : "");
+            verb[47] = 0;
+            DoBootArm(verb, 0);
+            if (vhRes[0]) {   // both results in the window
+                wchar_t boot[4096];
+                wcscpy(boot, g_status);
+                _snwprintf(g_status, 4096, L"%s\n\n%s", vhRes, boot);
+                g_status[4095] = 0;
+            }
+        }
+        g_busy = 0;
+        LogMsg(g_status);
+        InvalidateRect(g_hwnd, NULL, TRUE);
+        return;
     }
-
-    if (id == B_STUB && !Confirm(L"Поставить пустышку вместо штатной оболочки при следующей загрузке?\n"
-                                 L"После загрузки вместо G3NavHMI запустится VestaHome. Штатная оболочка остаётся рядом "
-                                 L"(G3NavHMI_orig.exe) и запустится сама, если VestaHome 3 раза подряд не проработает 3 мин, "
-                                 L"если его нет или в корне SD/USB лежит файл VestaStub.off.\n"
-                                 L"Потом перезагрузите ГУ, НЕ вынимая SD-карту."))
-        return;
-    if (id == B_STUB_DEL && !Confirm(L"Убрать пустышку и вернуть штатную оболочку при следующей загрузке?\n"
-                                     L"Потом перезагрузите ГУ, НЕ вынимая SD-карту."))
-        return;
 
     if (id == B_DRILL && !Confirm(L"Тест восстановления: зарядить заводской загрузочный апдейтер безобидным пакетом?\n"
                                   L"Нужна перезагрузка ГУ, SD-карту не вынимать. Потом — «СНЯТЬ ТЕСТ»."))
@@ -2379,12 +2419,8 @@ static void RunAction(int id)
     g_busy = 1;
     InvalidateRect(g_hwnd, NULL, TRUE);
 
-    if      (id == B_INSTALL)  DoBootArm("install p2", 0);
-    else if (id == B_DRILL)    DoDrill(0);
+    if      (id == B_DRILL)    DoDrill(0);
     else if (id == B_DRILLOFF || id == B_TESTOFF) DoDrillOff();
-    else if (id == B_ROLLBACK) DoBootArm("rollback", 0);
-    else if (id == B_STUB)     DoBootArm("stub on", 0);
-    else if (id == B_STUB_DEL) DoBootArm("stub off", 0);
 
     g_busy = 0;
     LogMsg(g_status);

@@ -68,3 +68,5 @@ G3patch/
 
 # the user guide's screens (tools/make_shots.py, made again on demand)
 docs/shots/
+# the PC build: the user widgets' answers in "RAM" (Temp\VestaWidgets beside the exe)
+VestaHome/VestaHome/Temp/

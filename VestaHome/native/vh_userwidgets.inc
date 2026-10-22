@@ -16,13 +16,49 @@ static const struct { const wchar_t* name; Icon ic; } kIconNames[] = {
     { L"warn", IC_WARN }, { L"eye", IC_EYE }, { L"power", IC_POWER }, { L"folder", IC_FOLDER },
     { L"tasks", IC_TASKS }, { L"star", IC_STAR }, { L"lock", IC_LOCK }, { L"file", IC_FILE } };
 
-static void UserWgDir(wchar_t* dir)
+// The widgets' folders (2026-10-22, the user: widgets without the card too): the SD card's, then the built-in
+// card's (a name in both - the SD card's). UserWgDir: the first there is (the text editor's start).
+static int UserWgDirs(wchar_t (*dirs)[MAX_PATH])
 {
 #ifdef UNDER_CE
-    wcscpy(dir, L"\\SDMemory\\VestaWidgets\\");
+    wcscpy(dirs[0], L"\\SDMemory\\VestaWidgets\\");
+    wcscpy(dirs[1], L"\\SDMMC\\VestaWidgets\\");
+    return 2;
 #else
-    _snwprintf(dir, MAX_PATH, L"%sVestaWidgets\\", s_dir);
+    _snwprintf(dirs[0], MAX_PATH, L"%sVestaWidgets\\", s_dir);
+    return 1;
 #endif
+}
+
+static void UserWgDir(wchar_t* dir)
+{
+    wchar_t d[2][MAX_PATH];
+    int n = UserWgDirs(d);
+    wcscpy(dir, d[0]);
+    for (int i = 0; i < n; i++)
+        if (GetFileAttributes(d[i]) != 0xFFFFFFFF) {
+            wcscpy(dir, d[i]);
+            return;
+        }
+}
+
+// What VestaHome writes for a widget (a url's answer, the fields taken out of it) when the ini names no place: in
+// RAM, \Temp\VestaWidgets\ (no wear of either card; gone at power-off - fetched again). The PC: beside the exe.
+static void UserWgTemp(const wchar_t* name, wchar_t* out)
+{
+#ifdef UNDER_CE
+    CreateDirectory(L"\\Temp", NULL);
+    CreateDirectory(L"\\Temp\\VestaWidgets", NULL);
+    _snwprintf(out, MAX_PATH, L"\\Temp\\VestaWidgets\\%s", name);
+#else
+    wchar_t d[MAX_PATH];
+    _snwprintf(d, MAX_PATH, L"%sTemp", s_dir);
+    CreateDirectory(d, NULL);
+    _snwprintf(d, MAX_PATH, L"%sTemp\\VestaWidgets", s_dir);
+    CreateDirectory(d, NULL);
+    _snwprintf(out, MAX_PATH, L"%sTemp\\VestaWidgets\\%s", s_dir, name);
+#endif
+    out[MAX_PATH - 1] = 0;
 }
 
 static bool IsUtf8(const unsigned char* p, int n)
@@ -124,6 +160,7 @@ static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
     wchar_t dataName[MAX_PATH];
     _snwprintf(dataName, MAX_PATH, L"%s.txt", name);
     UserWgPath(*w, dataName, w->data);
+    bool dataSet = false;   // data= given (else for a url widget its data goes to RAM)
     wchar_t* pos = text;
     wchar_t *k, *v;
     while (NextKeyVal(&pos, &k, &v)) {
@@ -138,6 +175,7 @@ static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
             w->wide = CfgBool(v);
         } else if (!_wcsicmp(k, L"data")) {
             UserWgPath(*w, v, w->data);
+            dataSet = true;
         } else if (!_wcsicmp(k, L"refresh")) {
             w->refresh = _wtoi(v) < 1 ? 1 : _wtoi(v) > 3600 ? 3600 : _wtoi(v);
         } else if (!_wcsicmp(k, L"tap")) {
@@ -170,11 +208,13 @@ static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
     if (w->url[0]) {
         if (!w->every)
             w->every = 600;
-        if (!w->resp[0]) {
+        if (!w->resp[0]) {   // VestaHome's writes: in RAM unless the ini names a place
             wchar_t respName[MAX_PATH];
             _snwprintf(respName, MAX_PATH, L"%s.resp", name);
-            UserWgPath(*w, respName, w->resp);
+            UserWgTemp(respName, w->resp);
         }
+        if (!dataSet)
+            UserWgTemp(dataName, w->data);
     }
     CharUpperBuff(w->title, (DWORD)wcslen(w->title));
     free(text);
@@ -477,18 +517,25 @@ static void UserWidgetsScan()
 {
     static wchar_t s_started[32][40];
     static int s_startedCount;
-    wchar_t dir[MAX_PATH], pat[MAX_PATH];
-    UserWgDir(dir);
-    _snwprintf(pat, MAX_PATH, L"%s*.ini", dir);
+    wchar_t dirs[2][MAX_PATH], pat[MAX_PATH];
+    int nd = UserWgDirs(dirs);
     if (!s_uwThread)
         InitializeCriticalSection(&s_uwCs);
     EnterCriticalSection(&s_uwCs);
     s_uwCount = 0;
-    WIN32_FIND_DATA fd;
-    HANDLE f = FindFirstFile(pat, &fd);
-    if (f != INVALID_HANDLE_VALUE) {
+    for (int d = 0; d < nd && s_uwCount < kWgUser; d++) {   // the SD card's first: a name in both - its
+        _snwprintf(pat, MAX_PATH, L"%s*.ini", dirs[d]);
+        WIN32_FIND_DATA fd;
+        HANDLE f = FindFirstFile(pat, &fd);
+        if (f == INVALID_HANDLE_VALUE)
+            continue;
         do {
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && UserWgLoad(dir, fd.cFileName, &s_uw[s_uwCount]))
+            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !UserWgLoad(dirs[d], fd.cFileName, &s_uw[s_uwCount]))
+                continue;
+            bool dup = false;
+            for (int i = 0; i < s_uwCount && !dup; i++)
+                dup = !wcscmp(s_uw[i].key, s_uw[s_uwCount].key);
+            if (!dup)
                 s_uwCount++;
         } while (s_uwCount < kWgUser && FindNextFile(f, &fd));
         FindClose(f);
@@ -513,7 +560,7 @@ static void UserWidgetsScan()
         }
     }
     if (s_uwCount)
-        VLog(L"виджеты пользователя: %d (%s)", s_uwCount, dir);
+        VLog(L"виджеты пользователя: %d (%s, %s)", s_uwCount, dirs[0], nd > 1 ? dirs[1] : L"-");
     HomeWidgetsLoad(s_cfg.homeRaw);
 }
 
@@ -685,7 +732,7 @@ static void ScrSetHome(HDC dc)
         Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, IC_EYE, 15, 24, A_WGVIS, id);
     }
     T(dc, 24, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
-                   L"\\SDMemory\\VestaWidgets\\*.ini", 13, kDim, 400, AL_START, 560);
+                   L"VestaWidgets\\*.ini на SD или \\SDMMC", 13, kDim, 400, AL_START, 560);
     if (pages > 1) {
         wchar_t pg[16];
         _snwprintf(pg, 16, L"%d / %d", s_setHomePage + 1, pages);
