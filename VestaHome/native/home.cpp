@@ -68,7 +68,7 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_BT, IC_USB, IC_LIST, IC_VOL, IC_SEARCH, IC_SHUFFLE, IC_REPEAT, IC_CALL, IC_HANGUP, IC_WIFI,
             IC_STAR, IC_STAR_F, IC_USER, IC_USERS, IC_CLOCK, IC_KEYPAD, IC_MIC_OFF, IC_HANDOVER, IC_PLAY,
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
-            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_COUNT };
+            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_NETRADIO, IC_BTMUSIC, IC_COUNT };
 
 // Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing.
 static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music", L"phone", L"settings", L"home",
@@ -88,7 +88,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
-              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW };
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -103,7 +103,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -118,7 +118,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_SAVER, T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SUBTITLES, T_SLIDES_OPEN, T_AUTOROTATE, T_MUTED,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_RVC_OWN, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_RVC_OWN, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, true, false, true, false, true, true, true, true, false,
                               true, false, true, false, true, true };
 enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_FMT, G_PHOTO_SCALE, G_CALLS,
@@ -297,6 +297,7 @@ static COLORREF C(COLORREF c)
 #include "vh_tasks.inc"
 #include "vh_userwidgets.inc"
 #include "vh_widgetset.inc"
+#include "vh_textedit.inc"
 #include "vh_sound.inc"
 #include "vh_camdl.inc"
 #include "vh_frame.inc"
@@ -362,6 +363,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         WifiApSetup(s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
         WifiStart(hwnd, WM_APP_WIFI, VLog);
         ObdInit(hwnd, WM_APP_OBD, VLog);
+        if (s_cfg.nmeaPort)   // the navigators' COM6 (the registry is new at every boot)
+            NmeaPortSet(true);
         ObdSetSppAddrFn(ObdSppAddr);
         for (int i = 0; i < s_cfg.wifiCount; i++)
             if (!s_cfg.wifiLocked[i])
@@ -500,8 +503,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 static int s_min = -1;
                 SYSTEMTIME t;
                 GetLocalTime(&t);
-                if (t.wMinute != s_min && front) {   // the clock
+                static wchar_t s_song[160];
+                wchar_t song[160];
+                SaverNowPlaying(song, 160);
+                if ((t.wMinute != s_min || wcscmp(song, s_song)) && front) {   // the clock, what plays
                     s_min = t.wMinute;
+                    wcscpy(s_song, song);
                     Redraw();
                 }
             } else if (s_cfg.saverMin > 0 && front && now - s_lastTouch > (DWORD)s_cfg.saverMin * 60000 &&
@@ -521,7 +528,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)
                 static DWORD s_tripSig;
                 RECT wr;
-                DWORD sig = (DWORD)(s_trip.km * 10) * 1000 + s_trip.movingS / 60 + (DWORD)s_trip.maxKmh * 7919;
+                DWORD sig = (DWORD)(s_trip.km * 10) * 1000 + s_trip.movingS / 60 + (DWORD)s_trip.maxKmh * 7919
+                            + (DWORD)(s_trip.fuelL * 10) * 104729;
                 if (sig != s_tripSig && s_screen == S_HOME && IsWindowVisible(hwnd) && HomeRect(WG_TRIP, &wr)) {
                     s_tripSig = sig;
                     RedrawArea(wr.left, wr.top, wr.right, wr.bottom);
@@ -773,7 +781,20 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_APP_OBD:   // the OBD thread's step or values
-        if (s_screen == S_SET_OBD && IsWindowVisible(hwnd))
+        {   // a new trouble code (more of them, or the lamp lit): breaking glass, once a change
+            static int s_dtcsWas = -1, s_milWas = -1;
+            ObdInfo o;
+            ObdGet(&o);
+            if (o.state == OBD_ON && o.dtcs >= 0) {
+                if ((o.dtcs > 0 && o.dtcs > s_dtcsWas) || (o.mil == 1 && s_milWas == 0)) {
+                    VLog(L"OBD: ошибок %d (было %d), лампа %d - звук", o.dtcs, s_dtcsWas, o.mil);
+                    GlassPlay();
+                }
+                s_dtcsWas = o.dtcs;
+                s_milWas = o.mil;
+            }
+        }
+        if ((s_screen == S_SET_OBD || s_screen == S_OBD_DTC || s_screen == S_CAR) && IsWindowVisible(hwnd))
             Redraw();
         return 0;
     case WM_APP_VIDTAP:   // a tap on the picture: the whole screen and back
@@ -939,6 +960,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         s_pressed = HitTest((short)LOWORD(lp), (short)HIWORD(lp));
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
+        if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD)   // the keyboard's cursor to the finger
+            KeysCursorAt((short)LOWORD(lp));
         if (s_pressed >= 0 && (s_btns[s_pressed].action == A_KEYFIELD || s_btns[s_pressed].action == A_PRESET ||
                                (s_btns[s_pressed].action == A_KEY && s_btns[s_pressed].arg == K_DIAL * 65536 + L'0') ||
                                (s_btns[s_pressed].action == A_BTCMD &&
@@ -948,6 +971,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         Redraw();
         return 0;
     case WM_MOUSEMOVE:   // the touch test and the balance point follow the finger, a swiped page, a scrolled list
+        if ((wp & MK_LBUTTON) && s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD) {   // the cursor follows
+            int dx = (short)LOWORD(lp) - s_downX, dy = (short)HIWORD(lp) - s_downY;
+            if (dx > 6 || dx < -6 || dy > 6 || dy < -6)
+                KillTimer(hwnd, TIMER_LONG);   // moved: not a hold for copy / paste
+            KeysCursorAt((short)LOWORD(lp));
+            RedrawArea(0, 60, 800, 140);
+            return 0;
+        }
         {   // (a block: the case labels below)
             Scroll* ls = (wp & MK_LBUTTON) ? ListUnderFinger() : NULL;
             if (ls) {

@@ -7,7 +7,9 @@
 
 static const wchar_t* kKeysRu[4] = { L"1234567890-_", L"йцукенгшщзхъ", L"фывапролджэё", L"ячсмитьбю.,!" };
 static const wchar_t* kKeysEn[4] = { L"1234567890-_", L"qwertyuiop()", L"asdfghjkl:;\"", L"zxcvbnm.,/\\=" };
-enum { F_NAME, F_PATH, F_PARAMS, F_ICON, F_CAMS };   // fields of the shortcut editor; F_CAMS: the camera file
+static const wchar_t  kKeysSym[] = L"!@#$%&*+?|~'";   // the digits' row with Shift (the configs: # @ & ? % + |)
+enum { F_NAME, F_PATH, F_PARAMS, F_ICON, F_CAMS, F_TEXT };   // fields of the shortcut editor; F_CAMS: the camera file;
+                                                             // F_TEXT: a text file for the editor
 
 // Programs of the "Apps" screen, from apps.txt: "Name | \path\to\program.exe | class!title | parameters | icon".
 struct App {
@@ -58,7 +60,13 @@ static wchar_t*       s_keysTarget;   // the text being typed: a shortcut's fiel
 static int            s_keysCap;
 static const wchar_t* s_keysTitle;
 static Screen         s_keysBack;     // where "Done" and "Cancel" return to
-static wchar_t s_keysText[200];
+static wchar_t s_keysText[400];
+// The cursor (2026-10-22, the user: long lines are edited in the middle): typing and backspace work at it; the finger
+// puts and drags it anywhere on the field (WndProc: KeysCursorAt), its handle shows below the line. The field shows
+// the text from s_keysView, as far as the cursor needs.
+enum { kKeyFieldX = 32, kKeyFieldW = 560 };
+static int s_keysCur, s_keysView, s_keysVisN;   // the cursor, the first character shown, how many are shown
+static int s_keysDx[400];                      // the shown characters' right edges from kKeyFieldX (the finger's map)   // (the text editor's lines: up to 399)
 static bool    s_keysEn, s_keysShift;
 static bool    s_clipMenu;     // "Copy" / "Paste" shown in place of the text field
 
@@ -579,10 +587,12 @@ static void OpenKeysFor(wchar_t* target, int cap, const wchar_t* title, Screen b
     s_keysCap = cap;
     s_keysTitle = title;
     s_keysBack = back;
-    wcsncpy(s_keysText, target, 199);
-    s_keysText[199] = 0;
+    wcsncpy(s_keysText, target, 399);
+    s_keysText[399] = 0;
     s_keysShift = false;
     s_clipMenu = false;
+    s_keysCur = (int)wcslen(s_keysText);
+    s_keysView = 0;
     s_screen = S_KEYS;
 }
 
@@ -603,20 +613,73 @@ static void KeyType(wchar_t ch)
         CharUpperBuff(&ch, 1);
         s_keysShift = false;
     }
-    s_keysText[n] = ch;
-    s_keysText[n + 1] = 0;
+    int c = s_keysCur < 0 ? 0 : s_keysCur > n ? n : s_keysCur;
+    memmove(s_keysText + c + 1, s_keysText + c, (n - c + 1) * sizeof(wchar_t));
+    s_keysText[c] = ch;
+    s_keysCur = c + 1;
 }
 
-static void KeyBack()
+static void KeyBack()   // the character before the cursor
 {
     int n = (int)wcslen(s_keysText);
-    if (n > 0)
-        s_keysText[n - 1] = 0;
+    int c = s_keysCur < 0 ? 0 : s_keysCur > n ? n : s_keysCur;
+    if (c > 0) {
+        memmove(s_keysText + c - 1, s_keysText + c, (n - c + 1) * sizeof(wchar_t));
+        s_keysCur = c - 1;
+    }
+}
+
+// The finger at x on the field: the cursor to the nearest gap between the shown characters; at the field's ends one
+// further (the view follows it: the field's drawing keeps the cursor in sight).
+static void KeysCursorAt(int x)
+{
+    int n = (int)wcslen(s_keysText), rel = x - kKeyFieldX;
+    if (rel < 8 && s_keysView > 0) {
+        s_keysCur = s_keysView - 1;
+        return;
+    }
+    if (rel > kKeyFieldW - 8 && s_keysView + s_keysVisN < n) {
+        s_keysCur = s_keysView + s_keysVisN + 1;
+        return;
+    }
+    int best = 0, bd = rel < 0 ? -rel : rel;
+    for (int k = 1; k <= s_keysVisN; k++) {
+        int d = rel - s_keysDx[k - 1];
+        d = d < 0 ? -d : d;
+        if (d < bd) {
+            bd = d;
+            best = k;
+        }
+    }
+    s_keysCur = s_keysView + best;
+}
+
+// The field's text from s_keysView with the cursor in sight: s_keysVisN, s_keysDx; returns the cursor's x.
+static int KeysLayout(HDC dc)
+{
+    int n = (int)wcslen(s_keysText);
+    s_keysCur = s_keysCur < 0 ? 0 : s_keysCur > n ? n : s_keysCur;
+    if (s_keysView > s_keysCur)
+        s_keysView = s_keysCur;
+    HGDIOBJ of = SelectObject(dc, Font(26, 700));
+    for (;;) {
+        SIZE sz;
+        int fit = 0;
+        if (!GetTextExtentExPoint(dc, s_keysText + s_keysView, n - s_keysView, kKeyFieldW, &fit, s_keysDx, &sz))
+            fit = 0;
+        s_keysVisN = fit < 0 ? 0 : fit;
+        if (s_keysCur - s_keysView <= s_keysVisN || s_keysView >= s_keysCur)
+            break;
+        s_keysView++;   // the cursor beyond the field: one character on
+    }
+    SelectObject(dc, of);
+    int k = s_keysCur - s_keysView;
+    return kKeyFieldX + (k > 0 ? s_keysDx[k - 1] : 0);
 }
 
 // ---- the clipboard on the keyboard screen: a long press on the text field (TIMER_LONG) shows "Copy",
-// "Paste" and "Clear" in its place. The text is copied whole; pasting adds to its end (the cursor is always there),
-// without line breaks and tabs, up to the field's length.
+// "Paste" and "Clear" in its place. The text is copied whole; pasting goes in at the cursor, without line breaks and
+// tabs, up to the field's length.
 
 static void ClipCopy()
 {
@@ -654,10 +717,10 @@ static void ClipPaste()
 #endif
         for (; p && *p && n < cap; p++)
             if (*p >= L' ') {
-                s_keysText[n++] = *p;
+                KeyType(*p);   // at the cursor
+                n++;
                 got = true;
             }
-        s_keysText[n] = 0;
 #ifndef UNDER_CE
         if (h)
             GlobalUnlock(h);
@@ -709,7 +772,9 @@ static void ListDir()
         int n = (int)wcslen(fd.cFileName);
         if (n >= 100 || !wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L".."))
             continue;
-        bool want = s_filesFor == F_CAMS ? HasExt(fd.cFileName, L".txt") : HasExt(fd.cFileName, L".exe") ||
+        bool want = s_filesFor == F_TEXT ? HasExt(fd.cFileName, L".ini") || HasExt(fd.cFileName, L".txt") ||
+                                           HasExt(fd.cFileName, L".cfg")
+                  : s_filesFor == F_CAMS ? HasExt(fd.cFileName, L".txt") : HasExt(fd.cFileName, L".exe") ||
                     (s_filesFor == F_ICON && (HasExt(fd.cFileName, L".png") || HasExt(fd.cFileName, L".ico") ||
                                               HasExt(fd.cFileName, L".dll")));
         if (!dir && !want)
@@ -742,6 +807,9 @@ static bool BrowseFolderOf(const wchar_t* file)
 
 // For the program the browser opens in its folder, otherwise at the root. For the icon: in the current
 // icon's folder, otherwise our Icons\ folder, otherwise the program's folder.
+static void UserWgDir(wchar_t* dir);                               // (vh_userwidgets.inc)
+static bool TeOpen(const wchar_t* path, Screen back, bool widget);   // (vh_textedit.inc)
+
 static void OpenFiles(int field)
 {
     s_filesFor = field;
@@ -756,6 +824,11 @@ static void OpenFiles(int field)
             _snwprintf(cur, MAX_PATH, L"%s%s", s_dir, s_edit.iconPath);
         if (!(cur[0] && BrowseFolderOf(cur)) && !BrowseFolderOf(icons))
             BrowseFolderOf(s_edit.path);
+    } else if (field == F_TEXT) {   // the user widgets' folder, else ours
+        wchar_t uw[MAX_PATH];
+        UserWgDir(uw);
+        if (!BrowseFolderOf(uw))
+            BrowseFolderOf(s_dir);
     } else if (field == F_CAMS) {
         wchar_t cur[MAX_PATH];
         if (s_cfg.camFile[0] == L'\\' || wcschr(s_cfg.camFile, L':'))
@@ -795,6 +868,16 @@ static void PickFile(int i)
         wcscat(s_fdir, f.name);
         wcscat(s_fdir, L"\\");
         ListDir();
+        return;
+    }
+    if (s_filesFor == F_TEXT) {   // into the editor; VestaHome.ini is its settings' own (it writes it itself)
+        wchar_t path[MAX_PATH];
+        _snwprintf(path, MAX_PATH, L"%s%s", s_fdir, f.name);
+        path[MAX_PATH - 1] = 0;
+        if (!_wcsicmp(f.name, L"VestaHome.ini"))
+            wcscpy(s_status, L"VestaHome.ini меняется в Настройках");
+        else
+            TeOpen(path, S_FILES, false);
         return;
     }
     if (s_filesFor == F_CAMS) {   // like the icon: relative inside our folder
@@ -937,20 +1020,30 @@ static void DrawKeys(HDC dc)
         Button(dc, 422, 68, 194, 60, L"ОЧИСТИТЬ", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
                s_keysText[0] ? A_CLIPCLEAR : A_NONE);
     } else {
-        Zone(16, 68, 600, 60, A_KEYFIELD);   // a long press: copy / paste (TIMER_LONG)
+        Zone(16, 68, 600, 70, A_KEYFIELD);   // the finger: the cursor (WndProc); held still: copy / paste
         R(dc, 16, 68, 600, 60, 10, kPanel, kLine);
-        int end = TTail(dc, 32, 106, s_keysText, 26, kText, 700, 560);
-        R(dc, end + 4, 84, 3, 28, 0, kOrange);
+        int cx = KeysLayout(dc);
+        wchar_t shown[400];
+        wcsncpy(shown, s_keysText + s_keysView, s_keysVisN);
+        shown[s_keysVisN] = 0;
+        T(dc, kKeyFieldX, 104, shown, 26, kText, 700);
+        if (s_keysView > 0)   // more on the left / the right
+            T(dc, 20, 104, L"‹", 22, kOrange, 700);
+        if (s_keysView + s_keysVisN < (int)wcslen(s_keysText))
+            T(dc, 604, 104, L"›", 22, kOrange, 700);
+        R(dc, cx - 1, 76, 3, 34, 0, kOrange);   // the cursor and its handle under the line, for the finger
+        Disc(dc, cx, 124, 13, kOrange);
+        R(dc, cx - 1, 108, 3, 6, 0, kOrange);
     }
     Button(dc, 628, 68, 156, 60, L"ГОТОВО", B_PRI, IC_NONE, 18, 0, A_OK);
     const wchar_t** rows = s_keysEn ? kKeysEn : kKeysRu;
     for (int r = 0; r < 4; r++)
         for (int c = 0; rows[r][c]; c++) {
             int x = 13 + c * 65, y = 140 + r * 66;
-            wchar_t ch[2] = { rows[r][c], 0 };
+            wchar_t ch[2] = { r == 0 && s_keysShift ? kKeysSym[c] : rows[r][c], 0 };
             if (s_keysShift)
                 CharUpperBuff(ch, 1);
-            bool d = Zone(x, y, 60, 60, A_CHAR, rows[r][c]);
+            bool d = Zone(x, y, 60, 60, A_CHAR, ch[0]);
             R(dc, x, y, 60, 60, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
             T(dc, x + 30, y + 40, ch, 24, d ? kInk : kText, 700, AL_MID);
         }
@@ -965,7 +1058,8 @@ static void DrawKeys(HDC dc)
 // Choosing the program: the folder's path, folders and .exe files 2 x 5 per page.
 static void DrawFiles(HDC dc)
 {
-    Frame(dc, s_filesFor == F_ICON ? L"ВЫБОР ИКОНКИ" : s_filesFor == F_CAMS ? L"ФАЙЛ КАМЕР" : L"ВЫБОР ПРОГРАММЫ",
+    Frame(dc, s_filesFor == F_ICON ? L"ВЫБОР ИКОНКИ" : s_filesFor == F_CAMS ? L"ФАЙЛ КАМЕР"
+              : s_filesFor == F_TEXT ? L"ТЕКСТОВЫЕ ФАЙЛЫ (.ini, .txt, .cfg)" : L"ВЫБОР ПРОГРАММЫ",
           A_CANCEL);
     TTail(dc, 20, 84, s_fdir, 15, kMuted, 400, 760);
     int first = s_filePage * kFilesPerPage;
@@ -975,7 +1069,8 @@ static void DrawFiles(HDC dc)
                 NULL, A_FILE, first + k, f.dir ? kOrange : CLR_INVALID);
     }
     if (s_fileCount == 0)
-        T(dc, 400, 240, s_filesFor == F_ICON ? L"Здесь нет папок и иконок" : s_filesFor == F_CAMS ?
+        T(dc, 400, 240, s_filesFor == F_ICON ? L"Здесь нет папок и иконок" : s_filesFor == F_TEXT ?
+          L"Здесь нет папок и текстовых файлов" : s_filesFor == F_CAMS ?
           L"Здесь нет папок и .txt" : L"Здесь нет папок и программ", 22, kText, 700, AL_MID);
     PageDots(dc, s_filePage, FilePages(), 400, 382);
     Dock(dc);

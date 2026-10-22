@@ -95,7 +95,7 @@ static void ScrSetSound(HDC dc)
         McuKey(0xE6, false);
     }
     Settings(dc, S_SET_SOUND);
-    T(dc, 264, 92, L"Эквалайзер (MCU)", 19, kText, 700);
+    T(dc, 264, 92, L"Эквалайзер", 19, kText, 700);
     for (int p = 0; p < 5; p++) {
         bool cur = s_cfg.eq[0] == kEqPresets[p].v[0] && s_cfg.eq[1] == kEqPresets[p].v[1] &&
                    s_cfg.eq[2] == kEqPresets[p].v[2];
@@ -119,7 +119,6 @@ static void ScrSetSound(HDC dc)
 
 static void ScrSetBalance(HDC dc)
 {
-    static const wchar_t* speed[4] = { L"ВЫКЛ", L"+2", L"+3", L"+4" };
     static DWORD s_seen;   // opened: the shell's key of its balance screen (as 0xE6 for the equalizer)
     if (s_seen != s_screenTick) {
         s_seen = s_screenTick;
@@ -150,10 +149,7 @@ static void ScrSetBalance(HDC dc)
     Stepper(dc, 504, 108, 256, b, 48, 20, A_BAL);
     T(dc, 504, 184, L"Фейдер", 19, kText, 700);
     Stepper(dc, 504, 196, 256, f, 48, 20, A_FADE);
-    T(dc, 504, 272, L"Громкость от скорости", 19, kText, 700, AL_START, 260);
-    T(dc, 760, 272, L"на 100 км/ч", 13, kMuted, 400, AL_END);
-    Seg(dc, 504, 284, 256, 44, speed, 4, G_SPEED_VOL, 15);
-    Button(dc, 504, 344, 256, 48, L"В ЦЕНТР", B_N, IC_NONE, 16, 0, A_BALCENTER);
+    Button(dc, 504, 280, 256, 48, L"В ЦЕНТР", B_N, IC_NONE, 16, 0, A_BALCENTER);
 }
 
 // The volume by speed (the user 2026-10-22: the MCU has no key for it - our own): the volume the user set (the
@@ -214,10 +210,12 @@ static void SpeedVolTick()   // once a second
 static void ScrSetVolume(HDC dc)
 {
     static const wchar_t* rows[5][2] = { { L"Навигация и кнопки", L"подсказки, звук нажатий" },
-                                         { L"При включении (MCU)", L"значение хранит MCU" },
-                                         { L"Телефон (MCU)", L"разговор по Bluetooth" },
-                                         { L"Дорожные сообщения (MCU)", L"RDS TA" },
+                                         { L"При включении", L"сброс до значения" },
+                                         { L"Телефон", L"разговор по Bluetooth" },
+                                         { L"Дорожные сообщения", L"RDS TA" },
                                          { L"Макс. при включении", L"была громче — убавит до неё" } };
+    static const wchar_t* speed[4] = { L"ВЫКЛ", L"+2", L"+3", L"+4" };
+    enum { H = 52 };
     Settings(dc, S_SET_SOUND);
     for (int i = 0; i < 5; i++) {
         wchar_t v[8];
@@ -227,12 +225,14 @@ static void ScrSetVolume(HDC dc)
             _snwprintf(v, 8, s_cfg.startMax ? L"%d" : L"выкл", s_cfg.startMax);
         else if (i > 0)
             wcscpy(v, L"− / +");
-        SetRow(dc, 64 + i * 56, rows[i][0], rows[i][1], i == 4);
-        Stepper(dc, 560, 68 + i * 56, 200, v, 48, 20, A_SNDVOL);
+        SetRow(dc, 64 + i * H, rows[i][0], rows[i][1], false, A_NONE, 0, H);
+        Stepper(dc, 560, 68 + i * H, 200, v, 44, 20, A_SNDVOL);
         // the stepper sends -1/+1: which row is in the high bits
         s_btns[kBtnCount - 2].arg = i * 4 + 1;
         s_btns[kBtnCount - 1].arg = i * 4 + 3;
     }
+    SetRow(dc, 64 + 5 * H, L"От скорости", L"добавка на 100 км/ч", true, A_NONE, 0, H);   // (SpeedVolTick)
+    Seg(dc, 512, 68 + 5 * H, 248, 44, speed, 4, G_SPEED_VOL, 15);
 }
 
 // The stream monitor ("Diagnostics -> CAN / UART", "Car -> Data stream"): the port, bytes, the car's values and
@@ -386,6 +386,10 @@ static void WifiForgetTap(int i)
 // Typed into a setting: coordinates are parsed, the file written, what depends on it restarted.
 static void CfgKeysDone()
 {
+    if (s_keysTarget == s_teBuf) {   // the text editor's line
+        TeKeysDone();
+        return;
+    }
     if (s_keysTarget == s_wifiPass) {   // the password of a new network: kept and connected with
         if (s_wifiPass[0]) {
             WifiKnownSet(s_wifiTarget, s_wifiPass);
@@ -420,6 +424,7 @@ static void CfgToControls()
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
     s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
     s_on[T_RVC_OWN] = s_cfg.rvcOwn;
+    s_on[T_NMEA_PORT] = s_cfg.nmeaPort;
     s_on[T_WIFI] = s_cfg.wifiOn;
     s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
     s_on[T_SLIDES_OPEN] = s_cfg.photoSlides;
@@ -437,7 +442,7 @@ static bool IsCfgToggle(int id)
 {
     return id == T_GPS_TIME || id == T_W_GPS || id == T_CAM_ALERT ||
            id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_RVC_OWN || id == T_WIFI ||
-           id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE;
+           id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE || id == T_NMEA_PORT;
 }
 
 static void ControlsToCfg()
@@ -456,6 +461,10 @@ static void ControlsToCfg()
     s_cfg.photoSlides = s_on[T_SLIDES_OPEN];
     s_cfg.photoAutoRot = s_on[T_AUTOROTATE];
     s_cfg.rvcOwn = s_on[T_RVC_OWN];
+    if (s_cfg.nmeaPort != s_on[T_NMEA_PORT]) {
+        s_cfg.nmeaPort = s_on[T_NMEA_PORT];
+        NmeaPortSet(s_cfg.nmeaPort);
+    }
     if (s_cfg.wifiOn != s_on[T_WIFI]) {
         s_cfg.wifiOn = s_on[T_WIFI];
         WifiEnable(s_cfg.wifiOn);

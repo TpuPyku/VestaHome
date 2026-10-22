@@ -8,7 +8,9 @@
 #define VESTA_OBD_H
 
 enum { OBD_IDLE, OBD_CONNECTING, OBD_ON, OBD_FAILED };
-enum { kObdLines = 5 };
+enum { kObdLines = 5, kObdDtcMax = 16 };
+// the trouble codes (ObdReadDtc / ObdClearDtc): asked, being read, read (dtcN of them), being cleared, failed
+enum { OBD_DTC_NONE, OBD_DTC_READING, OBD_DTC_READ, OBD_DTC_CLEARING, OBD_DTC_FAILED };
 
 struct ObdInfo {
     int     state;                    // OBD_*
@@ -20,6 +22,8 @@ struct ObdInfo {
     int     maf100;                   // the air flow, g/s x 100 (0110): the fuel burnt
     int     mil, dtcs;                // "Check engine" on 1 / off 0, the trouble codes stored (0101)
     wchar_t volt[12];                 // ATRV: the adapter's supply voltage, "" none
+    int     dtcState, dtcN;           // OBD_DTC_*; the codes read (03)
+    char    dtc[kObdDtcMax][6];       // "P0133"
 };
 
 typedef void (*ObdLogFn)(const wchar_t* fmt, ...);
@@ -32,5 +36,10 @@ void ObdSetSppAddrFn(ObdSppAddrFn fn);
 void ObdConnect(const char* addr);                   // "A4:E2:87:98:D6:9F": connect and poll until ObdStop
 void ObdStop();
 void ObdGet(ObdInfo* out);
+void ObdReadDtc();                                   // the stored trouble codes (03), between two polls
+void ObdClearDtc();                                  // clear them and the lamp (04), then read them again
+// "43 02 01 33 01 71" (CAN; "0: ..." lines when long) or "43 01 33 00 00 00 00" lines (the older buses) -> the codes;
+// -1 when the answer is not one
+int ObdParseDtc(const char* r, char (*out)[6], int maxN);
 
 #endif

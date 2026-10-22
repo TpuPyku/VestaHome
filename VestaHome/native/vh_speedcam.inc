@@ -141,7 +141,7 @@ static void LoadCams(double lat, double lon)
 // The sound starts kVoiceLeadMs after "1" (the MCU turns the radio down meanwhile), "0" goes kVoiceTailMs after
 // it ends. No shell window: played at once. A device that never says "done" (Bluetooth HF without a phone, HU
 // 2026-10-18: the "1" stayed on, the knob then set the navigation's volume) is cut after kVoiceMaxMs.
-enum { TIMER_VOICE = 9, WM_NAVIGATION_VOICE = 0x101D, kVoiceLeadMs = 1000, kVoiceTailMs = 800, kVoiceMaxMs = 1500 };
+enum { TIMER_VOICE = 9, WM_NAVIGATION_VOICE = 0x101D, kVoiceLeadMs = 1000, kVoiceTailMs = 800, kVoiceMaxMs = 2000 };
 static int s_voice;   // 0 idle, 1 waiting to play, 2 playing, 3 waiting to end
 
 static bool NaviVoice(bool on)
@@ -160,8 +160,59 @@ static bool NaviVoice(bool on)
 static HWAVEOUT s_beepOut;
 static WAVEHDR  s_beepHdr;
 static short    s_beep[11025 / 2];   // 2 x 120 ms at 1.2 kHz with a gap, 11 kHz mono
+static short*   s_glass;             // breaking glass (a new OBD trouble code), 1.2 s, made on its first play
+static int      s_glassN;
+static bool     s_beepGlass;         // the next BeepPlay: the glass, not the beep
 
 static void BeepPlay();
+
+// Breaking glass, made here (no file): a crack - a burst of rough noise falling in 60 ms - then splinters: short
+// high pings (2.2..5 kHz, 20..70 ms each) scattered over a second, quieter and sparser towards its end. 11 kHz mono.
+static bool GlassMake()
+{
+    if (s_glass)
+        return true;
+    s_glassN = 11025 * 12 / 10;
+    int* acc = (int*)calloc(s_glassN, sizeof(int));
+    s_glass = (short*)malloc(s_glassN * sizeof(short));
+    if (!acc || !s_glass) {
+        free(acc);
+        free(s_glass);
+        s_glass = NULL;
+        return false;
+    }
+    unsigned rnd = 12345;
+#define GRND() (rnd = rnd * 1103515245 + 12345, (rnd >> 16) & 0x7FFF)
+    int prev = 0;
+    for (int i = 0; i < 11025 * 9 / 100; i++) {   // the crack: noise, its highs (a difference), fast decay
+        int nz = (int)GRND() - 16384, hi = nz - prev;
+        prev = nz;
+        acc[i] += (int)(hi * 0.9 * exp(-i / (11025 * 0.025)));
+    }
+    for (int k = 0; k < 34; k++) {   // the splinters
+        double at = k < 8 ? GRND() % 1000 / 1000.0 * 0.12 : 0.05 + pow(GRND() % 1000 / 1000.0, 1.6) * 1.0;
+        double f = 2200 + GRND() % 2800, len = 0.02 + GRND() % 50 / 1000.0;
+        double amp = (5000 + GRND() % 6000) * (1.15 - at);
+        int s0 = (int)(at * 11025), n = (int)(len * 11025);
+        for (int i = 0; i < n && s0 + i < s_glassN; i++)
+            acc[s0 + i] += (int)(amp * exp(-i / (n * 0.25)) * sin(i * 2 * 3.14159265 * f / 11025));
+    }
+#undef GRND
+    for (int i = 0; i < s_glassN; i++)
+        s_glass[i] = (short)(acc[i] > 30000 ? 30000 : acc[i] < -30000 ? -30000 : acc[i]);
+    free(acc);
+    return true;
+}
+
+static void Beep2();
+
+static void GlassPlay()   // over the radio, as the beep
+{
+    if (!GlassMake())
+        return;
+    s_beepGlass = true;
+    Beep2();
+}
 
 static void Beep2()
 {
@@ -232,9 +283,11 @@ static void BeepPlay()
         bool on = t < 120 || (t >= 200 && t < 320);
         s_beep[i] = on ? (short)(9000 * sin(i * 2 * 3.14159265 * 1200 / 11025)) : 0;
     }
+    bool glass = s_beepGlass && s_glass;
+    s_beepGlass = false;
     memset(&s_beepHdr, 0, sizeof(s_beepHdr));
-    s_beepHdr.lpData = (LPSTR)s_beep;
-    s_beepHdr.dwBufferLength = sizeof(s_beep);
+    s_beepHdr.lpData = glass ? (LPSTR)s_glass : (LPSTR)s_beep;
+    s_beepHdr.dwBufferLength = glass ? s_glassN * sizeof(short) : sizeof(s_beep);
     waveOutPrepareHeader(s_beepOut, &s_beepHdr, sizeof(s_beepHdr));
     waveOutWrite(s_beepOut, &s_beepHdr, sizeof(s_beepHdr));
 }
@@ -356,7 +409,8 @@ static void ScrTestAv(HDC dc)
     WaveDevName(s_cfg.beepDev, s, 64);
     wchar_t b[96];
     _snwprintf(b, 96, L"УСТРОЙСТВО ПИСКА: %s", s);
-    Button(dc, 40, 356, 720, 42, b, B_N, IC_NONE, 15, 0, A_AVDEV);   // the next device and a beep on it
+    Button(dc, 40, 356, 470, 42, b, B_N, IC_NONE, 15, 0, A_AVDEV);   // the next device and a beep on it
+    Button(dc, 520, 356, 240, 42, L"СТЕКЛО (ОШИБКА OBD)", B_N, IC_NONE, 15, 0, A_AVTEST, 100);
     if (dir[0])
         _snwprintf(s, 160, L"Файлы: %s. Писк — через канал голоса навигации (радио тише).", dir);
     else
@@ -379,6 +433,10 @@ static void AvDevNext()
 
 static void AvTestRun(int i)
 {
+    if (i == 100) {   // the OBD's new trouble code sound
+        GlassPlay();
+        return;
+    }
     if (i < 0 || i >= 10)
         return;
     if (!kAvTests[i].file) {

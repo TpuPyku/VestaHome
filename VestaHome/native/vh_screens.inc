@@ -590,11 +590,8 @@ static void ScrAudioBt(HDC dc)
     Button(dc, 496, 312, 64, 56, NULL, ctl ? B_N : B_DIS, playing ? IC_PAUSE : IC_PLAY, 18, 40, A_BTCMD,
            BT_CMD_PLAYPAUSE);
     Button(dc, 600, 312, 64, 56, NULL, ctl ? B_N : B_DIS, IC_FWD, 18, 40, A_BTCMD, BT_CMD_NEXT);
-    if (!proxy) {
-        T(dc, 272, 384, L"Название трека и кнопки — с proxy Bluetooth (кнопка 2 установщика).", 14, kDim, 400,
-          AL_START, 512);
-        T(dc, 272, 402, L"Пока — с телефона или кнопками руля.", 14, kDim, 400, AL_START, 512);
-    }
+    if (!proxy)
+        T(dc, 272, 392, L"Установите proxy Bluetooth", 14, kDim, 400, AL_START, 512);
 }
 
 static void ScrAux(HDC dc)
@@ -1027,8 +1024,7 @@ static void ScrSetGeneral(HDC dc)
     Stepper(dc, 560, 116, 200, hh, 40, 19, A_HOUR);
     SetRow(dc, 160, L"Минуты", NULL, false, A_NONE, 0, H);
     Stepper(dc, 560, 164, 200, mm, 40, 19, A_MINUTE);
-    SetRow(dc, 208, L"Синхронизация по GPS", s_on[T_GPS_TIME] ? L"вручную выставленное время поправит фикс" : NULL,
-           false, A_NONE, 0, H);
+    SetRow(dc, 208, L"Синхронизация по GPS", NULL, false, A_NONE, 0, H);
     Toggle(dc, 688, 214, T_GPS_TIME);
     SetRow(dc, 256, L"Формат времени", NULL, false, A_NONE, 0, H);
     Seg(dc, 560, 260, 200, 40, fmt, 2, G_TIME_FMT);
@@ -1386,7 +1382,7 @@ static void ScrSetWifi(HDC dc)
                A_WIFISCAN);
     if (w.state == WIFI_AP) {   // the unit is the access point: what to type on the phone
         Panel(dc, 256, 124, 512, 168, 12);
-        T(dc, 276, 160, w.apAuto ? L"ТОЧКА ГУ ДЛЯ ТЕЛЕФОНА (АВТО)" : L"ТОЧКА ГУ ДЛЯ ТЕЛЕФОНА", 14, kMuted, 700);
+        T(dc, 276, 160, w.apAuto ? L"ТОЧКА ДОСТУПА (ФИКС XIAOMI)" : L"ТОЧКА ДОСТУПА", 14, kMuted, 700);
         _snwprintf(s, 120, L"Сеть: %s", w.apSsid);
         T(dc, 276, 198, s, 22, kText, 700, AL_START, 470);
         _snwprintf(s, 120, L"Пароль: %s", w.apPass);
@@ -1410,12 +1406,15 @@ static void ScrSetWifi(HDC dc)
         int bars = WifiBars(n.rssi);
         Ico(dc, IC_WIFI, 268, y + 10, 32, hl ? kInk : bars >= 3 ? kText : bars >= 2 ? kMuted : kDim);
         T(dc, 312, y + 23, n.ssid, 18, hl ? kInk : kText, 700, AL_START, 280);
+        wchar_t ch[16] = L"";   // the channel (the unit's radio: 2.4 GHz only, channels 1..14)
+        if (n.ch)
+            _snwprintf(ch, 16, L" · кан. %d", n.ch);
         if (cur && w.state == WIFI_CONNECTED)
-            _snwprintf(s, 120, L"подключено · %d дБм", n.rssi);
+            _snwprintf(s, 120, L"подключено · %d дБм%s", n.rssi, ch);
         else if (cur)
-            _snwprintf(s, 120, L"подключение…");
+            _snwprintf(s, 120, L"подключение…%s", ch);
         else
-            _snwprintf(s, 120, L"%s%s · %d дБм", n.known ? L"сохранена · " : L"", kSec[n.sec & 3], n.rssi);
+            _snwprintf(s, 120, L"%s%s · %d дБм%s", n.known ? L"сохр. · " : L"", kSec[n.sec & 3], n.rssi, ch);
         T(dc, 312, y + 44, s, 14, hl ? kInk : kMuted, 400, AL_START, 280);
         if (n.sec != WSEC_OPEN)
             Ico(dc, IC_LOCK, 724, y + 12, 28, hl ? kInk : kDim);
@@ -1429,9 +1428,9 @@ static void ScrSetWifi(HDC dc)
     // the unit's own access point: by hand, or automatically when no known network is in sight
     if (w.state >= WIFI_AP) {
         bool apOn = w.state == WIFI_AP && !w.apAuto;
-        Button(dc, 256, 352, 196, 40, apOn ? L"ТОЧКА ГУ: ВКЛ" : L"ТОЧКА ГУ", apOn ? B_SEL : B_N, IC_NONE, 14, 0,
-               A_WIFIAP);
-        T(dc, 466, 378, L"авто", 15, kMuted, 600);
+        Button(dc, 256, 352, 196, 40, apOn ? L"ТОЧКА ДОСТУПА: ВКЛ" : L"ТОЧКА ДОСТУПА", apOn ? B_SEL : B_N, IC_NONE,
+               14, 0, A_WIFIAP);
+        T(dc, 464, 378, L"Фикс Xiaomi", 14, kMuted, 600);
         Toggle(dc, 520, 354, T_WIFI_AP_AUTO);
     }
     if (pages > 1) {
@@ -1472,8 +1471,8 @@ static void ScrInfo(HDC dc)
         wcscpy(shell, L"нет G3NavHMI.exe");
     else {
         FindClose(f);
-        if (fd.nFileSizeLow == 4077056)
-            wcscpy(shell, L"27.0.0.4120");
+        if (fd.nFileSizeLow == 4077056)   // the stock shell's build = the firmware's (the proxies need 4120)
+            wcscpy(shell, L"4120 (27.0.0.4120)");
         else
             _snwprintf(shell, 48, L"неизвестна (%u Б)", (unsigned)fd.nFileSizeLow);
     }
@@ -1491,7 +1490,7 @@ static void ScrInfo(HDC dc)
     else
         wcscpy(os, L"?");
     CanStatusText(can, 64);
-    const wchar_t* rows[5][2] = { { L"Модель", L"LADA Vesta · MMC" }, { L"Оболочка G3", shell }, { L"ОС", os },
+    const wchar_t* rows[5][2] = { { L"Модель", L"LADA Vesta · MMC" }, { L"Прошивка ГУ", shell }, { L"ОС", os },
                                   { L"CAN-модуль", can }, { L"VestaHome", L"0.5 · 2026-10-18" } };
     Settings(dc, S_INFO);
     for (int i = 0; i < 5; i++) {

@@ -18,6 +18,7 @@ static const wchar_t* kWgKey[WG_COUNT] = { L"media", L"speed", L"radio", L"weath
 enum { kWgUser = 8, kWgMax = WG_COUNT + kWgUser };
 struct UserWg {
     wchar_t  key[40], title[40], dir[MAX_PATH], data[MAX_PATH], tap[MAX_PATH], start[MAX_PATH];
+    wchar_t  file[MAX_PATH];        // its .ini's name (the text editor opens it)
     Icon     ic;
     bool     wide, have;
     int      refresh, state;        // refresh: seconds between reads; state: 0 none, 1 ok, 2 warn, 3 alert
@@ -68,10 +69,12 @@ struct Cfg {
     bool    videoStretch;              // fill the window instead of keeping the proportions
     bool    videoMoving;               // the picture also while the car moves
     bool    rvcOwn;                    // the rear view camera shown by VestaHome (rvc.cpp), not by the shell
+    bool    nmeaPort;                  // COM6 for the navigators: the GPS stream's NMEA only (VestaNMEA.dll)
     bool    wifiOn;                    // the Wi-Fi radio (wifi.cpp WifiEnable)
     int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
     int     speedVol;                  // the volume by speed: 0 off, 1..3 = +2 / +3 / +4 per 100 km/h
     int     carSens[3];                // the car widget's lines: sensors (kCarSensor), -1 none
+    int     tank;                      // the fuel tank, L (the range from OBD's level): Vesta 55
     bool    time12;                    // the clock 12 h (else 24 h)
     int     startMax;                  // the volume at the start: no louder than this (VestaHome's own), 0 = no cap
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
@@ -118,6 +121,7 @@ static void CfgDefaults()
     s_cfg.wifiOn = true;
     s_cfg.saverMin = 5;
     s_cfg.speedVol = 2;
+    s_cfg.tank = 55;
     s_cfg.startMax = 10;
     s_cfg.keyVol = -1;
     s_cfg.carSens[0] = 0;   // the speed (CAN), the trip, the unit's board
@@ -327,6 +331,8 @@ static void LoadCfg()
             s_cfg.videoMoving = CfgBool(v);
         } else if (!wcscmp(k, L"rvc.own")) {
             s_cfg.rvcOwn = CfgBool(v);
+        } else if (!wcscmp(k, L"gps.nmeaport")) {
+            s_cfg.nmeaPort = CfgBool(v);
         } else if (!wcscmp(k, L"wifi.on")) {
             s_cfg.wifiOn = CfgBool(v);
         } else if (!wcscmp(k, L"ui.media")) {
@@ -367,6 +373,8 @@ static void LoadCfg()
             s_cfg.themeMode = _wtoi(v) % 3;
         } else if (!wcscmp(k, L"screen.light")) {
             s_cfg.lightMode = _wtoi(v) % 3;
+        } else if (!wcscmp(k, L"car.tank")) {
+            s_cfg.tank = _wtoi(v) < 20 ? 20 : _wtoi(v) > 120 ? 120 : _wtoi(v);
         } else if (!wcscmp(k, L"car.sensors")) {   // "0,2,10"
             const wchar_t* q = v;
             for (int i = 0; i < 3; i++) {
@@ -466,12 +474,14 @@ static void SaveCfg()
         L"video.dir=%s\r\nvideo.file=%s\r\nvideo.stretch=%d\r\nvideo.moving=%d\r\nradio.station=%s\r\n"
         L"# rvc.own: the rear view camera by VestaHome (without the stock shell); rvc.invert: the trajectory mirrored\r\n"
         L"rvc.own=%d\r\nrvc.invert=%d\r\nwifi.on=%d\r\n"
+        L"# gps.nmeaport: COM6 for the navigators - only the NMEA of the GPS stream (Settings -> Car)\r\ngps.nmeaport=%d\r\n"
         L"# screen.saver: the clock after this many minutes untouched (0 = never)\r\n"
         L"screen.saver=%d\r\n"
         L"# sound.speedvol: the volume by speed, 0 off, 1..3 = +2 / +3 / +4 per 100 km/h\r\nsound.speedvol=%d\r\n"
         L"# sound.startmax: the volume at the start no louder than this (0 = no cap); sound.keyvol: navigation / keys\r\n"
         L"sound.startmax=%d\r\nsound.keyvol=%d\r\ntime.12h=%d\r\n"
         L"# car.sensors: the car widget's three lines (Settings of the widget), -1 none\r\ncar.sensors=%d,%d,%d\r\n"
+        L"# car.tank: the fuel tank, L (the range: OBD's fuel level)\r\ncar.tank=%d\r\n"
         L"# screen.theme / screen.light: our colours and maps / the unit's backlight: 0 by sunrise and sunset (GPS, else\r\n"
         L"# home, else 7:00-20:00), 1 day, 2 night\r\n"
         L"screen.theme=%d\r\nscreen.light=%d\r\n"
@@ -494,7 +504,7 @@ static void SaveCfg()
         s_cfg.camOver, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
+        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
     if (n < 0)

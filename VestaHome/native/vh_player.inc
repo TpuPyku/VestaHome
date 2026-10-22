@@ -512,9 +512,24 @@ static void ScrAudio(HDC dc)
             T(dc, 272, 200, L"BASS_Init не удался — звук занят?", 16, kMuted, 400, AL_START, 512);
         }
     } else {
-        T(dc, 272, 170, L"НИЧЕГО НЕ ИГРАЕТ", 22, kText, 700, AL_START, 512);
-        T(dc, 272, 200, s_cfg.musicFile[0] ? L"Нажмите ▶ — продолжить последний трек" : L"Выберите музыку — кнопка списка вверху",
-          16, kMuted, 400, AL_START, 512);
+        wchar_t last[MAX_PATH] = L"—", folder[MAX_PATH] = L"";   // the last track (▶ goes on with it), "—" none
+        if (s_cfg.musicFile[0]) {
+            const wchar_t* fn = wcsrchr(s_cfg.musicFile, L'\\');
+            wcscpy(last, fn ? fn + 1 : s_cfg.musicFile);
+            wchar_t* dot = wcsrchr(last, L'.');
+            if (dot && dot != last)
+                *dot = 0;
+            wcscpy(folder, s_cfg.musicDir);
+            int fl = (int)wcslen(folder);
+            if (fl && folder[fl - 1] == L'\\')
+                folder[--fl] = 0;
+            const wchar_t* dn = wcsrchr(folder, L'\\');
+            if (dn)
+                memmove(folder, dn + 1, (wcslen(dn + 1) + 1) * sizeof(wchar_t));
+        }
+        T(dc, 272, 192, last, 34, kText, 700, AL_START, 512);
+        if (folder[0])
+            T(dc, 272, 222, folder, 20, kMuted, 400, AL_START, 512);
     }
     int k = len > 0 ? (int)(pos * 512 / len) : 0;
     R(dc, 272, 248, 512, 8, 4, kLine);

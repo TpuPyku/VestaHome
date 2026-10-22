@@ -10,18 +10,19 @@ static POINT s_touch[kTouchMax];  // the touch test's trail, oldest first
 static int   s_touchCount;
 
 struct Test { const wchar_t* label; Action a; int arg; };
-static const Test kTests[8] = { { L"ЭКРАН", A_SCREEN, S_TEST_SCREEN }, { L"КАСАНИЯ", A_SCREEN, S_TEST_TOUCH },
+static const Test kTests[10] = { { L"ЭКРАН", A_SCREEN, S_TEST_SCREEN }, { L"КАСАНИЯ", A_SCREEN, S_TEST_TOUCH },
                                 { L"КАЛИБРОВКА", A_CALIBRATE, 0 }, { L"ПАМЯТЬ И ДИСКИ", A_SCREEN, S_TEST_MEM },
                                 { L"КНОПКИ · MCU", A_SCREEN, S_TEST_MCU }, { L"ЗВУК И ВИДЕО", A_SCREEN, S_TEST_AV },
-                                { L"CAN / UART · ПОТОК", A_SCREEN, S_TEST_CAN }, { L"GPS", A_SCREEN, S_TEST_CAN } };
+                                { L"CAN / UART · ПОТОК", A_SCREEN, S_TEST_CAN }, { L"GPS", A_SCREEN, S_TEST_CAN },
+                                { L"ТЕКСТОВЫЕ ФАЙЛЫ", A_TEXTFILES, 0 }, { NULL, A_NONE, 0 } };
 
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
 static void ScrDiag(HDC dc)
 {
     Frame(dc, L"ДИАГНОСТИКА");
     Panel(dc, 16, 68, 768, 396);
-    for (int i = 0; i < 8; i++)
-        Button(dc, 40 + (i % 2) * 368, 84 + (i / 2) * 64, 352, 52, kTests[i].label,
+    for (int i = 0; i < 10 && kTests[i].label; i++)
+        Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
                kTests[i].a == A_SOON ? B_DIS : B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
     T(dc, 40, 362, L"«Кнопки» — монитор MCU (нажатия руля и панели приходят оттуда). GPS и CAN — один поток.",
       14, kDim, 400, AL_START, 720);
@@ -356,6 +357,7 @@ static void ScrVolume(HDC dc)
 // skin/make_saver.py), dimmed by the night theme; the clock, the date, the weather with its picture in the middle,
 // what plays below. A tap goes back.
 static void SaverWeather(HDC dc, int cx, int y);   // (after the weather's part)
+static Icon SaverNowPlaying(wchar_t* s, int n);    // (after the players' parts)
 
 static void ScrSaver(HDC dc)
 {
@@ -370,26 +372,11 @@ static void ScrSaver(HDC dc)
     T(dc, 400, 218, clock, 132, kText, 700, AL_MID);
     T(dc, 400, 270, date, 24, kMuted, 400, AL_MID);
     SaverWeather(dc, 400, 300);
-    // what plays: the radio's station, Bluetooth's track
-    s[0] = 0;
-    int vol, mute, src;
-    VolGet(&vol, &mute, &src);
-    BtState bt;
-    if (src == 9 && BtGet(&bt, NULL) && bt.title[0]) {
-        BtText(bt.title, s, 160);
-    } else if (src == 0) {
-        Tuner tu;
-        TunerGet(&tu);
-        wchar_t f[16];
-        FreqText(tu.f10, f, 16);
-        const wchar_t* nm = tu.ps[0] ? tu.ps : RadioName(tu, tu.f10);
-        if (tu.f10)
-            _snwprintf(s, 160, L"%s  %s", f, nm);
-    }
+    Icon ic = SaverNowPlaying(s, 160);   // what plays
     if (s[0]) {
         int w = TextWidth(dc, s, 18, 700);
         w = w > 560 ? 560 : w;
-        Ico(dc, src == 0 ? IC_RADIO : IC_MUSIC, 400 - (w + 40) / 2, 424, 30, kMuted);
+        Ico(dc, ic, 400 - (w + 40) / 2, 424, 30, kMuted);
         T(dc, 400 - (w + 40) / 2 + 40, 446, s, 18, kText, 700, AL_START, 560);
     }
 }

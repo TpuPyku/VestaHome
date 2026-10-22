@@ -7,7 +7,9 @@
 //     each start, 0 once it has run 3 minutes (so at most two writes to the flash per boot); at 3 the original
 //     shell is started instead - the stub is off until the counter is deleted (or set to 0);
 //   - VestaHome fell (an exit code that is not 0) -> started again (the counter above stops a loop);
-//   - VestaHome closed itself (code 0) -> the original shell.
+//   - VestaHome closed itself (code 0) -> the original shell;
+//   - VestaHome closed by VestaHomeInstall updating it (it holds the mutex "VestaHomeUpdate" meanwhile) -> waited
+//     for the update to end, then the new VestaHome (not counted as a failed start).
 // While VestaHome runs, a second copy of ours ("G3NavHMI.exe /mcu", McuHost) does for the MCU what the stock shell
 // did (Ghidra 2026-10-21, docs/MCU.md "Обработчики в оболочке"): it registers the skeletons - without them the MCU's
 // messages reach nobody, VestaHome's ring included - and answers the messages the shell answered. A process of its
@@ -301,6 +303,15 @@ static void HostStop()
     s_mcuHost = 0;
 }
 
+static bool UpdateRunning()   // VestaHomeInstall replaces VestaHome's files (its mutex is there)
+{
+    HANDLE m = CreateMutex(NULL, FALSE, L"VestaHomeUpdate");
+    bool held = m && GetLastError() == ERROR_ALREADY_EXISTS;
+    if (m)
+        CloseHandle(m);
+    return held;
+}
+
 static int RunOriginal(const wchar_t* args, const wchar_t* why)
 {
     HostStop();   // the shell registers its own skeletons
@@ -394,6 +405,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
         DWORD code = 1;
         GetExitCodeProcess(h, &code);
         CloseHandle(h);
+        if (UpdateRunning()) {   // closed for an update: the new one when it is in place
+            Log(L"VestaHome закрыт установщиком (код %08X): жду конца обновления", code);
+            for (int i = 0; i < 600 && UpdateRunning(); i++)   // up to 5 min
+                Sleep(500);
+            if (!lived)
+                WriteCount(fails);   // not a failed start
+            Log(L"обновление закончено: запускаю VestaHome");
+            continue;
+        }
         if (code == 0) {   // closed itself (or a second copy that found the first)
             if (!lived)
                 WriteCount(0);

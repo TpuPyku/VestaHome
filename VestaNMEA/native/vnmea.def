@@ -1,0 +1,13 @@
+LIBRARY VestaNMEA
+EXPORTS
+    COM_Init
+    COM_Deinit
+    COM_Open
+    COM_PreClose
+    COM_Close
+    COM_Read
+    COM_Write
+    COM_Seek
+    COM_IOControl
+    COM_PowerUp
+    COM_PowerDown

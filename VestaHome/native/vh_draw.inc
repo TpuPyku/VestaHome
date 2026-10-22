@@ -600,6 +600,25 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.Circle(35, 33, 4.5);
         break;
     }
+    case IC_NETRADIO:   // the internet radio: a mast sending waves both ways
+        p.L2(24, 22, 15, 43);
+        p.L2(24, 22, 33, 43);
+        p.L2(18.5, 35, 29.5, 35);
+        FillDot(dc, x, y, size, 24, 18, 3.5, c);
+        p.ArcP(24, 18, 8, 140, 220);
+        p.ArcP(24, 18, 8, 320, 400);
+        p.ArcP(24, 18, 15, 145, 215);
+        p.ArcP(24, 18, 15, 325, 395);
+        break;
+    case IC_BTMUSIC: {   // the phone's music: a note with the Bluetooth rune
+        double v[] = { 13, 37, 13, 14, 27, 10, 27, 33 };
+        p.Line(v, 4);
+        p.Circle(9, 37, 4);
+        p.Circle(23, 33, 4);
+        double r[] = { 33, 19, 43, 29, 38, 34, 38, 10, 43, 15, 33, 25 };
+        p.Line(r, 6);
+        break;
+    }
     case IC_CLOUD:   // three bumps on a flat base
         p.ArcP(15, 30, 7, 90, 250);
         p.ArcP(25, 25, 10, 190, 330);
@@ -1729,6 +1748,7 @@ static int MediaMask()
 // with a fix). The ones that would reach left of minLeft are left out. Returns the left edge.
 struct BtState;
 static bool BtGet(BtState* st, LONG* seq);
+static Icon PlayingIcon(Screen* to);   // what plays (vh_tasks.inc): its icon and screen, IC_NONE nothing
 
 static int StatusMarks(HDC dc, int end, int minLeft)
 {
@@ -1737,14 +1757,21 @@ static int StatusMarks(HDC dc, int end, int minLeft)
     WifiInfo w;
     WifiGet(&w);
     struct Mark { Icon ic; COLORREF c; bool shown; Action a; int arg; };
-    Mark m[5] = {
+    Screen playTo = S_NONE;
+    Icon play = PlayingIcon(&playTo);
+    ObdInfo obd;   // the engine's trouble codes (OBD): a warning, a tap - their screen
+    ObdGet(&obd);
+    bool dtc = obd.state == OBD_ON && (obd.dtcs > 0 || obd.mil == 1);
+    Mark m[7] = {
         { IC_USB, kOrange, (s_mediaMask & 2) != 0, A_NONE, 0 },
         { IC_SD, kOrange, (s_mediaMask & 1) != 0, A_NONE, 0 },
         { IC_WIFI, w.state == WIFI_CONNECTED ? kOrange : kDim, w.state >= WIFI_DISCONNECTED, A_NAV, S_SET_WIFI },
         { IC_BT, btOn ? kOrange : kDim, true, A_NAV, S_PHONE },
-        { IC_NAV, GpsHasFix() ? kOrange : kMuted, true, A_NONE, 0 } };
+        { IC_NAV, GpsHasFix() ? kOrange : kMuted, true, A_NONE, 0 },
+        { play, kOrange, play != IC_NONE, A_NAV, playTo },
+        { IC_WARN, kOrange, dtc, A_SCREEN, S_OBD_DTC } };
     int x = end;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 7; i++) {
         if (!m[i].shown)
             continue;
         if (x - 36 < minLeft)
@@ -1922,10 +1949,9 @@ static void SideTabs(HDC dc, const Tab* tabs, int n, int active, int step, int h
 
 static void PhoneNav(HDC dc, int active)
 {
-    static const Tab tabs[5] = { { IC_KEYPAD, L"НАБОР", S_PHONE }, { IC_USERS, L"КОНТАКТЫ", S_CONTACTS },
-                                 { IC_STAR, L"ИЗБРАННОЕ", S_FAVS }, { IC_CLOCK, L"ЖУРНАЛ", S_CALLS },
-                                 { IC_BT, L"МУЗЫКА", S_AUDIO_BT } };
-    SideTabs(dc, tabs, 5, active, 78, 70);
+    static const Tab tabs[4] = { { IC_KEYPAD, L"НАБОР", S_PHONE }, { IC_USERS, L"КОНТАКТЫ", S_CONTACTS },
+                                 { IC_STAR, L"ИЗБРАННОЕ", S_FAVS }, { IC_CLOCK, L"ЖУРНАЛ", S_CALLS } };
+    SideTabs(dc, tabs, 4, active, 78, 70);
 }
 
 // Settings, a main screen: ten sections as a 2 x 5 grid of 102 x 62 tiles on the left, the panel 64..400.

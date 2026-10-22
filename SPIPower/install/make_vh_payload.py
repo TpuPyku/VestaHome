@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""make_vh_payload.py - pack VestaHome (exe, Skin, radio.txt, bass) into vh_payload.bin, embedded by VestaHomeInstall.
+"""make_vh_payload.py - pack VestaHome (exe, Skin, radio.txt, obd_codes.txt, VestaNMEA.dll, bass) into vh_payload.bin, embedded by VestaHomeInstall.
 
 Format (the same as LaunchInstall's payload.bin):
     [u32 count][count x (u16 nameLen, name UTF-8 with '/', u32 dataLen, data)][u32 CRC-32 of all before]
@@ -24,7 +24,9 @@ BASS_FILES = ('bass.dll', 'bass_aac.dll', 'bassflac.dll', 'bassalac.dll', 'bass_
 
 def main():
     entries = [('VestaHome.exe', os.path.join(VH, 'VestaHome.exe')),
-               ('radio.txt', os.path.join(VH, 'radio.txt'))]
+               ('radio.txt', os.path.join(VH, 'radio.txt')),
+               ('obd_codes.txt', os.path.join(VH, 'obd_codes.txt')),   # tools/make_obd_codes.py
+               ('VestaNMEA.dll', os.path.join(HERE, '..', '..', 'VestaNMEA', 'VestaNMEA', 'VestaNMEA.dll'))]   # COM6
     skin = os.path.join(VH, 'Skin')
     for name in sorted(os.listdir(skin)):
         if os.path.isfile(os.path.join(skin, name)):

@@ -138,7 +138,7 @@ static void ScrSetCar(HDC dc)
     Settings(dc, S_SET_CAR);
     SetRow(dc, 64, L"Порт GPS · CAN", gps, false, A_NONE, 0, H);
     Stepper(dc, 512, 68, 248, port, 40, 19, A_GPSPORT);
-    SetRow(dc, 112, L"Скорость порта", L"или как у оболочки", false, A_NONE, 0, H);
+    SetRow(dc, 112, L"Скорость порта", L"по умолчанию 115200", false, A_NONE, 0, H);
     Stepper(dc, 512, 116, 248, baud, 40, 19, A_GPSBAUD);
     SetRow(dc, 160, L"Данные CAN", can, false, A_SCREEN, S_TEST_CAN, H);
     Chevron(dc, 728, 168);
@@ -153,12 +153,20 @@ static void ScrSetCar(HDC dc)
         _snwprintf(mcu, 80, L"proxy работает · сообщений %u", (unsigned)s_mcuTotal);
     SetRow(dc, 208, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU, H);
     Chevron(dc, 728, 216);
-    SetRow(dc, 256, L"Камера заднего хода — своя", L"видео и разметка VestaHome", true, A_NONE, 0, H);
+    SetRow(dc, 256, L"Камера заднего хода — своя", L"видео и разметка VestaHome", false, A_NONE, 0, H);
     Button(dc, 552, 262, 124, 40, L"ПОКАЗАТЬ", B_N, IC_NONE, 14, 0, A_RVCVIEW);   // by hand; a tap closes it
     Toggle(dc, 688, 262, T_RVC_OWN);
-    T(dc, 264, 336, L"CAN-модуль даёт скорость и угол руля; климат, наружная температура,", 14, kDim, 400,
-      AL_START, 504);
-    T(dc, 264, 356, L"кнопки и версии приходят от MCU — через proxy SPIPowerMgr.", 14, kDim, 400, AL_START, 504);
+    wchar_t tank[16];
+    _snwprintf(tank, 16, L"%d Л", s_cfg.tank);
+    SetRow(dc, 304, L"Объём бака", L"для запаса хода", false, A_NONE, 0, H);
+    Stepper(dc, 560, 308, 200, tank, 40, 19, A_TANK);
+    wchar_t nm[64];   // the navigators' COM6 (vh_gps.inc)
+    if (s_nmeaState < 0)
+        _snwprintf(nm, 64, L"COM%d не загрузился (ошибка %lu)", kNmeaCom, s_nmeaErr);
+    else
+        _snwprintf(nm, 64, L"COM%d · только NMEA%s", kNmeaCom, s_nmeaState > 0 ? L" · работает" : L"");
+    SetRow(dc, 352, L"Порт для навигаторов", nm, true, A_NONE, 0, H);
+    Toggle(dc, 688, 358, T_NMEA_PORT);
 }
 
 // MCU monitor ("Car -> MCU data", "Diagnostics -> keys"): the proxy's state, every message id with its count,

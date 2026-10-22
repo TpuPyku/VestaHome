@@ -11,6 +11,105 @@
 #define WM_APP_WX  (WM_APP + 11)
 typedef GpsState Gps;
 
+// ---- The navigators' NMEA port (2026-10-22, the user: "like GpsGate, only NMEA on COM6"): VestaNMEA.dll
+// (VestaNMEA/native) gives the '$' lines of the GPS stream from VestaCore's shared memory. The registry and \Windows
+// are new at every boot: the driver is copied into \Windows (RAM: the card's copy stays free for the installer) and
+// registered again at each start, as a user-mode driver (udevice.exe) in a process group of its own - a fault of it
+// takes no other driver along.
+enum { kNmeaCom = 6 };
+static int   s_nmeaState;   // 0 off, 1 on, -1 failed (s_nmeaErr)
+static DWORD s_nmeaErr;
+
+#ifdef UNDER_CE
+static HANDLE NmeaActive()   // its device when loaded: Drivers\Active\* with Key = Drivers\VestaNMEA
+{
+    HKEY act;
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\Active", 0, 0, &act) != ERROR_SUCCESS)
+        return NULL;
+    HANDLE h = NULL;
+    wchar_t name[32];
+    for (DWORD i = 0; !h; i++) {
+        DWORD n = 32;
+        if (RegEnumKeyEx(act, i, name, &n, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        HKEY k;
+        if (RegOpenKeyEx(act, name, 0, 0, &k) != ERROR_SUCCESS)
+            continue;
+        wchar_t key[64];
+        DWORD sz = sizeof(key), type, hnd = 0;
+        if (RegQueryValueEx(k, L"Key", NULL, &type, (BYTE*)key, &sz) == ERROR_SUCCESS &&
+            !_wcsicmp(key, L"Drivers\\VestaNMEA")) {
+            sz = sizeof(hnd);
+            RegQueryValueEx(k, L"Hnd", NULL, &type, (BYTE*)&hnd, &sz);
+            h = (HANDLE)hnd;
+        }
+        RegCloseKey(k);
+    }
+    RegCloseKey(act);
+    return h;
+}
+
+static void RegStr(HKEY k, const wchar_t* name, const wchar_t* v)
+{
+    RegSetValueEx(k, name, 0, REG_SZ, (const BYTE*)v, (wcslen(v) + 1) * sizeof(wchar_t));
+}
+
+static void RegDw(HKEY k, const wchar_t* name, DWORD v)
+{
+    RegSetValueEx(k, name, 0, REG_DWORD, (const BYTE*)&v, sizeof(v));
+}
+#endif
+
+static void NmeaPortSet(bool on)
+{
+#ifdef UNDER_CE
+    HANDLE h = NmeaActive();
+    if (!on) {
+        if (h)
+            VLog(L"порт NMEA: выключен (%s)", DeactivateDevice(h) ? L"выгружен" : L"не выгрузился");
+        s_nmeaState = 0;
+        return;
+    }
+    if (h) {   // loaded already (VestaHome started again)
+        s_nmeaState = 1;
+        return;
+    }
+    wchar_t src[MAX_PATH];
+    _snwprintf(src, MAX_PATH, L"%sVestaNMEA.dll", s_dir);
+    s_nmeaErr = 0;
+    if (!CopyFile(src, L"\\Windows\\VestaNMEA.dll", FALSE)) {
+        s_nmeaErr = GetLastError();
+        VLog(L"порт NMEA: нет %s (%lu)", src, s_nmeaErr);
+        s_nmeaState = -1;
+        return;
+    }
+    HKEY k;
+    DWORD disp;
+    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\ProcGroup_0020", 0, NULL, 0, 0, NULL, &k, &disp) ==
+        ERROR_SUCCESS) {   // its own udevice.exe (the firmware's groups 2 and 3 are the same but shared)
+        RegStr(k, L"ProcName", L"udevice.exe");
+        RegStr(k, L"ProcVolPrefix", L"$udevice");
+        RegCloseKey(k);
+    }
+    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\VestaNMEA", 0, NULL, 0, 0, NULL, &k, &disp) == ERROR_SUCCESS) {
+        RegStr(k, L"Dll", L"VestaNMEA.dll");
+        RegStr(k, L"Prefix", L"COM");
+        RegDw(k, L"Index", kNmeaCom);
+        RegDw(k, L"Flags", 0x10);   // DEVFLAGS_LOAD_AS_USERPROC
+        RegDw(k, L"UserProcGroup", 0x20);
+        RegStr(k, L"FriendlyName", L"VestaHome NMEA port");
+        RegCloseKey(k);
+    }
+    h = ActivateDeviceEx(L"Drivers\\VestaNMEA", NULL, 0, NULL);
+    s_nmeaErr = h ? 0 : GetLastError();
+    s_nmeaState = h ? 1 : -1;
+    VLog(L"порт NMEA: COM%d %s (%lu)", kNmeaCom, h ? L"загружен" : L"не загрузился", s_nmeaErr);
+#else
+    s_nmeaState = on ? 1 : 0;   // PC: the driver is the unit's only
+    VLog(L"порт NMEA: ПК - только запомнено (%d)", on ? 1 : 0);
+#endif
+}
+
 // The stream (G3NavHMI: rn2::CanMessageParser on COM4, a copy of COM3, 115200): '$' = NMEA, '@' = the CAN
 // module ("@,<speed km/h>,<version>*hh", "@ANG,<steering angle | null>,*hh"). The monitor counts every type and
 // can record the stream (can.log next to the exe): raw bytes while this program reads the port, the checked

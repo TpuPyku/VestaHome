@@ -16,6 +16,7 @@ struct WifiNet {
     int     rssi;      // dBm
     int     sec;       // WSEC_*
     bool    known;     // its password is kept
+    int     ch;        // its channel (of the strongest access point), 0 = unknown; the unit's radio: 2.4 GHz only
 };
 
 struct WifiInfo {

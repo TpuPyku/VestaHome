@@ -107,6 +107,7 @@ static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
         return false;
     memset(w, 0, sizeof(*w));
     wcsncpy(w->dir, dir, MAX_PATH - 1);
+    wcsncpy(w->file, file, MAX_PATH - 1);
     wchar_t name[40];
     wcsncpy(name, file, 39);
     name[39] = 0;
@@ -668,8 +669,10 @@ static void ScrSetHome(HDC dc)
         const wchar_t* sub = WgWide(id) ? L"двойной" : NULL;
         wchar_t usub[48];
         if (id >= WG_COUNT) {
-            _snwprintf(usub, 48, L"свой · %s.ini%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");
+            _snwprintf(usub, 48, L"%s.ini · изменить%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");
             sub = usub;
+            if (Zone(x, y, 218, 54, A_UWEDIT, id - WG_COUNT))   // its file into the editor
+                R(dc, x, y + 2, 218, 50, 8, kPanel2);
         }
         if (id == WG_CLIMATE)
             sub = L"выключен: нет данных от машины";
@@ -701,8 +704,12 @@ static void ScrCar(HDC dc)   // all the car's sensors (2026-10-22, out of the de
         int x = 28 + id / 9 * 252, y = 74 + id % 9 * 43;
         wchar_t v[32];
         bool have = CarSensor(id, v, 32);
-        T(dc, x, y + 28, kCarSensor[id][0], 14, kMuted, 400, AL_START, 140);
-        T(dc, x + 236, y + 28, have ? v : L"—", 15, have ? kText : kDim, 700, AL_END, 100);
+        bool d = id == 24 && Zone(x - 8, y + 4, 252, 38, A_SCREEN, S_OBD_DTC);   // the trouble codes: their screen
+        if (d)
+            R(dc, x - 8, y + 4, 252, 38, 8, kOrange);
+        T(dc, x, y + 28, kCarSensor[id][0], 14, d ? kInk : kMuted, 400, AL_START, 140);
+        T(dc, x + 236, y + 28, have ? v : id == 24 ? L"›" : L"—", 15, d ? kInk : have ? kText : kDim, 700, AL_END,
+          100);
         if (id % 9 < 8 && id + 1 < kCarSensors)
             Sep(dc, x, y + 42, 236);
     }

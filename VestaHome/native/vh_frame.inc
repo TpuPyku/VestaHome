@@ -40,6 +40,8 @@ static void DrawScreen(HDC dc, Screen s)
     case S_EXIT:        ScrExit(dc); break;
     case S_REBOOT:      ScrReboot(dc); break;
     case S_CAR:         ScrCar(dc); break;
+    case S_OBD_DTC:     ScrObdDtc(dc); break;
+    case S_TEXTEDIT:    ScrTextEdit(dc); break;
     case S_APPS:        DrawApps(dc); break;
     case S_EDIT:        DrawEdit(dc); break;
     case S_KEYS:        DrawKeys(dc); break;
@@ -316,6 +318,8 @@ static int SlideBottom()
         return 378;   // over their dots and dock
     if (s_screen == S_BT_PAIRED)
         return 382;
+    if (s_screen == S_PHOTO_VIEW)
+        return 398;   // over its dock
     if (Section(s_screen) < 0)
         return 480;
     return s_screen == S_HOME || s_screen == S_RADIO || s_screen == S_APPS || s_screen == S_PHOTO ||

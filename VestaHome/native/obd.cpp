@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include "obd.h"
 
 #ifdef UNDER_CE
@@ -24,6 +25,7 @@ static ObdLogFn       s_log;
 static HANDLE         s_thread;
 static volatile bool  s_stop;
 static char           s_devAddr[18];
+static volatile int   s_dtcWant;         // 1 read the trouble codes, 2 clear them (the thread does it)
 static ObdSppAddrFn   s_sppAddr;
 
 static void Changed()
@@ -108,8 +110,9 @@ static DWORD PortState(HANDLE h)
     return st;
 }
 
-// One ELM327 command: its answer up to the prompt '>', the line breaks as spaces. false: the port failed.
-static bool Elm(HANDLE h, const char* cmd, int waitMs, char* out, int cap)
+// One ELM327 command: its answer up to the prompt '>', the line breaks as spaces (or '\n' with lines). false: the
+// port failed.
+static bool Elm(HANDLE h, const char* cmd, int waitMs, char* out, int cap, bool lines = false)
 {
     char line[32];
     int n = _snprintf(line, sizeof(line) - 1, "%s\r", cmd);
@@ -132,12 +135,13 @@ static bool Elm(HANDLE h, const char* cmd, int waitMs, char* out, int cap)
                 break;
             }
             if (c == '\r' || c == '\n')
-                c = ' ';
-            if (c && len < cap - 1 && !(c == ' ' && (len == 0 || out[len - 1] == ' ')))
+                c = lines ? '\n' : ' ';
+            bool blank = c == ' ' || c == '\n';
+            if (c && len < cap - 1 && !(blank && (len == 0 || out[len - 1] == ' ' || out[len - 1] == '\n')))
                 out[len++] = c;
         }
     }
-    while (len > 0 && out[len - 1] == ' ')
+    while (len > 0 && (out[len - 1] == ' ' || out[len - 1] == '\n'))
         len--;
     out[len] = 0;
     return true;
@@ -175,6 +179,122 @@ static void Answer(const char* cmd, const char* r, char* last, int cap)
     strncpy(last, r, cap - 1);
     last[cap - 1] = 0;
     Say(L"%S → %S", cmd, r[0] ? r : "(нет ответа)");
+}
+
+int ObdParseDtc(const char* r, char (*out)[6], int maxN)
+{
+    int n = 0;
+    bool any = false;   // a "43" frame seen
+    unsigned char fr[64];
+    int frN = 0;
+    bool frCan = false;   // a long CAN answer's frame ("0:"): its count after 43 whatever its length
+    for (const char* line = r; ; ) {   // each line: its bytes; a "43" starts a frame, "1:".."F:" go on with it
+        const char* end = strchr(line, '\n');
+        int len = end ? (int)(end - line) : (int)strlen(line);
+        char s[160];
+        if (len > 159)
+            len = 159;
+        memcpy(s, line, len);
+        s[len] = 0;
+        const char* p = s;
+        while (*p == ' ')
+            p++;
+        int part = -1;   // "0:".."F:": a long CAN answer's part
+        if (isxdigit((unsigned char)p[0]) && p[1] == ':') {
+            part = isdigit((unsigned char)p[0]) ? p[0] - '0' : toupper(p[0]) - 'A' + 10;
+            p += 2;
+        }
+        unsigned char b[64];
+        int bn = 0;
+        bool hex = true;
+        while (*p && hex) {
+            while (*p == ' ')
+                p++;
+            if (!*p)
+                break;
+            int x;
+            if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1]) && (!p[2] || p[2] == ' ')
+                && sscanf(p, "%2x", &x) == 1 && bn < 64) {
+                b[bn++] = (unsigned char)x;
+                p += 2;
+            } else {
+                hex = false;   // "SEARCHING...", "NO DATA", the length line "00A"
+            }
+        }
+        bool starts = hex && bn && b[0] == 0x43 && part <= 0;
+        if ((starts || (!end && !len)) && frN) {   // the frame before it ends (or the text): its codes
+            int k = 1, count = -1;
+            if (frCan || (frN - 1) % 2) {   // CAN: the count after 43
+                count = fr[1];
+                k = 2;
+            }
+            for (; k + 1 < frN && n < maxN && count != 0; k += 2) {
+                int a = fr[k], c = fr[k + 1];
+                if (!a && !c)
+                    continue;
+                char code[6];
+                _snprintf(code, 6, "%c%d%X%X%X", "PCBU"[a >> 6], (a >> 4) & 3, a & 15, c >> 4, c & 15);
+                code[5] = 0;
+                bool dup = false;
+                for (int i = 0; i < n; i++)
+                    dup = dup || !strcmp(out[i], code);
+                if (!dup)
+                    strcpy(out[n++], code);
+                if (count > 0)
+                    count--;
+            }
+            frN = 0;
+        }
+        if (starts) {
+            any = true;
+            memcpy(fr, b, bn);
+            frN = bn;
+            frCan = part == 0;
+        } else if (hex && part > 0 && frN) {
+            for (int i = 0; i < bn && frN < 64; i++)
+                fr[frN++] = b[i];
+        }
+        if (!end) {
+            if (frN) {   // the last line was a frame's: once more through the end above
+                line = "";
+                continue;
+            }
+            break;
+        }
+        line = end + 1;
+    }
+    if (any)
+        return n;
+    return strstr(r, "NO DATA") ? 0 : -1;   // no codes stored: some cars answer so
+}
+
+// The trouble codes asked for (s_dtcWant): read (03) or clear (04, then read). Under the poll's thread.
+static void DtcDo(HANDLE h)
+{
+    int want = s_dtcWant;
+    s_dtcWant = 0;
+    char r[400];
+    if (want == 2) {
+        bool ok = Elm(h, "04", 8000, r, sizeof(r)) && strstr(r, "44");
+        Say(L"04 (сброс ошибок) → %S", r[0] ? r : "(нет ответа)");
+        if (!ok) {
+            EnterCriticalSection(&s_cs);
+            s_info.dtcState = OBD_DTC_FAILED;
+            LeaveCriticalSection(&s_cs);
+            return;
+        }
+    }
+    char codes[kObdDtcMax][6];
+    int n = Elm(h, "03", 8000, r, sizeof(r), true) ? ObdParseDtc(r, codes, kObdDtcMax) : -1;
+    for (char* c = r; *c; c++)
+        if (*c == '\n')
+            *c = '|';
+    Say(L"03 (ошибки) → %.80S", r[0] ? r : "(нет ответа)");
+    EnterCriticalSection(&s_cs);
+    s_info.dtcState = n < 0 ? OBD_DTC_FAILED : OBD_DTC_READ;
+    s_info.dtcN = n < 0 ? 0 : n;
+    memcpy(s_info.dtc, codes, sizeof(codes));
+    LeaveCriticalSection(&s_cs);
 }
 
 static DWORD WINAPI ObdThread(LPVOID)
@@ -241,6 +361,10 @@ static DWORD WINAPI ObdThread(LPVOID)
     memset(last, 0, sizeof(last));
     bool alive = true;
     while (!s_stop && alive) {
+        if (s_dtcWant) {
+            DtcDo(h);
+            Changed();
+        }
         for (int i = 0; i < kPolls && !s_stop; i++) {
             if (!Elm(h, kPoll[i], 3000, r, sizeof(r))) {
                 Say(L"связь потеряна (%lu)", GetLastError());
@@ -298,6 +422,27 @@ void ObdInit(HWND notify, UINT msg, ObdLogFn log)
     s_info.rpm = s_info.speed = s_info.coolant = s_info.load = s_info.throttle = s_info.fuel = s_info.maf100 = -1;
     s_info.mil = s_info.dtcs = -1;
     s_info.intake = s_info.ambient = -1000;
+}
+
+static void DtcAsk(int want)
+{
+    EnterCriticalSection(&s_cs);
+    bool on = s_info.state == OBD_ON;
+    s_info.dtcState = !on ? OBD_DTC_FAILED : want == 2 ? OBD_DTC_CLEARING : OBD_DTC_READING;
+    LeaveCriticalSection(&s_cs);
+    if (on)
+        s_dtcWant = want;
+    Changed();
+}
+
+void ObdReadDtc()
+{
+    DtcAsk(1);
+}
+
+void ObdClearDtc()
+{
+    DtcAsk(2);
 }
 
 void ObdSetSppAddrFn(ObdSppAddrFn fn)

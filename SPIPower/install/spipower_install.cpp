@@ -2322,10 +2322,17 @@ static void RunAction(int id)
         g_busy = 1;
         InvalidateRect(g_hwnd, NULL, TRUE);
         UpdateWindow(g_hwnd);
+        // No "start it?" (the user 2026-10-22): a running VestaHome comes back by itself - under the stub the stub
+        // starts the new one when this mutex is gone (VestaStub: UpdateRunning), else we do; a first install starts
+        // at the boot (the stub) or by hand.
+        int was = ProcExists(kVhExe) == 1;
+        HANDLE upd = id == B_VH ? CreateMutex(NULL, TRUE, L"VestaHomeUpdate") : NULL;
         int ok = id == B_VH ? DoVhInstall() : DoVhUninstall();
+        if (upd)
+            CloseHandle(upd);
         g_busy = 0;
         InvalidateRect(g_hwnd, NULL, TRUE);
-        if (id == B_VH && ok && Confirm(L"VestaHome установлен. Запустить его сейчас?"))
+        if (id == B_VH && ok && was && !IsStubFile(kShellPath))
             VhStart();
         return;
     }

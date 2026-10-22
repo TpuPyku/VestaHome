@@ -107,15 +107,23 @@ static void PhotoOpenDir(const wchar_t* dir)
     }
 }
 
-static int PhotoTiles()   // the tiles of the folder: "up" first in a folder
+static int PhotoPer()   // the folder's entries a page: in a folder "up" is the first tile of every page
 {
-    return s_phCount + (s_phDir[0] ? 1 : 0);
+    return kPhTiles - (s_phDir[0] ? 1 : 0);
 }
 
 static int PhotoPages()
 {
-    int n = PhotoTiles();
-    return n > 0 ? (n + kPhTiles - 1) / kPhTiles : 1;
+    return s_phCount > 0 ? (s_phCount + PhotoPer() - 1) / PhotoPer() : 1;
+}
+
+static int PhotoTileEntry(int t)   // tile t of the page: its entry, -1 "up", -2 none
+{
+    int up = s_phDir[0] ? 1 : 0;
+    if (up && t == 0)
+        return -1;
+    int k = s_phPage * PhotoPer() + t - up;
+    return k < s_phCount ? k : -2;
 }
 
 // The picture into the frame at x, y (cut at the frame and at the partial redraw's area).
@@ -144,7 +152,7 @@ static void PhotoWantThumbs()
     bool any = false;
     EnterCriticalSection(&s_phCs);
     for (int t = 0; t < kPhTiles; t++) {
-        int k = s_phPage * kPhTiles + t - (s_phDir[0] ? 1 : 0);
+        int k = PhotoTileEntry(t);
         wchar_t path[MAX_PATH] = L"";
         if (k >= 0 && k < s_phCount && !PhIsDir(k))
             _snwprintf(path, MAX_PATH, L"%s%s", s_phDir, s_phs[k]);
@@ -169,10 +177,9 @@ static void ScrPhoto(HDC dc)
     DirTitle(dc, L"МЕДИА · ФОТО", s_phDir);
     MediaTabs(dc, S_PHOTO, IC_PLAY, A_PHPLAY, 0, S_SET_PHOTO);
     PhotoWantThumbs();
-    int up = s_phDir[0] ? 1 : 0;
     for (int t = 0; t < kPhTiles; t++) {
-        int k = s_phPage * kPhTiles + t - up, x = 16 + (t % 4) * 194, y = 124 + (t / 4) * 138;
-        if (k >= s_phCount)
+        int k = PhotoTileEntry(t), x = 16 + (t % 4) * 194, y = 124 + (t / 4) * 138;
+        if (k == -2)
             break;
         bool down = Zone(x, y, 184, 128, A_PHFILE, k);   // k -1: up
         bool dir = k < 0 || PhIsDir(k);
@@ -213,7 +220,7 @@ static void PhotoView(int i)
     if (i != s_phCur)
         s_phRot = 0;
     s_phCur = i;
-    s_phPage = (i + (s_phDir[0] ? 1 : 0)) / kPhTiles;
+    s_phPage = i / PhotoPer();
     if (wcscmp(s_cfg.photoFile, s_phs[i])) {   // the start comes back to it (ResumeScreen)
         wcsncpy(s_cfg.photoFile, s_phs[i], MAX_PATH - 1);
         s_cfg.photoFile[MAX_PATH - 1] = 0;
@@ -332,7 +339,7 @@ static void DoAction(const Btn& b)
     case A_TASKCLOSE:  TaskClose((HWND)(INT_PTR)b.arg); break;
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;
-    case A_CLIPCLEAR:  s_keysText[0] = 0; break;
+    case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
     case A_NAV:      Nav((Screen)b.arg); break;
     case A_NIGHT:    SetTheme(!s_night); break;   // the bar: the theme (the backlight: in the settings)
     case A_PHFILE:   // a tile: up, a folder, a picture (the viewer)
@@ -447,6 +454,47 @@ static void DoAction(const Btn& b)
     case A_HOMEGPS:  HomeFromGps(); break;
     case A_TZ:       TzStep(b.arg); break;
     case A_GPSPORT:  GpsPortStep(b.arg); break;
+    case A_TANK:   // the fuel tank, L: 20..120
+        s_cfg.tank = s_cfg.tank + b.arg < 20 ? 20 : s_cfg.tank + b.arg > 120 ? 120 : s_cfg.tank + b.arg;
+        SaveCfg();
+        break;
+    case A_DTCINFO: {   // a code's meaning: open (its index) / close (-1)
+        ObdInfo o;
+        ObdGet(&o);
+        if (b.arg >= 0 && b.arg < o.dtcN)
+            DtcInfo(o.dtc[b.arg]);
+        else
+            s_dtcCode[0] = 0;
+        break;
+    }
+    case A_TELINE: case A_TEADD: case A_TEDEL: case A_TESAVE: case A_TEBACK:
+        TeAction(b.action, b.arg);
+        break;
+    case A_TEXTFILES:
+        OpenFiles(F_TEXT);
+        break;
+    case A_UWEDIT:   // a user widget's .ini (Home -> widgets)
+        if (b.arg >= 0 && b.arg < s_uwCount) {
+            wchar_t dir[MAX_PATH], path[MAX_PATH];
+            UserWgDir(dir);
+            _snwprintf(path, MAX_PATH, L"%s%s", dir, s_uw[b.arg].file);
+            path[MAX_PATH - 1] = 0;
+            TeOpen(path, S_SET_HOME, true);
+        }
+        break;
+    case A_DTCREAD:
+        s_dtcArm = false;
+        ObdReadDtc();
+        break;
+    case A_DTCCLEAR:   // asked twice
+        if (!s_dtcArm) {
+            s_dtcArm = true;
+        } else {
+            s_dtcArm = false;
+            VLog(L"OBD: сброс кодов ошибок");
+            ObdClearDtc();
+        }
+        break;
     case A_GPSBAUD:  GpsBaudStep(b.arg); break;
     case A_HOUR:     ClockStep(true, b.arg); break;
     case A_MINUTE:   ClockStep(false, b.arg); break;
@@ -732,7 +780,8 @@ static void DoAction(const Btn& b)
         } else if (s_screen == S_KEYS) {
             s_screen = s_keysBack;
         } else {
-            s_screen = s_filesFor == F_CAMS ? S_WSET_SPEED : S_EDIT;
+            s_screen = s_filesFor == F_CAMS ? S_WSET_SPEED : s_filesFor == F_TEXT ? S_DIAG : S_EDIT;
+            s_status[0] = 0;
         }
         break;
     case A_OK:       KeysDone(); break;

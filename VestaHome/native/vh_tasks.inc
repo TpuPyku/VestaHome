@@ -234,14 +234,90 @@ static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, I
 
 // The player's track (or "nothing plays" with play = the last track / the list); the progress updates with the
 // minute redraw, the player screen itself updates every second.
+// The screen saver's line of what plays (its timer redraws it when the line changes): the internet radio's station
+// and song, our music's track, Bluetooth's track, the radio's station; "" nothing.
+// What plays, for the top bar's mark (2026-10-22): our internet radio, our music, our video, the phone's music, the
+// radio; *to: its screen (a tap opens it). Each its own icon.
+static Icon PlayingIcon(Screen* to)
+{
+    double pos, len;
+    if (s_netOn) {
+        *to = S_NETRADIO;
+        return IC_NETRADIO;
+    }
+    if (PlayerPlaying()) {
+        *to = S_AUDIO;
+        return IC_MUSIC;
+    }
+    if (VideoTimes(&pos, &len)) {
+        *to = S_VIDEO;
+        return IC_VIDEO;
+    }
+    int vol, mute, src;
+    if (!VolGet(&vol, &mute, &src))
+        return IC_NONE;
+    BtState bt;
+    if (src == 9 && BtGet(&bt, NULL) && bt.av == 2) {   // the phone streams (our players are off: above)
+        *to = S_AUDIO_BT;
+        return IC_BTMUSIC;
+    }
+    if (src == 0) {
+        *to = S_RADIO;
+        return IC_RADIO;
+    }
+    return IC_NONE;
+}
+
+static Icon SaverNowPlaying(wchar_t* s, int n)
+{
+    s[0] = 0;
+    if (s_netOn && s_netCur >= 0) {
+        wchar_t t[160];
+        EnterCriticalSection(&s_netCs);
+        wcscpy(t, s_netTitle);
+        LeaveCriticalSection(&s_netCs);
+        if (t[0] && s_netState == NR_PLAY)
+            _snwprintf(s, n, L"%s · %s", s_stations[s_netCur].name, t);
+        else
+            _snwprintf(s, n, L"%s", s_stations[s_netCur].name);
+        s[n - 1] = 0;
+        return IC_NETRADIO;
+    }
+    wchar_t title[96], sub[200];
+    double pos, len;
+    if (PlayerPlaying() && PlayerNow(title, sub, 96, &pos, &len)) {
+        _snwprintf(s, n, L"%s", title);
+        s[n - 1] = 0;
+        return IC_MUSIC;
+    }
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    BtState bt;
+    if (src == 9 && BtGet(&bt, NULL) && bt.title[0]) {
+        BtText(bt.title, s, n);
+        return IC_BTMUSIC;
+    }
+    if (src == 0) {
+        Tuner tu;
+        TunerGet(&tu);
+        wchar_t f[16];
+        FreqText(tu.f10, f, 16);
+        const wchar_t* nm = tu.ps[0] ? tu.ps : RadioName(tu, tu.f10);
+        if (tu.f10)
+            _snwprintf(s, n, L"%s  %s", f, nm);
+        s[n - 1] = 0;
+    }
+    return IC_RADIO;
+}
+
 static void WMedia(HDC dc, int x, int y)
 {
     if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
         NetLoadList();
     if (s_netCur >= 0 && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
-        bool d = Widget(dc, x, y, kWgW2, kWgH, L"СЕЙЧАС ИГРАЕТ · ИНТЕРНЕТ-РАДИО", IC_RADIO, A_NAV, S_NETRADIO);
+        bool d = Widget(dc, x, y, kWgW2, kWgH, L"СЕЙЧАС ИГРАЕТ · ИНТЕРНЕТ-РАДИО", IC_NETRADIO, A_NAV, S_NETRADIO);
         TriFill(x + 16, y + 42, 100, 100, 12);
-        Ico(dc, IC_RADIO, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
+        Ico(dc, IC_NETRADIO, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
         wchar_t s[160];
         EnterCriticalSection(&s_netCs);
         wcscpy(s, s_netTitle);
@@ -446,9 +522,28 @@ static void WCar(HDC dc, int x, int y)
 
 // The trip (2026-10-21, out of the demo): since VestaHome started (the ignition), counted once a second from the
 // car's speed (CAN, the MCU's 0x412A) or else GPS: the distance, the time moving (3 km/h and more), the mean of it
-// and the top speed. Fuel and range come with OBD.
-struct Trip { double km; DWORD movingS; int maxKmh; SYSTEMTIME start; bool started; int src; };   // src 1 CAN 2 GPS
+// and the top speed. With OBD (2026-10-22): the fuel burnt from the air flow (0110, petrol 14.7:1, 745 g/L) while it
+// answers, its own km beside it - the mean consumption; the range = the tank's level (012F) x car.tank / that mean.
+struct Trip {
+    double km; DWORD movingS; int maxKmh; SYSTEMTIME start; bool started; int src;   // src 1 CAN 2 GPS
+    double fuelL, obdKm;
+};
 static Trip s_trip;
+
+static double TripMean()   // L/100 km of the trip, -1 not yet (under 1 km with OBD)
+{
+    return s_trip.obdKm >= 1 ? s_trip.fuelL * 100 / s_trip.obdKm : -1;
+}
+
+static int TripRange()   // km on what is left in the tank, -1 not known
+{
+    ObdInfo o;
+    ObdGet(&o);
+    double m = TripMean();
+    if (o.state != OBD_ON || o.fuel < 0 || m < 1)
+        return -1;
+    return (int)(o.fuel * s_cfg.tank / 100.0 * 100 / m + 0.5);
+}
 
 static void TripTick()   // once a second
 {
@@ -458,6 +553,11 @@ static void TripTick()   // once a second
     }
     Gps g;
     GpsGet(&g);
+    ObdInfo o;
+    ObdGet(&o);
+    bool obd = o.state == OBD_ON && o.maf100 >= 0;
+    if (obd)   // a second of it, L
+        s_trip.fuelL += o.maf100 / 100.0 / (14.7 * 745);
     int kmh = -1;
     if (g.carTick && GetTickCount() - g.carTick < 3000) {
         kmh = g.carSpeed;
@@ -469,6 +569,8 @@ static void TripTick()   // once a second
     if (kmh < 3)
         return;
     s_trip.km += kmh / 3600.0;
+    if (obd)
+        s_trip.obdKm += kmh / 3600.0;
     s_trip.movingS++;
     if (kmh > s_trip.maxKmh)
         s_trip.maxKmh = kmh;
@@ -502,13 +604,21 @@ static void WTrip(HDC dc, int x, int y)
         T(dc, cx, y + 102, v[i], 32, d ? kInk : kText, 700, AL_START, 108);
         T(dc, cx, y + 122, unit[i], 14, d ? kInk : kMuted, 400);
     }
-    wchar_t s[64];
+    wchar_t s[96], f[48] = L"расход и запас хода — с OBD";
+    double m = TripMean();
+    int range = TripRange();
+    if (m >= 0 && range >= 0)
+        _snwprintf(f, 48, L"расход %d,%d л/100 км · запас %d км", (int)m, (int)(m * 10) % 10, range);
+    else if (m >= 0)
+        _snwprintf(f, 48, L"расход %d,%d л/100 км", (int)m, (int)(m * 10) % 10);
+    else if (s_trip.fuelL > 0)
+        _snwprintf(f, 48, L"сожжено %d,%d л", (int)s_trip.fuelL, (int)(s_trip.fuelL * 10) % 10);
+    f[47] = 0;
     if (s_trip.started)
-        _snwprintf(s, 64, L"Поездка с %02d:%02d · расход и запас хода — с OBD", s_trip.start.wHour,
-                   s_trip.start.wMinute);
+        _snwprintf(s, 96, L"Поездка с %02d:%02d · %s", s_trip.start.wHour, s_trip.start.wMinute, f);
     else
-        wcscpy(s, L"Расход и запас хода — с OBD");
-    s[63] = 0;
+        wcscpy(s, f);
+    s[95] = 0;
     T(dc, x + 16, y + 146, s, 14, d ? kInk : kDim, 400, AL_START, kWgW2 - 32);
 }
 
@@ -736,7 +846,7 @@ static void ShellStart()
 // ---- the car's sensors (2026-10-22): what VestaHome knows of the car and the unit, for the car widget's lines and
 // the "Car" screen. The CAN module gives only the speed and the steering angle (its firmware, PROJECT.md), the
 // MCU the unit's temperatures (System status 0x7905), the OBD adapter the engine once it connects.
-enum { kCarSensors = 25 };
+enum { kCarSensors = 27 };
 static const wchar_t* const kCarSensor[kCarSensors][2] = {
     { L"Скорость (CAN)", L"км/ч" }, { L"Угол руля", L"°" }, { L"Пробег поездки", L"км" },
     { L"В движении", L"ч:мин" }, { L"Средняя скорость", L"км/ч" }, { L"Макс. скорость", L"км/ч" },
@@ -745,7 +855,7 @@ static const wchar_t* const kCarSensor[kCarSensors][2] = {
     { L"Поле тюнера", L"дБ" }, { L"CAN-модуль", L"" }, { L"Спутники GPS", L"" }, { L"Высота GPS", L"м" },
     { L"Нагрузка (OBD)", L"%" }, { L"Дроссель (OBD)", L"%" }, { L"Впуск (OBD)", L"°C" }, { L"За бортом (OBD)", L"°C" },
     { L"Топливо (OBD)", L"%" }, { L"Расход (OBD)", L"л/100 км" }, { L"Расход стоя (OBD)", L"л/ч" },
-    { L"Ошибки (OBD)", L"" } };
+    { L"Ошибки (OBD)", L"" }, { L"Расход поездки (OBD)", L"л/100 км" }, { L"Запас хода (OBD)", L"км" } };
 
 static const wchar_t* CarSensorName(int id)
 {
@@ -833,6 +943,14 @@ static bool CarSensor(int id, wchar_t* v, int n)   // its value with the unit; f
         _snwprintf(v, n, L"v%S", g.canVer);
         return true;
     case 15: x = GpsFresh(g, 5000) || g.sats ? g.sats : -1; break;
+    case 25: {
+        double m = TripMean();
+        if (m < 0)
+            return false;
+        _snwprintf(v, n, L"%d,%d %s", (int)m, (int)(m * 10) % 10, kCarSensor[id][1]);
+        return true;
+    }
+    case 26: x = TripRange(); break;
     case 16: x = GpsFresh(g, 5000) ? (int)(g.alt + 0.5) : -1; break;
     }
     if (x < 0 && id != 1)
@@ -840,6 +958,126 @@ static bool CarSensor(int id, wchar_t* v, int n)   // its value with the unit; f
     _snwprintf(v, n, L"%d %s", x, kCarSensor[id][1]);
     v[n - 1] = 0;
     return true;
+}
+
+// Car -> "Ошибки (OBD)": the stored trouble codes (03) and their clearing (04, asked twice: it also puts out the
+// "Check engine" lamp and resets the engine's learnt values).
+static bool s_dtcArm;   // "СБРОСИТЬ" pressed once: the next press clears
+enum { kDtcInfoMax = 3 };
+static char    s_dtcCode[6];                // the code whose meaning is shown ("" none)
+static wchar_t s_dtcInfo[kDtcInfoMax][400]; // its lines of obd_codes.txt past the code: ECU;system;meaning[;more]
+static int     s_dtcInfoN;                  // -1 no file
+
+// A code's meaning (a tap on it): its lines of obd_codes.txt next to the exe (tools/make_obd_codes.py), read on
+// each tap, nothing kept but them.
+static void DtcInfo(const char* code)
+{
+    strncpy(s_dtcCode, code, 5);
+    s_dtcCode[5] = 0;
+    s_dtcInfoN = -1;
+    wchar_t path[MAX_PATH], wc[8];
+    _snwprintf(path, MAX_PATH, L"%sobd_codes.txt", s_dir);
+    MultiByteToWideChar(CP_ACP, 0, s_dtcCode, -1, wc, 8);
+    DWORD size;
+    char* buf = ReadAll(path, &size);
+    if (!buf)
+        return;
+    s_dtcInfoN = 0;
+    char* p = Utf8Text(buf);
+    wchar_t line[400];
+    while (s_dtcInfoN < kDtcInfoMax && NextUtf8Line(&p, line, 400))
+        if (!wcsncmp(line, wc, 5) && line[5] == L';')
+            wcscpy(s_dtcInfo[s_dtcInfoN++], line + 6);
+    free(buf);
+}
+
+// The meaning's window over the codes: per line the system (bold), the meaning and more, the ECU (small)
+static void DtcInfoWindow(HDC dc)
+{
+    Zone(0, 0, 800, 480, A_DTCINFO, -1);   // a tap beside it closes it (and the codes under it take none)
+    Panel(dc, 64, 64, 672, 352);
+    wchar_t s[64], code[8];
+    MultiByteToWideChar(CP_ACP, 0, s_dtcCode, -1, code, 8);
+    T(dc, 88, 104, code, 26, kOrange, 700);
+    int y = 132;
+    if (s_dtcInfoN <= 0)
+        T(dc, 88, y + 24, s_dtcInfoN < 0 ? L"Нет файла расшифровки obd_codes.txt (переустановите VestaHome)"
+                                        : L"Этого кода нет в таблице расшифровки", 17, kMuted, 400, AL_START, 624);
+    for (int i = 0; i < s_dtcInfoN && y < 340; i++) {
+        wchar_t f[5][400];   // ECU, system, meaning, more
+        int nf = 0;
+        const wchar_t* q = s_dtcInfo[i];
+        while (nf < 5) {
+            const wchar_t* e = wcschr(q, L';');
+            int len = e ? (int)(e - q) : (int)wcslen(q);
+            wcsncpy(f[nf], q, len);
+            f[nf++][len] = 0;
+            if (!e)
+                break;
+            q = e + 1;
+        }
+        wchar_t more[800] = L"";
+        for (int k = 2; k < nf; k++)
+            if (f[k][0]) {
+                if (more[0])
+                    wcscat(more, L". ");
+                wcsncat(more, f[k], 799 - wcslen(more));
+            }
+        if (nf > 1 && f[1][0])
+            y += 22 * TWrap(dc, 88, y + 22, f[1], 18, kText, 700, 624, 2, 22);
+        if (more[0])
+            y += 20 * TWrap(dc, 88, y + 22, more, 16, kText, 400, 624, 3, 20);
+        _snwprintf(s, 64, L"блок: %s", f[0]);
+        s[63] = 0;
+        T(dc, 88, y + 20, s, 13, kDim, 400, AL_START, 624);
+        y += 34;
+    }
+    Button(dc, 300, 348, 200, 48, L"ЗАКРЫТЬ", B_N, IC_NONE, 17, 0, A_DTCINFO, -1);
+}
+
+static void ScrObdDtc(HDC dc)
+{
+    Frame(dc, L"АВТОМОБИЛЬ · ОШИБКИ ДВИГАТЕЛЯ (OBD)");
+    ObdInfo o;
+    ObdGet(&o);
+    bool on = o.state == OBD_ON, busy = o.dtcState == OBD_DTC_READING || o.dtcState == OBD_DTC_CLEARING;
+    Panel(dc, 16, 68, 768, 324);
+    wchar_t s[96];
+    if (!on)
+        wcscpy(s, L"OBD-адаптер не подключён: Настройки → Bluetooth → OBD-адаптер");
+    else if (o.dtcState == OBD_DTC_READING)
+        wcscpy(s, L"Читаю коды…");
+    else if (o.dtcState == OBD_DTC_CLEARING)
+        wcscpy(s, L"Сбрасываю…");
+    else if (o.dtcState == OBD_DTC_FAILED)
+        wcscpy(s, L"Блок не ответил — повторите при включённом зажигании");
+    else if (o.dtcState == OBD_DTC_READ)
+        _snwprintf(s, 96, o.dtcN ? L"Сохранённых ошибок: %d" : L"Сохранённых ошибок нет", o.dtcN);
+    else
+        wcscpy(s, L"Нажмите ПРОЧИТАТЬ");
+    s[95] = 0;
+    T(dc, 32, 104, s, 20, on ? kText : kOrange, 700, AL_START, 736);
+    if (on && o.mil >= 0)
+        T(dc, 32, 134, o.mil ? L"Лампа «Check engine» горит" : L"Лампа «Check engine» не горит", 16,
+          o.mil ? kOrange : kMuted, 400, AL_START, 736);
+    if (o.dtcState == OBD_DTC_READ)
+        for (int i = 0; i < o.dtcN; i++) {   // four columns
+            wchar_t c[8];
+            MultiByteToWideChar(CP_ACP, 0, o.dtc[i], -1, c, 8);
+            int x = 32 + i % 4 * 184, y = 160 + i / 4 * 52;
+            bool d = Zone(x, y, 172, 44, A_DTCINFO, i);   // a tap: its meaning
+            R(dc, x, y, 172, 44, 10, d ? kOrange : kPanel2, d ? CLR_INVALID : kLine);
+            T(dc, x + 86, y + 30, c, 22, d ? kInk : kText, 700, AL_MID, 160);
+        }
+    T(dc, 32, 380, L"P — двигатель и коробка, C — шасси, B — кузов, U — сеть. Нажмите на код — расшифровка.", 14,
+      kDim, 400, AL_START, 736);
+    Dock(dc);
+    Button(dc, 200, 412, 190, 52, L"ПРОЧИТАТЬ", on && !busy ? B_N : B_DIS, IC_NONE, 17, 0,
+           on && !busy ? A_DTCREAD : A_NONE);
+    Button(dc, 410, 412, 190, 52, s_dtcArm ? L"ТОЧНО СБРОСИТЬ?" : L"СБРОСИТЬ",
+           !on || busy ? B_DIS : s_dtcArm ? B_FILL : B_N, IC_NONE, 17, 0, on && !busy ? A_DTCCLEAR : A_NONE);
+    if (s_dtcCode[0])
+        DtcInfoWindow(dc);
 }
 
 // Car -> its settings: the widget's three lines, from the sensors (a tap: in / out, in the order chosen)

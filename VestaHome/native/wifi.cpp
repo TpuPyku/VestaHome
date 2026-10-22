@@ -180,6 +180,19 @@ static void SsidText(const Ssid& s, wchar_t* w)
 }
 
 // The configurations of a WZC_802_11_CONFIG_LIST, checked against its size (the layout is ours, not the SDK's).
+// The channel from NDIS_802_11_CONFIGURATION's DSConfig (kHz): 2.4 GHz 1..14, 5 GHz 36..; 0 unknown
+static int ChannelOf(const WlanConfig& c)
+{
+    int mhz = (int)(c.configuration[3] / 1000);
+    if (mhz == 2484)
+        return 14;
+    if (mhz >= 2412 && mhz < 2484)
+        return (mhz - 2407) / 5;
+    if (mhz >= 5000 && mhz < 6000)
+        return (mhz - 5000) / 5;
+    return 0;
+}
+
 static WlanConfig* ListItems(const RawData& rd, int* n)
 {
     *n = 0;
@@ -681,14 +694,23 @@ static DWORD WINAPI WifiThread(LPVOID)
             SsidText(list[i].ssid, s);
             if (!s[0])
                 continue;   // a hidden network
-            if (connected && !wcscmp(s, w.ssid) && (!w.rssi || list[i].rssi > w.rssi))
+            if (connected && !wcscmp(s, w.ssid) && (!w.rssi || list[i].rssi > w.rssi)) {
                 w.rssi = list[i].rssi;
+                static int s_loggedCh = -1;   // the connected network's channel into the log when it changes
+                int ch = ChannelOf(list[i]);
+                if (ch != s_loggedCh) {
+                    s_loggedCh = ch;
+                    Log(L"wifi: %s на канале %d (%lu кГц)", w.ssid, ch, list[i].configuration[3]);
+                }
+            }
             int k = 0;
             while (k < w.count && wcscmp(w.nets[k].ssid, s))
                 k++;
             if (k < w.count) {   // the same network from another access point: the strongest
-                if (list[i].rssi > w.nets[k].rssi)
+                if (list[i].rssi > w.nets[k].rssi) {
                     w.nets[k].rssi = list[i].rssi;
+                    w.nets[k].ch = ChannelOf(list[i]);
+                }
                 continue;
             }
             if (w.count == kWifiNets)
@@ -698,6 +720,7 @@ static DWORD WINAPI WifiThread(LPVOID)
             n.rssi = list[i].rssi;
             n.sec = SecOf(list[i]);
             n.known = IsKnown(s, NULL);
+            n.ch = ChannelOf(list[i]);
         }
         qsort(w.nets, w.count, sizeof(WifiNet), CmpRssi);
 
@@ -828,6 +851,7 @@ static DWORD WINAPI WifiThread(LPVOID)
             wcscpy(w.nets[i].ssid, kNames[i]);
             w.nets[i].rssi = kRssi[i];
             w.nets[i].sec = kSec[i];
+            w.nets[i].ch = 1 + i * 5;
             w.nets[i].known = IsKnown(kNames[i], NULL);
         }
         EnterCriticalSection(&s_cs);
