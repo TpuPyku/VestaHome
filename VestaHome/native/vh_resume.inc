@@ -9,7 +9,6 @@ static const struct { Screen s; const wchar_t* key; } kUiScreens[] = {
     { S_AUDIO_BT, L"bt" }, { S_AUX, L"aux" }, { S_VIDEO, L"video" }, { S_PHOTO, L"photo" }, { S_PHONE, L"phone" },
     { S_APPS, L"apps" }, { S_SETTINGS, L"settings" } };
 static DWORD s_bootTick;
-static bool  s_resumed;   // the source has been brought back (or given up)
 
 static const wchar_t* UiScreenKey()
 {
@@ -22,9 +21,12 @@ static const wchar_t* UiScreenKey()
     return NULL;   // not a main screen (a player, a call): the last main one stays
 }
 
-// What plays now: "music" (ours), "radio", "bt", "" (another source: the shell's); NULL - not known yet.
+// What plays now: "music" (ours), "net" (the internet radio), "radio", "bt", "" (another source: the shell's);
+// NULL - not known yet.
 static const wchar_t* UiSourceKey()
 {
+    if (s_netOn)
+        return L"net";
     if (PlayerPlaying())
         return L"music";
     int vol, mute, src;
@@ -52,7 +54,11 @@ static bool FileThere(const wchar_t* dir, const wchar_t* file)
 
 static void ResumeScreen()   // at the start
 {
+    s_mediaLast = !wcscmp(s_cfg.uiSource, L"net") ? 2 : 1;
     Screen s = S_NONE;
+    for (int i = 0; i < (int)(sizeof(kUiScreens) / sizeof(kUiScreens[0])); i++)   // the media's tab (ui.media)
+        if (!wcscmp(kUiScreens[i].key, s_cfg.uiMedia) && Section(kUiScreens[i].s) == 2)
+            s_media = kUiScreens[i].s;
     for (int i = 0; i < (int)(sizeof(kUiScreens) / sizeof(kUiScreens[0])); i++)
         if (!wcscmp(kUiScreens[i].key, s_cfg.uiScreen))
             s = kUiScreens[i].s;
@@ -94,7 +100,6 @@ static void ResumeScreen()   // at the start
 // OnTimerDefaultSlot, Ghidra 2026-10-19; beside it UpdateStartedVol - the volume at power-on); whether it moves
 // the volume playing now or only the next start's is to be seen on the unit: the volume the MCU reports after it
 // goes to the log. Once, 10 s after the start (the MCU's link up); then again at 15 s only to log the result.
-enum { kStartVolMax = 10 };
 
 static void StartVolumeTick()
 {
@@ -103,16 +108,16 @@ static void StartVolumeTick()
     int vol, mute, src;
     if (s_step == 0 && el >= 10000) {
         s_step = 2;
-        if (VolGet(&vol, &mute, &src) && vol > kStartVolMax) {
-            McuSend3("SPApi_SendRadioAudioVolData", 0, kStartVolMax, 0);
-            VLog(L"запуск: громкость %d > %d - SendRadioAudioVolData(0, %d)", vol, kStartVolMax, kStartVolMax);
+        if (s_cfg.startMax > 0 && VolGet(&vol, &mute, &src) && vol > s_cfg.startMax) {   // (Sound -> Volume)
+            McuSend3("SPApi_SendRadioAudioVolData", 0, s_cfg.startMax, 0);
+            VLog(L"запуск: громкость %d > %d - SendRadioAudioVolData(0, %d)", vol, s_cfg.startMax, s_cfg.startMax);
             s_step = 1;
         }
     } else if (s_step == 1 && el >= 15000) {
         s_step = 2;
         bool have = VolGet(&vol, &mute, &src);
         VLog(L"запуск: громкость после команды - %d (MCU %s)", have ? vol : -1,
-             have && vol <= kStartVolMax ? L"убавил сейчас" : L"сейчас не убавил: возможно, только при следующем включении");
+             have && vol <= s_cfg.startMax ? L"убавил сейчас" : L"сейчас не убавил: возможно, только при следующем включении");
     }
 }
 
@@ -128,9 +133,15 @@ static void ResumeSourceTick()
         return;
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
+    s_resuming = true;   // (ResumeByUser: not the user's)
     if (!wcscmp(s_cfg.uiSource, L"radio")) {
         VLog(L"запуск: радио (источник MCU %d)", src);
         RadioOn();
+    } else if (!wcscmp(s_cfg.uiSource, L"net")) {   // the station last played (radio.station)
+        NetLoadList();
+        VLog(L"запуск: интернет-радио «%s»", s_cfg.radioStation);
+        if (s_netCur >= 0)
+            NetPlay(s_netCur);
     } else if (!wcscmp(s_cfg.uiSource, L"music")) {
         VLog(L"запуск: музыка «%s»", s_cfg.musicFile);
         if (!s_chan && s_cfg.musicDir[0])
@@ -154,21 +165,26 @@ static void ResumeSourceTick()
                     VLog(L"запуск: Bluetooth - последний телефон не известен, жду подключения");
                 }
             }
-            if (el < 120000)
+            if (el < 120000) {
+                s_resuming = false;
                 return;
+            }
             VLog(L"запуск: Bluetooth - телефон не подключился за 2 мин");
         } else if (src != 9 && !s_srcAsked) {
             VLog(L"запуск: Bluetooth - телефон подключён, источник BT");
             BtMusicOn();
             s_srcAsked = GetTickCount();
+            s_resuming = false;
             return;
         } else if (src != 9 && GetTickCount() - s_srcAsked < 4000) {
+            s_resuming = false;
             return;   // the source still switching
         } else {
             VLog(L"запуск: Bluetooth - играть (источник MCU %d)", src);
             BtCmd(BT_CMD_PLAYON);
         }
     }
+    s_resuming = false;
     s_resumed = true;
 }
 
@@ -190,6 +206,14 @@ static void UiRememberTick()
         return;
     const wchar_t* sc = UiScreenKey();
     const wchar_t* so = UiSourceKey();
+    const wchar_t* sm = NULL;
+    for (int i = 0; i < (int)(sizeof(kUiScreens) / sizeof(kUiScreens[0])); i++)
+        if (kUiScreens[i].s == s_media)
+            sm = kUiScreens[i].key;
+    if (sm && wcscmp(sm, s_cfg.uiMedia)) {
+        wcscpy(s_cfg.uiMedia, sm);
+        CfgSoon();
+    }
     if ((sc && wcscmp(sc, s_cfg.uiScreen)) || (so && wcscmp(so, s_cfg.uiSource))) {
         if (sc)
             wcscpy(s_cfg.uiScreen, sc);

@@ -485,6 +485,18 @@ static DWORD WINAPI CmdThread(LPVOID)
             char a[40];
             CopyText(a, s_shm->cmdText, 18);
             r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Spp_SetAddr])(a);
+        } else if (cmd == BT_CMD_SETOPT) {   // as the shell's CSetUpBTMenuDlg: on / off, the answer after 5 s
+            char t[8];
+            CopyText(t, s_shm->cmdText, 8);
+            int on = t[2] == '1';
+            if (t[0] == 'c')
+                r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_EnablePowerOnConnect])(on);
+            else
+                r = ((int (*)(int, int))g_real[IDX_Flc_Bluetooth_Conn_EnableAutoAnswerIncomingCall])(on, 5);
+        } else if (cmd == BT_CMD_GETOPTS) {
+            int c = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_GetPowerOnConnectStatus])() & 0xFF;
+            int a = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_GetAutoAnswerIncomingCallStatus])() & 0xFF;
+            r = (c ? 1 : 0) | (a ? 2 : 0);
         } else if (cmd == BT_CMD_PBAP_PULL) {
             char t[40];
             CopyText(t, s_shm->cmdText, 40);

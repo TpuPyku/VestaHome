@@ -166,14 +166,7 @@ static void ScrPhoto(HDC dc)
         PhotoOpenDir(s_cfg.photoDir[0] && GetFileAttributes(s_cfg.photoDir) != 0xFFFFFFFF ? s_cfg.photoDir : L"");
     if (s_phPage >= PhotoPages())
         s_phPage = PhotoPages() - 1;
-    wchar_t s[MAX_PATH + 16], folder[MAX_PATH];
-    wcscpy(folder, s_phDir);
-    int fl = (int)wcslen(folder);
-    if (fl && folder[fl - 1] == L'\\')
-        folder[--fl] = 0;
-    const wchar_t* fn = wcsrchr(folder, L'\\');
-    _snwprintf(s, MAX_PATH + 16, L"МЕДИА · ФОТО · %s", !s_phDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
-    Frame(dc, s);
+    DirTitle(dc, L"МЕДИА · ФОТО", s_phDir);
     MediaTabs(dc, S_PHOTO, IC_PLAY, A_PHPLAY, 0, S_SET_PHOTO);
     PhotoWantThumbs();
     int up = s_phDir[0] ? 1 : 0;
@@ -334,10 +327,6 @@ static void DoAction(const Btn& b)
     switch (b.action) {
     case A_TASKTAB:    s_taskTab = b.arg; s_taskPage = 0; s_status[0] = 0; break;
     case A_TASKSORT:   TaskSort(&s_task, b.arg); s_taskPage = 0; break;
-    case A_TASKPAGE:
-        s_taskPage += b.arg;
-        s_taskPage = s_taskPage < 0 ? 0 : s_taskPage >= TaskPages() ? TaskPages() - 1 : s_taskPage;
-        break;
     case A_TASKKILL:   TaskEnd((DWORD)b.arg); break;
     case A_TASKSWITCH: TaskSwitch((HWND)(INT_PTR)b.arg); break;
     case A_TASKCLOSE:  TaskClose((HWND)(INT_PTR)b.arg); break;
@@ -425,11 +414,24 @@ static void DoAction(const Btn& b)
             ControlsToCfg();
         if (b.arg == T_LOGS)
             LogsSet(s_on[T_LOGS]);
+        if (b.arg == T_AUTOCONNECT || b.arg == T_AUTOANSWER)   // the stack's options (the proxy)
+            BtCmdText(BT_CMD_SETOPT, b.arg == T_AUTOCONNECT ? (s_on[b.arg] ? L"c 1" : L"c 0")
+                                                            : (s_on[b.arg] ? L"a 1" : L"a 0"));
+        if (b.arg == T_LOUDNESS)   // the shell's loudness keys (CAudioEffectDlg, Ghidra 2026-10-22; to verify)
+            McuKey(s_on[T_LOUDNESS] ? 0x93 : 0x94, false);
         break;
     case A_SEG:
         s_seg[b.arg / 16] = b.arg % 16;
         if (b.arg / 16 == G_PHOTO_SCALE) {   // fit / fill: the picture viewed again
             s_cfg.photoFill = b.arg % 16 == 1;
+            SaveCfg();
+        }
+        if (b.arg / 16 == G_TIME_FMT) {   // 12 / 24 h: the clock
+            s_cfg.time12 = b.arg % 16 == 0;
+            SaveCfg();
+        }
+        if (b.arg / 16 == G_SPEED_VOL) {   // (SpeedVolTick follows it)
+            s_cfg.speedVol = b.arg % 16;
             SaveCfg();
         }
         if (b.arg / 16 == G_SAVER) {
@@ -495,6 +497,59 @@ static void DoAction(const Btn& b)
             PbDial(s_book[b.arg / 4].num[b.arg % 4]);
         break;
     case A_PBRELOAD: PbAsk(b.arg); break;
+    case A_PBFIND:   OpenKeysFor(s_pbFind, 23, L"ПОИСК КОНТАКТА", S_CONTACTS); s_bookList.pos = 0; break;
+    case A_PBSIM:    // the other book: pulled anew
+        s_pbStorage ^= 1;
+        free(s_book);
+        s_book = NULL;
+        s_bookN = -1;
+        s_bookList.pos = 0;
+        PbAsk(BT_PB_PB);
+        break;
+    case A_PBFAV:    // the contact's first number in / out of the favourites
+        if (b.arg >= 0 && b.arg < s_bookN && s_book[b.arg].num[0][0]) {
+            wchar_t nm[64], num[24];
+            BtText(s_book[b.arg].name, nm, 64);
+            BtText(s_book[b.arg].num[0], num, 24);
+            FavToggle(nm, num);
+        }
+        break;
+    case A_FAVDIAL: {
+        wchar_t names[kFavMax][48], nums[kFavMax][24];
+        if (b.arg < FavCount(names, nums)) {
+            wcscpy(s_callOut, nums[b.arg]);
+            BtCmdText(BT_CMD_DIAL, nums[b.arg]);
+            Go(S_CALL, true);
+        }
+        break;
+    }
+    case A_BTCONNECT:
+        BtCmdText(BT_CMD_CONNECT, s_cfg.btLast);
+        wcscpy(s_status, L"подключаю телефон…");
+        VLog(L"телефон: подключить %s", s_cfg.btLast);
+        break;
+    case A_PTYSEL:   s_ptySel = b.arg; break;
+    case A_CARSENS: {   // a sensor in / out of the car widget's lines
+        int at = -1, n = 0;
+        for (int i = 0; i < 3; i++) {
+            if (s_cfg.carSens[i] == b.arg)
+                at = i;
+            n += s_cfg.carSens[i] >= 0;
+        }
+        if (at >= 0) {   // out: the later ones move up
+            for (int i = at; i < 2; i++)
+                s_cfg.carSens[i] = s_cfg.carSens[i + 1];
+            s_cfg.carSens[2] = -1;
+        } else if (n < 3) {
+            s_cfg.carSens[n] = b.arg;
+        } else {
+            wcscpy(s_status, L"уже три: сначала уберите одно");
+        }
+        SaveCfg();
+        break;
+    }
+    case A_PTYGO:    PtySearch(); Back(); break;
+    case A_SHELL:    ShellStart(); DestroyWindow(s_wnd); return;
     case A_PHONEANS:
         BtCmd(BT_CMD_ANSWER);
         Back();
@@ -591,17 +646,43 @@ static void DoAction(const Btn& b)
         WifiApManual(!(w.state == WIFI_AP && !w.apAuto));
         break;
     }
-    case A_WIFIPAGE: s_wifiPage += b.arg; if (s_wifiPage < 0) s_wifiPage = 0; break;
+    case A_PAGESTEP: {   // a paged list's arrows (kPagers: Wi-Fi, tasks, the cameras' regions)
+        const Pager* p = PagerOf(s_screen);
+        int to;
+        if (p && PageStep(*p, b.arg, &to)) {
+            *p->page = to;
+            s_slideDir = b.arg;
+        }
+        break;
+    }
     case A_MCUREQ:   McuRequest(); break;
     case A_EQ:       EqSet(b.arg); break;
     case A_EQPRESET: EqPresetSet(b.arg); break;
     case A_BAL:      BalanceStep(false, b.arg); break;
     case A_FADE:     BalanceStep(true, b.arg); break;
     case A_BALCENTER: BalanceStep(false, 0); break;
-    case A_SNDVOL: {   // demo volumes: row * 4 + 1 (down) / + 3 (up)
-        int row = b.arg / 4, v = s_sndVol[row] + (b.arg % 4) - 2;
-        if (row >= 0 && row < 4 && v >= 0 && v <= 30)
-            s_sndVol[row] = v;
+    case A_SNDVOL: {   // the volumes (ScrSetVolume): row * 4 + 1 (down) / + 3 (up)
+        int row = b.arg / 4;
+        bool up = b.arg % 4 == 3;
+        if (row == 0) {   // the navigation / the keys: its value
+            int v = (s_cfg.keyVol < 0 ? 10 : s_cfg.keyVol) + (up ? 1 : -1);
+            s_cfg.keyVol = v < 0 ? 0 : v > 30 ? 30 : v;
+            McuSend3("SPApi_SendRadioKeyVolData", s_cfg.keyVol, 0, 0);
+            McuKey(0x9E, true);
+            SaveCfg();
+        } else if (row == 1) {
+            McuKey(up ? 0x52 : 0x53, true);
+        } else if (row == 2) {
+            McuKey(up ? 0x95 : 0x96, false);
+        } else if (row == 3) {
+            McuKey(up ? 0x2D : 0x2B, false);
+        } else if (row == 4) {   // the start's cap: 0 (off), 5..30
+            int v = s_cfg.startMax + (up ? 1 : -1);
+            s_cfg.startMax = v < 5 ? (up ? 5 : 0) : v > 30 ? 30 : v;
+            SaveCfg();
+        }
+        if (row >= 1 && row <= 3)
+            VLog(L"громкости: строка %d %s", row, up ? L"+" : L"-");
         break;
     }
     case A_WXNOW:    WeatherRefresh(); break;
@@ -609,12 +690,6 @@ static void DoAction(const Btn& b)
     case A_KIND:     ToggleKind(b.arg); break;
     case A_KINDS:    KindsPreset(b.arg); break;
     case A_REGION:   ToggleRegion(b.arg); break;
-    case A_REGPAGE: {
-        int pages = (kCamRegionCount + kRegionsPerPage - 1) / kRegionsPerPage;
-        s_regPage = (s_regPage + b.arg + pages) % pages;
-        s_slideDir = b.arg;
-        break;
-    }
     case A_CAMDL:    CamDownload(); break;
     case A_KEY:
     case A_DEL: {    // typing into the dialled number or the Wi-Fi password
@@ -714,4 +789,87 @@ static void ResumeMedia()   // the file of the screen the start went back to (be
                 VLog(L"запуск: фото «%s»", s_cfg.photoFile);
             }
     }
+}
+
+// ---- the panel's and the wheel's buttons without the stock shell (the user 2026-10-22): MCU 0x4C01 as G3NavHMI's
+// CInputTrigger handles it (Ghidra 2026-10-21, docs/MCU.md) - only under VestaStub (its MCU host holds the event
+// VestaMcuHost; while the stock shell runs, it does them itself and VestaHome must not do them twice).
+// key 7 long (the power button on the volume knob) - the screen off / on; the wheel's 0x12 "phone" - a call coming
+// answered, otherwise up: the radio's seek up, the next track / station (held - the phone's screen); 0x14 "hang up" -
+// a call ended, otherwise down (the user 2026-10-22: as the stock shell, by the mode); 8 / 9 short - next / previous
+// too (which is which: to verify on the unit).
+static bool McuHostOn()
+{
+    HANDLE h = CreateEvent(NULL, TRUE, FALSE, L"VestaMcuHost");
+    bool on = h && GetLastError() == ERROR_ALREADY_EXISTS;
+    if (h)
+        CloseHandle(h);
+    return on;
+}
+
+static void Backlight(bool on)   // the stock shell's SV_BacklightOn / Off(0) (desay_sdk_api.dll, the OS's)
+{
+#ifdef UNDER_CE
+    static HMODULE s_sv;
+    if (!s_sv)
+        s_sv = LoadLibrary(L"desay_sdk_api.dll");
+    typedef int (*SvFn)(int);
+    SvFn f = s_sv ? (SvFn)GetProcAddress(s_sv, on ? L"SV_BacklightOn" : L"SV_BacklightOff") : NULL;
+    if (f)
+        f(0);
+#endif
+}
+
+static void MediaStep(int dir)   // the source playing: the next / previous track, station
+{
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    if (s_netOn)
+        NetStep(dir);
+    else if (PlayerPlaying())
+        dir > 0 ? PlayerStep(1, false) : PlayerPrev();
+    else if (s_vidState == VID_PLAYING)
+        VidStep(dir);
+    else if (src == 9)
+        BtCmd(dir > 0 ? BT_CMD_NEXT : BT_CMD_PREV);
+    else if (src == 0)
+        RadioKey(dir > 0 ? 0x13C : 0x13B);   // the seek up / down
+}
+
+static void HwKey(int key, int st, int kind)
+{
+    if (!McuHostOn())
+        return;
+    VLog(L"кнопка 0x%02X %s %s", key, st ? L"отпущена" : L"нажата", kind == 2 ? L"долго" : kind == 3 ? L"повтор" : L"");
+    static bool s_dark;
+    if (key == 7 && st == 0 && kind == 2) {   // the screen
+        s_dark = !s_dark;
+        McuSend3("SPApi_SendRadioNaviTFTOpenClose", s_dark ? 0 : 1, 0, 0);
+        Backlight(!s_dark);
+    } else if (key == 0x12 && st == 0 && kind == 2) {   // "phone" held: its screen
+        Nav(S_PHONE);
+    } else if (key == 0x12 && st == 1 && kind == 1) {   // "phone": a call coming answered, otherwise up
+        BtState bt;
+        if (BtGet(&bt, NULL) && bt.call[0] == BT_CALL_INCOMING) {
+            BtCmd(BT_CMD_ANSWER);
+            Go(S_CALL, true);
+        } else {
+            MediaStep(1);
+        }
+    } else if (key == 0x14 && st == 1 && kind == 1) {   // "hang up": a call ended, otherwise down
+        BtState bt;
+        if (BtGet(&bt, NULL) && bt.call[0] != BT_CALL_NONE) {
+            BtCmd(BT_CMD_END);
+            if (s_screen == S_INCOMING || s_screen == S_CALL)
+                Back();
+        } else {
+            MediaStep(-1);
+        }
+    } else if ((key == 8 || key == 9) && st == 1 && kind == 1) {
+        MediaStep(key == 8 ? 1 : -1);
+    } else {
+        return;
+    }
+    BuildButtons();
+    Redraw();
 }

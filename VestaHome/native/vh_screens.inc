@@ -280,6 +280,7 @@ static void ScrRadio(HDC dc)
     wchar_t btn[12];
     _snwprintf(btn, 12, L"%s%s", band, pending ? L"…" : L"");
     Button(dc, 200, 200, 120, 52, btn, B_N, IC_NONE, 20, 0, A_RPAGE);   // the next page
+    Button(dc, 504, 200, 88, 52, L"PTY", B_N, IC_NONE, 18, 0, A_SCREEN, S_RADIO_PTY);   // a programme type
     Button(dc, 600, 200, 88, 52, NULL, B_N, IC_LIST, 18, 32, A_SCREEN, S_RADIO_LIST);
     Button(dc, 696, 200, 88, 52, NULL, B_N, IC_GEAR, 18, 32, A_SCREEN, S_SET_RADIO);
     for (int i = 0; i < 8; i++) {   // the page's presets, 4 x 2: the frequency and the name
@@ -365,6 +366,7 @@ static void McuKey(int code, bool ext)
 // One source at a time: our players and the phone's music stop.
 static void RadioOn()
 {
+    ResumeByUser();
     OursQuiet();
     BtQuiet();
     if (!s_tunLive)
@@ -468,18 +470,34 @@ static void RadioScanTick()
     }
 }
 
+// Radio -> PTY: the RDS programme type (its codes 0..15 in order; 0 = all) chosen, then "search" as the stock shell
+// does it - its ext key 0xA4 (the PTY list), then SPApi_SendCurrentAdjustPty(type) (CRadioListDlg, Ghidra
+// 2026-10-22; to verify on the unit).
+static const wchar_t* const kPtyTypes[16] = { L"ВСЕ", L"НОВОСТИ", L"СОБЫТИЯ", L"ИНФОРМАЦИЯ", L"СПОРТ", L"ОБРАЗОВАНИЕ",
+                                              L"ДРАМА", L"КУЛЬТУРА", L"НАУКА", L"РАЗНОЕ", L"ПОП", L"РОК", L"ЛЁГКАЯ",
+                                              L"ЛЁГКАЯ КЛАССИКА", L"КЛАССИКА", L"ДРУГАЯ" };
+static int s_ptySel = 11;
+
+static void PtySearch()
+{
+    McuKey(0xA4, true);
+    McuSend3("SPApi_SendCurrentAdjustPty", s_ptySel, 0, 0);
+    _snwprintf(s_status, 96, L"поиск станций: %s", kPtyTypes[s_ptySel]);
+    VLog(L"радио: PTY %d (%s)", s_ptySel, kPtyTypes[s_ptySel]);
+}
+
 static void ScrRadioPty(HDC dc)
 {
-    static const wchar_t* types[15] = { L"ВСЕ", L"НОВОСТИ", L"СОБЫТИЯ", L"ИНФОРМАЦИЯ", L"СПОРТ", L"ОБРАЗОВАНИЕ",
-                                        L"ДРАМА", L"КУЛЬТУРА", L"НАУКА", L"РАЗНОЕ", L"ПОП", L"РОК", L"ЛЁГКАЯ",
-                                        L"КЛАССИКА", L"ДРУГАЯ" };
     Frame(dc, L"РАДИО · ТИП ПРОГРАММЫ");
-    for (int i = 0; i < 15; i++)
-        Button(dc, 16 + (i % 3) * 260, 68 + (i / 3) * 64, 248, 56, types[i], i == 11 ? B_ACT : B_FILL, IC_NONE, 17);
+    for (int i = 0; i < 16; i++)
+        Button(dc, 16 + (i % 4) * 196, 68 + (i / 4) * 80, 186, 70, kPtyTypes[i], i == s_ptySel ? B_SEL : B_FILL,
+               IC_NONE, 16, 0, A_PTYSEL, i);
     Dock(dc);
     Button(dc, 16, 410, 180, 58, L"ОТМЕНА", B_N, IC_NONE, 18, 0, A_BACK);
-    T(dc, 400, 446, L"Ищет станции с типом «Рок»", 17, kMuted, 400, AL_MID, 390);
-    Button(dc, 604, 410, 180, 58, L"ИСКАТЬ", B_PRI, IC_SEARCH, 18, 0, A_BACK);
+    wchar_t s[64];
+    _snwprintf(s, 64, L"Ищет станции с типом «%s»", kPtyTypes[s_ptySel]);
+    T(dc, 400, 446, s, 17, kMuted, 400, AL_MID, 390);
+    Button(dc, 604, 410, 180, 58, L"ИСКАТЬ", B_PRI, IC_SEARCH, 18, 0, A_PTYGO);
 }
 
 // Media -> music and its list: the player (BASS), defined with it below.
@@ -493,7 +511,8 @@ enum { TIMER_BTSRC = 12 };
 static int s_btHold;   // ⏮ / ⏭ held: the release command to send when the finger goes up
 
 static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x8905), then its BT music key 0x54
-{                         // (HU 2026-10-18-2: 0x54 alone did nothing; after 0x84 the source turned 09)
+{
+    ResumeByUser();                         // (HU 2026-10-18-2: 0x54 alone did nothing; after 0x84 the source turned 09)
     OursQuiet();
     s_srcByUs = GetTickCount();
     McuKey(0x84, false);
@@ -612,6 +631,9 @@ static void BtCmdText(int cmd, const wchar_t* text)
     BtCmd(cmd);
 }
 
+static const wchar_t* BtLastAddr();   // (vh_settings: bt.last)
+static int FavFind(const wchar_t* num);
+
 static void ScrPhone(HDC dc)
 {
     static const wchar_t* keys = L"123456789*0#";
@@ -634,10 +656,21 @@ static void ScrPhone(HDC dc)
     if (!proxy) {
         T(dc, 32, 190, L"Нет proxy Bluetooth", 20, kText, 700, AL_START, 324);
         T(dc, 32, 220, L"VestaHomeInstall, кнопка 2", 16, kMuted, 400, AL_START, 324);
-    } else if (!on) {
+    } else if (!on) {   // the phone last connected (bt.last) with its name from the paired list
         T(dc, 32, 190, L"Телефон не подключён", 20, kText, 700, AL_START, 324);
-        T(dc, 32, 220, L"Подключение пока — в штатной", 16, kMuted, 400, AL_START, 324);
-        T(dc, 32, 242, L"оболочке: Телефон → Bluetooth", 16, kMuted, 400, AL_START, 324);
+        wchar_t last[48] = L"";
+        char a[18];
+        WideCharToMultiByte(CP_ACP, 0, BtLastAddr(), -1, a, 18, NULL, NULL);
+        for (int i = 0; i < bt.paired && i < BT_PAIRED && a[0]; i++)
+            if (!_stricmp(bt.pairedAddr[i], a))
+                BtText(bt.pairedName[i], last, 48);
+        if (BtLastAddr()[0]) {
+            _snwprintf(s, 120, L"последний: %s", last[0] ? last : BtLastAddr());
+            T(dc, 32, 218, s, 16, kMuted, 400, AL_START, 324);
+            Button(dc, 32, 240, 150, 44, L"ПОДКЛЮЧИТЬ", B_PRI, IC_NONE, 14, 0, A_BTCONNECT);
+        }
+        Button(dc, BtLastAddr()[0] ? 194 : 32, 240, 162, 44, L"СОПРЯЖЁННЫЕ", B_N, IC_NONE, 14, 0, A_SCREEN, S_BT_PAIRED);
+        T(dc, 32, 316, L"Новый телефон: найдите «VESTA» в его Bluetooth", 14, kDim, 400, AL_START, 324);
     } else {
         T(dc, 32, 190, bt.devName[0] ? name : L"Телефон", 22, kText, 700, AL_START, 324);
         BtText(bt.operatorName, name, BT_TEXT);
@@ -688,6 +721,8 @@ static LONG       s_pbSeq;          // BtPb's seq when it was asked
 static DWORD      s_pbTick;
 static bool       s_pbFail;         // the last pull failed
 static int        s_pbContact = -1; // the contact open (S_CONTACT)
+static int        s_pbStorage;      // the book from: 0 the phone, 1 its SIM ("ТЕЛ." / "SIM")
+static wchar_t    s_pbFind[24];     // the contacts' search: a part of the name or the number (the keyboard)
 enum { kPbTop = 120, kPbBottom = 386, kPbPitch = 62 };
 static Scroll     s_bookList = { 0, 0, 4 * kPbPitch }, s_callList = { 0, 0, 4 * kPbPitch };
 
@@ -710,7 +745,7 @@ static void PbAsk(int list)
     s_pbTick = GetTickCount();
     s_pbFail = false;
     wchar_t t[8];
-    _snwprintf(t, 8, L"0 %d", list);
+    _snwprintf(t, 8, L"%d %d", list == BT_PB_PB ? s_pbStorage : 0, list);
     BtCmdText(BT_CMD_PBAP_PULL, t);
 }
 
@@ -718,7 +753,7 @@ static void PbAsk(int list)
 static bool PbTake(int list)
 {
     BtPb* pb = PbShm();
-    if (!pb || pb->state != BT_PBS_DONE || pb->list != list)
+    if (!pb || pb->state != BT_PBS_DONE || pb->list != list || pb->storage != (list == BT_PB_PB ? s_pbStorage : 0))
         return false;
     LONG seq = pb->seq;
     int n = pb->count;
@@ -815,7 +850,13 @@ static bool PbHead(HDC dc, int list, int n, const wchar_t* what)
         wcscpy(s, L"Телефон не отдал список");
     else
         _snwprintf(s, 64, L"%s: %d", what, n < 0 ? 0 : n);
-    T(dc, 216, 100, s, 17, s_pbFail ? kStop : kMuted, 600, AL_START, 300);
+    T(dc, 216, 100, s, 17, s_pbFail ? kStop : kMuted, 600, AL_START, list == BT_PB_PB ? 160 : 300);
+    if (list == BT_PB_PB) {   // the book: the phone's / the SIM's, the search
+        Button(dc, 384, 76, 80, 36, s_pbStorage ? L"SIM" : L"ТЕЛ.", s_pbStorage ? B_SEL : B_N, IC_NONE, 14, 0,
+               s_pbWant >= 0 ? A_NONE : A_PBSIM);
+        Button(dc, 472, 76, 80, 36, s_pbFind[0] ? s_pbFind : NULL, s_pbFind[0] ? B_SEL : B_N, IC_SEARCH, 14, 20,
+               A_PBFIND);
+    }
     Button(dc, 560, 76, 152, 36, L"ОБНОВИТЬ", s_pbWant >= 0 ? B_DIS : B_N, IC_REFRESH, 14, 20,
            s_pbWant >= 0 ? A_NONE : A_PBRELOAD, list);
     if (s_pbFail && n < 0) {
@@ -830,11 +871,29 @@ static void ScrContacts(HDC dc)
     Frame(dc, L"ТЕЛЕФОН · КОНТАКТЫ");
     PhoneNav(dc, 1);
     PbNeed(BT_PB_PB);
-    if (PbHead(dc, BT_PB_PB, s_bookN, L"Контактов")) {
-        s_bookList.content = s_bookN * kPbPitch - 6 + 8;
+    if (PbHead(dc, BT_PB_PB, s_bookN, s_pbStorage ? L"На SIM" : L"Контактов")) {
+        static int idx[BT_PB_MAX];   // the ones the search leaves (all without it)
+        int n = 0;
+        wchar_t find[24];
+        wcscpy(find, s_pbFind);
+        CharLowerBuff(find, wcslen(find));
+        for (int i = 0; i < s_bookN && n < BT_PB_MAX; i++) {
+            if (find[0]) {
+                wchar_t w[64], num[24];
+                BtText(s_book[i].name, w, 64);
+                CharLowerBuff(w, wcslen(w));
+                BtText(s_book[i].num[0], num, 24);
+                if (!wcsstr(w, find) && !wcsstr(num, find))
+                    continue;
+            }
+            idx[n++] = i;
+        }
+        if (!n)
+            T(dc, 216, 160, L"Ничего не найдено", 18, kMuted, 600);
+        s_bookList.content = n * kPbPitch - 6 + 8;
         ScrollBegin(dc, s_bookList, 196, kPbTop, 716, kPbBottom);
-        for (int i = 0; i < s_bookN; i++) {
-            int y = kPbTop + 4 + i * kPbPitch - s_bookList.pos;
+        for (int k = 0; k < n; k++) {
+            int i = idx[k], y = kPbTop + 4 + k * kPbPitch - s_bookList.pos;
             if (y + 56 <= kPbTop || y >= kPbBottom)
                 continue;
             const BtPbEntry& e = s_book[i];
@@ -861,7 +920,11 @@ static void ScrContact(HDC dc)
     const BtPbEntry& e = s_book[s_pbContact];
     wchar_t w[64];
     BtText(e.name, w, 64);
-    T(dc, 216, 112, w[0] ? w : L"Без имени", 26, kText, 700, AL_START, 540);
+    T(dc, 216, 112, w[0] ? w : L"Без имени", 26, kText, 700, AL_START, 480);
+    wchar_t num0[24];
+    BtText(e.num[0], num0, 24);
+    bool fav = num0[0] && FavFind(num0) >= 0;
+    Button(dc, 712, 78, 56, 48, NULL, fav ? B_SEL : B_N, fav ? IC_STAR_F : IC_STAR, 15, 26, A_PBFAV, s_pbContact);
     for (int k = 0; k < BT_PB_NUMS && e.num[k][0]; k++) {
         BtText(e.num[k], w, 64);
         ListRow(dc, 208, 140 + k * 64, 560, 56, w, L"ПОЗВОНИТЬ", L_N, IC_CALL, NULL, NULL, A_PBDIAL,
@@ -934,22 +997,6 @@ static void ScrCall(HDC dc)
     T(dc, 88, 452, v, 22, kText, 700);
 }
 
-static void ScrPhoneOff(HDC dc)
-{
-    Frame(dc, L"ТЕЛЕФОН");
-    Disc(dc, 400, 140, 56, kPanel);
-    Ico(dc, IC_BT, 368, 108, 64, kMuted);
-    T(dc, 400, 236, L"ТЕЛЕФОН НЕ ПОДКЛЮЧЁН", 22, kText, 700, AL_MID, 760);
-    T(dc, 400, 268, L"Включите Bluetooth на телефоне и найдите устройство «VESTA»", 18, kMuted, 400, AL_MID, 760);
-    R(dc, 192, 296, 416, 64, 10, kPanel);
-    Avatar(dc, 226, 328, 18, L"R", 14);
-    T(dc, 258, 322, L"Redmi Note", 19, kText, 700);
-    T(dc, 258, 344, L"подключался вчера", 15, kMuted, 400);
-    Button(dc, 470, 304, 130, 48, L"ПОДКЛЮЧИТЬ", B_PRI, IC_NONE, 14, 0, A_TAB, S_PHONE);
-    Dock(dc);
-    Button(dc, 16, 410, 300, 58, L"НАСТРОЙКИ BLUETOOTH", B_N, IC_GEAR, 16, 0, A_SCREEN, S_SET_BT);
-}
-
 static int TzMinutes();
 static void GpsPortText(wchar_t* s, int n);
 static void GpsBaudText(wchar_t* s, int n);
@@ -985,11 +1032,8 @@ static void ScrSetGeneral(HDC dc)
     Toggle(dc, 688, 214, T_GPS_TIME);
     SetRow(dc, 256, L"Формат времени", NULL, false, A_NONE, 0, H);
     Seg(dc, 560, 260, 200, 40, fmt, 2, G_TIME_FMT);
-    SetRow(dc, 304, L"Язык", NULL, false, A_NONE, 0, H);
-    T(dc, 720, 335, L"Русский", 18, kMuted, 400, AL_END);
+    SetRow(dc, 304, L"Виджеты главной", NULL, true, A_SCREEN, S_SET_HOME, H);
     Chevron(dc, 728, 312);
-    SetRow(dc, 352, L"Виджеты главной", NULL, true, A_SCREEN, S_SET_HOME, H);
-    Chevron(dc, 728, 360);
 }
 
 static void ScrSetSound(HDC dc);
@@ -1049,15 +1093,24 @@ static bool McuBtAddr(wchar_t* s, int n);
 static void ScrSetBt(HDC dc)
 {
     Settings(dc, S_SET_BT);
+    enum { H = 48 };
     wchar_t a[24];
-    SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен proxy MCU)");
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
-    SetRow(dc, 120, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");
-    if (src != 9)
-        Button(dc, 560, 126, 200, 44, L"ВКЛЮЧИТЬ", B_N, IC_BT, 15, 22, A_BTMUSIC);
     BtState bt;
     if (BtGet(&bt, NULL)) {
+        static DWORD s_seen;   // opened: the stack's options (the proxy's BT_CMD_GETOPTS, its answer waited for)
+        if (s_seen != s_screenTick) {
+            s_seen = s_screenTick;
+            BtShm* b = BtShmGet();
+            BtCmd(BT_CMD_GETOPTS);
+            for (int i = 0; i < 30 && b && b->cmdDone != b->cmdSeq; i++)
+                Sleep(10);
+            if (b && b->cmdDone == b->cmdSeq && b->cmdResult >= 0) {
+                s_on[T_AUTOCONNECT] = (b->cmdResult & 1) != 0;
+                s_on[T_AUTOANSWER] = (b->cmdResult & 2) != 0;
+            }
+        }
         wchar_t name[BT_TEXT], s[200];
         if (bt.devName[0]) {
             BtText(bt.devName, name, BT_TEXT);
@@ -1065,7 +1118,7 @@ static void ScrSetBt(HDC dc)
         } else {
             wcscpy(s, bt.ready ? L"нет" : L"Bluetooth оболочки ещё не запущен");
         }
-        SetRow(dc, 176, L"Телефон", s);
+        SetRow(dc, 64, L"Телефон", s, false, A_NONE, 0, H);
         const wchar_t* av = bt.av == 2 ? L"играет" : bt.av == 1 ? L"подключена" : bt.av == 0 ? L"нет" : L"—";
         const wchar_t* hf = bt.hf == 2 ? L"подключены" : bt.hf == 0 ? L"нет" : L"—";
         wchar_t bs[40] = L"", ss[40] = L"";
@@ -1073,8 +1126,15 @@ static void ScrSetBt(HDC dc)
             _snwprintf(bs, 40, L" · батарея %d", bt.battery);
         if (bt.signal >= 0)
             _snwprintf(ss, 40, L" · сеть %d", bt.signal);
-        _snwprintf(s, 200, L"музыка: %s · звонки: %s%s%s", av, hf, bs, ss);
-        SetRow(dc, 232, L"Связь", s);
+        _snwprintf(s, 200, L"музыка: %s · звонки: %s%s%s · ГУ %s", av, hf, bs, ss, McuBtAddr(a, 24) ? a : L"—");
+        SetRow(dc, 112, L"Связь", s, false, A_NONE, 0, H);
+        SetRow(dc, 160, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник", false, A_NONE, 0, H);
+        if (src != 9)
+            Button(dc, 560, 164, 200, 40, L"ВКЛЮЧИТЬ", B_N, IC_BT, 15, 22, A_BTMUSIC);
+        SetRow(dc, 208, L"Автосоединение", L"последний телефон — при включении ГУ", false, A_NONE, 0, H);
+        Toggle(dc, 688, 214, T_AUTOCONNECT);
+        SetRow(dc, 256, L"Автоответ", L"входящий звонок принимается через 5 с", false, A_NONE, 0, H);
+        Toggle(dc, 688, 262, T_AUTOANSWER);
         s[0] = 0;   // the paired ones (0x08), by name
         for (int i = 0; i < bt.paired && i < BT_PAIRED && wcslen(s) < 150; i++) {
             wchar_t nm[48];
@@ -1083,9 +1143,13 @@ static void ScrSetBt(HDC dc)
                 wcscat(s, L", ");
             wcsncat(s, nm, 40);
         }
-        SetRow(dc, 288, L"Сопряжённые", s[0] ? s : L"—", false, A_SCREEN, S_BT_PAIRED);
-        SetRow(dc, 344, L"OBD-адаптер (проверка)", L"поиск, сопряжение и опрос ELM327", true, A_SCREEN, S_SET_OBD);
+        SetRow(dc, 304, L"Сопряжённые", s[0] ? s : L"—", false, A_SCREEN, S_BT_PAIRED, H);
+        SetRow(dc, 352, L"OBD-адаптер (проверка)", L"поиск, сопряжение и опрос ELM327", true, A_SCREEN, S_SET_OBD, H);
     } else {
+        SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен proxy MCU)");
+        SetRow(dc, 120, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");
+        if (src != 9)
+            Button(dc, 560, 126, 200, 44, L"ВКЛЮЧИТЬ", B_N, IC_BT, 15, 22, A_BTMUSIC);
         SetRow(dc, 176, L"Сопряжение и подключение", L"пока в штатной оболочке: Телефон → Bluetooth", true);
         T(dc, 264, 268, L"Подключённый телефон и его связь появятся здесь с proxy Bluetooth", 15, kMuted, 400,
           AL_START, 500);
@@ -1280,6 +1344,13 @@ static void ScrSetObd(HDC dc)
 // "Забыть" drops a known one. The known networks live in VestaHome.ini: WZC forgets them on every boot.
 enum { kWifiRows = 3 };   // under them: the message and the access point's controls
 static int     s_wifiPage;
+
+static int WifiPages()   // (kPagers)
+{
+    WifiInfo w;
+    WifiGet(&w);
+    return w.count ? (w.count + kWifiRows - 1) / kWifiRows : 1;
+}
 static wchar_t s_wifiPass[64];     // typed on the keyboard
 static wchar_t s_wifiTarget[33];   // the network it is for
 static wchar_t s_wifiTitle[64];
@@ -1365,9 +1436,9 @@ static void ScrSetWifi(HDC dc)
     }
     if (pages > 1) {
         _snwprintf(s, 16, L"%d/%d", s_wifiPage + 1, pages);
-        Button(dc, 644, 298, 56, 40, NULL, s_wifiPage ? B_N : B_DIS, IC_BACK, 18, 26, A_WIFIPAGE, -1);
+        Button(dc, 644, 298, 56, 40, NULL, s_wifiPage ? B_N : B_DIS, IC_BACK, 18, 26, A_PAGESTEP, -1);
         T(dc, 638, 324, s, 14, kMuted, 600, AL_END);
-        Button(dc, 708, 298, 56, 40, NULL, s_wifiPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 26, A_WIFIPAGE, 1);
+        Button(dc, 708, 298, 56, 40, NULL, s_wifiPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 26, A_PAGESTEP, 1);
     }
 }
 

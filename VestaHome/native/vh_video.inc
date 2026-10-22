@@ -119,6 +119,7 @@ static void VidOpenDir(const wchar_t* dir)
 
 static bool VidPlay(int i)
 {
+    ResumeByUser();
     if (i < 0 || i >= s_vpCount)
         return false;
     s_vpCur = i;

@@ -273,12 +273,14 @@ static void ScrExit(HDC dc)
     Panel(dc, 110, 110, 580, 260, 16);
     Ico(dc, IC_POWER, 142, 140, 48, kText);
     T(dc, 206, 176, L"VESTAHOME", 24, kText, 700, AL_START, 440);
-    T(dc, 142, 232, L"Свернуть — останется открытым позади, появится рабочий стол.", 17, kMuted, 400, AL_START,
+    T(dc, 142, 220, L"Свернуть — останется открытым позади, появится рабочий стол.", 16, kMuted, 400, AL_START,
       520);
-    T(dc, 142, 256, L"Выход — закроется. Штатная оболочка продолжит работать.", 17, kMuted, 400, AL_START, 520);
-    Button(dc, 142, 284, 160, 60, L"ОТМЕНА", B_N, IC_NONE, 17, 0, A_BACK);
-    Button(dc, 320, 284, 160, 60, L"СВЕРНУТЬ", B_N, IC_NONE, 17, 0, A_MINIMIZE);
-    Button(dc, 498, 284, 160, 60, L"ВЫХОД", B_PRI, IC_POWER, 17, 24, A_EXIT);
+    T(dc, 142, 242, L"Штатная — закроется, на экране штатная оболочка.", 16, kMuted, 400, AL_START, 520);
+    T(dc, 142, 264, L"Выход — закроется, появится рабочий стол.", 16, kMuted, 400, AL_START, 520);
+    Button(dc, 134, 284, 124, 60, L"ОТМЕНА", B_N, IC_NONE, 16, 0, A_BACK);
+    Button(dc, 266, 284, 124, 60, L"СВЕРНУТЬ", B_N, IC_NONE, 16, 0, A_MINIMIZE);
+    Button(dc, 398, 284, 124, 60, L"ШТАТНАЯ", B_N, IC_NONE, 16, 0, A_SHELL);
+    Button(dc, 530, 284, 136, 60, L"ВЫХОД", B_PRI, IC_POWER, 16, 24, A_EXIT);
 }
 
 // The knob held 5 s (MCU 0x1102 18): the MCU reboots the unit 5 s later. The stock shell shows its own window

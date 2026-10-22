@@ -238,6 +238,8 @@ static int McuHost()
         Log(L"mcu: в SPIPowerMgr.dll нет нужных функций");
         return 1;
     }
+    // while it lives: VestaHome does the panel's buttons itself (the stock shell does not run), see its HwKey
+    CreateEvent(NULL, TRUE, FALSE, L"VestaMcuHost");
     load();   // as the shell starts it (FUN_00677740)
     if (!inited())
         init();
@@ -248,8 +250,20 @@ static int McuHost()
         skels[i].id = kIds[i];
         skel(kIds[i], &skels[i]);
     }
-    Log(L"mcu: скелеты зарегистрированы (%d), маршрут звука %s", (int)(sizeof(kIds) / sizeof(kIds[0])),
-        s_svRoute ? L"есть" : L"НЕТ");
+    // then as the shell's CMainDialog::SlotInitModule (Ghidra 2026-10-22): "the navigation started" (SPIPowerMgr's
+    // power state 2 - perhaps what keeps the unit from resetting without the shell), "send the current source",
+    // the media play times asked
+    SpFn0 navStarted = (SpFn0)Proc(sp, "SPApi_NavStarted");
+    SpFn0 sendDialog = (SpFn0)Proc(sp, "SPApi_TellRadioToSendDialog");
+    SpFn1 askTimes = (SpFn1)Proc(sp, "SPApi_RequestMediaPlayTimeFromRadio");
+    if (navStarted)
+        navStarted();
+    if (sendDialog)
+        sendDialog();
+    for (int i = 0; i < 4 && askTimes; i++)
+        askTimes(i);
+    Log(L"mcu: скелеты зарегистрированы (%d), запуск как у оболочки %s, маршрут звука %s",
+        (int)(sizeof(kIds) / sizeof(kIds[0])), navStarted && sendDialog ? L"да" : L"НЕТ", s_svRoute ? L"есть" : L"НЕТ");
     for (;;)
         Sleep(60000);
 }

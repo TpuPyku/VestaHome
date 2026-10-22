@@ -61,7 +61,7 @@ static volatile LONG s_mcuPosted;
 // source (00 radio, 06 and 07 the media player - USB, SD, video alike (2026-10-18), 09 Bluetooth). -1 = not seen yet. A change of the volume or the mute opens
 // the volume window (the same values sent again - the tuner repeats them - do not).
 enum { kVolMax = 50, WP_MCU_VOLUME = 1, WP_MCU_MARK = 2, WP_MCU_TUNER = 3, WP_MCU_REBOOT = 4, WP_MCU_SOUND = 5,
-       WP_MCU_DAYNIGHT = 6 };
+       WP_MCU_DAYNIGHT = 6, WP_MCU_HWKEY = 7 };
 // The screen (2026-10-17 photos + Ghidra on the shell's CSetUpDisplayDlg 2026-10-18): 0x4105 00 <0 day, 1 night>,
 // 0x4107 00 <backlight 1..10> (10 by day, 1 at night as set); the shell's day / night buttons are keys 0x64 / 0x65,
 // its brightness slider SPApi_SysSendRadioBackLight(0..10) (the current mode's level).
@@ -474,6 +474,8 @@ static void McuTake(const McuMsg& m)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_SOUND, 0);
     if (dayNight)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_DAYNIGHT, 0);
+    if (m.id == 0x4C01)   // a panel / wheel button: key, pressed 0 / released 1, short 1 / long 2 / repeat 3 (HwKey)
+        PostMessage(s_wnd, WM_APP_MCU, WP_MCU_HWKEY, p[1] | p[2] << 8 | p[3] << 16);
     if (m.id == 0x1102 && p[1] == 0x18)   // the knob held 5 s: the MCU reboots the unit in 5 s more (2026-10-18)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_REBOOT, 0);
     if (tuner && !InterlockedExchange((LONG*)&s_tunPosted, 1) && !PostMessage(s_wnd, WM_APP_MCU, WP_MCU_TUNER, 0))
@@ -535,6 +537,9 @@ static DWORD WINAPI McuThread(LPVOID)
 
 static void McuStart()
 {
+    s_info.cs = -1;   // nothing seen yet (before any message: the car's sensors say "—", not 0)
+    for (int k = 0; k < 16; k++)
+        s_info.sys[k] = -1;
     InitializeCriticalSection(&s_mcuCs);
     s_mcuCsReady = true;
     s_mcuThread = CreateThread(NULL, 0, McuThread, NULL, 0, NULL);

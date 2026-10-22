@@ -563,6 +563,24 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.Line(w, 3);
         break;
     }
+    case IC_FULL: {   // full screen: four corners outwards
+        double a[] = { 6, 17, 6, 6, 17, 6 }, b[] = { 31, 6, 42, 6, 42, 17 }, c2[] = { 42, 31, 42, 42, 31, 42 },
+               d[] = { 17, 42, 6, 42, 6, 31 };
+        p.Line(a, 3);
+        p.Line(b, 3);
+        p.Line(c2, 3);
+        p.Line(d, 3);
+        break;
+    }
+    case IC_UNFULL: {   // back from full screen: the corners inwards
+        double a[] = { 6, 17, 17, 17, 17, 6 }, b[] = { 31, 6, 31, 17, 42, 17 }, c2[] = { 42, 31, 31, 31, 31, 42 },
+               d[] = { 17, 42, 17, 31, 6, 31 };
+        p.Line(a, 3);
+        p.Line(b, 3);
+        p.Line(c2, 3);
+        p.Line(d, 3);
+        break;
+    }
     case IC_UP: {
         double v[] = { 9, 31, 24, 16, 39, 31 };
         p.Line(v, 3);
@@ -625,41 +643,111 @@ static HBITMAP MakeDib(int w, int h, unsigned short** bits)
 
 // Blends a skin picture scaled (bilinear) to w x h at (x, y) into the back buffer; dimmed at night.
 // With a tint the picture is only a mask: painted in that colour.
+// One pixel of a picture scaled to w x h (bilinear, premultiplied RGBA) and tinted: s[0..3].
+static void ImgSample(const Img& im, int w, int h, COLORREF tint, int dx, int dy, int* s)
+{
+    int fy = (2 * dy + 1) * im.h * 128 / h - 128;   // source position, 8-bit fraction
+    if (fy < 0)
+        fy = 0;
+    int y0 = fy >> 8, wy = fy & 255, y1 = y0 + 1 < im.h ? y0 + 1 : y0;
+    int fx = (2 * dx + 1) * im.w * 128 / w - 128;
+    if (fx < 0)
+        fx = 0;
+    int x0 = fx >> 8, wx = fx & 255, x1 = x0 + 1 < im.w ? x0 + 1 : x0;
+    const unsigned char* r0 = im.px + y0 * im.w * 4;
+    const unsigned char* r1 = im.px + y1 * im.w * 4;
+    const unsigned char *pa = r0 + x0 * 4, *pb = r0 + x1 * 4, *pc = r1 + x0 * 4, *pd = r1 + x1 * 4;
+    for (int k = 0; k < 4; k++)
+        s[k] = ((pa[k] * (256 - wx) + pb[k] * wx) * (256 - wy) + (pc[k] * (256 - wx) + pd[k] * wx) * wy) >> 16;
+    if (tint != CLR_INVALID && s[3]) {
+        s[0] = GetRValue(tint) * s[3] / 255;
+        s[1] = GetGValue(tint) * s[3] / 255;
+        s[2] = GetBValue(tint) * s[3] / 255;
+    }
+}
+
+// The pictures as DrawImg blends them, scaled and tinted once rather than every frame (the skin's icons come in a
+// few sizes and colours each): up to 128 x 128, kImgCopies of them, 256 KB at most (the unit's memory) - past it
+// all dropped at once; dropped too when a picture is freed (ImgCopiesDrop: the programs' icons).
+struct ImgCopy {
+    const unsigned char* src;
+    int                  w, h;
+    COLORREF             tint;
+    unsigned char*       px;   // w * h * 4: s[0..3] of ImgSample
+};
+enum { kImgCopies = 48, kImgCopyBytes = 256 * 1024 };
+static ImgCopy s_imgCopy[kImgCopies];
+static int     s_imgCopyN, s_imgCopyBytes;
+
+static void ImgCopiesDrop()
+{
+    for (int i = 0; i < s_imgCopyN; i++)
+        free(s_imgCopy[i].px);
+    s_imgCopyN = s_imgCopyBytes = 0;
+}
+
+static const unsigned char* ImgScaled(const Img& im, int w, int h, COLORREF tint)
+{
+    if (w > 128 || h > 128)
+        return NULL;
+    for (int i = 0; i < s_imgCopyN; i++) {
+        const ImgCopy& c = s_imgCopy[i];
+        if (c.src == im.px && c.w == w && c.h == h && c.tint == tint)
+            return c.px;
+    }
+    int bytes = w * h * 4;
+    if (s_imgCopyN == kImgCopies || s_imgCopyBytes + bytes > kImgCopyBytes)
+        ImgCopiesDrop();
+    unsigned char* px = (unsigned char*)malloc(bytes);
+    if (!px)
+        return NULL;
+    int s[4];
+    for (int dy = 0; dy < h; dy++)
+        for (int dx = 0; dx < w; dx++) {
+            ImgSample(im, w, h, tint, dx, dy, s);
+            unsigned char* q = px + (dy * w + dx) * 4;
+            q[0] = (unsigned char)s[0];
+            q[1] = (unsigned char)s[1];
+            q[2] = (unsigned char)s[2];
+            q[3] = (unsigned char)s[3];
+        }
+    ImgCopy& c = s_imgCopy[s_imgCopyN++];
+    c.src = im.px;
+    c.w = w;
+    c.h = h;
+    c.tint = tint;
+    c.px = px;
+    s_imgCopyBytes += bytes;
+    return px;
+}
+
 static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = CLR_INVALID)
 {
 #ifndef UNDER_CE
     GdiFlush();   // desktop GDI batches drawing: finish it before touching the pixels
 #endif
+    const unsigned char* copy = ImgScaled(im, w, h, tint);
     for (int dy = 0; dy < h; dy++) {
         int py = y + dy;
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
-        int fy = (2 * dy + 1) * im.h * 128 / h - 128;   // source position, 8-bit fraction
-        if (fy < 0)
-            fy = 0;
-        int y0 = fy >> 8, wy = fy & 255, y1 = y0 + 1 < im.h ? y0 + 1 : y0;
-        const unsigned char* r0 = im.px + y0 * im.w * 4;
-        const unsigned char* r1 = im.px + y1 * im.w * 4;
         unsigned short* dst = s_backBits + (479 - py) * 800;
         for (int dx = 0; dx < w; dx++) {
             int px = x + dx;
             if (px < s_clip.left || px >= s_clip.right)
                 continue;
-            int fx = (2 * dx + 1) * im.w * 128 / w - 128;
-            if (fx < 0)
-                fx = 0;
-            int x0 = fx >> 8, wx = fx & 255, x1 = x0 + 1 < im.w ? x0 + 1 : x0;
-            const unsigned char *pa = r0 + x0 * 4, *pb = r0 + x1 * 4, *pc = r1 + x0 * 4, *pd = r1 + x1 * 4;
             int s[4];
-            for (int k = 0; k < 4; k++)
-                s[k] = ((pa[k] * (256 - wx) + pb[k] * wx) * (256 - wy) + (pc[k] * (256 - wx) + pd[k] * wx) * wy) >> 16;
+            if (copy) {
+                const unsigned char* q = copy + (dy * w + dx) * 4;
+                s[0] = q[0];
+                s[1] = q[1];
+                s[2] = q[2];
+                s[3] = q[3];
+            } else {
+                ImgSample(im, w, h, tint, dx, dy, s);
+            }
             if (!s[3])
                 continue;
-            if (tint != CLR_INVALID) {
-                s[0] = GetRValue(tint) * s[3] / 255;
-                s[1] = GetGValue(tint) * s[3] / 255;
-                s[2] = GetBValue(tint) * s[3] / 255;
-            }
             if (s_night)
                 for (int k = 0; k < 3; k++)
                     s[k] = s[k] * 2 / 3;
@@ -708,6 +796,28 @@ static char* ReadAll(const wchar_t* path, DWORD* size)
         *size = got;
     }
     return buf;
+}
+
+// The text of ReadAll's buffer: past its UTF-8 BOM.
+static char* Utf8Text(char* buf)
+{
+    unsigned char* u = (unsigned char*)buf;
+    return u[0] == 0xEF && u[1] == 0xBB && u[2] == 0xBF ? buf + 3 : buf;
+}
+
+// The next line of a UTF-8 text (Utf8Text) into `line` ("" when it does not fit); false at the end. The text is cut
+// at its '\n's.
+static bool NextUtf8Line(char** p, wchar_t* line, int cap)
+{
+    if (!**p)
+        return false;
+    char* end = strchr(*p, '\n');
+    if (end)
+        *end = 0;
+    if (MultiByteToWideChar(CP_UTF8, 0, *p, -1, line, cap) <= 0)
+        line[0] = 0;
+    *p = end ? end + 1 : *p + strlen(*p);
+    return true;
 }
 
 // A skin's 800 x 480 picture into bits (as is: night dims it when a frame is drawn).
@@ -1472,6 +1582,35 @@ static void ListRow(HDC dc, int x, int y, int w, int h, const wchar_t* text, con
         T(dc, x + w - 16, y + h / 2 + 6, right, 16, mg, 600, AL_END);
 }
 
+// The browsers "volumes -> folders -> files" (music, video): the title "<prefix> · <the folder's name>"
+// ("НОСИТЕЛИ" at the top); inside a folder "Наверх" first, then the entries in columns of `rows` (folders end in '\\'
+// and are orange), the one playing (curName, NULL none) orange; nothing there - its line.
+static void DirEntries(HDC dc, const wchar_t* dir, wchar_t* const* names, int count, int page, int rows, int cols,
+                       int top, int h, int pitch, Action up, Action pick, Icon ic, const wchar_t* curName,
+                       const wchar_t* none, int noneY)
+{
+    int cell = 0;   // cells in columns: `rows` down, then the next column
+    if (dir[0]) {
+        ListRow(dc, 16, top, 380, h, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, up);
+        cell = 1;
+    }
+    int per = rows * cols - cell, first = page * per;
+    wchar_t s[MAX_PATH + 1];
+    for (int i = first; i < count && i < first + per; i++, cell++) {
+        const wchar_t* n = names[i];
+        bool isDir = n[wcslen(n) - 1] == L'\\';
+        wcsncpy(s, n, MAX_PATH);
+        s[MAX_PATH] = 0;
+        if (isDir && s[0])
+            s[wcslen(s) - 1] = 0;
+        ListRow(dc, 16 + cell / rows * 388, top + cell % rows * pitch, 380, h, s, NULL,
+                !isDir && curName && !_wcsicmp(n, curName) ? L_CUR : L_N, isDir ? IC_FOLDER : ic, NULL, NULL, pick,
+                i, isDir ? kOrange : CLR_INVALID);   // folders orange, files muted
+    }
+    if (!count)
+        T(dc, 40, dir[0] ? noneY + pitch : noneY, dir[0] ? none : L"Нет носителей", 18, kMuted, 400);
+}
+
 // A list that scrolls by px - the internet radio's stations, the licenses, the contacts, the calls: the finger moves
 // the one under the press (WndProc), its arrows (A_SCROLL, arg -1 / 1) by step. One per frame: s_scroll is the one
 // drawn last (a window's over its screen's). Between ScrollBegin and ScrollEnd the rows are drawn at
@@ -1547,11 +1686,14 @@ static void Dock(HDC dc)
     Sep(dc, 0, 398, 800);
 }
 
-static void Now(wchar_t* s, int n)
+static void Now(wchar_t* s, int n)   // the clock: 24 h, or 12 h ("General -> Time format", time.12h)
 {
     SYSTEMTIME t;
     GetLocalTime(&t);
-    _snwprintf(s, n, L"%02d:%02d", t.wHour, t.wMinute);
+    if (s_seg[G_TIME_FMT] == 0)
+        _snwprintf(s, n, L"%d:%02d", t.wHour % 12 ? t.wHour % 12 : 12, t.wMinute);
+    else
+        _snwprintf(s, n, L"%02d:%02d", t.wHour, t.wMinute);
 }
 
 // Top bar of every screen: back button (when there is a screen to go back to, or a given action) and title,
@@ -1674,6 +1816,19 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         T(dc, end + 16, 36, s_status, 15, kMuted, 400, AL_START, right - end - 16);
 }
 
+static void DirTitle(HDC dc, const wchar_t* prefix, const wchar_t* dir)
+{
+    wchar_t s[MAX_PATH + 32], folder[MAX_PATH];
+    wcscpy(folder, dir);   // the folder's own name, the whole path would not fit
+    int fl = (int)wcslen(folder);
+    if (fl && folder[fl - 1] == L'\\')
+        folder[--fl] = 0;
+    const wchar_t* fn = wcsrchr(folder, L'\\');
+    _snwprintf(s, MAX_PATH + 32, L"%s · %s", prefix, !dir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
+    s[MAX_PATH + 31] = 0;
+    Frame(dc, s);
+}
+
 // Sections of the bottom bar; each opens its main screen (media: the source shown last).
 struct NavItem { Icon ic; const wchar_t* label; Screen to; };
 static const NavItem kNav[6] = { { IC_HOME, L"ГЛАВНАЯ", S_HOME }, { IC_RADIO, L"РАДИО", S_RADIO },
@@ -1768,7 +1923,7 @@ static void SideTabs(HDC dc, const Tab* tabs, int n, int active, int step, int h
 static void PhoneNav(HDC dc, int active)
 {
     static const Tab tabs[5] = { { IC_KEYPAD, L"НАБОР", S_PHONE }, { IC_USERS, L"КОНТАКТЫ", S_CONTACTS },
-                                 { IC_STAR, L"ИЗБРАННОЕ", S_CONTACTS }, { IC_CLOCK, L"ЖУРНАЛ", S_CALLS },
+                                 { IC_STAR, L"ИЗБРАННОЕ", S_FAVS }, { IC_CLOCK, L"ЖУРНАЛ", S_CALLS },
                                  { IC_BT, L"МУЗЫКА", S_AUDIO_BT } };
     SideTabs(dc, tabs, 5, active, 78, 70);
 }

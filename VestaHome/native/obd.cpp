@@ -233,11 +233,15 @@ static DWORD WINAPI ObdThread(LPVOID)
             Elm(h, "ATZ", 4000, r, sizeof(r));   // the first command may only wake it
     }
     SetState(OBD_ON);
-    static const char* kPoll[4] = { "010C", "010D", "0105", "ATRV" };
-    char last[4][64] = { "", "", "", "" };
+    // the engine (2026-10-22: the car widget's lines): the PIDs most cars answer; one a car does not - "NO DATA", -1
+    enum { kPolls = 11 };
+    static const char* kPoll[kPolls] = { "010C", "010D", "0105", "ATRV", "0104", "0111", "010F", "0146", "012F",
+                                         "0110", "0101" };
+    char last[kPolls][64];
+    memset(last, 0, sizeof(last));
     bool alive = true;
     while (!s_stop && alive) {
-        for (int i = 0; i < 4 && !s_stop; i++) {
+        for (int i = 0; i < kPolls && !s_stop; i++) {
             if (!Elm(h, kPoll[i], 3000, r, sizeof(r))) {
                 Say(L"связь потеряна (%lu)", GetLastError());
                 alive = false;
@@ -252,8 +256,26 @@ static DWORD WINAPI ObdThread(LPVOID)
                 s_info.speed = PidBytes(r, "410D", v, 1) == 1 ? v[0] : -1;
             else if (i == 2)
                 s_info.coolant = PidBytes(r, "4105", v, 1) == 1 ? v[0] - 40 : -1;
-            else
+            else if (i == 3)
                 _snwprintf(s_info.volt, 12, L"%.10S", r[0] && r[0] != '?' ? r : "");
+            else if (i == 4)
+                s_info.load = PidBytes(r, "4104", v, 1) == 1 ? v[0] * 100 / 255 : -1;
+            else if (i == 5)
+                s_info.throttle = PidBytes(r, "4111", v, 1) == 1 ? v[0] * 100 / 255 : -1;
+            else if (i == 6)
+                s_info.intake = PidBytes(r, "410F", v, 1) == 1 ? v[0] - 40 : -1000;
+            else if (i == 7)
+                s_info.ambient = PidBytes(r, "4146", v, 1) == 1 ? v[0] - 40 : -1000;
+            else if (i == 8)
+                s_info.fuel = PidBytes(r, "412F", v, 1) == 1 ? v[0] * 100 / 255 : -1;
+            else if (i == 9)
+                s_info.maf100 = PidBytes(r, "4110", v, 2) == 2 ? v[0] * 256 + v[1] : -1;
+            else if (PidBytes(r, "4101", v, 1) == 1) {   // A: bit 7 the lamp, 0..6 the codes stored
+                s_info.mil = v[0] >> 7;
+                s_info.dtcs = v[0] & 0x7F;
+            } else {
+                s_info.mil = s_info.dtcs = -1;
+            }
             s_info.volt[11] = 0;
             LeaveCriticalSection(&s_cs);
         }
@@ -273,7 +295,9 @@ void ObdInit(HWND notify, UINT msg, ObdLogFn log)
     s_notify = notify;
     s_msg = msg;
     s_log = log;
-    s_info.rpm = s_info.speed = s_info.coolant = -1;
+    s_info.rpm = s_info.speed = s_info.coolant = s_info.load = s_info.throttle = s_info.fuel = s_info.maf100 = -1;
+    s_info.mil = s_info.dtcs = -1;
+    s_info.intake = s_info.ambient = -1000;
 }
 
 void ObdSetSppAddrFn(ObdSppAddrFn fn)
@@ -300,7 +324,9 @@ void ObdConnect(const char* addr)
     strncpy(s_devAddr, addr, 17);
     s_devAddr[17] = 0;
     EnterCriticalSection(&s_cs);
-    s_info.rpm = s_info.speed = s_info.coolant = -1;
+    s_info.rpm = s_info.speed = s_info.coolant = s_info.load = s_info.throttle = s_info.fuel = s_info.maf100 = -1;
+    s_info.mil = s_info.dtcs = -1;
+    s_info.intake = s_info.ambient = -1000;
     s_info.volt[0] = 0;
     LeaveCriticalSection(&s_cs);
     s_stop = false;

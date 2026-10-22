@@ -19,9 +19,9 @@ static void DrawScreen(HDC dc, Screen s)
     case S_CONTACTS:    ScrContacts(dc); break;
     case S_CONTACT:     ScrContact(dc); break;
     case S_CALLS:       ScrCalls(dc); break;
+    case S_FAVS:        ScrFavs(dc); break;
     case S_CALL:        ScrCall(dc); break;
     case S_INCOMING:    ScrIncoming(dc); break;
-    case S_PHONE_OFF:   ScrPhoneOff(dc); break;
     case S_SETTINGS:    ScrSetGeneral(dc); break;
     case S_SET_SOUND:   ScrSetSound(dc); break;
     case S_SET_BALANCE: ScrSetBalance(dc); break;
@@ -406,7 +406,9 @@ static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true }, { S_R
                                  { S_PHOTO, &s_phPage, PhotoPages, false },
                                  { S_AUDIO_LIST, &s_musPage, MusPages, false },
                                  { S_VIDEO, &s_vidPage, VidPages, false },
-                                 { S_BT_PAIRED, &s_pairedPage, PairedPages, true } };
+                                 { S_BT_PAIRED, &s_pairedPage, PairedPages, true },
+                                 { S_SET_WIFI, &s_wifiPage, WifiPages, false }, { S_TASKS, &s_taskPage, TaskPages, false },
+                                 { S_CAMREG, &s_regPage, RegPages, true } };
 
 static const Pager* PagerOf(Screen s)
 {

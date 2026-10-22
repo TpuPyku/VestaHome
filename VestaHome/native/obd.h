@@ -14,6 +14,11 @@ struct ObdInfo {
     int     state;                    // OBD_*
     wchar_t lines[kObdLines][96];     // the last steps, oldest first
     int     rpm, speed, coolant;      // -1 = no answer (yet)
+    int     load, throttle;           // %: the engine's load (0104), the throttle (0111)
+    int     intake, ambient;          // °C: the intake air (010F), outside (0146)
+    int     fuel;                     // %: the tank (012F)
+    int     maf100;                   // the air flow, g/s x 100 (0110): the fuel burnt
+    int     mil, dtcs;                // "Check engine" on 1 / off 0, the trouble codes stored (0101)
     wchar_t volt[12];                 // ATRV: the adapter's supply voltage, "" none
 };
 

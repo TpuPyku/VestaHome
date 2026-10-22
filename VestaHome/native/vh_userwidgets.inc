@@ -567,10 +567,11 @@ static void WgDraw(int id, HDC dc, int x, int y)
         WUser(dc, x, y, id - WG_COUNT);
 }
 
-// Shown: not hidden, and the climate only when the car has it (Settings -> Car).
+// Shown: not hidden (the climate too: a car without it hides it here, "General -> Widgets of the main screen";
+// the user 2026-10-21 - it no longer stands in for the calendar).
 static bool WgShown(int id)
 {
-    return !(s_cfg.homeHidden >> id & 1) && (id != WG_CLIMATE || s_cfg.climate);
+    return !(s_cfg.homeHidden >> id & 1) && id != WG_CLIMATE;   // the climate: off for now (no data from the car)
 }
 
 // Where each shown widget goes: in their order, each into the first free place (a double needs two free cells
@@ -670,8 +671,8 @@ static void ScrSetHome(HDC dc)
             _snwprintf(usub, 48, L"свой · %s.ini%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");
             sub = usub;
         }
-        if (id == WG_CLIMATE && !s_cfg.climate)
-            sub = L"нет в машине (Настройки → Автомобиль)";
+        if (id == WG_CLIMATE)
+            sub = L"выключен: нет данных от машины";
         T(dc, x + 46, y + (sub ? 24 : 33), WgName(id), 18, shown ? kText : kDim, 700, AL_START, 172);
         if (sub)
             T(dc, x + 46, y + 43, sub, 13, kMuted, 400, AL_START, 172);
@@ -692,37 +693,17 @@ static void ScrSetHome(HDC dc)
 }
 
 // The car's systems and the trip, opened from the widgets.
-static void ScrCar(HDC dc)
+static void ScrCar(HDC dc)   // all the car's sensors (2026-10-22, out of the demo): "—" without data
 {
-    static const wchar_t* sys[6][2] = { { L"Двигатель", L"в норме" }, { L"Тормозная система", L"в норме" },
-                                        { L"ABS / ESP", L"в норме" }, { L"Подушки безопасности", L"в норме" },
-                                        { L"Аккумулятор", L"14,2 В" }, { L"Охлаждающая жидкость", L"90 °C" } };
-    static const wchar_t* trip[5][2] = { { L"Средний расход", L"7,4 л/100 км" }, { L"Запас хода", L"420 км" },
-                                         { L"Пробег поездки", L"34,5 км" }, { L"Время в пути", L"0:42" },
-                                         { L"Средняя скорость", L"49 км/ч" } };
     Frame(dc, L"АВТОМОБИЛЬ");
-    Panel(dc, 16, 68, 376, 396);
-    Disc(dc, 44, 102, 10, kOk);
-    T(dc, 64, 110, L"ОШИБОК НЕТ", 22, kText, 700);
-    T(dc, 32, 138, L"проверено сегодня в 12:04", 15, kMuted, 400);
-    for (int i = 0; i < 6; i++) {
-        int y = 152 + i * 50;
-        T(dc, 32, y + 32, sys[i][0], 17, kText, 600, AL_START, 220);
-        T(dc, 376, y + 32, sys[i][1], 17, i < 4 ? kOk : kText, 700, AL_END);
-        if (i < 5)
-            Sep(dc, 32, y + 49, 344);
+    Panel(dc, 16, 68, 768, 396);
+    for (int id = 0; id < kCarSensors; id++) {   // three columns of nine
+        int x = 28 + id / 9 * 252, y = 74 + id % 9 * 43;
+        wchar_t v[32];
+        bool have = CarSensor(id, v, 32);
+        T(dc, x, y + 28, kCarSensor[id][0], 14, kMuted, 400, AL_START, 140);
+        T(dc, x + 236, y + 28, have ? v : L"—", 15, have ? kText : kDim, 700, AL_END, 100);
+        if (id % 9 < 8 && id + 1 < kCarSensors)
+            Sep(dc, x, y + 42, 236);
     }
-    Panel(dc, 408, 68, 376, 300);
-    T(dc, 424, 100, L"ПОЕЗДКА", 14, kMuted, 700);
-    for (int i = 0; i < 5; i++) {
-        int y = 112 + i * 50;
-        T(dc, 424, y + 32, trip[i][0], 17, kMuted, 400);
-        T(dc, 768, y + 32, trip[i][1], 17, kText, 700, AL_END);
-        if (i < 4)
-            Sep(dc, 424, y + 49, 344);
-    }
-    Panel(dc, 408, 380, 376, 84);
-    Ico(dc, IC_GEAR, 424, 402, 40, kOrange);
-    T(dc, 480, 416, L"ТО через 3 200 км", 19, kText, 700);
-    T(dc, 480, 442, L"или 41 день · масло и фильтры", 15, kMuted, 400, AL_START, 290);
 }

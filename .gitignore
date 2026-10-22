@@ -65,3 +65,6 @@ SPIPower/install/vh_payload.bin
 VestaHome/VestaHome/TestMedia/
 # G3patch was moved out of the repo 2026-10-17 (G3Skin\G3patch, MAIN\G3NavHMI_ghidra): never add it back
 G3patch/
+
+# the user guide's screens (tools/make_shots.py, made again on demand)
+docs/shots/

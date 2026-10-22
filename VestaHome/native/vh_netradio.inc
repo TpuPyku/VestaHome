@@ -333,6 +333,8 @@ static void NetStop()
 
 static void NetPlay(int i)
 {
+    ResumeByUser();
+    s_mediaLast = 2;
     NetLoadList();
     if (i < 0 || i >= s_netCount)
         return;

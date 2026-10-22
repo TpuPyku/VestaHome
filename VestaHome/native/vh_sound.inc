@@ -113,13 +113,13 @@ static void ScrSetSound(HDC dc)
     Button(dc, 600, 160, 168, 64, L"БАЛАНС", B_N, IC_EQ, 15, 28, A_SCREEN, S_SET_BALANCE);
     Button(dc, 600, 236, 168, 64, L"ГРОМКОСТЬ", B_N, IC_VOL, 15, 28, A_SCREEN, S_SET_VOLUME);
     Sep(dc, 256, 350, 512);
-    T(dc, 264, 384, L"Тонкомпенсация (демо)", 19, kText, 700);
+    T(dc, 264, 384, L"Тонкомпенсация", 19, kText, 700);   // the MCU's keys 0x93 / 0x94 (to verify on the unit)
     Toggle(dc, 688, 358, T_LOUDNESS);
 }
 
 static void ScrSetBalance(HDC dc)
 {
-    static const wchar_t* speed[4] = { L"ВЫКЛ", L"1", L"2", L"3" };
+    static const wchar_t* speed[4] = { L"ВЫКЛ", L"+2", L"+3", L"+4" };
     static DWORD s_seen;   // opened: the shell's key of its balance screen (as 0xE6 for the equalizer)
     if (s_seen != s_screenTick) {
         s_seen = s_screenTick;
@@ -150,34 +150,89 @@ static void ScrSetBalance(HDC dc)
     Stepper(dc, 504, 108, 256, b, 48, 20, A_BAL);
     T(dc, 504, 184, L"Фейдер", 19, kText, 700);
     Stepper(dc, 504, 196, 256, f, 48, 20, A_FADE);
-    T(dc, 504, 272, L"Громкость от скорости (демо)", 19, kText, 700, AL_START, 260);
+    T(dc, 504, 272, L"Громкость от скорости", 19, kText, 700, AL_START, 260);
+    T(dc, 760, 272, L"на 100 км/ч", 13, kMuted, 400, AL_END);
     Seg(dc, 504, 284, 256, 44, speed, 4, G_SPEED_VOL, 15);
     Button(dc, 504, 344, 256, 48, L"В ЦЕНТР", B_N, IC_NONE, 16, 0, A_BALCENTER);
 }
 
-// Volumes of the sources (CAudioVolumeDlg). Demo: of SPApi_SendRadioAudioVolData(kind, value) only kind 5
-// (traffic announcements, CRDSSetupDlg) is known, so nothing is sent from here yet.
-static int s_sndVol[4] = { 12, 18, 15, 10 };
+// The volume by speed (the user 2026-10-22: the MCU has no key for it - our own): the volume the user set (the
+// base) plus `gain` per 100 km/h (Balance: off / +2 / +3 / +4; the user: radio 3-5 standing, 6-8 at 100 km/h, media
+// 9-11 and 12-14), the speed from the car (CAN) or GPS, 5 km/h of hysteresis, a change every 3 s at most. Set with
+// SPApi_SendRadioAudioVolData(0, v) - the shell's "default" volume: whether it moves the volume playing now is to be
+// seen on the unit; if the MCU does not report it within 2 s, the method does not work and is left (till a restart)
+// rather than touch the next start's volume. A volume that changed not by us (the knob, the wheel, another source)
+// is the user's: the new base. Our changes do not open the volume window (WP_MCU_VOLUME).
+static int   s_svBase = -1, s_svAdd, s_svSent = -1, s_svPrev = -1;   // s_svPrev: the volume before our last
+static DWORD s_svTick;
+static bool  s_svDead;
 
+static void SpeedVolTick()   // once a second
+{
+    static const int kGain[4] = { 0, 2, 3, 4 };
+    int vol, mute, src;
+    if (s_svDead || !VolGet(&vol, &mute, &src) || vol < 0 || mute)
+        return;
+    DWORD now = GetTickCount();
+    if (vol != s_svSent) {
+        if (s_svSent >= 0 && now - s_svTick < 2000)
+            return;   // ours, the MCU's answer still to come
+        if (s_svSent >= 0 && s_svTick && now - s_svTick < 4000 && vol == s_svPrev) {
+            s_svDead = true;   // sent, not taken: the volume playing does not follow this command
+            VLog(L"громкость от скорости: MCU не взял %d (сейчас %d) - выключено до перезапуска", s_svSent, vol);
+            return;
+        }
+        s_svBase = vol - s_svAdd < 0 ? 0 : vol - s_svAdd;   // the user's
+        s_svSent = vol;
+    }
+    Gps g;
+    GpsGet(&g);
+    int kmh = 0;
+    if (g.carTick && now - g.carTick < 3000)
+        kmh = g.carSpeed;
+    else if (GpsFresh(g, 3000))
+        kmh = (int)(g.speedKmh + 0.5);
+    int gain = kGain[s_cfg.speedVol & 3];
+    int up = kmh > 5 ? (gain * (kmh - 5) + 50) / 100 : 0, down = (gain * (kmh + 5) + 50) / 100;
+    int add = up > s_svAdd ? up : down < s_svAdd ? down : s_svAdd;
+    if (add == s_svAdd || now - s_svTick < 3000)
+        return;
+    int v = s_svBase + add > 30 ? 30 : s_svBase + add;
+    s_svPrev = vol;
+    McuSend3("SPApi_SendRadioAudioVolData", 0, v, 0);
+    VLog(L"громкость от скорости: %d -> %d (своя %d, +%d при %d км/ч)", vol, v, s_svBase, add, kmh);
+    s_svAdd = add;
+    s_svSent = v;
+    s_svTick = now;
+}
+
+// Volumes (the user 2026-10-22, out of the demo) as the stock shell's CAudioVolumeDlg (Ghidra 2026-10-22): the
+// navigation's / the keys' volume - its value sent (SendRadioKeyVolData + ext key 0x9E); the MCU's own three - the
+// start's, the phone's, the traffic announcements' - by its rows' keys (+ / -: ext 0x52 / 0x53, 0x95 / 0x96,
+// 0x2D / 0x2B; their order on the shell's screen to verify), their values stay in the MCU (not reported);
+// VestaHome's cap of the volume at the start (StartVolumeTick).
 static void ScrSetVolume(HDC dc)
 {
-    static const wchar_t* rows[4][2] = { { L"Навигация", L"подсказки навигатора" },
-                                         { L"Телефон", L"разговор по Bluetooth" },
-                                         { L"Дорожные сообщения", L"RDS TA" },
-                                         { L"При включении", L"громкость после запуска" } };
+    static const wchar_t* rows[5][2] = { { L"Навигация и кнопки", L"подсказки, звук нажатий" },
+                                         { L"При включении (MCU)", L"значение хранит MCU" },
+                                         { L"Телефон (MCU)", L"разговор по Bluetooth" },
+                                         { L"Дорожные сообщения (MCU)", L"RDS TA" },
+                                         { L"Макс. при включении", L"была громче — убавит до неё" } };
     Settings(dc, S_SET_SOUND);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         wchar_t v[8];
-        _snwprintf(v, 8, L"%d", s_sndVol[i]);
-        SetRow(dc, 64 + i * 56, rows[i][0], rows[i][1], i == 3);
+        if (i == 0)
+            _snwprintf(v, 8, s_cfg.keyVol < 0 ? L"—" : L"%d", s_cfg.keyVol);
+        else if (i == 4)
+            _snwprintf(v, 8, s_cfg.startMax ? L"%d" : L"выкл", s_cfg.startMax);
+        else if (i > 0)
+            wcscpy(v, L"− / +");
+        SetRow(dc, 64 + i * 56, rows[i][0], rows[i][1], i == 4);
         Stepper(dc, 560, 68 + i * 56, 200, v, 48, 20, A_SNDVOL);
         // the stepper sends -1/+1: which row is in the high bits
         s_btns[kBtnCount - 2].arg = i * 4 + 1;
         s_btns[kBtnCount - 1].arg = i * 4 + 3;
     }
-    T(dc, 264, 312, L"Демо: из громкостей MCU разобрана только «дорожные сообщения» (вид 5),", 14, kDim, 400,
-      AL_START, 504);
-    T(dc, 264, 332, L"поэтому отсюда в MCU пока ничего не уходит.", 14, kDim, 400, AL_START, 504);
 }
 
 // The stream monitor ("Diagnostics -> CAN / UART", "Car -> Data stream"): the port, bytes, the car's values and
@@ -358,8 +413,9 @@ static void CfgToControls()
 {
     s_on[T_GPS_TIME] = s_cfg.gpsTime;
     s_on[T_W_GPS] = s_cfg.weatherGps;
-    s_on[T_CLIMATE] = s_cfg.climate;
     s_on[T_CAM_ALERT] = s_cfg.camAlert;
+    s_seg[G_SPEED_VOL] = s_cfg.speedVol;
+    s_seg[G_TIME_FMT] = s_cfg.time12 ? 0 : 1;
     s_seg[G_CAMSND] = !s_cfg.camSound ? 0 : s_cfg.camOver < 0 ? 1 : s_cfg.camOver < 10 ? 2 : s_cfg.camOver < 20 ? 3 : 4;
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
     s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
@@ -379,7 +435,7 @@ static void CfgToControls()
 
 static bool IsCfgToggle(int id)
 {
-    return id == T_GPS_TIME || id == T_W_GPS || id == T_CLIMATE || id == T_CAM_ALERT ||
+    return id == T_GPS_TIME || id == T_W_GPS || id == T_CAM_ALERT ||
            id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_RVC_OWN || id == T_WIFI ||
            id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE;
 }
@@ -389,7 +445,6 @@ static void ControlsToCfg()
     bool weather = s_cfg.weatherGps != s_on[T_W_GPS] || s_cfg.weatherProv != s_seg[G_WPROV];
     s_cfg.gpsTime = s_on[T_GPS_TIME];
     s_cfg.weatherGps = s_on[T_W_GPS];
-    s_cfg.climate = s_on[T_CLIMATE];
     s_cfg.camAlert = s_on[T_CAM_ALERT];
     {   // the beep: off / always / above the camera's limit by 0, 10, 20 km/h
         static const int over[5] = { -1, -1, 0, 10, 20 };

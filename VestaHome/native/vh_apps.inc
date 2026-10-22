@@ -122,6 +122,8 @@ static const char kDefaultApps[] =
 
 static void FreeAppIcon(App& a)
 {
+    ImgCopiesDrop();   // (its scaled copies)
+
     if (a.icon)
         DestroyIcon(a.icon);
     if (a.img.px)
@@ -205,18 +207,9 @@ static void LoadApps()
         if (!buf)
             return;
     }
-    char* p = buf;
-    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF)
-        p += 3;
-    while (*p && s_appCount < kMaxApps) {
-        char* end = strchr(p, '\n');
-        if (end)
-            *end = 0;
-        wchar_t line[400];
-        int n = MultiByteToWideChar(CP_UTF8, 0, p, -1, line, 400);
-        p = end ? end + 1 : p + strlen(p);
-        if (n <= 0)
-            continue;
+    char* p = Utf8Text(buf);
+    wchar_t line[400];
+    while (s_appCount < kMaxApps && NextUtf8Line(&p, line, 400)) {
         Trim(line);
         wchar_t* bar = wcschr(line, L'|');
         if (!line[0] || line[0] == L'#' || line[0] == L';' || !bar)
@@ -977,12 +970,9 @@ static void DrawFiles(HDC dc)
     TTail(dc, 20, 84, s_fdir, 15, kMuted, 400, 760);
     int first = s_filePage * kFilesPerPage;
     for (int k = 0; k < kFilesPerPage && first + k < s_fileCount; k++) {
-        const FileEnt& f = s_files[first + k];
-        int x = 16 + (k / 5) * 388, y = 96 + (k % 5) * 56;
-        bool d = Zone(x, y, 380, 50, A_FILE, first + k);
-        R(dc, x, y, 380, 50, 10, d ? kOrange : kPanel);
-        Ico(dc, f.dir ? IC_FOLDER : IC_FILE, x + 14, y + 10, 30, d ? kInk : f.dir ? kOrange : kMuted);   // folders stand out
-        T(dc, x + 58, y + 32, f.name, 18, d ? kInk : kText, 700, AL_START, 310);
+        const FileEnt& f = s_files[first + k];   // folders stand out
+        ListRow(dc, 16 + (k / 5) * 388, 96 + (k % 5) * 56, 380, 50, f.name, NULL, L_N, f.dir ? IC_FOLDER : IC_FILE, NULL,
+                NULL, A_FILE, first + k, f.dir ? kOrange : CLR_INVALID);
     }
     if (s_fileCount == 0)
         T(dc, 400, 240, s_filesFor == F_ICON ? L"Здесь нет папок и иконок" : s_filesFor == F_CAMS ?

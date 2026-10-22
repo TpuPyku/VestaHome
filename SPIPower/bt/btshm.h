@@ -49,7 +49,10 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
        BT_CMD_SPPADDR /* cmdText: the address - Flc_Bluetooth_Spp_SetAddr(addr) (the serial port's device) */,
        BT_CMD_PBAP_PULL /* cmdText: "<storage> <list>" (0 the phone / 1 SIM, BT_PB_*): a list of the connected phone
                            into BtPb - PbapClient_Connect first if PBAP is not connected; cmdResult -2 = another
-                           pull runs (ask again later) */ };
+                           pull runs (ask again later) */,
+       BT_CMD_SETOPT /* cmdText: "c 1" / "a 0" - the stack's connect at power-on (Conn_EnablePowerOnConnect) / the
+                        auto answer after 5 s (Conn_EnableAutoAnswerIncomingCall, as the shell's settings) */,
+       BT_CMD_GETOPTS /* cmdResult: bit 0 connect at power-on, bit 1 auto answer (Conn_Get*Status) */ };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
 struct BtEvent {

@@ -45,6 +45,11 @@ static wchar_t       s_dlStatus[100];   // the download's progress or result
 static DWORD         s_dlTry;           // tick of the last automatic attempt
 static int           s_regPage;
 
+static int RegPages()   // (kPagers)
+{
+    return (kCamRegionCount + kRegionsPerPage - 1) / kRegionsPerPage;
+}
+
 // Comma lists of the settings ("63,73"): membership and toggling of one item.
 static bool InList(const wchar_t* list, const wchar_t* item)
 {
@@ -318,10 +323,10 @@ static void ScrCamReg(HDC dc)
                A_REGION, i);
     }
     Dock(dc);
-    Button(dc, 16, 410, 120, 58, NULL, B_N, IC_BACK, 18, 0, A_REGPAGE, -1);
+    Button(dc, 16, 410, 120, 58, NULL, B_N, IC_BACK, 18, 0, A_PAGESTEP, -1);
     wchar_t s[16];
     _snwprintf(s, 16, L"%d / %d", s_regPage + 1, pages);
     T(dc, 210, 448, s, 22, kText, 700, AL_MID);
-    Button(dc, 284, 410, 120, 58, NULL, B_N, IC_NEXT, 18, 0, A_REGPAGE, 1);
+    Button(dc, 284, 410, 120, 58, NULL, B_N, IC_NEXT, 18, 0, A_PAGESTEP, 1);
     Button(dc, 584, 410, 200, 58, L"ГОТОВО", B_PRI, IC_NONE, 18, 0, A_BACK);
 }

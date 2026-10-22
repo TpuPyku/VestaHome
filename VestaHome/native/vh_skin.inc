@@ -51,18 +51,9 @@ static void LoadSkin()
     if (!buf)
         return;
     bool images = false;
-    char* p = buf;
-    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF)
-        p += 3;
-    while (*p) {
-        char* end = strchr(p, '\n');
-        if (end)
-            *end = 0;
-        wchar_t line[300];
-        int n = MultiByteToWideChar(CP_UTF8, 0, p, -1, line, 300);
-        p = end ? end + 1 : p + strlen(p);
-        if (n <= 0)
-            continue;
+    char* p = Utf8Text(buf);
+    wchar_t line[300];
+    while (NextUtf8Line(&p, line, 300)) {
         wchar_t* semi = wcschr(line, L';');
         if (semi)
             *semi = 0;

@@ -108,51 +108,51 @@
 | `SPApi_SendCurrentAdjustBand` | `0xc02` | 1 |  |
 | `SPApi_SendCurrentAdjustPty` | `0xc03` | 1 |  |
 | `SPApi_SendUpdateMemoryList` | `0xc04` | 2 |  |
-| `EngSendBTOpenStatus` | — |  |  |
-| `EngSendGYROACCData` | — |  |  |
-| `EngSendSWVersionA` | — |  |  |
-| `EngSendSWVersionW` | — |  |  |
-| `SPApi_DisableTFT` | — |  |  |
-| `SPApi_EmptySkelonton` | — |  |  |
-| `SPApi_EnableTFT` | — |  |  |
-| `SPApi_EngSendCanTestResult` | — |  |  |
-| `SPApi_EngSendWifiRegResult` | — |  |  |
-| `SPApi_EngSendWifiRegStatus` | — |  |  |
-| `SPApi_EngSendWifiSwCtrlResult` | — |  |  |
-| `SPApi_EngSendWifiTestResult` | — |  |  |
-| `SPApi_GetCurrentPowerState` | — |  |  |
-| `SPApi_InitializeRadioEngine` | — |  |  |
-| `SPApi_IsInitialized` | — |  |  |
-| `SPApi_IsLogoComplete` | — |  |  |
-| `SPApi_IsNeedToUpdateRadio` | — |  |  |
-| `SPApi_LoadByMain` | — |  |  |
-| `SPApi_LoadRadioEngine` | — |  |  |
-| `SPApi_LogoCompleteByMain` | — |  |  |
-| `SPApi_NavStarted` | — |  |  |
-| `SPApi_NotifyCurrentSpeed` | — |  |  |
-| `SPApi_OffBacklight` | — |  |  |
-| `SPApi_RegisterAspectCallBack` | — |  |  |
-| `SPApi_RequestEpromDataFromRadio` | — |  |  |
-| `SPApi_RequestMediaPlayTimeFromRadio` | — |  |  |
-| `SPApi_SendDiagMessage` | — |  |  |
-| `SPApi_SendMediaPlayTimeToRadio` | — |  |  |
-| `SPApi_SendRadioNaviEnterTipDlg` | — |  |  |
-| `SPApi_SendRadioSaveDataToEprom` | — |  |  |
-| `SPApi_SendVoiceGuidanceStatus` | — |  |  |
-| `SPApi_SetBackLightOn` | — |  |  |
-| `SPApi_SetExitSPI` | — |  |  |
-| `SPApi_SetSkelonton` | — |  |  |
-| `SPApi_SpeakerTest` | — |  |  |
-| `SPApi_TellMainToExit` | — |  |  |
-| `SPApi_TellRadioToSendDialog` | — |  |  |
-| `SPApi_TurnOnBacklight` | — |  |  |
-| `SPApi_UnLoadRadioEngine` | — |  |  |
-| `SPApi_UnRegisterAspectCallBack` | — |  |  |
-| `SPApi_UninitializeRadioEngine` | — |  |  |
-| `SPApi_queryProductionDate` | — |  |  |
-| `SPApi_queryProductionSN` | — |  |  |
-| `TerminalModelEnterExit` | — |  |  |
-| `TerminalModelStatus` | — |  |  |
+| `EngSendBTOpenStatus` | `0x7c01` | 1 + n | инженерное: состояние BT и строка (байты строки) |
+| `EngSendGYROACCData` | `0x7c0e` | 2 + n | инженерное: гироскоп/акселерометр |
+| `EngSendSWVersionA` | `0x7c09` | 2 + n | инженерное: версия ПО (вид, длина, символы ASCII) — тот же код, что `EngSendSWVersionB` |
+| `EngSendSWVersionW` | `0x7c09` | 2 + n | то же, строка UTF-16 (младшие байты символов) |
+| `SPApi_DisableTFT` | — |  | `SV_TouchDisable()` |
+| `SPApi_EmptySkelonton` | — |  | снять все скелеты |
+| `SPApi_EnableTFT` | — |  | `SV_TouchEnable()` |
+| `SPApi_EngSendCanTestResult` | `0x7c30` | 1 | инженерное: тест CAN |
+| `SPApi_EngSendWifiRegResult` | `0x7c21` | 1 | инженерное: Wi-Fi |
+| `SPApi_EngSendWifiRegStatus` | `0x7c22` | 1 | инженерное: Wi-Fi |
+| `SPApi_EngSendWifiSwCtrlResult` | `0x7c25` | 1 | инженерное: Wi-Fi |
+| `SPApi_EngSendWifiTestResult` | `0x7c28` | 1 | инженерное: тест Wi-Fi |
+| `SPApi_GetCurrentPowerState` | — |  | состояние менеджера питания |
+| `SPApi_InitializeRadioEngine` | — |  | запуск движка (менеджер питания, очередь SPI), флаг «инициализирован» |
+| `SPApi_IsInitialized` | — |  | флаг `InitializeRadioEngine` |
+| `SPApi_IsLogoComplete` | — |  | логотип закончен? (событие) да — шлёт 0x5401 06 |
+| `SPApi_IsNeedToUpdateRadio` | — |  | идёт ли обновление MCU (событие) |
+| `SPApi_LoadByMain` | — |  | Main.exe: флаг + `InitializeRadioEngine` |
+| `SPApi_LoadRadioEngine` | — |  | ничего (возвращает 1) |
+| `SPApi_LogoCompleteByMain` | — |  | Main.exe: логотип закончен — событие + `SendRadioSKDeMute` |
+| `SPApi_NavStarted` | — |  | внутреннее: состояние питания 2 («навигация запущена»); оболочка — в начале `SlotInitModule` |
+| `SPApi_NotifyCurrentSpeed` | `0x4401` | 2 | скорость машины (BE) от оболочки к MCU (по строке `@` CAN-модуля) |
+| `SPApi_OffBacklight` | — |  | `SV_BacklightOff(0)` |
+| `SPApi_RegisterAspectCallBack` | — |  | подписка на «аспект» (0..4; список событий менеджера); оболочка: 0, 2, 3 |
+| `SPApi_RequestEpromDataFromRadio` | `0x4418` | 1 | запрос данных EEPROM MCU |
+| `SPApi_RequestMediaPlayTimeFromRadio` | `0x4419` | 1 | запрос сохранённой позиции медиа (оболочка при старте: 0..3) |
+| `SPApi_SendDiagMessage` | — |  | пустая |
+| `SPApi_SendMediaPlayTimeToRadio` | `0x441a` | 4 | позиция медиа на хранение в MCU |
+| `SPApi_SendRadioNaviEnterTipDlg` | `0x4c27` | 1 | оболочка открыла окно-подсказку |
+| `SPApi_SendRadioSaveDataToEprom` | `0x4417` | 1 + 32 | сохранить блок в EEPROM MCU |
+| `SPApi_SendVoiceGuidanceStatus` | — |  | пустая |
+| `SPApi_SetBackLightOn` | — |  | `SV_BacklightOn/Off(0)` (desay_sdk_api) |
+| `SPApi_SetExitSPI` | — |  | остановить обмен SPI (ждёт до 10 с) |
+| `SPApi_SetSkelonton` | — |  | обработчик входящих скелета N (слот 1 таблицы — `(self, data)`) |
+| `SPApi_SpeakerTest` | `0x3410` | 1 | проверка динамиков (инженерное) |
+| `SPApi_TellMainToExit` | — |  | событие `EXIT_MAIN_20120315` — Main.exe завершается |
+| `SPApi_TellRadioToSendDialog` | — |  | если не идёт обновление MCU — `SendRadioSendCurrentSourceNow` (0x4c0e); оболочка — после `NavStarted` |
+| `SPApi_TurnOnBacklight` | — |  | пустая |
+| `SPApi_UnLoadRadioEngine` | — |  | снять все подписки |
+| `SPApi_UnRegisterAspectCallBack` | — |  | отписка |
+| `SPApi_UninitializeRadioEngine` | — |  | сброс флага, остановка |
+| `SPApi_queryProductionDate` | — |  | пустая |
+| `SPApi_queryProductionSN` | — |  | пустая |
+| `TerminalModelEnterExit` | `0x8c11` | 1 | «терминальный режим»: вход/выход |
+| `TerminalModelStatus` | `0x8c10` | 1 | «терминальный режим» |
 
 ## Входящие (MCU → программа)
 
@@ -258,10 +258,10 @@
 | Скелет | Класс | Коды |
 |---|---|---|
 | 1 | радио (`Receiver`, `CRadio…`) | 0x0901–0x0932 |
-| 2 | ? (окна оболочки) | 0x1101–0x1114 |
+| 2 | ? (состояния кнопок/функций: `0x1102` индекс + значение → событие `0x2EE`+, на ГУ — 16, 18 «крутилка 5 с», 0E) | 0x1101–0x1114 |
 | 3 | `CPanelManager` | 0x1901 (01 — окно 0x2A6, 02 — 0x2AD) |
-| 4 | ? (окна) | 0x2101–0x210B, 0x2402–0x240A |
-| 5 | ? (окна) | 0x2901–0x290B |
+| 4 | ? плеер MP3 у MCU (диск/USB радиомодуля: время `%02d:%02d:%02d` в 0x2105/0x2109, список папок и файлов 0x2402–0x240A, исходящие `0x24xx` — `SendRadioMp3ListDisplayRange`); на Весте не используется | 0x2101–0x210B, 0x2402–0x240A |
+| 5 | ? ещё один плеер MCU (время трека 0x2904/0x2905, `00:00:00` в конструкторе); на Весте не используется | 0x2901–0x290B |
 | 6 | `CAudio` | 0x3101–0x3120 |
 | 7 | `CClock` | 0x3901–0x3903 |
 | 8 | `CSystem` | 0x4101–0x4140 |
@@ -269,7 +269,7 @@
 | 11, 16 | — | обработчик пустой |
 | 12 | `CHvac` (климат) | 0x6102–0x6120 |
 | 13 | `CAuxiliary` | 0x6902–0x6904 |
-| 14 | ? | 0x7101–0x712E |
+| 14 | диагностика камеры заднего хода (`CRVCDiagnositicDlg`): `0x712E` `p[4]`=1 — ошибка, `p[5]` камера, `p[6]` **багажник**, `p[7]` **прицеп** (события 0x1FD–0x200); `0x7101` 06 00 — окно 800; `0x710A`–`0x7111` байты, `0x7112` (`p[4]` 1–6 + 16 бит) — значения калибровки/линий? | 0x7101–0x712E |
 | 15 | `CEngineering` | 0x7901–0x7939 |
 | 17 | `BTPhone` | 0x8901–0x8906, 0x8A01 |
 | 18 | `CMedia` | 0x9101, 0x9103, 0x9201 |
@@ -417,7 +417,7 @@
 
 ## Не сделано (PLAN.md)
 
-- Функции без кода (—): что делают (инициализация, `RegisterAspectCallBack`, питание, подсветка, `SpeakerTest`…).
+- Функции без кода: разобраны 2026-10-22, все (инженерные `EngSend*` — коды во внутренних функциях `SPIPowerMgr.dll`).
 - События `BCEventApi_RaiseId` (0x10D…0x20D): какое окно или виджет оболочки на что отвечает — для неизвестных входящих («?» выше).
-- Скелеты 2, 4, 5, 14: чьи (окна? климат-контроль?) и что значат их коды.
+- Скелеты 2, 4, 5, 14 — разобраны 2026-10-22 (таблица выше): 4 и 5 — плееры радиомодуля (на Весте не нужны), 14 — диагностика камеры (багажник/прицеп — проверить на ГУ, приходит ли `0x712E`), 2 — состояния (значения индексов неизвестны).
 - Для каждой группы — доходит ли из процесса VestaHome.

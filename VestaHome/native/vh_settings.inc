@@ -47,7 +47,6 @@ struct Cfg {
     DWORD   gpsBaud;                   // 0 = leave the speed the shell set
     bool    gpsTime;                   // set the clock from GPS
     int     tzMin;                     // local time = UTC + this (minutes): the unit's own zone resets with the registry
-    bool    climate;                   // the car has climate control: its widget is shown
     bool    camAlert, camSound;
     int     camOver;          // the beep: -1 always, else only above the camera's limit + camOver km/h
     int     beepDev;          // the beep's waveOut device, -1 = WAVE_MAPPER (2026-10-17: which one the MCU mixes?)
@@ -71,12 +70,19 @@ struct Cfg {
     bool    rvcOwn;                    // the rear view camera shown by VestaHome (rvc.cpp), not by the shell
     bool    wifiOn;                    // the Wi-Fi radio (wifi.cpp WifiEnable)
     int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
+    int     speedVol;                  // the volume by speed: 0 off, 1..3 = +2 / +3 / +4 per 100 km/h
+    int     carSens[3];                // the car widget's lines: sensors (kCarSensor), -1 none
+    bool    time12;                    // the clock 12 h (else 24 h)
+    int     startMax;                  // the volume at the start: no louder than this (VestaHome's own), 0 = no cap
+    int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
     int     homeOrder[kWgMax];         // the main screen's widgets (WG_*, then the user's) in their order
     wchar_t homeRaw[400];              // home.widgets as read: keeps the user widgets not found now (no card)
     int     homeHidden;                // bit 1 << WG_*: hidden
     wchar_t uiScreen[16], uiSource[8];   // the screen and the source last seen (Resume*): "home", "radio"...
+    wchar_t uiMedia[16];                 // the media's tab last seen: "music", "netradio", "bt"... (the nav bar)
     wchar_t btLast[18];                // the phone connected last, "A4:E2:87:98:D6:9F"
+    wchar_t favs[640];                 // the phone's favourites: "name|number;" each (Phone -> Favourites)
     wchar_t photoDir[MAX_PATH];        // the photos' folder last opened
     wchar_t photoFile[MAX_PATH];       // the picture last viewed there (the start goes back to it)
     int     photoInterval;             // the slide show's seconds
@@ -111,6 +117,12 @@ static void CfgDefaults()
     s_cfg.beepDev = 1;   // "Audio Output" 1: heard over the radio (HU 2026-10-18-2)
     s_cfg.wifiOn = true;
     s_cfg.saverMin = 5;
+    s_cfg.speedVol = 2;
+    s_cfg.startMax = 10;
+    s_cfg.keyVol = -1;
+    s_cfg.carSens[0] = 0;   // the speed (CAN), the trip, the unit's board
+    s_cfg.carSens[1] = 2;
+    s_cfg.carSens[2] = 10;
     s_cfg.photoInterval = 5;
     s_cfg.photoAutoRot = true;
     for (int i = 0; i < WG_COUNT; i++)
@@ -211,17 +223,10 @@ static void LoadCfg()
     char* buf = ReadAll(path, &size);
     if (!buf)
         return;
-    char* p = buf;
-    if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF)
-        p += 3;
-    while (*p) {
-        char* end = strchr(p, '\n');
-        if (end)
-            *end = 0;
-        wchar_t line[400];
-        int n = MultiByteToWideChar(CP_UTF8, 0, p, -1, line, 400);
-        p = end ? end + 1 : p + strlen(p);
-        wchar_t* eq = n > 0 && line[0] != L'#' ? wcschr(line, L'=') : NULL;
+    char* p = Utf8Text(buf);
+    wchar_t line[400];
+    while (NextUtf8Line(&p, line, 400)) {
+        wchar_t* eq = line[0] != L'#' ? wcschr(line, L'=') : NULL;
         if (!eq)
             continue;
         *eq = 0;
@@ -263,8 +268,6 @@ static void LoadCfg()
             s_cfg.gpsTime = CfgBool(v);
         } else if (!wcscmp(k, L"time.tz")) {
             s_cfg.tzMin = _wtoi(v);
-        } else if (!wcscmp(k, L"car.climate")) {
-            s_cfg.climate = CfgBool(v);
         } else if (!wcscmp(k, L"cam.alert")) {
             s_cfg.camAlert = CfgBool(v);
         } else if (!wcscmp(k, L"cam.sound")) {
@@ -326,6 +329,9 @@ static void LoadCfg()
             s_cfg.rvcOwn = CfgBool(v);
         } else if (!wcscmp(k, L"wifi.on")) {
             s_cfg.wifiOn = CfgBool(v);
+        } else if (!wcscmp(k, L"ui.media")) {
+            wcsncpy(s_cfg.uiMedia, v, 15);
+            s_cfg.uiMedia[15] = 0;
         } else if (!wcscmp(k, L"ui.screen")) {
             wcsncpy(s_cfg.uiScreen, v, 15);
             s_cfg.uiScreen[15] = 0;
@@ -346,6 +352,9 @@ static void LoadCfg()
         } else if (!wcscmp(k, L"bt.last")) {
             wcsncpy(s_cfg.btLast, v, 17);
             s_cfg.btLast[17] = 0;
+        } else if (!wcscmp(k, L"phone.fav")) {
+            wcsncpy(s_cfg.favs, v, 639);
+            s_cfg.favs[639] = 0;
         } else if (!wcscmp(k, L"obd.addr")) {
             wcsncpy(s_obdAddr, v, 17);
             s_obdAddr[17] = 0;
@@ -358,6 +367,23 @@ static void LoadCfg()
             s_cfg.themeMode = _wtoi(v) % 3;
         } else if (!wcscmp(k, L"screen.light")) {
             s_cfg.lightMode = _wtoi(v) % 3;
+        } else if (!wcscmp(k, L"car.sensors")) {   // "0,2,10"
+            const wchar_t* q = v;
+            for (int i = 0; i < 3; i++) {
+                s_cfg.carSens[i] = *q ? _wtoi(q) : -1;
+                if (s_cfg.carSens[i] < -1 || s_cfg.carSens[i] >= 64)
+                    s_cfg.carSens[i] = -1;
+                q = wcschr(q, L',');
+                q = q ? q + 1 : L"";
+            }
+        } else if (!wcscmp(k, L"time.12h")) {
+            s_cfg.time12 = CfgBool(v);
+        } else if (!wcscmp(k, L"sound.startmax")) {
+            s_cfg.startMax = _wtoi(v) < 0 ? 0 : _wtoi(v) > 30 ? 30 : _wtoi(v);
+        } else if (!wcscmp(k, L"sound.keyvol")) {
+            s_cfg.keyVol = _wtoi(v) < -1 ? -1 : _wtoi(v) > 30 ? 30 : _wtoi(v);
+        } else if (!wcscmp(k, L"sound.speedvol")) {
+            s_cfg.speedVol = _wtoi(v) < 0 ? 0 : _wtoi(v) > 3 ? 3 : _wtoi(v);
         } else if (!wcscmp(k, L"screen.saver")) {
             s_cfg.saverMin = _wtoi(v) < 0 ? 0 : _wtoi(v) > 60 ? 60 : _wtoi(v);
         } else if (!wcscmp(k, L"wifi.ap.auto")) {
@@ -425,7 +451,7 @@ static void SaveCfg()
         L"weather.gps=%d\r\nhome.name=%s\r\nhome.lat=%.5f\r\nhome.lon=%.5f\r\n"
         L"# gps.baud: 0 = leave the port's speed as the shell set it\r\n"
         L"gps.port=%s\r\ngps.baud=%u\r\ngps.time=%d\r\n"
-        L"# time.tz: local time = UTC + minutes (180 = Moscow)\r\ntime.tz=%d\r\ncar.climate=%d\r\n"
+        L"# time.tz: local time = UTC + minutes (180 = Moscow)\r\ntime.tz=%d\r\n"
         L"# cam.file: the camera file (iGO or Navitel), a relative path is from the VestaHome folder;\r\n"
         L"# downloads go to speedcam\\speedcam.txt\r\n"
         L"# cam.over: the beep only above the camera's limit + this many km/h; -1 = always\r\n"
@@ -442,15 +468,20 @@ static void SaveCfg()
         L"rvc.own=%d\r\nrvc.invert=%d\r\nwifi.on=%d\r\n"
         L"# screen.saver: the clock after this many minutes untouched (0 = never)\r\n"
         L"screen.saver=%d\r\n"
+        L"# sound.speedvol: the volume by speed, 0 off, 1..3 = +2 / +3 / +4 per 100 km/h\r\nsound.speedvol=%d\r\n"
+        L"# sound.startmax: the volume at the start no louder than this (0 = no cap); sound.keyvol: navigation / keys\r\n"
+        L"sound.startmax=%d\r\nsound.keyvol=%d\r\ntime.12h=%d\r\n"
+        L"# car.sensors: the car widget's three lines (Settings of the widget), -1 none\r\ncar.sensors=%d,%d,%d\r\n"
         L"# screen.theme / screen.light: our colours and maps / the unit's backlight: 0 by sunrise and sunset (GPS, else\r\n"
         L"# home, else 7:00-20:00), 1 day, 2 night\r\n"
         L"screen.theme=%d\r\nscreen.light=%d\r\n"
         L"# home.widgets: the main screen's widgets in their order, \"-\" before a hidden one\r\n"
         L"home.widgets=%s\r\n"
         L"# ui.screen / ui.source: the screen and what played when last seen - both come back at the start\r\n"
-        L"ui.screen=%s\r\nui.source=%s\r\n"
+        L"ui.screen=%s\r\nui.source=%s\r\nui.media=%s\r\n"
         L"# bt.last: the phone connected last (its address): connected again at the start when the source was BT\r\n"
         L"bt.last=%s\r\n"
+        L"# phone.fav: the phone's favourites, name|number; each\r\nphone.fav=%s\r\n"
         L"# obd.addr: the OBD-II Bluetooth adapter (ELM327; Settings -> Bluetooth -> OBD)\r\n"
         L"obd.addr=%s\r\n"
         L"# photo.*: the photos' folder, the slide show's seconds, fill the screen, the slide show on opening, EXIF turn\r\n"
@@ -459,11 +490,11 @@ static void SaveCfg()
         L"wifi.ap.ssid=%s\r\nwifi.ap.pass=%s\r\nwifi.ap.auto=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
         s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon,
-        s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.climate, s_cfg.camAlert, s_cfg.camSound,
+        s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
         s_cfg.camOver, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.saverMin, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.btLast, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
+        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
     if (n < 0)
@@ -501,4 +532,94 @@ static void SaveCfg()
     } else {
         DeleteFile(tmp);
     }
+}
+
+static const wchar_t* BtLastAddr()
+{
+    return s_cfg.btLast;
+}
+
+// Favourites (the user 2026-10-22, in place of the demo tab): a star on a contact's card; kept in the ini
+// (phone.fav = "name|number;" each), so they dial before the book is pulled.
+enum { kFavMax = 16 };
+
+static int FavCount(wchar_t names[][48], wchar_t nums[][24])   // the entries, up to kFavMax
+{
+    int n = 0;
+    const wchar_t* p = s_cfg.favs;
+    while (*p && n < kFavMax) {
+        const wchar_t* bar = wcschr(p, L'|');
+        const wchar_t* end = wcschr(p, L';');
+        if (!end)
+            end = p + wcslen(p);
+        if (bar && bar < end) {
+            int ln = bar - p < 47 ? bar - p : 47, lu = end - bar - 1 < 23 ? end - bar - 1 : 23;
+            if (names) {
+                wcsncpy(names[n], p, ln);
+                names[n][ln] = 0;
+                wcsncpy(nums[n], bar + 1, lu);
+                nums[n][lu] = 0;
+            }
+            n++;
+        }
+        p = *end ? end + 1 : end;
+    }
+    return n;
+}
+
+static int FavFind(const wchar_t* num)
+{
+    wchar_t names[kFavMax][48], nums[kFavMax][24];
+    int n = FavCount(names, nums);
+    for (int i = 0; i < n; i++)
+        if (!wcscmp(nums[i], num))
+            return i;
+    return -1;
+}
+
+static void FavToggle(const wchar_t* name, const wchar_t* num)
+{
+    wchar_t names[kFavMax][48], nums[kFavMax][24];
+    int n = FavCount(names, nums), at = -1;
+    for (int i = 0; i < n; i++)
+        if (!wcscmp(nums[i], num))
+            at = i;
+    s_cfg.favs[0] = 0;
+    for (int i = 0; i < n; i++)
+        if (i != at) {
+            wchar_t e[80];
+            _snwprintf(e, 80, L"%s|%s;", names[i], nums[i]);
+            e[79] = 0;
+            wcscat(s_cfg.favs, e);
+        }
+    if (at < 0 && n < kFavMax) {
+        wchar_t nm[48], e[80];
+        wcsncpy(nm, name, 47);
+        nm[47] = 0;
+        for (wchar_t* c = nm; *c; c++)   // (the separators)
+            if (*c == L'|' || *c == L';')
+                *c = L' ';
+        _snwprintf(e, 80, L"%s|%s;", nm, num);
+        e[79] = 0;
+        if (wcslen(s_cfg.favs) + wcslen(e) < 639)
+            wcscat(s_cfg.favs, e);
+    }
+    SaveCfg();
+}
+
+static void ScrFavs(HDC dc)
+{
+    Frame(dc, L"ТЕЛЕФОН · ИЗБРАННОЕ");
+    PhoneNav(dc, 2);
+    Panel(dc, 192, 68, 592, 322);
+    wchar_t names[kFavMax][48], nums[kFavMax][24];
+    int n = FavCount(names, nums);
+    if (!n) {
+        T(dc, 216, 140, L"Избранных нет", 20, kText, 700, AL_START, 540);
+        T(dc, 216, 172, L"Звёздочка в карточке контакта добавляет его сюда.", 16, kMuted, 400, AL_START, 540);
+        return;
+    }
+    for (int i = 0; i < n && i < 10; i++)   // two columns of five
+        ListRow(dc, 200 + i / 5 * 292, 76 + i % 5 * 62, 284, 56, names[i][0] ? names[i] : nums[i],
+                NULL, L_N, IC_STAR_F, names[i][0] ? nums[i] : NULL, NULL, A_FAVDIAL, i, kOrange);
 }

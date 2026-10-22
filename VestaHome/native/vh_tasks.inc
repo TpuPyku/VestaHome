@@ -161,10 +161,10 @@ static void DrawTasks(HDC dc)
     int pages = TaskPages();
     if (s_taskPage >= pages)
         s_taskPage = pages - 1;
-    Button(dc, 668, 176, 40, 48, NULL, B_N, IC_BACK, 18, 24, A_TASKPAGE, -1);
+    Button(dc, 668, 176, 40, 48, NULL, B_N, IC_BACK, 18, 24, A_PAGESTEP, -1);
     _snwprintf(s, 96, L"%d/%d", s_taskPage + 1, pages);
     T(dc, 726, 207, s, 15, kMuted, 600, AL_MID);
-    Button(dc, 744, 176, 40, 48, NULL, B_N, IC_NEXT, 18, 24, A_TASKPAGE, 1);
+    Button(dc, 744, 176, 40, 48, NULL, B_N, IC_NEXT, 18, 24, A_PAGESTEP, 1);
 
     if (s_taskTab == 0 && !s_task.procOk) {
         T(dc, 400, 350, L"Список процессов недоступен: нет toolhelp.dll", 18, kMuted, 600, AL_MID, 760);
@@ -236,7 +236,9 @@ static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, I
 // minute redraw, the player screen itself updates every second.
 static void WMedia(HDC dc, int x, int y)
 {
-    if (s_netOn && s_netCur >= 0) {   // the internet radio: the station, the song or its state
+    if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
+        NetLoadList();
+    if (s_netCur >= 0 && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
         bool d = Widget(dc, x, y, kWgW2, kWgH, L"СЕЙЧАС ИГРАЕТ · ИНТЕРНЕТ-РАДИО", IC_RADIO, A_NAV, S_NETRADIO);
         TriFill(x + 16, y + 42, 100, 100, 12);
         Ico(dc, IC_RADIO, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
@@ -423,16 +425,22 @@ static void SaverWeather(HDC dc, int cx, int y)
         T(dc, cx, y + 88, w.desc, 18, kMuted, 400, AL_MID, 400);
 }
 
+static bool CarSensor(int id, wchar_t* v, int n);   // (below: the trip's)
+static const wchar_t* CarSensorName(int id);
+
+// The car (2026-10-22, out of the demo; the user: three lines, chosen in its settings): the sensors chosen, "—"
+// while one has no data.
 static void WCar(HDC dc, int x, int y)
 {
-    static const wchar_t* rows[3][2] = { { L"Двигатель", L"90 °C" }, { L"Аккумулятор", L"14,2 В" },
-                                         { L"ТО через", L"3 200 км" } };
     bool d = Widget(dc, x, y, 248, 158, L"АВТОМОБИЛЬ", IC_CAR, A_SCREEN, S_CAR, S_WSET_CAR);
-    Disc(dc, x + 24, y + 58, 7, d ? kInk : kOk);
-    T(dc, x + 40, y + 65, L"Ошибок нет", 19, d ? kInk : kText, 700);
     for (int i = 0; i < 3; i++) {
-        T(dc, x + 16, y + 94 + i * 24, rows[i][0], 15, d ? kInk : kMuted, 400, AL_START, 140);
-        T(dc, x + 232, y + 94 + i * 24, rows[i][1], 15, d ? kInk : kText, 700, AL_END);
+        if (s_cfg.carSens[i] < 0)
+            continue;
+        wchar_t v[32];
+        bool have = CarSensor(s_cfg.carSens[i], v, 32);
+        int ly = y + 74 + i * 30;
+        T(dc, x + 16, ly, CarSensorName(s_cfg.carSens[i]), 15, d ? kInk : kMuted, 400, AL_START, 132);
+        T(dc, x + 232, ly, have ? v : L"—", 19, d ? kInk : have ? kText : kDim, 700, AL_END, 96);
     }
 }
 
@@ -692,4 +700,171 @@ static void WNavi(HDC dc, int x, int y)
     TWrap(dc, x + 78, y + 96, L"маршрут не задан", 15, d ? kInk : kMuted, 400, 154, 1, 0);
     TWrap(dc, x + 16, y + 144, app >= 0 ? L"нажмите, чтобы открыть карты" : L"добавьте его в «Приложениях»", 14,
           d ? kInk : kDim, 400, 216, 1, 0);
+}
+
+// "ШТАТНАЯ" (the user 2026-10-22): the stock shell instead of VestaHome. Under VestaStub (G3NavHMI_orig.exe beside
+// it) VestaHome only closes: on a clean exit the stub starts the shell itself (and stops its MCU host first);
+// otherwise the shell is started when it does not run (it normally runs beside VestaHome).
+static void ShellStart()
+{
+#ifdef UNDER_CE
+    if (GetFileAttributes(L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe") != 0xFFFFFFFF) {
+        VLog(L"штатная оболочка: её запустит пустышка");
+        return;
+    }
+    TaskInfo* t = (TaskInfo*)calloc(1, sizeof(TaskInfo));
+    bool running = false;
+    if (t) {
+        TaskSample(t, s_wnd);
+        for (int i = 0; i < t->procCount; i++)
+            running = running || !_wcsicmp(t->proc[i].name, L"G3NavHMI.exe");
+        free(t);
+    }
+    if (!running) {
+        PROCESS_INFORMATION pi;
+        memset(&pi, 0, sizeof(pi));
+        if (CreateProcess(L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", NULL, NULL, NULL, FALSE, 0, NULL, NULL,
+                          NULL, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+    }
+    VLog(L"штатная оболочка: %s", running ? L"уже работает" : L"запущена");
+#endif
+}
+
+// ---- the car's sensors (2026-10-22): what VestaHome knows of the car and the unit, for the car widget's lines and
+// the "Car" screen. The CAN module gives only the speed and the steering angle (its firmware, PROJECT.md), the
+// MCU the unit's temperatures (System status 0x7905), the OBD adapter the engine once it connects.
+enum { kCarSensors = 25 };
+static const wchar_t* const kCarSensor[kCarSensors][2] = {
+    { L"Скорость (CAN)", L"км/ч" }, { L"Угол руля", L"°" }, { L"Пробег поездки", L"км" },
+    { L"В движении", L"ч:мин" }, { L"Средняя скорость", L"км/ч" }, { L"Макс. скорость", L"км/ч" },
+    { L"Обороты (OBD)", L"об/мин" }, { L"Охл. жидкость (OBD)", L"°C" }, { L"Напряжение (OBD)", L"В" },
+    { L"Скорость (OBD)", L"км/ч" }, { L"Плата ГУ", L"°C" }, { L"Усилитель", L"°C" }, { L"Экран", L"°C" },
+    { L"Поле тюнера", L"дБ" }, { L"CAN-модуль", L"" }, { L"Спутники GPS", L"" }, { L"Высота GPS", L"м" },
+    { L"Нагрузка (OBD)", L"%" }, { L"Дроссель (OBD)", L"%" }, { L"Впуск (OBD)", L"°C" }, { L"За бортом (OBD)", L"°C" },
+    { L"Топливо (OBD)", L"%" }, { L"Расход (OBD)", L"л/100 км" }, { L"Расход стоя (OBD)", L"л/ч" },
+    { L"Ошибки (OBD)", L"" } };
+
+static const wchar_t* CarSensorName(int id)
+{
+    return id >= 0 && id < kCarSensors ? kCarSensor[id][0] : L"";
+}
+
+static bool CarSensor(int id, wchar_t* v, int n)   // its value with the unit; false = no data
+{
+    v[0] = 0;
+    Gps g;
+    GpsGet(&g);
+    DWORD now = GetTickCount();
+    int x = -1;
+    switch (id) {
+    case 0: x = g.carTick && now - g.carTick < 3000 ? g.carSpeed : -1; break;
+    case 1:
+        if (!g.angTick || now - g.angTick > 3000)
+            return false;
+        _snwprintf(v, n, L"%+d,%d°", g.angle10 / 10, abs(g.angle10) % 10);
+        return true;
+    case 2:
+        if (!s_trip.started)
+            return false;
+        _snwprintf(v, n, L"%d,%d км", (int)s_trip.km, (int)(s_trip.km * 10) % 10);
+        return true;
+    case 3:
+        if (!s_trip.started)
+            return false;
+        _snwprintf(v, n, L"%u:%02u", (unsigned)(s_trip.movingS / 3600), (unsigned)(s_trip.movingS / 60 % 60));
+        return true;
+    case 4: x = s_trip.movingS >= 60 ? (int)(s_trip.km * 3600 / s_trip.movingS + 0.5) : -1; break;
+    case 5: x = s_trip.maxKmh > 0 ? s_trip.maxKmh : -1; break;
+    case 6: case 7: case 8: case 9: case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24: {
+        ObdInfo o;
+        ObdGet(&o);
+        if (o.state != OBD_ON)
+            return false;
+        if (id == 8) {
+            wcsncpy(v, o.volt, n - 1);
+            v[n - 1] = 0;
+            return v[0] != 0;
+        }
+        if (id == 19 || id == 20) {   // the temperatures may be below 0
+            int t = id == 19 ? o.intake : o.ambient;
+            if (t <= -1000)
+                return false;
+            _snwprintf(v, n, L"%d °C", t);
+            return true;
+        }
+        if (id == 22 || id == 23) {   // the fuel from the air flow: L/h = g/s x 3600 / (14.7 x 745 g/L)
+            if (o.maf100 < 0)
+                return false;
+            double lh = o.maf100 / 100.0 * 3600 / (14.7 * 745);
+            if (id == 22 && o.speed < 5)
+                return false;   // standing: per 100 km means nothing
+            double val = id == 22 ? lh * 100 / o.speed : lh;
+            _snwprintf(v, n, L"%d,%d %s", (int)val, (int)(val * 10) % 10, kCarSensor[id][1]);
+            return true;
+        }
+        if (id == 24) {
+            if (o.dtcs < 0)
+                return false;
+            if (!o.dtcs && !o.mil)
+                wcscpy(v, L"нет");
+            else
+                _snwprintf(v, n, L"%d%s", o.dtcs, o.mil ? L" · лампа" : L"");
+            return true;
+        }
+        x = id == 6 ? o.rpm : id == 7 ? o.coolant : id == 9 ? o.speed : id == 17 ? o.load : id == 18 ? o.throttle
+          : o.fuel;
+        break;
+    }
+    case 10: case 11: case 12: case 13: {   // the MCU's System status: its subs 0A, 06, 0D, 07
+        static const int sub[4] = { 0x0A, 0x06, 0x0D, 0x07 };
+        if (!s_mcuCsReady)
+            return false;
+        EnterCriticalSection(&s_mcuCs);
+        x = s_info.sys[sub[id - 10]];
+        LeaveCriticalSection(&s_mcuCs);
+        break;
+    }
+    case 14:
+        if (!g.canVer[0])
+            return false;
+        _snwprintf(v, n, L"v%S", g.canVer);
+        return true;
+    case 15: x = GpsFresh(g, 5000) || g.sats ? g.sats : -1; break;
+    case 16: x = GpsFresh(g, 5000) ? (int)(g.alt + 0.5) : -1; break;
+    }
+    if (x < 0 && id != 1)
+        return false;
+    _snwprintf(v, n, L"%d %s", x, kCarSensor[id][1]);
+    v[n - 1] = 0;
+    return true;
+}
+
+// Car -> its settings: the widget's three lines, from the sensors (a tap: in / out, in the order chosen)
+static void ScrWSetCar(HDC dc)
+{
+    Frame(dc, L"АВТОМОБИЛЬ · СТРОКИ ВИДЖЕТА");
+    int n = 0;
+    for (int i = 0; i < 3; i++)
+        n += s_cfg.carSens[i] >= 0;
+    wchar_t s[64];
+    _snwprintf(s, 64, L"Выберите до трёх показаний: выбрано %d. «—» — данных пока нет.", n);
+    T(dc, 24, 92, s, 16, kMuted, 400, AL_START, 752);
+    for (int id = 0; id < kCarSensors; id++) {
+        int at = -1;
+        for (int i = 0; i < 3; i++)
+            if (s_cfg.carSens[i] == id)
+                at = i;
+        wchar_t v[32], label[64];
+        bool have = CarSensor(id, v, 32);
+        _snwprintf(label, 64, at >= 0 ? L"%d. %s" : L"%s", at + 1, kCarSensor[id][0]);
+        if (at < 0)
+            wcscpy(label, kCarSensor[id][0]);
+        int bx = 16 + id / 9 * 258, by = 104 + id % 9 * 41;
+        Button(dc, bx, by, 250, 37, NULL, at >= 0 ? B_SEL : B_N, IC_NONE, 14, 0, A_CARSENS, id);
+        T(dc, bx + 12, by + 25, label, 13, at >= 0 ? kInk : kText, 700, AL_START, 150);
+        T(dc, bx + 238, by + 25, have ? v : L"—", 13, at >= 0 ? kInk : kMuted, 600, AL_END, 90);
+    }
 }

@@ -323,6 +323,8 @@ static void PlayerStopStream()
 
 static bool PlayerPlay(int i)
 {
+    ResumeByUser();
+    s_mediaLast = 1;
     if (!BassLoad() || i < 0 || i >= s_plCount)
         return false;
     NetStop();
@@ -421,6 +423,7 @@ static void PlayerToggle()
     if (a == BASS_ACTIVE_PLAYING_F) {
         s_bass.pause(s_chan);
     } else {
+        ResumeByUser();
         NetStop();
         VidPauseForAudio();
         s_bass.play(s_chan, a == 0);   // stopped at the end: from the start
@@ -545,37 +548,12 @@ static void ScrAudioList(HDC dc)
 {
     if (!s_musCount && !s_musDir[0])
         MusicOpenDir(s_cfg.musicDir[0] && GetFileAttributes(s_cfg.musicDir) != 0xFFFFFFFF ? s_cfg.musicDir : L"");
-    wchar_t s[MAX_PATH + 16], folder[MAX_PATH];
-    wcscpy(folder, s_musDir);   // the folder's own name in the title, the whole path would not fit
-    int fl = (int)wcslen(folder);
-    if (fl && folder[fl - 1] == L'\\')
-        folder[--fl] = 0;
-    const wchar_t* fn = wcsrchr(folder, L'\\');
-    _snwprintf(s, MAX_PATH + 16, L"МУЗЫКА · %s", !s_musDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
-    Frame(dc, s);
+    DirTitle(dc, L"МУЗЫКА", s_musDir);
     if (s_musPage >= MusPages())
         s_musPage = MusPages() - 1;
-    int cell = 0;   // cells in columns: 5 down, then the second column
-    if (s_musDir[0]) {
-        ListRow(dc, 16, 66, 380, 56, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_MUP);
-        cell = 1;
-    }
-    int per = kMusRows * kMusCols - cell, first = s_musPage * per;
-    for (int i = first; i < s_musCount && i < first + per; i++, cell++) {
-        int x = 16 + cell / kMusRows * 388, y = 66 + cell % kMusRows * 62;
-        const wchar_t* n = s_mus[i];
-        bool isDir = n[wcslen(n) - 1] == L'\\';
-        bool cur = !isDir && s_chan && s_plCur >= 0 && !_wcsicmp(s_plDir, s_musDir) && !_wcsicmp(n, s_pl[s_plCur]);
-        wcsncpy(s, n, MAX_PATH);
-        s[MAX_PATH] = 0;
-        if (isDir && s[0] && s[wcslen(s) - 1] == L'\\')
-            s[wcslen(s) - 1] = 0;
-        ListRow(dc, x, y, 380, 56, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_MUSIC, NULL, NULL, A_MFILE, i,
-                isDir ? kOrange : CLR_INVALID);   // folders orange, tracks muted
-    }
-    if (!s_musCount)
-        T(dc, 40, s_musDir[0] ? 176 : 114, s_musDir[0] ? L"Здесь нет папок и музыки" : L"Нет носителей", 18, kMuted,
-          400);
+    DirEntries(dc, s_musDir, s_mus, s_musCount, s_musPage, kMusRows, kMusCols, 66, 56, 62, A_MUP, A_MFILE, IC_MUSIC,
+               s_chan && s_plCur >= 0 && !_wcsicmp(s_plDir, s_musDir) ? s_pl[s_plCur] : NULL,
+               L"Здесь нет папок и музыки", 114);
     PageDots(dc, s_musPage, MusPages(), 400, 382);
     Dock(dc);
     Button(dc, 16, 410, 200, 58, L"НОСИТЕЛИ", B_N, IC_FOLDER, 16, 28, A_MUP, 1);

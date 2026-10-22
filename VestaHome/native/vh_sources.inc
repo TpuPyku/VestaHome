@@ -109,37 +109,12 @@ static void ScrVideo(HDC dc)
 {
     if (!s_vidRead)
         VidOpenDir(s_cfg.videoDir[0] && GetFileAttributes(s_cfg.videoDir) != 0xFFFFFFFF ? s_cfg.videoDir : L"");
-    wchar_t s[MAX_PATH + 16], folder[MAX_PATH];
-    wcscpy(folder, s_vidDir);
-    int fl = (int)wcslen(folder);
-    if (fl && folder[fl - 1] == L'\\')
-        folder[--fl] = 0;
-    const wchar_t* fn = wcsrchr(folder, L'\\');
-    _snwprintf(s, MAX_PATH + 16, L"МЕДИА · ВИДЕО · %s", !s_vidDir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
-    Frame(dc, s);
+    DirTitle(dc, L"МЕДИА · ВИДЕО", s_vidDir);
     MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
     if (s_vidPage >= VidPages())
         s_vidPage = VidPages() - 1;
-    int cell = 0;
-    if (s_vidDir[0]) {
-        ListRow(dc, 16, 120, 380, 60, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, A_VUP);
-        cell = 1;
-    }
-    int per = kVidRows * kVidCols - cell, first = s_vidPage * per;
-    for (int i = first; i < s_vidCount && i < first + per; i++, cell++) {
-        int x = 16 + cell / kVidRows * 388, y = 120 + cell % kVidRows * 66;
-        const wchar_t* n = s_vids[i];
-        bool isDir = n[wcslen(n) - 1] == L'\\';
-        bool cur = !isDir && s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) && !_wcsicmp(n, s_vp[s_vpCur]);
-        wcsncpy(s, n, MAX_PATH);
-        s[MAX_PATH] = 0;
-        if (isDir && s[0] && s[wcslen(s) - 1] == L'\\')
-            s[wcslen(s) - 1] = 0;
-        ListRow(dc, x, y, 380, 60, s, NULL, cur ? L_CUR : L_N, isDir ? IC_FOLDER : IC_VIDEO, NULL, NULL, A_VFILE, i,
-                isDir ? kOrange : CLR_INVALID);
-    }
-    if (!s_vidCount)
-        T(dc, 40, s_vidDir[0] ? 236 : 168, s_vidDir[0] ? L"Здесь нет папок и видео" : L"Нет носителей", 18, kMuted, 400);
+    DirEntries(dc, s_vidDir, s_vids, s_vidCount, s_vidPage, kVidRows, kVidCols, 120, 60, 66, A_VUP, A_VFILE, IC_VIDEO,
+               s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) ? s_vp[s_vpCur] : NULL, L"Здесь нет папок и видео", 168);
     PageDots(dc, s_vidPage, VidPages());
 }
 
@@ -178,13 +153,13 @@ static void ScrVideoPlay(HDC dc)
     T(dc, 16, 414, s, 15, kMuted, 600);
     Mmss(s, 16, len);
     T(dc, 784, 414, s, 15, kMuted, 600, AL_END);
-    IconBtn(dc, IC_LIST, 24, 430, 40, kText, A_BACK);
-    IconBtn(dc, IC_HOME, 124, 430, 40, kText, A_NAV, S_HOME);
+    IconBtn(dc, IC_HOME, 24, 430, 40, kText, A_NAV, S_HOME);
+    IconBtn(dc, IC_LIST, 124, 430, 40, kText, A_BACK);
     IconBtn(dc, IC_PREV, 236, 430, 40, kText, A_VPREV);
     bool down = Zone(376, 426, 48, 48, A_VPLAY);
     Disc(dc, 400, 450, 24, down ? kFacet : kOrange);
     Ico(dc, s_vidState == VID_PLAYING ? IC_PAUSE : IC_PLAY, 384, 434, 32, kInk);
     IconBtn(dc, IC_FWD, 524, 430, 40, kText, A_VNEXT);
-    IconBtn(dc, IC_VIDEO, 632, 430, 40, s_vidFull ? kOrange : kText, A_VFULL);
+    IconBtn(dc, s_vidFull ? IC_UNFULL : IC_FULL, 632, 430, 40, s_vidFull ? kOrange : kText, A_VFULL);
     IconBtn(dc, IC_GEAR, 736, 430, 40, kText, A_SCREEN, S_SET_VIDEO);
 }

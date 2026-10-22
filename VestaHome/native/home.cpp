@@ -68,7 +68,7 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_BT, IC_USB, IC_LIST, IC_VOL, IC_SEARCH, IC_SHUFFLE, IC_REPEAT, IC_CALL, IC_HANGUP, IC_WIFI,
             IC_STAR, IC_STAR_F, IC_USER, IC_USERS, IC_CLOCK, IC_KEYPAD, IC_MIC_OFF, IC_HANDOVER, IC_PLAY,
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
-            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_COUNT };
+            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_COUNT };
 
 // Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing.
 static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music", L"phone", L"settings", L"home",
@@ -81,13 +81,13 @@ static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music
 enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE, A_SEG, A_KEY, A_DEL, A_PAGE,
               A_RUN, A_ADD, A_EDITMODE, A_FIELD, A_SAVE, A_DELETE, A_CANCEL, A_OK, A_CHAR, A_SHIFT, A_LANG,
               A_BKSP, A_FILE, A_UP, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_SOON, A_TEST,
-              A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_REGPAGE, A_CAMDL, A_TZ,
+              A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
               A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RLISTPAGE, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_SCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKPAGE, A_TASKKILL, A_TASKSWITCH,
+              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_SCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
-              A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIPAGE, A_WIFIAP,
+              A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
@@ -98,7 +98,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
 // system" (as the stock shell's engineering menu from its "Info"), S_TEST_*: its tests. S_WSET_*: widgets' settings.
 enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST, S_AUDIO_BT, S_AUX,
               S_VIDEO, S_VIDEO_PLAY, S_PHOTO, S_PHOTO_VIEW,
-              S_PHONE, S_CONTACTS, S_CONTACT, S_CALLS, S_CALL, S_INCOMING, S_PHONE_OFF,
+              S_PHONE, S_CONTACTS, S_CONTACT, S_CALLS, S_FAVS, S_CALL, S_INCOMING,
               S_SETTINGS, S_SET_SOUND, S_SET_BALANCE, S_SET_SCREEN, S_SET_RADIO, S_SET_BT, S_SET_WIFI, S_WIFI_KEYS,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
@@ -118,7 +118,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_SAVER, T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SUBTITLES, T_SLIDES_OPEN, T_AUTOROTATE, T_MUTED,
-       T_W_GPS, T_CLIMATE, T_CAM_ALERT, T_CAM_WEEKLY, T_RVC_OWN, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_RVC_OWN, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, true, false, true, false, true, true, true, true, false,
                               true, false, true, false, true, true };
 enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_FMT, G_PHOTO_SCALE, G_CALLS,
@@ -202,6 +202,20 @@ static void LogsSet(bool on)
         if (h != INVALID_HANDLE_VALUE)
             CloseHandle(h);
     }
+}
+
+// The start brings the last source back 10 s after it (ResumeSourceTick); a source the user starts before that
+// cancels it - the radio, the internet radio, music, Bluetooth or a video started by hand stays (the user
+// 2026-10-22: the disk's music came over the radio chosen meanwhile). s_resuming: the resume's own start.
+static bool s_resumed, s_resuming;
+static int  s_mediaLast;   // our media last played: 1 music, 2 the internet radio (the home widget shows it idle)
+
+static void ResumeByUser()
+{
+    if (s_resuming || s_resumed)
+        return;
+    s_resumed = true;
+    VLog(L"запуск: источник выбран вручную — прошлый не возвращаю");
 }
 
 static void VLog(const wchar_t* fmt, ...)
@@ -503,6 +517,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             ResumeSourceTick();
             PbTick();
             TripTick();
+            SpeedVolTick();
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)
                 static DWORD s_tripSig;
                 RECT wr;
@@ -687,7 +702,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_screen == S_TEST_MCU)
                 Redraw();
             else if (s_screen == S_AUDIO && PlayerPlaying())
-                RedrawArea(272, 130, 800, 300);   // the track's position
+                RedrawArea(256, 130, 800, 300);   // the track's position (the knob, r 11, from x 261)
             else if (s_screen == S_HOME && HomeRect(WG_MEDIA, &wr) && PlayerPlaying())
                 RedrawArea(wr.left, wr.top, wr.right, wr.bottom);   // the media widget
             else if (s_screen == S_NETRADIO && s_netState == NR_WAIT)
@@ -806,6 +821,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             return 0;
         }
+        if (wp == WP_MCU_HWKEY) {
+            HwKey(lp & 0xFF, lp >> 8 & 0xFF, lp >> 16 & 0xFF);
+            return 0;
+        }
         if (wp == WP_MCU_REBOOT) {
             VLog(L"mcu: крутилка удержана — перезагрузка через 5 с");
             s_rebootTick = GetTickCount();
@@ -825,6 +844,30 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (wp == WP_MCU_VOLUME) {   // the volume or the mute changed: the volume window for 2.5 s
             int v, mu, src;
             VolGet(&v, &mu, &src);
+            if (v == s_svSent && GetTickCount() - s_svTick < 3000)
+                return 0;   // the volume by speed: no window
+            {   // MUTE pressed twice (on, off within 1.5 s) while another program is in front: VestaHome back in
+                // front (the user 2026-10-22: the panel's MUTE is the MCU's own - only 0x3109 says it, no key
+                // message, so a long press cannot be seen or kept from muting; twice leaves the sound on)
+                static int   s_muteWas = -1;
+                static DWORD s_muteOn;
+                if (mu != s_muteWas) {
+                    if (mu)
+                        s_muteOn = GetTickCount();
+                    else if (s_muteWas == 1 && GetTickCount() - s_muteOn < 1500 &&
+                             (!IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd)) {
+                        VLog(L"MUTE дважды: VestaHome вперёд");
+#ifdef UNDER_CE
+                        ShowWindow(hwnd, SW_SHOW);
+                        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+#else
+                        ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+#endif
+                        SetForegroundWindow(hwnd);
+                    }
+                    s_muteWas = mu;
+                }
+            }
             if (!IsWindowVisible(hwnd))
                 return 0;
             if (GetForegroundWindow() == hwnd && s_screen != S_VOLUME)

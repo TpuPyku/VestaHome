@@ -103,16 +103,6 @@ static void ScrWSetSpeed(HDC dc)
     WRow(dc, 404, L"Скачать базу камер (speedcamonline.ru)", s, A_SCREEN, S_CAMDL, 776, true);
 }
 
-static void ScrWSetCar(HDC dc)
-{
-    Frame(dc, L"АВТОМОБИЛЬ · НАСТРОЙКИ");
-    Panel(dc, 16, 64, 768, 400);
-    WRow(dc, 68, L"Климат-контроль в машине", L"виджет «Климат» на главной", A_NONE, 0, 640, true);
-    Toggle(dc, 688, 78, T_CLIMATE);
-    T(dc, 36, 160, L"Ошибки, температуры, климат и датчик за бортом придут из MCU, когда будет", 15, kMuted, 400,
-      AL_START, 728);
-    T(dc, 36, 184, L"разобран его протокол. Сейчас значения на виджетах — демо.", 15, kMuted, 400, AL_START, 728);
-}
 
 // One line on the CAN module's stream: the car's speed and the steering angle when they come.
 static void CanStatusText(wchar_t* s, int n)
@@ -163,14 +153,12 @@ static void ScrSetCar(HDC dc)
         _snwprintf(mcu, 80, L"proxy работает · сообщений %u", (unsigned)s_mcuTotal);
     SetRow(dc, 208, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU, H);
     Chevron(dc, 728, 216);
-    SetRow(dc, 256, L"Климат-контроль в машине", L"виджет «Климат» вместо календаря", false, A_NONE, 0, H);
-    Toggle(dc, 688, 262, T_CLIMATE);
-    SetRow(dc, 304, L"Камера заднего хода — своя", L"видео и разметка VestaHome", true, A_NONE, 0, H);
-    Button(dc, 552, 310, 124, 40, L"ПОКАЗАТЬ", B_N, IC_NONE, 14, 0, A_RVCVIEW);   // by hand; a tap closes it
-    Toggle(dc, 688, 310, T_RVC_OWN);
-    T(dc, 264, 372, L"CAN-модуль даёт скорость и угол руля; климат, наружная температура,", 14, kDim, 400,
+    SetRow(dc, 256, L"Камера заднего хода — своя", L"видео и разметка VestaHome", true, A_NONE, 0, H);
+    Button(dc, 552, 262, 124, 40, L"ПОКАЗАТЬ", B_N, IC_NONE, 14, 0, A_RVCVIEW);   // by hand; a tap closes it
+    Toggle(dc, 688, 262, T_RVC_OWN);
+    T(dc, 264, 336, L"CAN-модуль даёт скорость и угол руля; климат, наружная температура,", 14, kDim, 400,
       AL_START, 504);
-    T(dc, 264, 392, L"кнопки и версии приходят от MCU — через proxy SPIPowerMgr.", 14, kDim, 400, AL_START, 504);
+    T(dc, 264, 356, L"кнопки и версии приходят от MCU — через proxy SPIPowerMgr.", 14, kDim, 400, AL_START, 504);
 }
 
 // MCU monitor ("Car -> MCU data", "Diagnostics -> keys"): the proxy's state, every message id with its count,
