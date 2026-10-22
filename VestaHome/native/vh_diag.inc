@@ -30,7 +30,7 @@ static void ScrDiag(HDC dc)
       AL_START, 720);
     Sep(dc, 40, 400, 720);
     T(dc, 40, 428, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
-    T(dc, 40, 450, L"VestaHome, proxy, пустышка — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 560);
+    T(dc, 40, 450, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 560);
     Toggle(dc, 688, 414, T_LOGS);
 }
 

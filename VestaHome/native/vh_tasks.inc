@@ -819,7 +819,7 @@ static void ShellStart()
 {
 #ifdef UNDER_CE
     if (GetFileAttributes(L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe") != 0xFFFFFFFF) {
-        VLog(L"штатная оболочка: её запустит пустышка");
+        VLog(L"штатная оболочка: её запустит загрузчик VestaHome");
         return;
     }
     TaskInfo* t = (TaskInfo*)calloc(1, sizeof(TaskInfo));
