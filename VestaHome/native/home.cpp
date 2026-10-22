@@ -372,7 +372,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         s_mediaMask = MediaMask();
         RvcInit(VLog);
         SetTimer(hwnd, TIMER_RVC, kRvcMs, NULL);   // the reverse gear (rvc.cpp), cheap: one GPIO read
-        WeatherRefresh();
+        if (WeatherWanted())
+            WeatherRefresh();
         BuildButtons();
         SetTimer(hwnd, 1, 1000, NULL);
         return 0;
@@ -538,8 +539,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             UiRememberTick();
             for (int u = 0; u < s_uwCount; u++) {   // the user widgets' data: re-read as often as each asks
                 UserWg& w = s_uw[u];
-                if (GetTickCount() - w.readTick < (DWORD)w.refresh * 1000)
-                    continue;
+                if (!WgShown(WG_COUNT + u) || GetTickCount() - w.readTick < (DWORD)w.refresh * 1000)
+                    continue;   // (a hidden one reads nothing)
                 w.readTick = GetTickCount();
                 RECT wr;
                 if (UserWgRead(w) && s_screen == S_HOME && IsWindowVisible(hwnd) && HomeRect(WG_COUNT + u, &wr))
@@ -667,7 +668,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Weather w;
             WxGet(&w);
             DWORD now = GetTickCount();
-            if (!s_wxBusy && ((w.have && w.ok > 0 && now - w.tick > 1800000) || (w.ok <= 0 && now - s_wxTry > 300000)))
+            if (!s_wxBusy && WeatherWanted() &&
+                ((w.have && w.ok > 0 && now - w.tick > 1800000) || (w.ok <= 0 && now - s_wxTry > 300000)))
                 WeatherRefresh();
         }
         CamAutoUpdate();
@@ -925,7 +927,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (g.date)
             HttpSetGpsDate(g.date);   // checks the certificates when the clock is wrong
         bool cam = CamCheck(g);
-        if (s_cfg.weatherGps && !s_wxByGps && GpsFresh(g, 5000)) {   // the first fix: the weather for here
+        if (s_cfg.weatherGps && !s_wxByGps && GpsFresh(g, 5000) && WeatherWanted()) {   // the first fix: the weather here
             s_wxByGps = true;
             WeatherRefresh();
         }

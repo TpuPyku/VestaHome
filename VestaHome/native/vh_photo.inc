@@ -390,6 +390,12 @@ static void DoAction(const Btn& b)
     case A_WGVIS:
         s_cfg.homeHidden ^= 1 << b.arg;
         SaveCfg();
+        if (WgShown(b.arg)) {   // shown again: to work now (a hidden one does nothing)
+            if (b.arg >= WG_COUNT)
+                UserWgWake(b.arg - WG_COUNT);
+            else if (b.arg == WG_WEATHER)
+                WeatherRefresh();
+        }
         break;
     case A_WGMOVE: {   // arg: id * 2 + (1 later, 0 earlier)
         int i = 0;

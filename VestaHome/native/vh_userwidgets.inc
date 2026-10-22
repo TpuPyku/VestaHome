@@ -478,6 +478,10 @@ static void UserWgFetchOne(const UwgJob& j)
     free(body);
 }
 
+static bool WgShown(int id);   // (below)
+
+// (2026-10-22, the user: a hidden widget must not work) A hidden user widget fetches nothing, starts no script and
+// reads no data; shown again (A_WGVIS: UserWgWake) it starts, reads and fetches at once.
 static DWORD WINAPI UserWgThread(LPVOID)
 {
     for (;;) {
@@ -487,7 +491,8 @@ static DWORD WINAPI UserWgThread(LPVOID)
         EnterCriticalSection(&s_uwCs);
         for (int i = 0; i < s_uwCount && !due; i++) {
             UserWg& w = s_uw[i];
-            if (!w.url[0] || (w.fetchTick && GetTickCount() - w.fetchTick < (DWORD)w.every * 1000))
+            if (!w.url[0] || !WgShown(WG_COUNT + i) ||
+                (w.fetchTick && GetTickCount() - w.fetchTick < (DWORD)w.every * 1000))
                 continue;
             w.fetchTick = GetTickCount();
             if (!w.fetchTick)
@@ -513,10 +518,35 @@ static int CmpUserWg(const void* a, const void* b) { return wcscmp(((const UserW
 
 // The widgets' folder read (at the start and when a card comes or goes); a widget seen the first time since
 // VestaHome started runs its start= script. The main screen's order is applied again with them.
+static wchar_t s_uwStarted[32][40];   // the widgets whose start= ran since VestaHome started
+static int     s_uwStartedCount;
+
+static void UserWgStart(int u)   // its start= once a run, when it is shown
+{
+    UserWg& w = s_uw[u];
+    if (!w.start[0] || !WgShown(WG_COUNT + u))
+        return;
+    for (int k = 0; k < s_uwStartedCount; k++)
+        if (!wcscmp(s_uwStarted[k], w.key))
+            return;
+    UserWgRun(w, w.start, L"start");
+    if (s_uwStartedCount < 32)
+        wcscpy(s_uwStarted[s_uwStartedCount++], w.key);
+}
+
+static void UserWgWake(int u)   // shown again: its script, its data, its url now
+{
+    if (u < 0 || u >= s_uwCount)
+        return;
+    UserWgStart(u);
+    UserWgRead(s_uw[u]);
+    EnterCriticalSection(&s_uwCs);
+    s_uw[u].fetchTick = 0;
+    LeaveCriticalSection(&s_uwCs);
+}
+
 static void UserWidgetsScan()
 {
-    static wchar_t s_started[32][40];
-    static int s_startedCount;
     wchar_t dirs[2][MAX_PATH], pat[MAX_PATH];
     int nd = UserWgDirs(dirs);
     if (!s_uwThread)
@@ -547,21 +577,14 @@ static void UserWidgetsScan()
     LeaveCriticalSection(&s_uwCs);
     if (net && !s_uwThread)
         s_uwThread = CreateThread(NULL, 0, UserWgThread, NULL, 0, NULL);
-    for (int i = 0; i < s_uwCount; i++) {
-        UserWg& w = s_uw[i];
-        UserWgRead(w);
-        bool started = false;
-        for (int k = 0; k < s_startedCount && !started; k++)
-            started = !wcscmp(s_started[k], w.key);
-        if (!started && w.start[0]) {
-            UserWgRun(w, w.start, L"start");
-            if (s_startedCount < 32)
-                wcscpy(s_started[s_startedCount++], w.key);
-        }
-    }
     if (s_uwCount)
         VLog(L"виджеты пользователя: %d (%s, %s)", s_uwCount, dirs[0], nd > 1 ? dirs[1] : L"-");
-    HomeWidgetsLoad(s_cfg.homeRaw);
+    HomeWidgetsLoad(s_cfg.homeRaw);   // the hidden ones known from here
+    for (int i = 0; i < s_uwCount; i++)
+        if (WgShown(WG_COUNT + i)) {
+            UserWgRead(s_uw[i]);
+            UserWgStart(i);
+        }
 }
 
 static void WUser(HDC dc, int x, int y, int u)
@@ -617,6 +640,13 @@ static void WgDraw(int id, HDC dc, int x, int y)
 
 // Shown: not hidden (the climate too: a car without it hides it here, "General -> Widgets of the main screen";
 // the user 2026-10-21 - it no longer stands in for the calendar).
+static bool WgShown(int id);
+
+static bool WeatherWanted()   // its widget shown, or the screen saver on (it shows the weather)
+{
+    return WgShown(WG_WEATHER) || s_cfg.saverMin > 0;
+}
+
 static bool WgShown(int id)
 {
     return !(s_cfg.homeHidden >> id & 1) && id != WG_CLIMATE;   // the climate: off for now (no data from the car)
