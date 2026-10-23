@@ -380,6 +380,25 @@ flatter 2D graphics», постоянная нижняя панель, верх�
 <div class="note" style="margin-top:10px"><h2>Реализация на ГУ</h2>Всё рисуется теми же средствами VH (GDI, 16 бит): прозрачность
 и свечение — заранее посчитанные тона, без настоящего смешивания на лету; мозаика — периодическая плитка, как сейчас.
 Плавность не страдает: элементов на кадр меньше, чем сейчас.</div></div>''']
+    # the font: VestaHome may carry its own (its folder Fonts\, AddFontResource at start: the unit has only Tahoma);
+    # samples drawn by Windows GDI as VestaHome draws text (fonts_sample/, made by a GDI script from static TTFs)
+    fonts = [('Tahoma', 'сейчас, есть на ГУ', 'привычный, узкий; жирный — грубоватый'),
+             ('Inter', 'OFL · 2 × 340 КБ', 'лучшая читаемость мелкого текста, различимы l / I / 1; тяжёлые файлы'),
+             ('GolosText', 'OFL · 2 × 70 КБ', 'для русских интерфейсов: плотный, крупные цифры; самые лёгкие файлы'),
+             ('Manrope', 'OFL · 2 × 97 КБ', 'геометричный, «автомобильный»; на 13 px тесно, I / l похожи'),
+             ('Onest', 'OFL · 2 × 98 КБ', 'геометричный, широкий; мелкий текст хуже Inter')]
+    cells = ''
+    for f, lic, why in fonts:
+        img = os.path.join(HERE, 'fonts_sample', 'font-%s.png' % f)
+        if os.path.exists(img):
+            cells += ('<div><div class="note"><b>%s</b> · %s — %s</div><img src="fonts_sample/font-%s.png" '
+                      'style="width:470px;border-radius:8px;display:block;margin-top:4px"></div>' % (f, lic, why, f))
+    pages.append('<div class="page"><h2>Шрифт</h2><p class="lead">На ГУ только Tahoma, но VestaHome может нести свой: '
+                  'обычный TrueType (.ttf, статические начертания — обычный и жирный) в своей папке Fonts, загрузка при '
+                  'старте (AddFontResource), реестр не нужен. Образцы ниже нарисованы GDI Windows так же, как рисует VH '
+                  '(сглаживание, размеры 52 / 30 / 19 / 18 / 15 / 13). Лицензия всех кандидатов — SIL OFL (можно '
+                  'класть в программу).</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px">%s'
+                  '</div></div>' % cells)
     for title, fn, shot, notes in SCREENS:
         was = ''
         if shot and os.path.exists(os.path.join(SHOTS, shot)):
