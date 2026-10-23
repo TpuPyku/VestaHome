@@ -2069,6 +2069,72 @@ static int Section(Screen s)
     }
 }
 
+// The section of the bottom bar a screen shows (the music list counts as the media's).
+static int NavSection(Screen s)
+{
+    return s == S_AUDIO_LIST ? 2 : Section(s);
+}
+
+// The bar's change of section, animated (the user 2026-10-23): the pill of the section left shrinks with its name to
+// a circle, its icon goes plain; the circle slides to the new section (ease in and out; 200 ms a place - Главная to
+// Настройки about a second), its icon turns orange and the circle opens into the pill with the name. The time counts
+// from the first frame of the new screen (its own drawing must not eat the start).
+enum { TIMER_NAVANIM = 21, kNavShrinkMs = 160, kNavStepMs = 200, kNavFrameMs = 25 };
+static int   s_navFrom = -1, s_navTo = -1;
+static DWORD s_navStart;   // 0: not started yet
+
+static int NavCx(int i)
+{
+    return 56 + i * 688 / 6;
+}
+
+static int NavPillW(HDC dc, int i)
+{
+    return 18 + 24 + 8 + TextWidth(dc, kNav[i].label, 15, 700) + 18;
+}
+
+static int NavPillX(int cx, int w)
+{
+    int x = cx - w / 2;
+    return x < 16 ? 16 : x + w > 784 ? 784 - w : x;
+}
+
+static int NavAnimMs()
+{
+    return 2 * kNavShrinkMs + kNavStepMs * abs(s_navTo - s_navFrom);
+}
+
+static void NavAnimStart(int from, int to)
+{
+    if (from < 0 || to < 0 || from > 5 || to > 5 || from == to)
+        return;
+    s_navFrom = from;
+    s_navTo = to;
+    s_navStart = 0;
+    SetTimer(s_wnd, TIMER_NAVANIM, kNavFrameMs, NULL);
+}
+
+static double Ease(double p)   // in and out
+{
+    p = p < 0 ? 0 : p > 1 ? 1 : p;
+    return p < 0.5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p);
+}
+
+// The pill of section i at width w (44: a circle) with its orange icon and as much of its name as fits.
+static void NavPill(HDC dc, int i, int w)
+{
+    int cx = NavCx(i), full = NavPillW(dc, i), x = NavPillX(cx, w), fx = NavPillX(cx, full);
+    RSoft(x, 426, w, 44, 22);
+    int ix = (cx - 12) + (fx + 18 - (cx - 12)) * (w - 44) / (full - 44 > 0 ? full - 44 : 1);   // centred -> its place
+    Ico(dc, kNav[i].ic, ix, 436, 24, kOrange);
+    if (w > 44 + 8) {   // the name, cut at the pill's right edge
+        int saved = SaveDC(dc);
+        IntersectClipRect(dc, x, 426, x + w - 12, 470);
+        T(dc, ix + 32, 454, kNav[i].label, 15, kOrange, 700);
+        RestoreDC(dc, saved);
+    }
+}
+
 // Bottom bar of the main screens (design 0.6): the six sections and day/night as icons without labels in seven fixed
 // places (nothing moves when the section changes), the current section a soft orange pill with its name, grown around
 // its place (it stays clear of the neighbours' icons). 64 px high (416..480) on the background colour; the main screens
@@ -2076,15 +2142,39 @@ static int Section(Screen s)
 static void NavBar(HDC dc, int active)
 {
     Fill(dc, 0, 408, 800, 480, kInk);
+    int animIc = -1;   // the icon the animation draws itself
+    if (s_navFrom >= 0 && s_navTo == active) {
+        if (!s_navStart)
+            s_navStart = GetTickCount();
+        int el = (int)(GetTickCount() - s_navStart), move = NavAnimMs() - 2 * kNavShrinkMs;
+        if (el < kNavShrinkMs) {   // the pill left shrinks to a circle
+            int full = NavPillW(dc, s_navFrom);
+            NavPill(dc, s_navFrom, full - (int)((full - 44) * Ease((double)el / kNavShrinkMs)));
+            animIc = s_navFrom;
+        } else if (el < kNavShrinkMs + move) {   // the circle slides
+            int cx = NavCx(s_navFrom) + (int)((NavCx(s_navTo) - NavCx(s_navFrom)) * Ease((double)(el - kNavShrinkMs) / move));
+            RSoft(cx - 22, 426, 44, 44, 22);
+        } else if (el < NavAnimMs()) {   // it opens into the new pill
+            int full = NavPillW(dc, s_navTo);
+            NavPill(dc, s_navTo, 44 + (int)((full - 44) * Ease((double)(el - kNavShrinkMs - move) / kNavShrinkMs)));
+            animIc = s_navTo;
+        } else {
+            s_navFrom = -1;
+        }
+    } else {
+        s_navFrom = -1;
+    }
+    bool anim = s_navFrom >= 0;
     for (int i = 0; i < 7; i++) {
-        int cx = 56 + i * 688 / 6;
+        int cx = NavCx(i);
         Icon ic = i < 6 ? kNav[i].ic : s_night ? IC_SUN : IC_MOON;
         Screen to = i == 2 ? s_media : i < 6 ? kNav[i].to : S_NONE;
-        bool on = i == active;
-        bool d = Zone(cx - 57, 416, 114, 64, i == 6 ? A_NIGHT : on && s_histLen == 0 && s_screen == to ? A_NONE : A_NAV,
-                      to);
-        int w = on ? 18 + 24 + 8 + TextWidth(dc, kNav[i].label, 15, 700) + 18 : 64, x = cx - w / 2;
-        x = x < 16 ? 16 : x + w > 784 ? 784 - w : x;
+        bool on = i == active && !anim;
+        bool d = Zone(cx - 57, 416, 114, 64, i == 6 ? A_NIGHT : i == active && s_histLen == 0 && s_screen == to ? A_NONE
+                      : A_NAV, to);
+        if (i == animIc && !d)
+            continue;
+        int w = on ? NavPillW(dc, i) : 64, x = NavPillX(cx, w);
         if (on || d)
             RSel(dc, x, 426, w, 44, 22, on, d, CLR_INVALID);
         COLORREF fg = d ? kInk : on ? kOrange : kMuted;

@@ -86,7 +86,7 @@ static void DrawFrame(HDC dc)
         s_scroll = NULL;
     }
     DrawScreen(dc, s_screen);
-    int sec = s_screen == S_AUDIO_LIST ? 2 : Section(s_screen);   // the music list has the bar too (not a tab of its own)
+    int sec = NavSection(s_screen);   // the music list has the bar too (not a tab of its own)
     if (sec >= 0)
         NavBar(dc, sec);
 }

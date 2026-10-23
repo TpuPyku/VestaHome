@@ -351,7 +351,12 @@ static void DoAction(const Btn& b)
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;
     case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
-    case A_NAV:      Nav((Screen)b.arg); break;
+    case A_NAV: {   // a section of the bottom bar (or a widget's screen): the bar's pill slides there
+        int from = NavSection(s_screen);
+        Nav((Screen)b.arg);
+        NavAnimStart(from, NavSection(s_screen));
+        break;
+    }
     case A_NIGHT:    SetTheme(!s_night); break;   // the bar: the theme (the backlight: in the settings)
     case A_PHFILE:   // a tile: a folder, a picture (the viewer); the path line: -1 up, -3 the volumes
         if (b.arg == -3) {

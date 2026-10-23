@@ -437,6 +437,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RvcTick();
             return 0;
         }
+        if (wp == TIMER_NAVANIM) {   // the bottom bar's change of section: its next frame, the last one stops it
+            if (s_navFrom < 0 || (s_navStart && GetTickCount() - s_navStart >= (DWORD)NavAnimMs())) {
+                KillTimer(hwnd, TIMER_NAVANIM);
+                s_navFrom = -1;
+            }
+            if (IsWindowVisible(hwnd))
+                RedrawArea(0, 408, 800, 480);
+            return 0;
+        }
         if (wp == TIMER_MARQ) {   // the running lines of the radio screen: only its text strip is drawn again
             if (s_screen != S_RADIO || !s_marqOn || !IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd) {
                 KillTimer(hwnd, TIMER_MARQ);
