@@ -2,13 +2,13 @@
 """make_saver.py - the screen saver's background of design 0.6 -> VestaHome/VestaHome/Skin/saver.png (800 x 480).
 
 As the mockup's saver (make_home_mockup.py, .saver): the rhombus mosaic in cells of 64 x 112, darkened downwards, a
-soft orange glow over the clock's place. A little noise against the banding of the unit's 16-bit screen. The previous
+soft orange glow over the clock's place. Ordered dither, written in exact RGB565 colours (the unit's screen cuts
+the low bits: without it the dark greys band and go green). The previous
 picture (the headlights) stays as saver2.png: "saver = saver2.png" in skin.ini brings it back.
 
 Usage: python VestaHome/skin/make_saver.py
 """
 import os
-import random
 
 from PIL import Image, ImageDraw
 
@@ -17,8 +17,9 @@ OUT = os.path.join(HERE, '..', 'VestaHome', 'VestaHome', 'Skin', 'saver.png')
 W, H = 800, 480
 CW, CH = 64, 112   # a mosaic cell: four triangles meeting in its middle
 SHADES = {'left': (0x17, 0x1a, 0x20), 'right': (0x12, 0x14, 0x19), 'top': (0x1b, 0x1e, 0x24), 'bottom': (0x0f, 0x11, 0x14)}
-INK = (0x0b, 0x0c, 0x0e)
-ORANGE = (0xff, 0x6b, 0x1a)
+INK = (0x10, 0x10, 0x18)   # VestaHome's background (RGB565)
+ORANGE = (0xf8, 0x6c, 0x18)
+BAYER = ((0, 8, 2, 10), (12, 4, 14, 6), (3, 11, 1, 9), (15, 7, 13, 5))
 
 
 def mosaic():
@@ -37,7 +38,6 @@ def mosaic():
 def main():
     base = mosaic()
     px = base.load()
-    rnd = random.Random(6)
     gx, gy, rx, ry = W * 0.5, H * 0.4, W * 0.9 * 0.6, H * 0.7 * 0.6   # the glow: to 60 % of a 90 % x 70 % ellipse
     for y in range(H):
         dark = 0.6 + 0.25 * y / (H - 1)   # the shade over the mosaic, more towards the bottom
@@ -47,8 +47,8 @@ def main():
             e = ((x - gx) / rx) ** 2 + ((y - gy) / ry) ** 2
             a = 0.12 * max(0.0, 1 - e ** 0.5)   # the orange, fading out
             r, g, b = (c * (1 - a) + o * a for c, o in zip((r, g, b), ORANGE))
-            n = rnd.uniform(-1.5, 1.5)
-            px[x, y] = tuple(max(0, min(255, int(c + n + 0.5))) for c in (r, g, b))
+            d = BAYER[y & 3][x & 3] / 16.0
+            px[x, y] = (min(248, int(r + d * 8) // 8 * 8), min(252, int(g + d * 4) // 4 * 4), min(248, int(b + d * 8) // 8 * 8))
     base.save(OUT, optimize=True)
     print('%s %d B' % (os.path.normpath(OUT), os.path.getsize(OUT)))
 

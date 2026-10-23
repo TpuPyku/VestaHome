@@ -15,6 +15,7 @@ static const SkinColor kSkinColors[] = {
     { L"mosaic1", &kTri[0],  "built-in background triangles (unused with a background picture)" },
     { L"mosaic2", &kTri[1],  "" },
     { L"mosaic3", &kTri[2],  "" },
+    { L"mosaic4", &kTri[3],  "" },
 };
 
 // PNG icon into premultiplied RGBA. Up to 256 x 256: icons only, keeps memory bounded.

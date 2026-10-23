@@ -46,8 +46,8 @@ CSS = '''
 @font-face { font-family: 'Golos Text'; font-weight: 400; src: url('../VestaHome/VestaHome/Fonts/GolosText-Regular.ttf'); }
 @font-face { font-family: 'Golos Text'; font-weight: 700; src: url('../VestaHome/VestaHome/Fonts/GolosText-Bold.ttf'); }
 @page { size: 297mm 210mm; margin: 0; }
-:root { --bg:#0e1013; --s1:#1a1d22; --s2:#23272e; --sep:#2a2f37; --tx:#f5f3ee; --t2:#aab0b8; --t3:#6c727c;
-        --or:#ff6b1a; --orS:rgba(255,107,26,.16); --ok:#33c27a; }
+:root { --bg:#101018; --s1:#181c20; --s2:#202428; --sep:#283038; --tx:#f8f4f0; --t2:#a8b0b8; --t3:#707480;
+        --or:#f86c18; --orS:rgba(248,108,24,.16); --ok:#33c27a; }
 * { box-sizing: border-box; }
 html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; background: #08090b; color: var(--tx); font-family: 'Golos Text', Tahoma, sans-serif; }
@@ -68,7 +68,7 @@ h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 0 0 6px; 
 .scr { width: 800px; height: 480px; position: relative; overflow: hidden; border-radius: 10px; flex: none;
        background: radial-gradient(120% 90% at 85% 0%, rgba(255,107,26,.07), transparent 55%),
                    linear-gradient(180deg, rgba(14,16,19,.25), rgba(10,11,13,.7)),
-                   url('data:image/svg+xml;utf8,MOSAIC') 0 0/64px 112px, #0e1013;
+                   url('data:image/svg+xml;utf8,MOSAIC') 0 0/64px 112px, #101018;
        box-shadow: 0 0 0 1px #20242a; }
 .top { position: absolute; left: 0; right: 0; top: 0; height: 48px; display: flex; align-items: center;
        padding: 0 24px; gap: 14px; }
@@ -89,7 +89,7 @@ h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 0 0 6px; 
         background: var(--s2); font-size: 15px; color: var(--t2); }
 .pill.a { background: var(--orS); color: var(--or); font-weight: bold; }
 .btn { display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--s2); }
-.play { background: var(--or); color: #0e1013; }
+.play { background: var(--or); color: #101018; }
 .facet { background: url('data:image/svg+xml;utf8,FACET') 0 0/40px 70px; }
 .bar { height: 6px; border-radius: 3px; background: var(--s2); position: relative; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--or); }
@@ -99,7 +99,7 @@ h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 0 0 6px; 
 .tog { width: 52px; height: 30px; border-radius: 15px; background: var(--s2); position: relative; }
 .tog::after { content: ''; position: absolute; left: 4px; top: 4px; width: 22px; height: 22px; border-radius: 50%;
               background: var(--t3); }
-.tog.on { background: var(--or); } .tog.on::after { left: 26px; background: #0e1013; }
+.tog.on { background: var(--or); } .tog.on::after { left: 26px; background: #101018; }
 .tok { display: inline-block; width: 30px; height: 30px; border-radius: 8px; vertical-align: middle; margin-right: 6px;
        box-shadow: 0 0 0 1px #2c3038; }
 table.tk { border-collapse: collapse; font-size: 12px; } table.tk td { padding: 3px 10px 3px 0; color: var(--t2); }
@@ -311,7 +311,7 @@ def scr_phone():
 <div style="position:absolute;left:24px;top:112px;width:300px">
   <div style="font-size:28px;font-weight:bold;height:36px;letter-spacing:1px">8 927 12</div>
   <div style="display:grid;grid-template-columns:repeat(3,56px);gap:8px 22px;margin-top:4px">%s</div></div>
-<div style="position:absolute;left:300px;top:200px;"><span class="btn" style="width:72px;height:72px;background:var(--ok);color:#0e1013">%s</span></div>
+<div style="position:absolute;left:300px;top:200px;"><span class="btn" style="width:72px;height:72px;background:var(--ok);color:#101018">%s</span></div>
 <div class="card" style="left:420px;top:116px;width:356px;height:284px;padding:6px 18px">%s</div>
 %s</div>''' % (top('Телефон · Redmi Note 13'), keys, ico('call', 28), calls, bot('phone'))
 
@@ -364,7 +364,7 @@ def scr_pair():
   <div class="t2" style="font-size:16px;margin-top:8px">просит сопряжение. Код на телефоне тот же?</div>
   <div style="font-size:54px;font-weight:bold;letter-spacing:6px;margin-top:16px" class="or">482 915</div>
   <div style="display:flex;gap:16px;margin-top:26px"><span class="pill" style="flex:1;justify-content:center;height:54px;font-size:17px">Отклонить</span>
-  <span class="pill" style="flex:1;justify-content:center;height:54px;font-size:17px;background:var(--or);color:#0e1013;font-weight:bold">Принять</span></div>
+  <span class="pill" style="flex:1;justify-content:center;height:54px;font-size:17px;background:var(--or);color:#101018;font-weight:bold">Принять</span></div>
 </div>
 %s</div>''' % (top('Настройки'), ico('bt', 16), bot('gear'))
 
@@ -440,7 +440,7 @@ flatter 2D graphics», постоянная нижняя панель, верх�
 акцент, ромбы, 800×480; шрифт — свой, Golos Text (в папке VestaHome, на ГУ только Tahoma).</p>
 <div class="row"><div class="note" style="flex:1"><h2>Что меняется</h2><ul>
 <li><b>Меньше элементов на экране, больше пустого места.</b> Отступ от края 24 px, между карточками 16 px.</li>
-<li><b>Без рамок.</b> Карточки отличаются от фона тоном (поверхность #1a1d22 на #0e1013), разделители в списках — 1 px.</li>
+<li><b>Без рамок.</b> Карточки отличаются от фона тоном (поверхность #181c20 на #101018), разделители в списках — 1 px.</li>
 <li><b>Скругления крупнее:</b> карточки 20, окна 26, кнопки-«таблетки» — полукруглые.</li>
 <li><b>Иерархия размером:</b> главное число 52–76 px, заголовок 26–34, текст 16–19, подписи 13–15. Регистр обычный, без
 СПЛОШНЫХ ЗАГЛАВНЫХ.</li>
@@ -449,16 +449,17 @@ flatter 2D graphics», постоянная нижняя панель, верх�
 <li><b>Ромбы:</b> фон — крупная мозаика (64×112) почти в тон фону; оранжевые грани — на обложках и акцентных плитках.
 Лёгкое оранжевое свечение в углу экрана.</li>
 <li><b>Значки — Lucide</b> (тот же набор, что в скине VestaHome): линейные, 24-сетка, линия 2 px, кнопки плеера залиты; в нижней панели без подписей — подпись только у текущего раздела.</li>
-<li><b>Контраст:</b> текст #f5f3ee на #1a1d22 — 15:1; вторичный #aab0b8 — 8:1; третичный #6c727c — для неважного.</li>
+<li><b>Контраст:</b> текст #f8f4f0 на #181c20 — 15:1; вторичный #a8b0b8 — 8:1; третичный #707480 — для неважного.</li>
 </ul></div>
 <div class="note" style="width:330px"><h2>Токены</h2><table class="tk">
-<tr><td><span class="tok" style="background:#0e1013"></span><b>фон</b> #0e1013</td></tr>
-<tr><td><span class="tok" style="background:#1a1d22"></span><b>карточка</b> #1a1d22</td></tr>
-<tr><td><span class="tok" style="background:#23272e"></span><b>кнопка / вложенное</b> #23272e</td></tr>
-<tr><td><span class="tok" style="background:#2a2f37"></span><b>разделитель</b> #2a2f37</td></tr>
-<tr><td><span class="tok" style="background:#ff6b1a"></span><b>акцент</b> #ff6b1a, заливка выбранного 16%</td></tr>
-<tr><td><span class="tok" style="background:#f5f3ee"></span><b>текст</b> #f5f3ee · #aab0b8 · #6c727c</td></tr>
+<tr><td><span class="tok" style="background:#101018"></span><b>фон</b> #101018</td></tr>
+<tr><td><span class="tok" style="background:#181c20"></span><b>карточка</b> #181c20</td></tr>
+<tr><td><span class="tok" style="background:#202428"></span><b>кнопка / вложенное</b> #202428</td></tr>
+<tr><td><span class="tok" style="background:#283038"></span><b>разделитель</b> #283038</td></tr>
+<tr><td><span class="tok" style="background:#f86c18"></span><b>акцент</b> #f86c18, заливка выбранного 16%</td></tr>
+<tr><td><span class="tok" style="background:#f8f4f0"></span><b>текст</b> #f8f4f0 · #a8b0b8 · #707480</td></tr>
 <tr><td><span class="tok" style="background:#33c27a"></span><b>вызов / норма</b> #33c27a</td></tr>
+<tr><td><b>16 бит.</b> Экран ГУ — RGB565: красный и синий шагами 8, зелёный 4. Все цвета выше — точные 565 (иначе тёмные серые уходят в зелень); фон и засветка — с упорядоченным шумом (дизеринг).</td></tr>
 </table><h2 style="margin-top:12px">Размеры</h2><table class="tk">
 <tr><td><b>Верхняя строка</b> 48 · нижняя панель 64</td></tr><tr><td><b>Поля</b> 24 · промежутки 16 · строка списка 60</td></tr>
 <tr><td><b>Радиусы</b> 20 карточка · 26 окно · ½ высоты «таблетка»</td></tr>

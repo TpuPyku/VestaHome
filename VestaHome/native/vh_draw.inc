@@ -87,34 +87,6 @@ static void FillDot(HDC dc, int x, int y, int size, double cx, double cy, double
     SelectObject(dc, op);
 }
 
-// Equilateral-triangle mosaic, three close shades (the 2018 Vesta trim).
-static void Triangles(HDC dc, int l, int t, int r, int b, const COLORREF* shades, int nshades)
-{
-    const int w = 64, h = 56;   // design 0.6: a larger mosaic
-    HRGN clip = CreateRectRgn(l, t, r, b);
-    SelectClipRgn(dc, clip);
-    for (int row = 0; t + row * h < b; row++) {
-        int y0 = t + row * h, y1 = y0 + h;
-        for (int col = -1; l + col * w / 2 < r; col++) {
-            int x = l + col * w / 2;
-            bool up = ((row + col) & 1) == 0;
-            POINT p[3];
-            if (up) {
-                p[0].x = x;         p[0].y = y1;
-                p[1].x = x + w / 2; p[1].y = y0;
-                p[2].x = x + w;     p[2].y = y1;
-            } else {
-                p[0].x = x;         p[0].y = y0;
-                p[1].x = x + w;     p[1].y = y0;
-                p[2].x = x + w / 2; p[2].y = y1;
-            }
-            Poly(dc, p, 3, shades[(row * 7 + col * 3 + (up ? 1 : 0)) % nshades]);
-        }
-    }
-    SelectClipRgn(dc, NULL);
-    DeleteObject(clip);
-}
-
 // ---------------------------------------------------------------- icons (48 x 48 design grid)
 
 struct Pen {
@@ -895,7 +867,9 @@ static bool LoadBackground(const wchar_t* path, unsigned short* bits)
     return true;
 }
 
-enum { kTileW = 48, kTileH = 252 };   // the mosaic repeats every two triangles across and six rows down
+enum { kTileW = 64, kTileH = 480 };
+enum { kGlowX = 152, kGlowW = 324, kGlowH = 120 };   // the glow's map: x 152..800, y 0..240, every 2nd pixel
+static unsigned char* s_glow;   // design 0.6: a column of the mosaic's cells (64 x 112), the whole height
 
 // Night: a third less brightness, as C() does (RGB565).
 static unsigned short Dim565(unsigned p)
@@ -947,29 +921,42 @@ static void BuildBackground()
 {
     if (s_skinTile[0] && !LoadTile(s_skinTile))
         s_skinTile[0] = 0;   // (the triangles below)
-    unsigned short* bits;
-    HBITMAP bmp = s_skinTile[0] ? NULL : MakeDib(kTileW, kTileH, &bits);
-    if (bmp) {
-        HDC dc = CreateCompatibleDC(NULL);
-        HGDIOBJ ob = SelectObject(dc, bmp);
-        Triangles(dc, 0, 0, kTileW, kTileH, kTri, 3);
-        SelectObject(dc, ob);
-        DeleteDC(dc);
-#ifndef UNDER_CE
-        GdiFlush();
-#endif
+    if (!s_skinTile[0]) {   // design 0.6, as the mockup: rhombi of four triangles meeting in a 64 x 112 cell's
+        // middle, darkened towards the bottom (to 25 % .. 70 % of the background), dithered against the 16-bit bands
+        static const int kBayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
         s_tile[0] = (unsigned short*)malloc(kTileW * kTileH * 2);
         s_tile[1] = (unsigned short*)malloc(kTileW * kTileH * 2);
-        if (s_tile[0] && s_tile[1])
-            for (int y = 0; y < kTileH; y++)
+        if (s_tile[0] && s_tile[1]) {
+            int ir = GetRValue(kInk), ig = GetGValue(kInk), ib = GetBValue(kInk);
+            for (int y = 0; y < kTileH; y++) {
+                int a = 64 + 115 * y / (kTileH - 1);   // the shade over it, of 256
+                int fy = y % 112 - 56;
                 for (int x = 0; x < kTileW; x++) {
-                    unsigned short p = bits[(kTileH - 1 - y) * kTileW + x];   // the DIB is bottom-up
+                    int fx = x - 32;
+                    // which of the four: the diagonals through the middle (|fx| / 32 against |fy| / 56)
+                    int k = abs(fx) * 56 > abs(fy) * 32 ? (fx < 0 ? 0 : 1) : (fy < 0 ? 2 : 3);
+                    COLORREF c = kTri[k];
+                    int d = kBayer[y & 3][x & 3];   // 0..15: an offset of 0..15/16 of a step before RGB565 cuts
+                    int r = (GetRValue(c) * (256 - a) + ir * a + d * 128) / 256;   // + d/16 of a step of 8
+                    int g = (GetGValue(c) * (256 - a) + ig * a + d * 64) / 256;    // + d/16 of a step of 4
+                    int b = (GetBValue(c) * (256 - a) + ib * a + d * 128) / 256;
+                    unsigned short p = RGB565(r > 255 ? 255 : r, g > 255 ? 255 : g, b > 255 ? 255 : b);
                     s_tile[0][y * kTileW + x] = p;
                     s_tile[1][y * kTileW + x] = Dim565(p);
                 }
-        s_tileW = kTileW;
-        s_tileH = kTileH;
-        DeleteObject(bmp);
+            }
+            s_tileW = kTileW;
+            s_tileH = kTileH;
+        }
+        // the orange glow at the top right (the mockup's radial gradient at 85 %, 0: 7 % of the accent fading out
+        // by 55 % of a 120 % x 90 % ellipse), its strength at half the resolution
+        s_glow = (unsigned char*)malloc(kGlowW * kGlowH);
+        if (s_glow)
+            for (int y = 0; y < kGlowH; y++)
+                for (int x = 0; x < kGlowW; x++) {
+                    double dx = (kGlowX + x * 2 - 680) / 528.0, dy = y * 2 / 238.0, e = sqrt(dx * dx + dy * dy);
+                    s_glow[y * kGlowW + x] = (unsigned char)(e < 1 ? (1 - e) * 0.10 * 256 : 0);
+                }
     }
     if (s_skinBg[0]) {
         s_bg = MakeDib(800, 480, &s_bgBits);
@@ -980,7 +967,9 @@ static void BuildBackground()
     }
 }
 
-// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top).
+// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top); the glow over it.
+static void Glow(int top, int bottom);
+
 static void Pattern(int top, int bottom, int anchor)
 {
     const unsigned short* t = s_tile[s_night ? 1 : 0];
@@ -1002,6 +991,34 @@ static void Pattern(int top, int bottom, int anchor)
             x += n;
         }
     }
+    Glow(top, bottom);
+}
+
+// The orange glow at the top right over the background just copied (rows [top, bottom), inside the clip).
+static void Glow(int top, int bottom)
+{
+    if (!s_glow)
+        return;
+    COLORREF o = C(kOrange);
+    int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o);
+    int x0 = s_clip.left > kGlowX ? s_clip.left : kGlowX;
+    static const int kBayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+    for (int y = top; y < bottom && y < kGlowH * 2; y++) {
+        const unsigned char* g = s_glow + (y / 2) * kGlowW;
+        unsigned short* row = s_backBits + (479 - y) * 800;
+        for (int x = x0; x < s_clip.right; x++) {
+            int a = g[(x - kGlowX) / 2];
+            if (!a)
+                continue;
+            unsigned p = row[x];
+            int r = ((p >> 8) & 0xF8), gg = ((p >> 3) & 0xFC), b = ((p << 3) & 0xF8);
+            int d = kBayer[y & 3][x & 3];   // dithered: the glow's fine steps between the screen's
+            r += ((orr - r) * a + d * 128) / 256;
+            gg += ((og - gg) * a + d * 64) / 256;
+            b += ((ob - b) * a + d * 128) / 256;
+            row[x] = RGB565(r > 255 ? 255 : r < 0 ? 0 : r, gg > 255 ? 255 : gg < 0 ? 0 : gg, b > 255 ? 255 : b < 0 ? 0 : b);
+        }
+    }
 }
 
 // ---------------------------------------------------------------- the other screens
@@ -1018,11 +1035,10 @@ static void Blit(HDC dc, HBITMAP bmp)
     DeleteDC(src);
 }
 
-// Graphite under the top bar, the mosaic below it.
+// The mosaic under the top bar too (design 0.6), the glow at the top right.
 static void SubBackground(HDC dc)
 {
-    Fill(dc, 0, 0, 800, 56, kInk);
-    Pattern(56, 480, 56);
+    Pattern(0, 480, 0);
 }
 
 // A full-screen picture into the frame, a third darker with the night theme (as C()).
@@ -1363,7 +1379,7 @@ static unsigned short Px(COLORREF c)
     return RGB565(GetRValue(c), GetGValue(c), GetBValue(c));
 }
 
-// Shade index of the triangle mosaic at (u, v) from its origin: the same tiling as Triangles().
+// Shade index of the orange triangle mosaic (TriFill) at (u, v) from its origin: rows of 64 x 56 triangles.
 static int TriIndex(int u, int v, int n)
 {
     const int w = 64, h = 56;   // design 0.6: a larger mosaic

@@ -42,17 +42,19 @@
 #define APP_CLASS L"VestaHome_Wnd"
 
 // ---------------------------------------------------------------- palette (design 0.6 tokens; skin.ini may override)
+// Exact RGB565 colours (red and blue in steps of 8, green of 4), each the nearest to the mockup's that keeps its tint
+// (2026-10-23: rounded plainly, the dark greys went green on the 16-bit screen); the mockup uses the same.
 
-static COLORREF kInk      = RGB(0x0e, 0x10, 0x13);   // background
-static COLORREF kPanel    = RGB(0x1a, 0x1d, 0x22);   // cards, tiles, widgets (no borders)
-static const COLORREF kPanel2   = RGB(0x23, 0x27, 0x2e);   // pills, buttons, nested
-static COLORREF kLine     = RGB(0x2a, 0x2f, 0x37);   // separators, tracks
-static COLORREF kText     = RGB(0xf5, 0xf3, 0xee);
-static COLORREF kMuted    = RGB(0xaa, 0xb0, 0xb8);
-static COLORREF kDim      = RGB(0x6c, 0x72, 0x7c);
-static COLORREF kOrange   = RGB(0xff, 0x6b, 0x1a);   // the one accent: action / active
+static COLORREF kInk      = RGB(0x10, 0x10, 0x18);   // background
+static COLORREF kPanel    = RGB(0x18, 0x1c, 0x20);   // cards, tiles, widgets (no borders)
+static const COLORREF kPanel2   = RGB(0x20, 0x24, 0x28);   // pills, buttons, nested
+static COLORREF kLine     = RGB(0x28, 0x30, 0x38);   // separators, tracks
+static COLORREF kText     = RGB(0xf8, 0xf4, 0xf0);
+static COLORREF kMuted    = RGB(0xa8, 0xb0, 0xb8);
+static COLORREF kDim      = RGB(0x70, 0x74, 0x80);
+static COLORREF kOrange   = RGB(0xf8, 0x6c, 0x18);   // the one accent: action / active
 static COLORREF kFacet    = RGB(0xc2, 0x4a, 0x0b);
-static COLORREF kTri[3]   = { RGB(0x0e, 0x0f, 0x12), RGB(0x14, 0x16, 0x1a), RGB(0x17, 0x19, 0x1d) };
+static COLORREF kTri[4]   = { RGB(0x17, 0x1a, 0x20), RGB(0x12, 0x14, 0x19), RGB(0x1b, 0x1e, 0x24), RGB(0x0f, 0x11, 0x14) };   // the mosaic's cell: left, right, top, bottom (design 0.6)
 static const COLORREF kTriOr[4] = { RGB(0x8f, 0x36, 0x08), RGB(0xc2, 0x4a, 0x0b), RGB(0xa8, 0x3f, 0x09), RGB(0xe6, 0x5a, 0x12) };
 static const COLORREF kOff    = RGB(0x3d, 0x42, 0x4a);   // unavailable
 static const COLORREF kOk     = RGB(0x2f, 0xbf, 0x71);   // call
@@ -281,12 +283,24 @@ static const wchar_t* kMonths[12] = { L"января", L"февраля", L"ма
 static const wchar_t* kDays[7] = { L"воскресенье", L"понедельник", L"вторник", L"среда", L"четверг",
                                    L"пятница", L"суббота" };
 
-// Night mode only dims the menu: colours lose a third of their brightness.
+// Night mode only dims the menu: colours lose a third of their brightness. Then rounded to the nearest RGB565
+// colour: the 16-bit screen otherwise drops the low bits (3 of red and blue, 2 of green) and the dark greys turn
+// green (2026-10-23: the cards looked darker and greener than the mockup).
+static int Round565(int v, int step)
+{
+    v = (v + step / 2) / step * step;
+    return v > 255 ? 256 - step : v;
+}
+
 static COLORREF C(COLORREF c)
 {
-    if (!s_night)
-        return c;
-    return RGB(GetRValue(c) * 2 / 3, GetGValue(c) * 2 / 3, GetBValue(c) * 2 / 3);
+    int r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
+    if (s_night) {
+        r = r * 2 / 3;
+        g = g * 2 / 3;
+        b = b * 2 / 3;
+    }
+    return RGB(Round565(r, 8), Round565(g, 4), Round565(b, 8));
 }
 // The rest of VestaHome, in this order (one translation unit: the parts are not compiled on their own).
 #include "vh_draw.inc"
