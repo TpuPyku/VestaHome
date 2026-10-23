@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_home_mockup.py - VestaHome 0.6 mockup ("more air", after Škoda's Flow HMI) -> vesta-home-v0.6.html + .pdf.
 
-Screens 800 x 480 drawn in HTML/CSS in VestaHome's own face Golos Text (its Fonts\ folder; the unit has only Tahoma), the orange accent and the rhombus
+Screens 800 x 480 drawn in HTML/CSS in VestaHome's own face Golos Text (its folder Fonts; the unit has only Tahoma), the orange accent and the rhombus
 mosaic of VestaHome kept; beside each one the current screen (docs/shots, made by tools/make_shots.py) for
 comparison. The PDF is printed by headless Edge (as make_maps_mockup.py).
 
