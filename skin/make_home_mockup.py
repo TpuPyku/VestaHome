@@ -23,7 +23,7 @@ P = {
     'pause': '!pause', 'prev': '!skip-back', 'next': '!skip-forward', 'shuffle': 'shuffle', 'repeat': 'repeat',
     'list': 'list', 'cloud': 'cloud', 'car': 'car', 'clock': 'clock', 'user': 'user', 'star': 'star',
     'keypad': 'grid-3x3', 'warn': 'triangle-alert', 'search': 'search', 'chev': 'chevron-right', 'back': 'chevron-left',
-    'sd': 'save', 'info': 'info', 'media': 'clapperboard', 'photo': 'image', 'sun': 'sun', 'call': 'phone', 'end': 'phone-off', 'trip': 'route', 'fuel': 'fuel', 'drop': 'droplet', 'bolt': 'zap',
+    'folder': 'folder', 'film': 'film', 'sd': 'save', 'info': 'info', 'media': 'clapperboard', 'photo': 'image', 'sun': 'sun', 'call': 'phone', 'end': 'phone-off', 'trip': 'route', 'fuel': 'fuel', 'drop': 'droplet', 'bolt': 'zap',
 }
 
 
@@ -184,6 +184,85 @@ def scr_music():
                ico('pause', 32), ico('next', 34), ico('repeat', 26), bot('music'))
 
 
+def media_head(tab, crumbs, action=''):   # the sources' pills, then the path: back, the folders, an action at the right
+    tabs = ''.join('<span class="pill%s">%s</span>' % (' a' if t == tab else '', t)
+                   for t in ('Музыка', 'Интернет', 'Bluetooth', 'AUX', 'Видео', 'Фото'))
+    path = '<span class="t3"> › </span>'.join('<span class="%s">%s</span>' % ('' if k == len(crumbs) - 1 else 't2', c)
+                                              for k, c in enumerate(crumbs))
+    return ('<div style="position:absolute;left:24px;top:60px;display:flex;gap:10px">%s</div>'
+            '<div style="position:absolute;left:16px;right:24px;top:110px;height:40px;display:flex;align-items:center;gap:10px">'
+            '<span class="t2" style="display:flex">%s</span><span style="font-size:17px;font-weight:bold;flex:1">%s</span>%s</div>'
+            % (tabs, ico('back', 24), path, action))
+
+
+def file_rows(items):   # (icon, name, second line, state) in two columns: state 'dir' a folder, 'now' the playing one
+    out = ''
+    for icn, name, sub, st in items:
+        now = st == 'now'
+        out += ('<div style="display:flex;align-items:center;gap:12px;height:52px;padding:0 14px;border-radius:14px;'
+                'background:%s;%s"><span style="display:flex;color:%s">%s</span><div style="flex:1;min-width:0">'
+                '<div style="font-size:16px;%swhite-space:nowrap;overflow:hidden;text-overflow:ellipsis">%s</div>%s</div>%s</div>' % (
+                    'var(--orS)' if now else 'var(--s1)', 'color:var(--or)' if now else '',
+                    'var(--or)' if st in ('dir', 'now') else 'var(--t2)', ico(icn, 22),
+                    'font-weight:bold;' if st in ('dir', 'now') else '', name,
+                    '<div class="%s" style="font-size:12px">%s</div>' % ('or' if now else 't3', sub) if sub else '',
+                    '<span class="or" style="font-size:12px;font-weight:bold">▶ играет</span>' if now else ''))
+    return ('<div style="position:absolute;left:24px;right:24px;top:160px;display:grid;grid-template-columns:1fr 1fr;'
+            'gap:8px 12px">%s</div>' % out)
+
+
+def page_dots(n, top_px=396):
+    return ('<div style="position:absolute;left:0;right:0;top:%dpx;display:flex;justify-content:center;gap:8px">%s</div>' % (
+        top_px, ''.join('<i style="width:%dpx;height:5px;border-radius:3px;background:%s"></i>' % (
+            22 if k == 0 else 8, 'var(--or)' if k == 0 else 'var(--t3)') for k in range(n))))
+
+
+def scr_music_list():
+    items = [('folder', 'Rock Hits 2024', '18 треков', 'dir'), ('music', '01 · Thunderstruck', 'AC/DC · 4:52', ''),
+             ('music', '02 · Kickstart My Heart', 'Mötley Crüe · 4:44', ''), ('music', '03 · Holy Diver', 'Dio · 5:54', ''),
+             ('music', '04 · Valhalla Calling', 'Miracle of Sound · 3:41', 'now'),
+             ('music', '05 · Paranoid', 'Black Sabbath · 2:48', ''), ('music', '06 · Ace of Spades', 'Motörhead · 2:49', ''),
+             ('music', '07 · The Trooper', 'Iron Maiden · 4:12', '')]
+    act = '<span class="pill a">%s Играть всё</span>' % ico('play', 16)
+    return '<div class="scr">%s%s%s%s%s</div>' % (top('Медиа', play='music'),
+                                                 media_head('Музыка', ['SD-карта', 'Музыка', 'Rock'], act),
+                                                 file_rows(items), page_dots(3), bot('music'))
+
+
+def scr_video_list():
+    items = [('folder', 'Сериалы', '3 папки', 'dir'), ('folder', 'Мультфильмы', '12 файлов', 'dir'),
+             ('film', 'Дорога на Байкал.mp4', 'MP4 · 1,4 ГБ', ''),
+             ('film', 'Видеорегистратор 0612.avi', 'AVI · 210 МБ', ''),
+             ('film', 'Концерт 2019.mkv', 'MKV · 2,1 ГБ', ''), ('film', 'Отпуск Крым.mp4', 'MP4 · 640 МБ', ''),
+             ('film', 'Трейлер.wmv', 'WMV · 38 МБ', ''), ('film', 'Урок 1.mp4', 'MP4 · 520 МБ', '')]
+    return '<div class="scr">%s%s%s%s%s</div>' % (top('Медиа'), media_head('Видео', ['USB-диск', 'Видео']),
+                                                 file_rows(items), page_dots(2), bot('music'))
+
+
+# photo stand-ins: sea and sunset gradients
+SUN = ['#f6b25e 0%, #ee7a45 38%, #3a4a5a 52%, #1e2a36 100%',
+       '#ffd27a 0%, #f39a52 30%, #c25a3a 48%, #2a3440 60%, #151c24 100%',
+       '#9cc6e8 0%, #d9e6ef 40%, #c9b28a 58%, #8a7656 100%', '#f4c48a 0%, #e0905c 42%, #405468 55%, #2a3846 100%',
+       '#a8d0ef 0%, #e8f0f4 45%, #3f7fa8 55%, #1f4a6a 100%', '#ffb36b 0%, #e2683f 35%, #5a3a46 52%, #241c26 100%',
+       '#bcd8ea 0%, #e2ecf2 38%, #b9a27c 52%, #6c5a42 100%']
+
+
+def scr_photo():
+    tiles = ('<div><div style="height:86px;border-radius:14px;background:var(--s1);display:flex;align-items:center;'
+             'justify-content:center;gap:8px;color:var(--or)">%s<span class="t3" style="font-size:13px">42</span></div>'
+             '<div style="font-size:13px;font-weight:bold;margin-top:5px">Бахчисарай 2010</div></div>' % ico('folder', 36))
+    for k, g in enumerate(SUN):
+        sel = k == 2
+        tiles += ('<div><div style="height:86px;border-radius:14px;background:linear-gradient(180deg, %s);%s"></div>'
+                  '<div class="%s" style="font-size:13px;margin-top:5px">IMAGE_%03d.jpg</div></div>' % (
+                      g, 'box-shadow:0 0 0 3px var(--or)' if sel else '', 'or' if sel else 't2', k + 2))
+    act = '<span class="pill">%s Слайд-шоу</span>' % ico('play', 16)
+    return ('<div class="scr">%s%s<div style="position:absolute;left:24px;right:24px;top:162px;display:grid;'
+            'grid-template-columns:repeat(4,1fr);gap:12px 12px">%s</div>%s%s</div>' % (
+                top('Медиа'), media_head('Фото', ['SD-карта', 'Фото', 'Крым 2010'], act), tiles, page_dots(4),
+                bot('music')))
+
+
 def scr_radio():
     pre = ''
     for i, (f, n) in enumerate([('87,5', 'Европа+'), ('91,1', 'Радио 7'), ('96,3', 'Русское'), ('101,4', 'Ретро FM'),
@@ -318,6 +397,21 @@ SCREENS = [
         'Пресеты — 8 карточек (две строки по 4), под ними точки страниц: видно, что листаются пальцем. '
         'Текущая станция — оранжевая.',
         'PTY и список станций — «таблетки» справа от частоты.']),
+    ('Музыка: папка', scr_music_list, '08_music_list.png', [
+        'Списки — внутри раздела «Медиа»: «таблетки» источников остаются сверху, отдельного экрана с «назад» нет.',
+        'Путь — строка «‹ SD-карта › Музыка › Rock»: стрелка — на уровень выше (вместо плитки «Наверх»), '
+        'текущая папка — белым; справа действие папки — «Играть всё».',
+        'Строки 52 px в два столбца без рамок: значок, название, вторая строка тусклее (исполнитель, длительность); '
+        'папки — оранжевый значок и жирное название; играющий трек — оранжевая подложка и «▶ играет».',
+        'Под списком — точки страниц.']),
+    ('Видео: папка', scr_video_list, '13_video.png', [
+        'Те же строки, что у музыки: папки сверху, у файла второй строкой — формат и размер.',
+        'Носители — первый уровень пути: вместо букв «C: D: E: H:» — названия «SD-карта», «USB-диск», '
+        '«Встроенная карта».']),
+    ('Фото', scr_photo, '14_photo.png', [
+        'Сетка 4×2: превью без рамок со скруглением 14 px, подпись под картинкой мелко и тусклее.',
+        'Папка — такая же плитка: оранжевый значок и число фото в ней; «Наверх» — стрелка в строке пути.',
+        'Последнее открытое фото — оранжевая обводка (видно, откуда продолжать); справа в строке пути — «Слайд-шоу».']),
     ('Телефон', scr_phone, '15_phone.png', [
         'Разделы телефона — «таблетки» сверху (боковых вкладок нет).',
         'Скруглённые клавиши 56×52 с воздухом между ними; зелёная кнопка вызова — единственное исключение из оранжевого.',
