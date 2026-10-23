@@ -41,15 +41,15 @@
 
 #define APP_CLASS L"VestaHome_Wnd"
 
-// ---------------------------------------------------------------- palette (concept v0.1 tokens; skin.ini may override)
+// ---------------------------------------------------------------- palette (design 0.6 tokens; skin.ini may override)
 
-static COLORREF kInk      = RGB(0x0b, 0x0c, 0x0e);   // background
-static COLORREF kPanel    = RGB(0x17, 0x19, 0x1c);   // tiles, widgets
-static const COLORREF kPanel2   = RGB(0x22, 0x25, 0x2a);   // pressed / nested
-static COLORREF kLine     = RGB(0x34, 0x38, 0x3f);   // 2 px borders
-static COLORREF kText     = RGB(0xf3, 0xf1, 0xec);
-static COLORREF kMuted    = RGB(0xa3, 0xa8, 0xb0);
-static COLORREF kDim      = RGB(0x5d, 0x63, 0x6c);
+static COLORREF kInk      = RGB(0x0e, 0x10, 0x13);   // background
+static COLORREF kPanel    = RGB(0x1a, 0x1d, 0x22);   // cards, tiles, widgets (no borders)
+static const COLORREF kPanel2   = RGB(0x23, 0x27, 0x2e);   // pills, buttons, nested
+static COLORREF kLine     = RGB(0x2a, 0x2f, 0x37);   // separators, tracks
+static COLORREF kText     = RGB(0xf5, 0xf3, 0xee);
+static COLORREF kMuted    = RGB(0xaa, 0xb0, 0xb8);
+static COLORREF kDim      = RGB(0x6c, 0x72, 0x7c);
 static COLORREF kOrange   = RGB(0xff, 0x6b, 0x1a);   // the one accent: action / active
 static COLORREF kFacet    = RGB(0xc2, 0x4a, 0x0b);
 static COLORREF kTri[3]   = { RGB(0x0e, 0x0f, 0x12), RGB(0x14, 0x16, 0x1a), RGB(0x17, 0x19, 0x1d) };

@@ -222,9 +222,9 @@ static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, I
 {
     bool d = a != A_NONE && Zone(x, y, w, h, a, arg);
     bool hd = settings != S_NONE && Zone(x, y, w, 42, A_SCREEN, settings);
-    R(dc, x, y, w, h, 14, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
+    R(dc, x, y, w, h, 20, d ? kOrange : kPanel);   // design 0.6: a card without a border
     if (hd)
-        R(dc, x + 2, y + 2, w - 4, 40, 12, kOrange);
+        R(dc, x + 2, y + 2, w - 4, 40, 18, kOrange);
     Ico(dc, ic, x + 16, y + 12, 22, d || hd ? kInk : kOrange);
     T(dc, x + 46, y + 29, caption, 13, d || hd ? kInk : kMuted, 700, AL_START, w - (settings != S_NONE ? 90 : 62));
     if (settings != S_NONE)

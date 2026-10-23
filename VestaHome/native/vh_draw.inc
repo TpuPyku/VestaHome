@@ -1097,6 +1097,12 @@ static COLORREF Mix(COLORREF a, COLORREF b, int alpha)
                (GetBValue(a) * alpha + GetBValue(b) * (255 - alpha)) / 255);
 }
 
+// The soft orange of the selected (design 0.6): the accent at 16 % over the background; its text is orange.
+static COLORREF OrSoft()
+{
+    return Mix(kOrange, kInk, 41);
+}
+
 struct FontEnt { int size, weight; HFONT f; };
 static FontEnt s_fonts[160];
 static int     s_fontCount;
@@ -1462,13 +1468,15 @@ static void Sep(HDC dc, int x, int y, int w)
     Fill(dc, x, y, x + w, y + 2, kLine);
 }
 
-static void Panel(HDC dc, int x, int y, int w, int h, int rx = 14)
+// A card (design 0.6): a surface a shade lighter than the background, no border.
+static void Panel(HDC dc, int x, int y, int w, int h, int rx = 18)
 {
-    R(dc, x, y, w, h, rx, kPanel, kLine);
+    R(dc, x, y, w, h, rx, kPanel);
 }
 
-// Button states: outlined, selected source, pressed / active, unavailable, filled, the dialog's main action.
-// The shell has no separate "selected" text colour, so selected, active and main action are all orange.
+// Button states: plain, selected (source, tab), pressed / active, unavailable, filled, the dialog's main action.
+// Design 0.6: pills without borders; selected = the soft orange with orange text, pressed and the main action =
+// the full orange.
 enum { B_N, B_SEL, B_ACT, B_DIS, B_FILL, B_PRI };
 
 static void Button(HDC dc, int x, int y, int w, int h, const wchar_t* label, int state, Icon ic = IC_NONE,
@@ -1476,19 +1484,20 @@ static void Button(HDC dc, int x, int y, int w, int h, const wchar_t* label, int
 {
     if (Zone(x, y, w, h, a, arg))
         state = B_ACT;
+    int rx = h / 2 < 24 ? h / 2 : 24;
     COLORREF fg;
-    if (state == B_ACT || state == B_SEL || state == B_PRI) {
-        R(dc, x, y, w, h, 10, kOrange);
+    if (state == B_ACT || state == B_PRI) {
+        R(dc, x, y, w, h, rx, kOrange);
         fg = kInk;
+    } else if (state == B_SEL) {
+        R(dc, x, y, w, h, rx, OrSoft());
+        fg = kOrange;
     } else if (state == B_DIS) {
-        R(dc, x, y, w, h, 10, RGB(0x11, 0x13, 0x16), kPanel2);
+        R(dc, x, y, w, h, rx, kPanel);
         fg = kOff;
-    } else if (state == B_FILL) {
-        R(dc, x, y, w, h, 10, kPanel, kLine);
-        fg = kText;
     } else {
-        R(dc, x, y, w, h, 10, CLR_INVALID, kLine);
-        fg = label ? kMuted : kText;
+        R(dc, x, y, w, h, rx, kPanel2);
+        fg = label && state == B_N ? kMuted : kText;
     }
     if (ic != IC_NONE && label) {
         if (!isz)
@@ -1506,12 +1515,12 @@ static void Button(HDC dc, int x, int y, int w, int h, const wchar_t* label, int
     }
 }
 
-// A bare icon (docks, transport): its button reaches 8 px around it, pressed = an orange plate.
+// A bare icon (docks, transport): its button reaches 8 px around it, pressed = an orange circle.
 static void IconBtn(HDC dc, Icon ic, int x, int y, int size, COLORREF c, Action a = A_NONE, int arg = 0)
 {
     bool down = Zone(x - 8, y - 8, size + 16, size + 16, a, arg);
     if (down)
-        R(dc, x - 8, y - 8, size + 16, size + 16, 10, kOrange);
+        Disc(dc, x + size / 2, y + size / 2, size / 2 + 8, kOrange);
     Ico(dc, ic, x, y, size, down ? kInk : c);
 }
 
@@ -1531,7 +1540,7 @@ static void Toggle(HDC dc, int x, int y, int id)
         R(dc, x, y, 72, 36, 18, kOrange);
         Disc(dc, x + 54, y + 18, 14, kInk);
     } else {
-        R(dc, x, y, 72, 36, 18, kPanel2, kLine);
+        R(dc, x, y, 72, 36, 18, kPanel2);
         Disc(dc, x + 18, y + 18, 13, kDim);
     }
 }
@@ -1539,13 +1548,13 @@ static void Toggle(HDC dc, int x, int y, int id)
 // Segmented choice s_seg[id] among n options.
 static void Seg(HDC dc, int x, int y, int w, int h, const wchar_t* const* opts, int n, int id, int size = 17)
 {
-    R(dc, x, y, w, h, 10, kInk, kLine);
+    R(dc, x, y, w, h, h / 2, kPanel2);
     int cw = (w - 4) / n;
     for (int i = 0; i < n; i++) {
         int cx = x + 2 + i * cw;
         bool on = Zone(cx, y, cw, h, A_SEG, id * 16 + i) || s_seg[id] == i;
         if (on)
-            R(dc, cx, y + 2, cw, h - 4, 8, kOrange);
+            R(dc, cx, y + 2, cw, h - 4, (h - 4) / 2, kOrange);
         T(dc, cx + cw / 2, y + h / 2 + size * 36 / 100, opts[i], size, on ? kInk : kMuted, 700, AL_MID, cw - 6);
     }
 }
@@ -1573,12 +1582,12 @@ static void VSlider(HDC dc, int x, int y, int h, int pct, const wchar_t* label, 
 static void Stepper(HDC dc, int x, int y, int w, const wchar_t* value, int h = 48, int size = 20,
                     Action a = A_NONE)   // a: the left arrow sends arg -1, the right one +1
 {
-    R(dc, x, y, w, h, 10, kInk, kLine);
+    R(dc, x, y, w, h, h / 2, kPanel2);
     bool l = Zone(x, y, 48, h, a, -1), r = Zone(x + w - 48, y, 48, h, a, 1);
     if (l)
-        R(dc, x + 2, y + 2, 44, h - 4, 8, kOrange);
+        R(dc, x + 2, y + 2, 44, h - 4, (h - 4) / 2, kOrange);
     if (r)
-        R(dc, x + w - 46, y + 2, 44, h - 4, 8, kOrange);
+        R(dc, x + w - 46, y + 2, 44, h - 4, (h - 4) / 2, kOrange);
     Ico(dc, IC_BACK, x + 6, y + (h - 32) / 2, 32, l ? kInk : kText);
     Ico(dc, IC_NEXT, x + w - 38, y + (h - 32) / 2, 32, r ? kInk : kText);
     T(dc, x + w / 2, y + h / 2 + size * 36 / 100, value, size, kText, 700, AL_MID, w - 96);
@@ -1605,24 +1614,25 @@ static void AvatarOr(HDC dc, int cx, int cy, int r, const wchar_t* initials)
 
 enum { L_N, L_CUR, L_DIM };
 
-// List row, one button: optional number, icon, second line and right-hand text; current = orange.
-// icColor: the icon's own colour (folders in the browsers), CLR_INVALID = muted like the text.
+// List row, one button: optional number, icon, second line and right-hand text; current = the soft orange with
+// orange text, pressed = the full orange. icColor: the icon's own colour (folders in the browsers), CLR_INVALID =
+// muted like the text.
 static void ListRow(HDC dc, int x, int y, int w, int h, const wchar_t* text, const wchar_t* right, int state,
                     Icon ic = IC_NONE, const wchar_t* sub = NULL, const wchar_t* num = NULL, Action a = A_NONE,
                     int arg = 0, COLORREF icColor = CLR_INVALID)
 {
-    if (Zone(x, y, w, h, a, arg))
-        state = L_CUR;
-    bool cur = state == L_CUR;
-    COLORREF fg = cur ? kInk : state == L_DIM ? kOff : kText, mg = cur ? kInk : kMuted;
-    R(dc, x, y, w, h, 10, cur ? kOrange : kPanel);
+    bool down = Zone(x, y, w, h, a, arg);
+    bool cur = state == L_CUR && !down;
+    COLORREF fg = down ? kInk : cur ? kOrange : state == L_DIM ? kOff : kText,
+             mg = down ? kInk : cur ? kOrange : kMuted;
+    R(dc, x, y, w, h, 14, down ? kOrange : cur ? OrSoft() : kPanel);
     int tx = x + 16;
     if (num) {
-        T(dc, tx, y + h / 2 + 6, num, 16, cur ? kInk : kDim, 700);
+        T(dc, tx, y + h / 2 + 6, num, 16, down ? kInk : cur ? kOrange : kDim, 700);
         tx += 40;
     }
     if (ic != IC_NONE) {
-        Ico(dc, ic, tx, y + (h - 30) / 2, 30, cur ? kInk : icColor != CLR_INVALID ? icColor : kMuted);
+        Ico(dc, ic, tx, y + (h - 30) / 2, 30, down ? kInk : cur ? kOrange : icColor != CLR_INVALID ? icColor : kMuted);
         tx += 44;
     }
     int maxw = x + w - (right ? TextWidth(dc, right, 16, 600) + 28 : 16) - tx;
@@ -1737,7 +1747,6 @@ static void ScrollEnd(HDC dc, Scroll& s, int x, int y, int w, int h, int ah)
 static void Dock(HDC dc)
 {
     Fill(dc, 0, 398, 800, 480, kInk);
-    Sep(dc, 0, 398, 800);
 }
 
 static void Now(wchar_t* s, int n)   // the clock: 24 h, or 12 h ("General -> Time format", time.12h)
@@ -1823,8 +1832,7 @@ static int StatusMarks(HDC dc, int end, int minLeft)
 static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act = IC_NONE, Action a = A_NONE,
                   bool sel = false, Icon act2 = IC_NONE, Action a2 = A_NONE, int arg2 = 0)
 {
-    Sep(dc, 0, 54, 800);
-    int vol, mute, src, marksEnd;
+    int vol, mute, src, marksEnd;   // design 0.6: no line under the bar
     wchar_t s[40];
     {   // the volume (MCU, through the proxy): a speaker and the level, "–" before the first value; opens its window
         bool have = VolGet(&vol, &mute, &src);
@@ -1869,7 +1877,7 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
     }
     if (back != A_NONE && (back != A_BACK || s_histLen > 0)) {
         bool d = Zone(0, 0, 64, 56, back);
-        R(dc, 8, 8, 48, 40, 8, d ? kOrange : kPanel);
+        R(dc, 8, 8, 48, 40, 20, d ? kOrange : kPanel);
         Ico(dc, IC_BACK, 14, 10, 36, d ? kInk : kText);
         x = 72;
     }
@@ -1893,9 +1901,9 @@ static void DirTitle(HDC dc, const wchar_t* prefix, const wchar_t* dir)
 
 // Sections of the bottom bar; each opens its main screen (media: the source shown last).
 struct NavItem { Icon ic; const wchar_t* label; Screen to; };
-static const NavItem kNav[6] = { { IC_HOME, L"ГЛАВНАЯ", S_HOME }, { IC_RADIO, L"РАДИО", S_RADIO },
-                                 { IC_MUSIC, L"МЕДИА", S_AUDIO }, { IC_PHONE, L"ТЕЛЕФОН", S_PHONE },
-                                 { IC_APPS, L"ПРИЛОЖЕНИЯ", S_APPS }, { IC_GEAR, L"НАСТРОЙКИ", S_SETTINGS } };
+static const NavItem kNav[6] = { { IC_HOME, L"Главная", S_HOME }, { IC_RADIO, L"Радио", S_RADIO },
+                                 { IC_MUSIC, L"Медиа", S_AUDIO }, { IC_PHONE, L"Телефон", S_PHONE },
+                                 { IC_APPS, L"Приложения", S_APPS }, { IC_GEAR, L"Настройки", S_SETTINGS } };
 static Screen s_media = S_AUDIO;
 
 // Section of a main screen (index in kNav); -1: not a main screen, it has no bottom bar (its own dock instead).
@@ -1921,24 +1929,31 @@ static int Section(Screen s)
     }
 }
 
-// Bottom bar of the main screens: the six sections and day/night, 104 x 58 each; the current section is orange.
-// The main screens keep their content above y 400.
+// Bottom bar of the main screens (design 0.6): the six sections and day/night as icons without labels in seven fixed
+// places (nothing moves when the section changes), the current section a soft orange pill with its name, grown around
+// its place (it stays clear of the neighbours' icons). 64 px high (416..480) on the background colour; the main screens
+// keep their content above y 400.
 static void NavBar(HDC dc, int active)
 {
     Fill(dc, 0, 408, 800, 480, kInk);
-    Sep(dc, 0, 408, 800);
     for (int i = 0; i < 7; i++) {
-        int x = 8 + i * 112;
+        int cx = 56 + i * 688 / 6;
         Icon ic = i < 6 ? kNav[i].ic : s_night ? IC_SUN : IC_MOON;
-        const wchar_t* label = i < 6 ? kNav[i].label : s_night ? L"ДЕНЬ" : L"НОЧЬ";
         Screen to = i == 2 ? s_media : i < 6 ? kNav[i].to : S_NONE;
         bool on = i == active;
-        bool d = Zone(x, 416, 104, 58, i == 6 ? A_NIGHT : on && s_histLen == 0 && s_screen == to ? A_NONE : A_NAV, to);
+        bool d = Zone(cx - 57, 416, 114, 64, i == 6 ? A_NIGHT : on && s_histLen == 0 && s_screen == to ? A_NONE : A_NAV,
+                      to);
+        int w = on ? 18 + 24 + 8 + TextWidth(dc, kNav[i].label, 15, 700) + 18 : 64, x = cx - w / 2;
+        x = x < 16 ? 16 : x + w > 784 ? 784 - w : x;
         if (on || d)
-            R(dc, x, 416, 104, 58, 10, kOrange);
-        COLORREF fg = on || d ? kInk : kMuted;
-        Ico(dc, ic, x + 37, 421, 30, fg);
-        T(dc, x + 52, 467, label, 12, fg, 700, AL_MID, 98);
+            R(dc, x, 426, w, 44, 22, d ? kOrange : OrSoft());
+        COLORREF fg = d ? kInk : on ? kOrange : kMuted;
+        if (on) {
+            Ico(dc, ic, x + 18, 436, 24, fg);
+            T(dc, x + 50, 454, kNav[i].label, 15, fg, 700);
+        } else {
+            Ico(dc, ic, cx - 13, 435, 26, fg);
+        }
     }
 }
 
@@ -1975,40 +1990,43 @@ static void SideTabs(HDC dc, const Tab* tabs, int n, int active, int step, int h
 {
     for (int i = 0; i < n; i++) {
         int y = y0 + i * step;
-        bool on = i == active || Zone(16, y, 160, h, i == active || tabs[i].to == S_NONE ? A_NONE : A_TAB, tabs[i].to);
-        R(dc, 16, y, 160, h, 10, on ? kOrange : kPanel);
-        Ico(dc, tabs[i].ic, 30, y + (h - 32) / 2, 32, on ? kInk : kMuted);
-        T(dc, 72, y + h / 2 + 6, tabs[i].label, 13, on ? kInk : kMuted, 700, AL_START, 100);
+        bool on = i == active, d = Zone(16, y, 160, h, on || tabs[i].to == S_NONE ? A_NONE : A_TAB, tabs[i].to);
+        R(dc, 16, y, 160, h, 16, d ? kOrange : on ? OrSoft() : kPanel);
+        COLORREF fg = d ? kInk : on ? kOrange : kMuted;
+        Ico(dc, tabs[i].ic, 30, y + (h - 30) / 2, 30, fg);
+        T(dc, 72, y + h / 2 + 6, tabs[i].label, 15, fg, on ? 700 : 400, AL_START, 100);
     }
 }
 
 static void PhoneNav(HDC dc, int active)
 {
-    static const Tab tabs[4] = { { IC_KEYPAD, L"НАБОР", S_PHONE }, { IC_USERS, L"КОНТАКТЫ", S_CONTACTS },
-                                 { IC_STAR, L"ИЗБРАННОЕ", S_FAVS }, { IC_CLOCK, L"ЖУРНАЛ", S_CALLS } };
+    static const Tab tabs[4] = { { IC_KEYPAD, L"Набор", S_PHONE }, { IC_USERS, L"Контакты", S_CONTACTS },
+                                 { IC_STAR, L"Избранное", S_FAVS }, { IC_CLOCK, L"Журнал", S_CALLS } };
     SideTabs(dc, tabs, 4, active, 78, 70);
 }
 
-// Settings, a main screen: ten sections as a 2 x 5 grid of 102 x 62 tiles on the left, the panel 64..400.
+// Settings, a main screen: ten sections as a 2 x 5 grid of 102 x 62 tiles on the left (an icon, its name under it;
+// the current one soft orange), the card 64..400.
 static void Settings(HDC dc, Screen active)
 {
-    static const Tab items[10] = { { IC_GEAR, L"ОБЩИЕ", S_SETTINGS }, { IC_VOL, L"ЗВУК", S_SET_SOUND },
-                                  { IC_MOON, L"ЭКРАН", S_SET_SCREEN }, { IC_RADIO, L"РАДИО", S_SET_RADIO },
-                                  { IC_BT, L"BLUETOOTH", S_SET_BT }, { IC_WIFI, L"WI-FI", S_SET_WIFI },
-                                  { IC_VIDEO, L"ВИДЕО", S_SET_VIDEO }, { IC_PHOTO, L"ФОТО", S_SET_PHOTO },
-                                  { IC_CAR, L"АВТОМОБИЛЬ", S_SET_CAR }, { IC_INFO, L"О СИСТЕМЕ", S_INFO } };
+    static const Tab items[10] = { { IC_GEAR, L"Общие", S_SETTINGS }, { IC_VOL, L"Звук", S_SET_SOUND },
+                                  { IC_SUN, L"Экран", S_SET_SCREEN }, { IC_RADIO, L"Радио", S_SET_RADIO },
+                                  { IC_BT, L"Bluetooth", S_SET_BT }, { IC_WIFI, L"Wi-Fi", S_SET_WIFI },
+                                  { IC_VIDEO, L"Видео", S_SET_VIDEO }, { IC_PHOTO, L"Фото", S_SET_PHOTO },
+                                  { IC_CAR, L"Автомобиль", S_SET_CAR }, { IC_INFO, L"О системе", S_INFO } };
     Frame(dc, L"НАСТРОЙКИ");
     for (int i = 0; i < 10; i++) {
         int x = 16 + (i % 2) * 110, y = 64 + (i / 2) * 68;
         bool on = items[i].to == active || (active == S_SET_BALANCE && items[i].to == S_SET_SOUND) ||
                   ((active == S_SET_OBD || active == S_BT_PAIRED || active == S_BT_PAIRNEW) &&
                    items[i].to == S_SET_BT);
-        on = Zone(x, y, 102, 62, items[i].to == active ? A_NONE : A_TAB, items[i].to) || on;
-        R(dc, x, y, 102, 62, 10, on ? kOrange : kPanel);
-        Ico(dc, items[i].ic, x + 37, y + 7, 28, on ? kInk : kMuted);
-        T(dc, x + 51, y + 53, items[i].label, 12, on ? kInk : kMuted, 700, AL_MID, 94);
+        bool d = Zone(x, y, 102, 62, items[i].to == active ? A_NONE : A_TAB, items[i].to);
+        R(dc, x, y, 102, 62, 16, d ? kOrange : on ? OrSoft() : kPanel);
+        COLORREF fg = d ? kInk : on ? kOrange : kMuted;
+        Ico(dc, items[i].ic, x + 38, y + 8, 26, fg);
+        T(dc, x + 51, y + 53, items[i].label, 13, fg, on ? 700 : 400, AL_MID, 94);
     }
-    Panel(dc, 240, 64, 544, 336);
+    Panel(dc, 240, 64, 544, 336, 20);
 }
 
 // Settings row (rows at 64 + i * 56): label (and a second line), separator under it unless last; the control is
@@ -2059,19 +2077,24 @@ static void Cover(HDC dc, Icon ic, int x, int y, int s)
     Ico(dc, ic, x + (s - isz) / 2, y + (s - isz) / 2, isz, Mix(kInk, kTriOr[1], 140));
 }
 
-// Sources of the media main screens as tabs on top (music from USB, internet radio, Bluetooth, AUX, video,
-// photo), then up to two buttons of the source: its own (list, player, slides) and its settings.
+// Sources of the media main screens as pills on top (music from USB, internet radio, Bluetooth, AUX, video, photo),
+// each as wide as its name, then up to two round buttons of the source: its own (list, player, slides) and its
+// settings.
 static void MediaTabs(HDC dc, Screen active, Icon ic, Action a, int arg, Screen settings)
 {
-    static const Tab tabs[6] = { { IC_MUSIC, L"МУЗЫКА", S_AUDIO }, { IC_RADIO, L"ИНТЕРНЕТ", S_NETRADIO },
-                                 { IC_BT, L"BLUETOOTH", S_AUDIO_BT }, { IC_AUX, L"AUX", S_AUX },
-                                 { IC_VIDEO, L"ВИДЕО", S_VIDEO }, { IC_PHOTO, L"ФОТО", S_PHOTO } };
-    for (int i = 0; i < 6; i++) {
+    static const Tab tabs[6] = { { IC_MUSIC, L"Музыка", S_AUDIO }, { IC_RADIO, L"Интернет", S_NETRADIO },
+                                 { IC_BT, L"Bluetooth", S_AUDIO_BT }, { IC_AUX, L"AUX", S_AUX },
+                                 { IC_VIDEO, L"Видео", S_VIDEO }, { IC_PHOTO, L"Фото", S_PHOTO } };
+    int w[6], sum = 0;
+    for (int i = 0; i < 6; i++)
+        sum += w[i] = TextWidth(dc, tabs[i].label, 15, 700) + 36;
+    int gap = (592 - sum) / 5;   // up to x 608: the round buttons after
+    gap = gap > 10 ? 10 : gap < 2 ? 2 : gap;
+    for (int i = 0, x = 16; i < 6; x += w[i] + gap, i++) {
         bool on = tabs[i].to == active;
-        Button(dc, 16 + i * 99, 64, 95, 48, tabs[i].label, on ? B_SEL : B_N, IC_NONE, 14, 0, on ? A_NONE : A_TAB,
-               tabs[i].to);
+        Button(dc, x, 68, w[i], 40, tabs[i].label, on ? B_SEL : B_N, IC_NONE, 15, 0, on ? A_NONE : A_TAB, tabs[i].to);
     }
     if (ic != IC_NONE)
-        Button(dc, 616, 64, 80, 48, NULL, B_N, ic, 18, 30, a, arg);
-    Button(dc, 704, 64, 80, 48, NULL, B_N, IC_GEAR, 18, 30, A_SCREEN, settings);
+        Button(dc, 668, 64, 48, 48, NULL, B_N, ic, 18, 26, a, arg);
+    Button(dc, 736, 64, 48, 48, NULL, B_N, IC_GEAR, 18, 26, A_SCREEN, settings);
 }
