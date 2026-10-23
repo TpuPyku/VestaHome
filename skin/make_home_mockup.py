@@ -218,11 +218,11 @@ def page_dots(n, top_px=396):
 
 
 def scr_music_list():
-    items = [('folder', 'Rock Hits 2024', '18 треков', 'dir'), ('music', '01 · Thunderstruck', 'AC/DC · 4:52', ''),
-             ('music', '02 · Kickstart My Heart', 'Mötley Crüe · 4:44', ''), ('music', '03 · Holy Diver', 'Dio · 5:54', ''),
-             ('music', '04 · Valhalla Calling', 'Miracle of Sound · 3:41', 'now'),
-             ('music', '05 · Paranoid', 'Black Sabbath · 2:48', ''), ('music', '06 · Ace of Spades', 'Motörhead · 2:49', ''),
-             ('music', '07 · The Trooper', 'Iron Maiden · 4:12', '')]
+    items = [('folder', 'Rock Hits 2024', '18 треков', 'dir'), ('music', '01 · Thunderstruck', 'MP3 · 11,2 МБ', ''),
+             ('music', '02 · Kickstart My Heart', 'MP3 · 10,9 МБ', ''), ('music', '03 · Holy Diver', 'FLAC · 38,4 МБ', ''),
+             ('music', '04 · Valhalla Calling', 'MP3 · 8,5 МБ', 'now'),
+             ('music', '05 · Paranoid', 'MP3 · 6,5 МБ', ''), ('music', '06 · Ace of Spades', 'WMA · 4,1 МБ', ''),
+             ('music', '07 · The Trooper', 'MP3 · 9,7 МБ', '')]
     act = '<span class="pill a">%s Играть всё</span>' % ico('play', 16)
     return '<div class="scr">%s%s%s%s%s</div>' % (top('Медиа', play='music'),
                                                  media_head('Музыка', ['SD-карта', 'Музыка', 'Rock'], act),
@@ -401,7 +401,7 @@ SCREENS = [
         'Списки — внутри раздела «Медиа»: «таблетки» источников остаются сверху, отдельного экрана с «назад» нет.',
         'Путь — строка «‹ SD-карта › Музыка › Rock»: стрелка — на уровень выше (вместо плитки «Наверх»), '
         'текущая папка — белым; справа действие папки — «Играть всё».',
-        'Строки 52 px в два столбца без рамок: значок, название, вторая строка тусклее (исполнитель, длительность); '
+        'Строки 52 px в два столбца без рамок: значок, название, вторая строка тусклее — формат и размер (теги не читаются); '
         'папки — оранжевый значок и жирное название; играющий трек — оранжевая подложка и «▶ играет».',
         'Под списком — точки страниц.']),
     ('Видео: папка', scr_video_list, '13_video.png', [
