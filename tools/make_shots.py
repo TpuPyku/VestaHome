@@ -33,7 +33,7 @@ TAB = {'music': (62, 88), 'net': (160, 88), 'bt': (260, 88), 'aux': (360, 88), '
        'photo': (557, 88), 'list': (692, 88), 'gear': (760, 88)}
 SHOTS = [
     ('home', [HOME]), ('home_page2', [HOME, ('swipe',)]), ('home_page3', [HOME, ('swipe',), ('swipe',)]),
-    ('radio', [RADIO]), ('radio_list', [RADIO, (644, 226)]), ('radio_pty', [RADIO, (548, 226)]),
+    ('radio', [RADIO]), ('radio_list', [RADIO, (712, 98)]), ('radio_pty', [RADIO, (594, 98)]),
     ('music', [MEDIA, TAB['music']]), ('music_list', [MEDIA, TAB['music'], TAB['list']]),
     ('netradio', [MEDIA, TAB['net']]), ('netradio_list', [MEDIA, TAB['net'], TAB['list']]),
     ('bt_music', [MEDIA, TAB['bt']]), ('aux', [MEDIA, TAB['aux']]), ('video', [MEDIA, TAB['video']]),

@@ -255,49 +255,63 @@ static void ScrRadio(HDC dc)
     else
         _snwprintf(band, 8, L"FM%d", page + 1);
     const wchar_t* name = t.ps[0] ? t.ps : RadioName(t, t.f10);
+    // design 0.6: the frequency the largest, "МГц · FM1" after it (the page's name; a tap - the next page, a swipe
+    // too), PTY and the stations at the right; the name and RDS text; the scale with the seek arrows at its ends
+    // (an arrow or the scale's end: seek down / up); the page's presets; the page dots
     Frame(dc, L"Радио");
-    Panel(dc, 16, 64, 768, 128);
-    T(dc, 40, 146, f, 80, t.f10 ? kText : kDim, 700, AL_START, 250);
-    T(dc, 300, 100, t.f10 ? band : L"нет данных — включаю радио…", 20, t.f10 ? kOrange : kDim, 700, AL_START, 460);
-    Marquee(dc, 300, 130, 460, name, 28, kText, 600);
+    int end = T(dc, 24, 128, f, 76, t.f10 ? kText : kDim, 700, AL_START, 300);
+    if (t.f10) {
+        wchar_t pg[12];
+        _snwprintf(pg, 12, L"%s%s", band, pending ? L"…" : L"");
+        int ux = T(dc, end + 14, 126, mw ? L"кГц · " : L"МГц · ", 20, kMuted, 400);
+        int ue = T(dc, ux, 126, pg, 20, kOrange, 700);
+        Zone(end + 6, 64, ue - end + 8, 72, A_RPAGE);   // the next page
+    } else {
+        T(dc, end + 14, 126, L"нет данных — включаю радио…", 18, kDim, 700, AL_START, 470 - end);
+    }
+    Button(dc, 556, 76, 76, 44, L"PTY", B_N, IC_NONE, 16, 0, A_SCREEN, S_RADIO_PTY);   // a programme type
+    Button(dc, 640, 76, 144, 44, L"Станции", B_N, IC_LIST, 16, 20, A_SCREEN, S_RADIO_LIST);
+    Marquee(dc, 24, 166, 752, name, 26, kText, 700);
     wchar_t rt[68];
     _snwprintf(rt, 68, L"%s%s", t.rt[0], t.rt[1]);
     rt[67] = 0;
-    Marquee(dc, 300, 156, 460, rt, 17, kMuted, 400);
+    Marquee(dc, 24, 190, 752, rt, 15, kMuted, 400);
     if (s_marqOn)
         SetTimer(s_wnd, TIMER_MARQ, kMarqMs, NULL);   // (again: the same timer, restarted)
+    bool sd = Zone(8, 200, 112, 48, A_RKEY, 0x13B), su = Zone(680, 200, 112, 48, A_RKEY, 0x13C);   // seek down / up
+    if (sd)
+        Disc(dc, 40, 224, 22, kOrange);
+    if (su)
+        Disc(dc, 760, 224, 22, kOrange);
+    Ico(dc, IC_PREV, 24, 208, 32, sd ? kInk : kText);
+    Ico(dc, IC_FWD, 744, 208, 32, su ? kInk : kText);
+    for (int k = 0; k < 3; k++) {   // the scale's ends lead into the arrows
+        Fill(dc, 70 + k * 9, 236 - (k % 2 ? 8 : 12), 72 + k * 9, 236, kMuted);
+        Fill(dc, 728 - k * 9, 236 - (k % 2 ? 8 : 12), 730 - k * 9, 236, kMuted);
+    }
     int lo = mw ? 522 : low ? 6500 : 8750, hi = mw ? 1620 : low ? 7400 : 10800;
-    for (int i = 0; i <= 20; i++) {   // tuning scale over x 40..740
-        int x = 40 + i * 35, h = i % 2 ? 5 : 8;
-        Fill(dc, x - 1, 182 - h, x + 1, 182, kDim);
+    for (int i = 0; i <= 48; i++) {   // the tuning scale over x 112..688
+        int x = 112 + i * 12, h = i % 5 ? 8 : 16;
+        Fill(dc, x - 1, 236 - h, x + 1, 236, kDim);
     }
     if (t.f10 >= lo && t.f10 <= hi) {
-        int mark = 40 + (t.f10 - lo) * 700 / (hi - lo);
-        R(dc, mark - 2, 168, 4, 18, 2, kOrange);
+        int mark = 112 + (t.f10 - lo) * 576 / (hi - lo);
+        Fill(dc, mark - 1, 216, mark + 2, 236, kOrange);
     }
-    Button(dc, 16, 200, 80, 52, NULL, B_N, IC_PREV, 18, 30, A_RKEY, 0x13B);    // seek down
-    Button(dc, 104, 200, 80, 52, NULL, B_N, IC_FWD, 18, 30, A_RKEY, 0x13C);    // seek up
-    wchar_t btn[12];
-    _snwprintf(btn, 12, L"%s%s", band, pending ? L"…" : L"");
-    Button(dc, 200, 200, 120, 52, btn, B_N, IC_NONE, 20, 0, A_RPAGE);   // the next page
-    Button(dc, 504, 200, 88, 52, L"PTY", B_N, IC_NONE, 18, 0, A_SCREEN, S_RADIO_PTY);   // a programme type
-    Button(dc, 600, 200, 88, 52, NULL, B_N, IC_LIST, 18, 32, A_SCREEN, S_RADIO_LIST);
-    Button(dc, 696, 200, 88, 52, NULL, B_N, IC_GEAR, 18, 32, A_SCREEN, S_SET_RADIO);
-    for (int i = 0; i < 8; i++) {   // the page's presets, 4 x 2: the frequency and the name
-        int x = 16 + (i % 4) * 194, y = 262 + (i / 4) * 66, n = page * 8 + i;
+    for (int i = 0; i < 8; i++) {   // the page's presets, 4 x 2: the frequency and the name, no borders
+        int x = 16 + (i % 4) * 194, y = 256 + (i / 4) * 72, n = page * 8 + i;
         int pf = n < 24 && ready ? t.preset[n] : 0;
         bool have = t.presets > 0 && pf > 0;
-        bool down = Zone(x, y, 182, 60, t.presets > 0 ? A_PRESET : A_NONE, n);
-        bool cur = down || (have && n == t.cur);
-        wchar_t num[4], pfs[16];
-        _snwprintf(num, 4, L"%d", i + 1);
+        bool down = Zone(x, y, 184, 64, t.presets > 0 ? A_PRESET : A_NONE, n);
+        bool cur = !down && have && n == t.cur;   // the one playing: soft orange
+        wchar_t pfs[16];
         FreqText(pf, pfs, 16);
-        R(dc, x, y, 182, 60, 12, cur ? kOrange : kPanel, cur ? CLR_INVALID : kLine);
-        T(dc, x + 166, y + 21, num, 13, cur ? kInk : kDim, cur ? 700 : 600, AL_END);
-        T(dc, x + 14, y + 28, have ? pfs : L"—", 22, cur ? kInk : have ? kText : kDim, 700);
+        R(dc, x, y, 184, 64, 16, down ? kOrange : cur ? OrSoft() : kPanel);
+        COLORREF fg = down ? kInk : cur ? kOrange : have ? kText : kDim;
+        T(dc, x + 16, y + 29, have ? pfs : L"—", 21, fg, 700);
         const wchar_t* nm = have ? RadioName(t, pf) : L"";
-        T(dc, x + 14, y + 51, nm[0] ? nm : have ? L"" : L"удерживать — сохранить", 14, cur ? kInk : kMuted, 600,
-          AL_START, 156);
+        T(dc, x + 16, y + 51, nm[0] ? nm : have ? L"" : L"удерживать — сохранить", 13, down ? kInk : cur ? kOrange
+          : kMuted, 400, AL_START, 156);
     }
     PageDots(dc, s_radioPage, kRadioPages);
 }
