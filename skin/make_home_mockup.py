@@ -168,7 +168,7 @@ def bot(active):
 # ---- the screens
 def scr_home():
     return '''<div class="scr">%s
-<div class="card" style="left:24px;top:60px;width:438px;height:340px">
+<div class="card" style="left:24px;top:60px;width:470px;height:340px">
   <div class="cap">%s Сейчас играет · интернет-радио</div>
   <div style="display:flex;gap:20px;margin-top:22px">
     <div class="facet" style="width:132px;height:132px;border-radius:18px;display:flex;align-items:center;justify-content:center;color:#3a1604">%s</div>
@@ -177,24 +177,21 @@ def scr_home():
   <div style="display:flex;align-items:center;justify-content:center;gap:34px;margin-top:40px">
     <span class="t2">%s</span><span class="btn play" style="width:72px;height:72px">%s</span><span class="t2">%s</span></div>
 </div>
-<div class="card" style="left:478px;top:60px;width:250px;height:162px">
+<div class="card" style="left:510px;top:60px;width:266px;height:162px">
   <div class="cap">%s Погода · Тольятти</div>
   <div style="display:flex;align-items:center;gap:14px;margin-top:16px"><span class="t2">%s</span><span class="big">+6°</span></div>
   <div class="t2" style="font-size:14px;margin-top:12px">Облачно · днём +9°, ночью +1°</div>
 </div>
-<div class="card" style="left:478px;top:238px;width:250px;height:162px">
+<div class="card" style="left:510px;top:238px;width:266px;height:162px">
   <div class="cap">%s Поездка</div>
   <div style="display:flex;gap:22px;margin-top:16px"><div><div class="mid">42,8</div><div class="t3" style="font-size:13px">км</div></div>
   <div><div class="mid">7,4</div><div class="t3" style="font-size:13px">л/100 км</div></div></div>
   <div class="t2" style="font-size:14px;margin-top:12px">Запас хода 420 км</div>
 </div>
-<div class="card" style="left:744px;top:60px;width:250px;height:340px;opacity:.55">
-  <div class="cap">%s Навигация</div><div class="mid" style="margin-top:16px">OSMapsCE</div></div>
-<div style="position:absolute;left:720px;top:56px;width:80px;height:348px;background:linear-gradient(90deg, rgba(14,16,19,0), rgba(14,16,19,.85))"></div>
 <div style="position:absolute;left:0;right:0;bottom:72px;display:flex;justify-content:center;gap:8px">
   <i style="width:22px;height:5px;border-radius:3px;background:var(--or)"></i><i style="width:8px;height:5px;border-radius:3px;background:var(--t3)"></i><i style="width:8px;height:5px;border-radius:3px;background:var(--t3)"></i></div>
 %s</div>''' % (top(date='Пятница, 23 октября', play='radio'), ico('music', 16), ico('radio', 64, '#3a1604', 2.2),
-               ico('prev', 30), ico('pause', 30), ico('next', 30), ico('cloud', 16), ico('cloud', 44), ico('trip', 16), ico('nav', 16),
+               ico('prev', 30), ico('pause', 30), ico('next', 30), ico('cloud', 16), ico('cloud', 44), ico('trip', 16),
                bot('home'))
 
 
@@ -218,41 +215,37 @@ def scr_music():
 
 
 def scr_radio():
-    def card(f, n, a=False, x=0, y=0, peek=False):
-        return ('<div style="position:absolute;left:%dpx;top:%dpx;width:160px;height:76px;background:%s;border-radius:16px;'
-                'padding:12px 16px;%s"><div style="font-size:21px;font-weight:bold">%s</div><div style="font-size:13px;'
-                'margin-top:2px" class="%s">%s</div></div>' % (x, y, 'var(--orS)' if a else 'var(--s1)',
-                                                               'color:var(--or)' if a else ('opacity:.55' if peek else ''), f,
-                                                               'or' if a else 't2', n))
-    fm1 = [('87,5', 'Европа+'), ('91,1', 'Радио 7'), ('96,3', 'Русское'), ('101,4', 'Ретро FM'),
-           ('103,7', 'Relax'), ('105,2', 'Шансон'), ('106,8', 'Маяк'), ('107,9', 'DFM')]
     pre = ''
-    for i, (f, n) in enumerate(fm1):   # FM1: 2 rows of 4; FM2's first column peeps in at the right edge
-        pre += card(f, n, i == 4, 24 + (i % 4) * 172, 236 + (i // 4) * 86)
-    pre += card('88,3', 'Авторадио', x=712, y=236, peek=True) + card('100,9', 'Хит FM', x=712, y=322, peek=True)
-    pre += ('<div style="position:absolute;left:690px;top:230px;width:110px;height:176px;'
-            'background:linear-gradient(90deg, rgba(14,16,19,0), rgba(14,16,19,.85))"></div>')
-    dots = ''.join('<i style="width:%dpx;height:5px;border-radius:3px;background:%s"></i>' % (22 if k == 0 else 8,
-                                                                                            'var(--or)' if k == 0 else 'var(--t3)')
-                   for k in range(5))
+    for i, (f, n) in enumerate([('87,5', 'Европа+'), ('91,1', 'Радио 7'), ('96,3', 'Русское'), ('101,4', 'Ретро FM'),
+                                ('103,7', 'Relax'), ('105,2', 'Шансон'), ('106,8', 'Маяк'), ('107,9', 'DFM')]):
+        a = i == 4
+        pre += ('<div style="background:%s;border-radius:16px;padding:12px 16px;%s"><div style="font-size:21px;font-weight:bold">%s'
+                '</div><div style="font-size:13px;margin-top:2px" class="%s">%s</div></div>' % (
+                    'var(--orS)' if a else 'var(--s1)', 'color:var(--or)' if a else '', f, 'or' if a else 't2', n))
+    dots = ''.join('<i style="width:%dpx;height:5px;border-radius:3px;background:%s"></i>' % (
+        22 if k == 0 else 8, 'var(--or)' if k == 0 else 'var(--t3)') for k in range(5))
+    ticks = ''.join('<i style="position:absolute;bottom:6px;left:%.1f%%;width:2px;height:%dpx;background:%s"></i>' % (
+        k * 100.0 / 48, 8 if k % 5 else 16, 'var(--or)' if k == 30 else 'var(--t3)') for k in range(49))
+
+    def seek(icon, left):   # the scale's end: its ticks go on into a rounded key with the arrow
+        t = ''.join('<i style="position:absolute;bottom:6px;%s:%dpx;width:2px;height:%dpx;background:var(--t2)"></i>' % (
+            'right' if left else 'left', 10 + k * 9, 8 if k % 2 else 12) for k in range(3))
+        return ('<div style="position:relative;width:96px;height:44px;flex:none;background:var(--s1);border-radius:%s;'
+                'display:flex;align-items:center;justify-content:%s;padding:0 14px;color:var(--tx)">%s%s</div>' % (
+                    '22px 8px 8px 22px' if left else '8px 22px 22px 8px', 'flex-start' if left else 'flex-end', icon, t))
     return '''<div class="scr">%s
-<div style="position:absolute;left:24px;top:58px;display:flex;align-items:flex-end;gap:14px">
+<div style="position:absolute;left:24px;top:58px;right:24px;display:flex;align-items:flex-end;gap:14px">
   <div style="font-size:76px;font-weight:bold;line-height:.9">103,7</div>
-  <div style="padding-bottom:6px"><span class="t2" style="font-size:20px">МГц · </span><span class="or" style="font-size:20px;font-weight:bold">FM1</span></div></div>
-<div style="position:absolute;right:24px;top:66px;display:flex;gap:12px;align-items:center">
-  <span class="btn" style="width:56px;height:56px;color:var(--tx)">%s</span>
-  <span class="pill" style="height:56px;border-radius:28px;padding:0 22px;color:var(--tx);font-size:17px;font-weight:bold">%s Скан</span>
-  <span class="btn" style="width:56px;height:56px;color:var(--tx)">%s</span></div>
-<div style="position:absolute;left:24px;top:146px;right:24px;display:flex;align-items:center;gap:10px">
-  <div style="flex:1"><div class="mid">Relax FM</div><div class="t2" style="font-size:15px;margin-top:2px">RDS: Spokojnaya muzyka dlya otdykha</div></div>
-  <span class="pill">PTY</span><span class="pill">%s Станции</span></div>
-<div style="position:absolute;left:24px;right:24px;top:204px;height:22px">%s</div>
-%s
-<div style="position:absolute;left:0;right:0;top:404px;display:flex;justify-content:center;gap:8px">%s</div>
-%s</div>''' % (top('Радио', play='radio'), ico('prev', 26), ico('scan', 22), ico('next', 26), ico('list', 18),
-               ''.join('<i style="position:absolute;bottom:0;left:%d%%;width:2px;height:%dpx;background:%s"></i>' % (
-                   k * 2, 8 if k % 5 else 16, 'var(--or)' if k == 33 else 'var(--t3)') for k in range(50)), pre, dots,
-               bot('radio'))
+  <div style="padding-bottom:6px"><span class="t2" style="font-size:20px">МГц · </span><span class="or" style="font-size:20px;font-weight:bold">FM1</span></div>
+  <span style="flex:1"></span><span class="pill">PTY</span><span class="pill">%s Станции</span></div>
+<div style="position:absolute;left:24px;top:146px;right:24px">
+  <div class="mid">Relax FM</div><div class="t2" style="font-size:15px;margin-top:2px">RDS: Spokojnaya muzyka dlya otdykha</div></div>
+<div style="position:absolute;left:24px;right:24px;top:196px;display:flex;gap:6px;align-items:center">
+  %s<div style="position:relative;flex:1;height:44px">%s</div>%s</div>
+<div style="position:absolute;left:24px;right:24px;top:252px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px 12px">%s</div>
+<div style="position:absolute;left:0;right:0;top:408px;display:flex;justify-content:center;gap:8px">%s</div>
+%s</div>''' % (top('Радио', play='radio'), ico('list', 18), seek(ico('prev', 24), True), ticks,
+               seek(ico('next', 24), False), pre, dots, bot('radio'))
 
 
 def scr_phone():
@@ -339,8 +332,7 @@ def scr_saver():
 SCREENS = [
     ('Главная', scr_home, '01_home.png', [
         'Три крупных виджета вместо шести: на странице меньше, зато каждый читается с одного взгляда; остальные — на соседних страницах.',
-        'Что страницы листаются, видно сразу: справа выглядывает край виджета следующей страницы (приглушён), под '
-        'виджетами — точки страниц, текущая — оранжевая чёрточка.',
+        'Под виджетами — точки страниц (текущая — оранжевая чёрточка): видно, что страницы листаются.',
         'Карточки без рамок — поверхность чуть светлее фона, скругление 20 px, отступы 24 / 16 px.',
         'Верхняя строка тоньше (48 px): дата, справа значки состояния тусклые, активное — оранжевое, часы.',
         'Нижняя панель (64 px): значки без подписей, текущий раздел — оранжевая «таблетка» с подписью.']),
@@ -351,10 +343,11 @@ SCREENS = [
     ('Радио', scr_radio, '04_radio.png', [
         'Частота — самое крупное на экране (76 px); после «МГц» — текущая страница пресетов (FM1, FM2, FM3, УКВ, СВ) '
         'оранжевым: отдельная кнопка диапазона не нужна, диапазон — это страница.',
-        'Справа от частоты — поиск ⏮ / ⏭ (круглые 56 px) и «Скан» между ними: главные действия радио под рукой.',
-        'Пресеты — 8 карточек (две строки по 4); справа выглядывает край следующей страницы (FM2, приглушён) и '
-        'точки страниц под ними — видно, что листаются пальцем. Текущая станция — оранжевая.',
-        'PTY и список станций — «таблетки» на строке названия станции; шкала — под ней.']),
+        'Поиск — продолжение шкалы: её края переходят в скруглённые клавиши со стрелками; тап по клавише или по '
+        'краю шкалы — поиск станции назад / вперёд. Отдельных кнопок поиска и «Скан» нет.',
+        'Пресеты — 8 карточек (две строки по 4), под ними точки страниц: видно, что листаются пальцем. '
+        'Текущая станция — оранжевая.',
+        'PTY и список станций — «таблетки» справа от частоты.']),
     ('Телефон', scr_phone, '15_phone.png', [
         'Разделы телефона — «таблетки» сверху (боковых вкладок нет).',
         'Скруглённые клавиши 56×52 с воздухом между ними; зелёная кнопка вызова — единственное исключение из оранжевого.',
