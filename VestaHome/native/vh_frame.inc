@@ -143,13 +143,13 @@ static void RedrawArea(int l, int t, int r, int b)
         return;
     DWORD t0 = GetTickCount();
     int w = r - l, h = b - t;
-    unsigned short* was = (unsigned short*)malloc(w * h * 2);
+    Pix* was = (Pix*)malloc(w * h * sizeof(Pix));
     if (!was) {
         Redraw();
         return;
     }
     for (int y = t; y < b; y++)
-        memcpy(was + (y - t) * w, s_backBits + (479 - y) * 800 + l, w * 2);
+        memcpy(was + (y - t) * w, s_backBits + (479 - y) * 800 + l, w * sizeof(Pix));
     s_partial = true;
     s_zoneIdx = 0;
     s_clip.left = l;
@@ -166,7 +166,7 @@ static void RedrawArea(int l, int t, int r, int b)
 #endif
     bool changed = false;
     for (int y = t; y < b && !changed; y++)
-        changed = memcmp(was + (y - t) * w, s_backBits + (479 - y) * 800 + l, w * 2) != 0;
+        changed = memcmp(was + (y - t) * w, s_backBits + (479 - y) * 800 + l, w * sizeof(Pix)) != 0;
     if (changed)
         BitBlt(hdc, l, t, w, h, dc, l, t, SRCCOPY);
     SelectObject(dc, ob);
@@ -333,10 +333,10 @@ static int SlideBottom()
 
 // A page turn: the new page slides in from the right (dir 1) or the left (dir -1) and pushes the old one out,
 // in the band between the top bar and the bottom bar (they stay). The old frame is what s_back holds now; the
-// copy of it lives only for the animation (768 KB).
+// copy of it lives only for the animation (1.5 MB).
 static void RedrawSlide(int dir)
 {
-    unsigned short* oldBits = NULL;
+    Pix* oldBits = NULL;
     HBITMAP old = MakeDib(800, 480, &oldBits);
     if (!old || !oldBits) {
         if (old)
@@ -344,7 +344,7 @@ static void RedrawSlide(int dir)
         Redraw();
         return;
     }
-    memcpy(oldBits, s_backBits, 800 * 480 * 2);
+    memcpy(oldBits, s_backBits, 800 * 480 * sizeof(Pix));
     SYSTEMTIME t;
     GetLocalTime(&t);
     s_drawnMinute = t.wMinute;
@@ -387,7 +387,7 @@ static int s_slideDir;   // set by an action that turned a page: the next frame 
 
 // ---- a page dragged with the finger: once the finger has moved sideways, the page goes with it and its
 // neighbour comes in beside it; let go far enough it turns (the rest slides on), otherwise it slides back. The
-// current frame is copied aside (768 KB, only while dragging), the neighbour is drawn into s_back.
+// current frame is copied aside (1.5 MB, only while dragging), the neighbour is drawn into s_back.
 static bool Swipe(int dir);
 static void BuildButtons();
 static int  s_phPage;   // the photos' page (the photos' part is below)
@@ -395,7 +395,7 @@ static int  PhotoPages();
 static void PhotoStep(int dir);
 static int     s_dragNb, s_dragSide, s_dragX;   // the neighbour in s_back (1 next, -1 previous, 0 none: an end)
 static HBITMAP s_dragOld;
-static unsigned short* s_dragOldBits;
+static Pix* s_dragOldBits;
 
 // The screens that turn pages - by a swipe (the neighbour follows the finger) and by their dots (A_PAGE): each one's
 // page and how many; round = past the last page the first (a swipe; the dots always go round).
@@ -505,7 +505,7 @@ static void DragStart()
         s_dragOld = NULL;
         return;
     }
-    memcpy(s_dragOldBits, s_backBits, 800 * 480 * 2);
+    memcpy(s_dragOldBits, s_backBits, 800 * 480 * sizeof(Pix));
     s_drag = true;
     s_dragNb = s_dragSide = s_dragX = 0;
 }

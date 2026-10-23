@@ -159,11 +159,13 @@ static wchar_t s_skinTile[MAX_PATH];   // the background's tile (all screens), o
 static HWND    s_wnd;
 static HBITMAP s_back;          // whole frame, drawn off-screen
 static HBITMAP s_bg;            // the skin's main menu background picture, only if it gives one (750 KB)
-static unsigned short* s_backBits;   // their pixels: RGB565, bottom-up, 800 per row
-static unsigned short* s_bgBits;
+typedef DWORD Pix;   // a pixel of the back buffer and the backgrounds: 0x00RRGGBB (32-bit DIBs; the unit's screen
+                     // is more than 16-bit - the user 2026-10-23, photos of the stock shell's gradients)
+static Pix*     s_backBits;   // their pixels: bottom-up, 800 per row
+static Pix*     s_bgBits;
 static HBITMAP s_saverBg;       // the screen saver's picture: loaded while it shows (750 KB)
-static unsigned short* s_saverBits;
-static unsigned short* s_tile[2];    // one period of the background (s_tileW x s_tileH, top-down), day / night
+static Pix*     s_saverBits;
+static Pix*     s_tile[2];    // one period of the background (s_tileW x s_tileH, top-down), day / night
 static int     s_tileW, s_tileH;      // the skin's tile, or the triangle mosaic's period
 static int     s_pressed = -1;
 static bool    s_night;
@@ -281,24 +283,12 @@ static const wchar_t* kMonths[12] = { L"января", L"февраля", L"ма
 static const wchar_t* kDays[7] = { L"воскресенье", L"понедельник", L"вторник", L"среда", L"четверг",
                                    L"пятница", L"суббота" };
 
-// Night mode only dims the menu: colours lose a third of their brightness. Then rounded to the nearest RGB565
-// colour: the 16-bit screen otherwise drops the low bits (3 of red and blue, 2 of green) and the dark greys turn
-// green (2026-10-23: the cards looked darker and greener than the mockup).
-static int Round565(int v, int step)
-{
-    v = (v + step / 2) / step * step;
-    return v > 255 ? 256 - step : v;
-}
-
+// Night mode only dims the menu: colours lose a third of their brightness.
 static COLORREF C(COLORREF c)
 {
-    int r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
-    if (s_night) {
-        r = r * 2 / 3;
-        g = g * 2 / 3;
-        b = b * 2 / 3;
-    }
-    return RGB(Round565(r, 8), Round565(g, 4), Round565(b, 8));
+    if (!s_night)
+        return c;
+    return RGB(GetRValue(c) * 2 / 3, GetGValue(c) * 2 / 3, GetBValue(c) * 2 / 3);
 }
 // The rest of VestaHome, in this order (one translation unit: the parts are not compiled on their own).
 #include "vh_draw.inc"
@@ -1211,7 +1201,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
         return 0;
     }
     VLog(L"=== VestaHome %s запущен", VhVersion());
-    {   // the screen's real colour depth (VestaHome itself draws into an RGB565 buffer)
+    {   // the screen's real colour depth (VestaHome draws into 32-bit buffers, GDI converts when it is less)
         HDC sdc = GetDC(NULL);
         VLog(L"экран: %d x %d, %d бит на точку", GetDeviceCaps(sdc, HORZRES), GetDeviceCaps(sdc, VERTRES),
              GetDeviceCaps(sdc, BITSPIXEL) * GetDeviceCaps(sdc, PLANES));

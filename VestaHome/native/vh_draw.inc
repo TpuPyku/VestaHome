@@ -619,10 +619,13 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
 
 // ---------------------------------------------------------------- skin pictures
 
-#define RGB565(r, g, b) ((unsigned short)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3)))
+#define PIX(r, g, b) ((Pix)(((r) << 16) | ((g) << 8) | (b)))
+#define PR(p) ((int)((p) >> 16) & 255)
+#define PG(p) ((int)((p) >> 8) & 255)
+#define PB(p) ((int)(p) & 255)
 
-// RGB565 bottom-up DIB section (800 x 480: the unit's screen format), with pixels reachable for blending.
-static HBITMAP MakeDib(int w, int h, unsigned short** bits)
+// 32-bit bottom-up DIB section (0x00RRGGBB), with pixels reachable for blending.
+static HBITMAP MakeDib(int w, int h, Pix** bits)
 {
     struct { BITMAPINFOHEADER h; DWORD masks[3]; } bi;
     memset(&bi, 0, sizeof(bi));
@@ -630,11 +633,8 @@ static HBITMAP MakeDib(int w, int h, unsigned short** bits)
     bi.h.biWidth = w;
     bi.h.biHeight = h;
     bi.h.biPlanes = 1;
-    bi.h.biBitCount = 16;
-    bi.h.biCompression = BI_BITFIELDS;
-    bi.masks[0] = 0xF800;
-    bi.masks[1] = 0x07E0;
-    bi.masks[2] = 0x001F;
+    bi.h.biBitCount = 32;
+    bi.h.biCompression = BI_RGB;
     HDC screen = GetDC(NULL);
     HBITMAP bmp = CreateDIBSection(screen, (BITMAPINFO*)&bi, DIB_RGB_COLORS, (void**)bits, NULL, 0);
     ReleaseDC(NULL, screen);
@@ -731,7 +731,7 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
         int py = y + dy;
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
-        unsigned short* dst = s_backBits + (479 - py) * 800;
+        Pix* dst = s_backBits + (479 - py) * 800;
         for (int dx = 0; dx < w; dx++) {
             int px = x + dx;
             if (px < s_clip.left || px >= s_clip.right)
@@ -753,10 +753,10 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
                     s[k] = s[k] * 2 / 3;
             unsigned p = dst[px];
             int inv = 255 - s[3];
-            int r = s[0] + ((p >> 8) & 0xF8) * inv / 255;
-            int g = s[1] + ((p >> 3) & 0xFC) * inv / 255;
-            int b = s[2] + ((p << 3) & 0xF8) * inv / 255;
-            dst[px] = RGB565(r, g, b);
+            int r = s[0] + PR(p) * inv / 255;
+            int g = s[1] + PG(p) * inv / 255;
+            int b = s[2] + PB(p) * inv / 255;
+            dst[px] = PIX(r > 255 ? 255 : r, g > 255 ? 255 : g, b > 255 ? 255 : b);
         }
     }
 }
@@ -841,7 +841,7 @@ static bool NextUtf8Line(char** p, wchar_t* line, int cap)
 }
 
 // A skin's 800 x 480 picture into bits (as is: night dims it when a frame is drawn).
-static bool LoadBackground(const wchar_t* path, unsigned short* bits)
+static bool LoadBackground(const wchar_t* path, Pix* bits)
 {
     DWORD size;
     char* data = ReadAll(path, &size);
@@ -853,14 +853,14 @@ static bool LoadBackground(const wchar_t* path, unsigned short* bits)
     if (!rgb)
         return false;
     for (int y = 0; y < 480; y++) {
-        unsigned short* dst = bits + (479 - y) * 800;
+        Pix* dst = bits + (479 - y) * 800;
         for (int x = 0; x < 800; x++) {
             COLORREF c = kInk;
             if (x < w && y < h) {
                 const unsigned char* p = rgb + (y * w + x) * 3;
                 c = RGB(p[0], p[1], p[2]);
             }
-            dst[x] = RGB565(GetRValue(c), GetGValue(c), GetBValue(c));
+            dst[x] = PIX(GetRValue(c), GetGValue(c), GetBValue(c));
         }
     }
     stbi_image_free(rgb);
@@ -869,20 +869,10 @@ static bool LoadBackground(const wchar_t* path, unsigned short* bits)
 
 enum { kTileW = 64, kTileH = 480 };   // design 0.6: a column of the mosaic's cells (64 x 112), the whole height
 
-// The mosaic's greys in RGB565 (2026-10-23, the user: the tile went red and blue - the dark greys nearest each shade
-// had different tints): one cool ramp, the cards' family (r, r + 4, r + 8): (8,12,16), (16,20,24), (24,28,32)...;
-// a shade takes the step nearest its brightness, so every triangle has the same tint.
-static unsigned short CoolGrey(int r, int g, int b)
+// Night: a third less brightness, as C() does.
+static Pix DimPix(Pix p)
 {
-    int k = ((r + g + b) / 3 - 4 + 4) / 8;   // the step: its brightness 8k + 4
-    k = k < 0 ? 0 : k > 30 ? 30 : k;
-    return RGB565(8 * k, 8 * k + 4, 8 * k + 8);
-}
-
-// Night: a third less brightness, as C() does (RGB565).
-static unsigned short Dim565(unsigned p)
-{
-    return (unsigned short)((((p >> 11) * 2 / 3) << 11) | ((((p >> 5) & 63) * 2 / 3) << 5) | ((p & 31) * 2 / 3));
+    return PIX(PR(p) * 2 / 3, PG(p) * 2 / 3, PB(p) * 2 / 3);
 }
 
 // The skin's tile (skin.ini "tile", 2026-10-21: a picture repeated over every screen's background instead of
@@ -900,15 +890,15 @@ static bool LoadTile(const wchar_t* path)
         return false;
     bool ok = w >= 8 && h >= 8 && w <= 400 && h <= 400;
     if (ok) {
-        s_tile[0] = (unsigned short*)malloc(w * h * 2);
-        s_tile[1] = (unsigned short*)malloc(w * h * 2);
+        s_tile[0] = (Pix*)malloc(w * h * sizeof(Pix));
+        s_tile[1] = (Pix*)malloc(w * h * sizeof(Pix));
         ok = s_tile[0] && s_tile[1];
     }
     if (ok) {
         for (int i = 0; i < w * h; i++) {
             const unsigned char* p = rgb + i * 3;
-            s_tile[0][i] = RGB565(p[0], p[1], p[2]);
-            s_tile[1][i] = Dim565(s_tile[0][i]);
+            s_tile[0][i] = PIX(p[0], p[1], p[2]);
+            s_tile[1][i] = DimPix(s_tile[0][i]);
         }
         s_tileW = w;
         s_tileH = h;
@@ -921,9 +911,9 @@ static bool LoadTile(const wchar_t* path)
     return ok;
 }
 
-// The background is periodic: one period is kept, day and night (the triangle mosaic's 24 KB each, or the
-// skin's tile), and copied into the frame row by row (Pattern) instead of keeping whole 800 x 480 backgrounds
-// (750 KB each). Only the skin's own main menu picture, if it gives one, is kept full-size. Built once at
+// The background is periodic: one period is kept, day and night (the mosaic's column 120 KB each, or the skin's
+// tile), and copied into the frame row by row (Pattern) instead of keeping whole 800 x 480 backgrounds (1.5 MB
+// each). Only the skin's own main menu picture, if it gives one, is kept full-size. Built once at
 // start, in day colours.
 static void BuildBackground()
 {
@@ -931,9 +921,9 @@ static void BuildBackground()
         s_skinTile[0] = 0;   // (the triangles below)
     if (!s_skinTile[0]) {   // design 0.6, as the mockup: rhombi of four triangles meeting in a 64 x 112 cell's
         // middle, darkened towards the bottom (25 % .. 70 % of the background) row of cells by row; each triangle one
-        // solid colour of one cool ramp (CoolGrey; the user 2026-10-23: no dither noise, no glow, no red / blue)
-        s_tile[0] = (unsigned short*)malloc(kTileW * kTileH * 2);
-        s_tile[1] = (unsigned short*)malloc(kTileW * kTileH * 2);
+        // solid colour (the user 2026-10-23: no dither noise, no glow)
+        s_tile[0] = (Pix*)malloc(kTileW * kTileH * sizeof(Pix));
+        s_tile[1] = (Pix*)malloc(kTileW * kTileH * sizeof(Pix));
         if (s_tile[0] && s_tile[1]) {
             int ir = GetRValue(kInk), ig = GetGValue(kInk), ib = GetBValue(kInk);
             for (int y = 0; y < kTileH; y++) {
@@ -946,8 +936,8 @@ static void BuildBackground()
                     COLORREF c = kTri[k];
                     int r = (GetRValue(c) * (256 - a) + ir * a) / 256, g = (GetGValue(c) * (256 - a) + ig * a) / 256,
                         b = (GetBValue(c) * (256 - a) + ib * a) / 256;
-                    s_tile[0][y * kTileW + x] = CoolGrey(r, g, b);
-                    s_tile[1][y * kTileW + x] = CoolGrey(r * 2 / 3, g * 2 / 3, b * 2 / 3);   // night: the same ramp
+                    s_tile[0][y * kTileW + x] = PIX(r, g, b);
+                    s_tile[1][y * kTileW + x] = PIX(r * 2 / 3, g * 2 / 3, b * 2 / 3);
                 }
             }
             s_tileW = kTileW;
@@ -966,7 +956,7 @@ static void BuildBackground()
 // Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top).
 static void Pattern(int top, int bottom, int anchor)
 {
-    const unsigned short* t = s_tile[s_night ? 1 : 0];
+    const Pix* t = s_tile[s_night ? 1 : 0];
     if (!t)
         return;
 #ifndef UNDER_CE
@@ -977,11 +967,11 @@ static void Pattern(int top, int bottom, int anchor)
     if (bottom > s_clip.bottom)
         bottom = s_clip.bottom;
     for (int y = top; y < bottom; y++) {
-        const unsigned short* src = t + ((y - anchor) % s_tileH) * s_tileW;
-        unsigned short* dst = s_backBits + (479 - y) * 800;
+        const Pix* src = t + ((y - anchor) % s_tileH) * s_tileW;
+        Pix* dst = s_backBits + (479 - y) * 800;
         for (int x = s_clip.left; x < s_clip.right;) {
             int o = x % s_tileW, n = s_tileW - o < s_clip.right - x ? s_tileW - o : s_clip.right - x;
-            memcpy(dst + x, src + o, n * 2);
+            memcpy(dst + x, src + o, n * sizeof(Pix));
             x += n;
         }
     }
@@ -1016,9 +1006,9 @@ static void BlitNight(HDC dc, HBITMAP bmp)
         GdiFlush();
 #endif
         for (int y = s_clip.top; y < s_clip.bottom; y++) {
-            unsigned short* row = s_backBits + (479 - y) * 800;
+            Pix* row = s_backBits + (479 - y) * 800;
             for (int x = s_clip.left; x < s_clip.right; x++)
-                row[x] = Dim565(row[x]);
+                row[x] = DimPix(row[x]);
         }
     }
 }
@@ -1026,7 +1016,7 @@ static void BlitNight(HDC dc, HBITMAP bmp)
 // The main screen: the skin's background picture (its night copy, a third darker, made once - it was dimmed pixel
 // by pixel on every frame), otherwise the same as the others.
 static HBITMAP         s_bgDim;
-static unsigned short* s_bgDimBits;
+static Pix*            s_bgDimBits;
 
 static void MainBackground(HDC dc)
 {
@@ -1038,7 +1028,7 @@ static void MainBackground(HDC dc)
         s_bgDim = MakeDib(800, 480, &s_bgDimBits);
         if (s_bgDim && s_bgDimBits)
             for (int i = 0; i < 800 * 480; i++)
-                s_bgDimBits[i] = Dim565(s_bgBits[i]);
+                s_bgDimBits[i] = DimPix(s_bgBits[i]);
     }
     if (s_night && s_bgDim)
         Blit(dc, s_bgDim);
@@ -1331,12 +1321,12 @@ static void Clip(HDC dc, int x, int y, int w, int h)
     DeleteObject(rgn);
 }
 
-// ---- pixels: the pattern, translucency (the back buffer is RGB565 and reachable)
+// ---- pixels: the pattern, translucency (the back buffer is 32-bit and reachable)
 
-static unsigned short Px(COLORREF c)
+static Pix Px(COLORREF c)
 {
     c = C(c);
-    return RGB565(GetRValue(c), GetGValue(c), GetBValue(c));
+    return PIX(GetRValue(c), GetGValue(c), GetBValue(c));
 }
 
 // Shade index of the orange triangle mosaic (TriFill) at (u, v) from its origin: rows of 64 x 56 triangles.
@@ -1359,13 +1349,13 @@ static void TriFill(int x, int y, int w, int h, int rx)
 #ifndef UNDER_CE
     GdiFlush();
 #endif
-    unsigned short sh[4];
+    Pix sh[4];
     for (int k = 0; k < 4; k++)
         sh[k] = Px(kTriOr[k]);
     for (int py = y; py < y + h; py++) {
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
-        unsigned short* row = s_backBits + (479 - py) * 800;
+        Pix* row = s_backBits + (479 - py) * 800;
         int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
         for (int px = x; px < x + w; px++) {
             if (px < s_clip.left || px >= s_clip.right)
@@ -1390,13 +1380,13 @@ static void Shade(int x, int y, int w, int h, int a0, int a1)
             continue;
         int a = a0 + (a1 - a0) * (py - y) / (h > 1 ? h - 1 : 1);
         int ir = GetRValue(ink) * a, ig = GetGValue(ink) * a, ib = GetBValue(ink) * a;
-        unsigned short* row = s_backBits + (479 - py) * 800;
+        Pix* row = s_backBits + (479 - py) * 800;
         for (int px = x > s_clip.left ? x : s_clip.left; px < x + w && px < s_clip.right; px++) {
             unsigned p = row[px];
-            int r = (((p >> 8) & 0xF8) * (255 - a) + ir) / 255;
-            int g = (((p >> 3) & 0xFC) * (255 - a) + ig) / 255;
-            int b = (((p << 3) & 0xF8) * (255 - a) + ib) / 255;
-            row[px] = RGB565(r, g, b);
+            int r = (PR(p) * (255 - a) + ir) / 255;
+            int g = (PG(p) * (255 - a) + ig) / 255;
+            int b = (PB(p) * (255 - a) + ib) / 255;
+            row[px] = PIX(r, g, b);
         }
     }
 }
@@ -1413,7 +1403,7 @@ static void RSoft(int x, int y, int w, int h, int rx)
     for (int py = y; py < y + h; py++) {
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
-        unsigned short* row = s_backBits + (479 - py) * 800;
+        Pix* row = s_backBits + (479 - py) * 800;
         int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
         for (int px = x; px < x + w; px++) {
             if (px < s_clip.left || px >= s_clip.right)
@@ -1422,11 +1412,11 @@ static void RSoft(int x, int y, int w, int h, int rx)
             if (dx && dy && dx * dx + dy * dy > rx * rx)
                 continue;
             unsigned p = row[px];
-            int r = (p >> 8) & 0xF8, g = (p >> 3) & 0xFC, b = (p << 3) & 0xF8;
+            int r = PR(p), g = PG(p), b = PB(p);
             r += ((orr - r) * a + 128) / 256;
             g += ((og - g) * a + 128) / 256;
             b += ((ob - b) * a + 128) / 256;
-            row[px] = RGB565(Round565(r, 8), Round565(g, 4), Round565(b, 8));
+            row[px] = PIX(r, g, b);
         }
     }
 }

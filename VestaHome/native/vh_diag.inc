@@ -46,19 +46,19 @@ static void ScrTestScreen(HDC dc)
     GdiFlush();
 #endif
     for (int y = 0; y < 480; y++) {
-        unsigned short* row = s_backBits + (479 - y) * 800;
+        Pix* row = s_backBits + (479 - y) * 800;
         for (int x = 0; x < 800; x++) {
             int v;
             if (s_testStep < 5) {
                 COLORREF c = fills[s_testStep];
-                row[x] = RGB565(GetRValue(c), GetGValue(c), GetBValue(c));
+                row[x] = PIX(GetRValue(c), GetGValue(c), GetBValue(c));
                 continue;
             }
             if (s_testStep == 5)
                 v = x * 255 / 799;
             else
                 v = x % 40 == 0 || y % 40 == 0 || x == 799 || y == 479 ? 255 : 0;
-            row[x] = RGB565(v, v, v);
+            row[x] = PIX(v, v, v);
         }
     }
     if (s_testStep == 0) {   // on the first fill only: the hint would hide pixels of the others

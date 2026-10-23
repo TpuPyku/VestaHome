@@ -136,8 +136,12 @@ static void BlitPic(const Pic& p, int x, int y)
         if (fy < s_clip.top || fy >= s_clip.bottom)
             continue;
         int x0 = x < s_clip.left ? s_clip.left : x, x1 = x + p.w > s_clip.right ? s_clip.right : x + p.w;
-        if (x1 > x0)
-            memcpy(s_backBits + (479 - fy) * 800 + x0, p.px + r * p.w + (x0 - x), (x1 - x0) * 2);
+        Pix* dst = s_backBits + (479 - fy) * 800;   // the picture is RGB565 (memory), the frame 32-bit
+        const unsigned short* src = p.px + r * p.w - x;
+        for (int i = x0; i < x1; i++) {
+            unsigned q = src[i];
+            dst[i] = PIX((q >> 8 & 0xF8) | q >> 13, (q >> 3 & 0xFC) | (q >> 9 & 3), (q << 3 & 0xF8) | (q >> 2 & 7));
+        }
     }
 }
 
