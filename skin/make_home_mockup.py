@@ -13,55 +13,25 @@ import subprocess
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHOTS = os.path.join(HERE, '..', 'docs', 'shots')
 
-# ---- icons: 24-grid line icons, stroke 2 (the unit's built-in set redrawn lighter)
+# ---- icons: Lucide (lucide.dev, ISC), the set VestaHome's skin is made of (make_icons.py; its SVGs cached in lucide/);
+# "!name" filled, as VestaHome's transport buttons
+from make_icons import inner, svg_of
+
 P = {
-    'home': 'M4 11 12 4l8 7v9h-5v-6H9v6H4z',
-    'radio': 'M4 9h16v11H4zM7 9l9-5M15 14.5a2 2 0 1 0 .01 0M7 13h4M7 16h4',
-    'music': 'M9 18V6l11-2v12M9 18a3 3 0 1 1-.01 0M20 16a3 3 0 1 1-.01 0',
-    'phone': 'M6 3h3l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z',
-    'apps': 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
-    'gear': ('M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 '
-             '1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33'
-             'l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 '
-             '1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 '
-             '1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 '
-             '2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'),
-    'moon': 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
-    'bt': 'M7 7l10 10-5 4V3l5 4L7 17',
-    'wifi': 'M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01',
-    'nav': 'M12 3l7 18-7-4-7 4z',
-    'vol': 'M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
-    'play': 'M8 5v14l11-7z',
-    'pause': 'M7 5h3v14H7zM14 5h3v14h-3z',
-    'prev': 'M18 6v12L9 12zM6 6v12',
-    'next': 'M6 6v12l9-6zM18 6v12',
-    'shuffle': 'M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4M18 4l3 3-3 3M18 14l3 3-3 3',
-    'repeat': 'M4 11V8a2 2 0 0 1 2-2h13l-3-3M20 13v3a2 2 0 0 1-2 2H5l3 3',
-    'list': 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
-    'cloud': 'M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1 0 9z',
-    'car': 'M3 15v-3l2-5h14l2 5v3zM5 15v3M19 15v3M7 12h.01M17 12h.01',
-    'clock': 'M12 3a9 9 0 1 0 .01 0M12 7v5l3 2',
-    'user': 'M12 4a4 4 0 1 0 .01 0M4 21a8 8 0 0 1 16 0',
-    'star': 'M12 3l2.7 5.7 6.3.8-4.6 4.3 1.2 6.2L12 17l-5.6 3 1.2-6.2L3 9.5l6.3-.8z',
-    'keypad': 'M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01',
-    'warn': 'M12 3l10 17H2zM12 10v4M12 17h.01',
-    'search': 'M10.5 4a6.5 6.5 0 1 0 .01 0M15.5 15.5 20 20',
-    'scan': 'M12 12h.01M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8',
-    'chev': 'M9 5l7 7-7 7',
-    'back': 'M15 5l-7 7 7 7',
-    'sd': 'M7 3h8l4 4v14H7zM10 7v2M13 7v2',
-    'call': 'M6 3h3l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 4 5a2 2 0 0 1 2-2z',
-    'end': 'M3 14c5-5 13-5 18 0l-3 3-3-2v-2a10 10 0 0 0-6 0v2l-3 2z',
-    'trip': 'M5 19c4-14 10 2 14-14M5 19h.01M19 5h.01',
-    'fuel': 'M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M4 21h12M15 9h2a2 2 0 0 1 2 2v6a1 1 0 0 0 2 0V9l-3-3M8 7h4',
-    'drop': 'M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z',
-    'bolt': 'M13 2 4 14h7l-1 8 9-12h-7z',
+    'home': 'house', 'radio': 'radio', 'music': 'music', 'phone': 'phone', 'apps': 'layout-grid', 'gear': 'settings',
+    'moon': 'moon', 'bt': 'bluetooth', 'wifi': 'wifi', 'nav': 'navigation', 'vol': 'volume-2', 'play': '!play',
+    'pause': '!pause', 'prev': '!skip-back', 'next': '!skip-forward', 'shuffle': 'shuffle', 'repeat': 'repeat',
+    'list': 'list', 'cloud': 'cloud', 'car': 'car', 'clock': 'clock', 'user': 'user', 'star': 'star',
+    'keypad': 'grid-3x3', 'warn': 'triangle-alert', 'search': 'search', 'chev': 'chevron-right', 'back': 'chevron-left',
+    'sd': 'save', 'call': 'phone', 'end': 'phone-off', 'trip': 'route', 'fuel': 'fuel', 'drop': 'droplet', 'bolt': 'zap',
 }
 
 
 def ico(name, size=24, color='currentColor', sw=2):
-    return ('<svg width="%d" height="%d" viewBox="0 0 24 24" fill="none" stroke="%s" stroke-width="%s" '
-            'stroke-linecap="round" stroke-linejoin="round"><path d="%s"/></svg>' % (size, size, color, sw, P[name]))
+    spec = P[name]
+    return ('<svg width="%d" height="%d" viewBox="0 0 24 24" fill="%s" stroke="%s" stroke-width="%s" '
+            'stroke-linecap="round" stroke-linejoin="round">%s</svg>' % (
+                size, size, color if spec.startswith('!') else 'none', color, sw, inner(svg_of(spec.lstrip('!')))))
 
 
 # ---- the rhombus mosaic (the background) and the orange facets (accents), as SVG patterns
@@ -382,7 +352,7 @@ flatter 2D graphics», постоянная нижняя панель, верх�
 действие — сплошная.</li>
 <li><b>Ромбы:</b> фон — крупная мозаика (64×112) почти в тон фону; оранжевые грани — на обложках и акцентных плитках.
 Лёгкое оранжевое свечение в углу экрана.</li>
-<li><b>Значки линейные</b> 24-сетка, линия 2 px; в нижней панели без подписей — подпись только у текущего раздела.</li>
+<li><b>Значки — Lucide</b> (тот же набор, что в скине VestaHome): линейные, 24-сетка, линия 2 px, кнопки плеера залиты; в нижней панели без подписей — подпись только у текущего раздела.</li>
 <li><b>Контраст:</b> текст #f5f3ee на #1a1d22 — 15:1; вторичный #aab0b8 — 8:1; третичный #6c727c — для неважного.</li>
 </ul></div>
 <div class="note" style="width:330px"><h2>Токены</h2><table class="tk">
