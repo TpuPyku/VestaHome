@@ -24,7 +24,7 @@ static void WRow(HDC dc, int y, const wchar_t* label, const wchar_t* sub, Action
 static void ScrWSetWeather(HDC dc)
 {
     static const wchar_t* prov[W_COUNT] = { L"OPEN-METEO", L"OPENWEATHER", L"ЯНДЕКС" };
-    Frame(dc, L"ПОГОДА · НАСТРОЙКИ");
+    Frame(dc, L"Погода · Настройки");
     Panel(dc, 16, 64, 768, 400);
     wchar_t s[120];
     int p = s_cfg.weatherProv;
@@ -67,7 +67,7 @@ static void RegionsText(wchar_t* s, int n);
 static void ScrWSetSpeed(HDC dc)
 {
     static const wchar_t* dist[4] = { L"ПО СКОРОСТИ", L"200 М", L"400 М", L"600 М" };
-    Frame(dc, L"СКОРОСТЬ И КАМЕРЫ");
+    Frame(dc, L"Скорость и камеры");
     Panel(dc, 16, 64, 768, 400);
     wchar_t s[160], label[48];
     WRow(dc, 68, L"Предупреждать о камерах", L"знак на виджете и в верхнем баре", A_NONE, 0, 640);
@@ -194,7 +194,7 @@ static void ScrTestMcu(HDC dc)
         }
 
     wchar_t s[160];
-    Frame(dc, L"ДАННЫЕ MCU");
+    Frame(dc, L"Данные MCU");
     Panel(dc, 16, 68, 768, 396);
     LONG attach, wraps;
     int state = McuState(&attach, &wraps);
@@ -267,7 +267,7 @@ static void McuRequest();
 static void ScrInfoMore(HDC dc)
 {
     wchar_t s[160], can[64];
-    Frame(dc, L"О СИСТЕМЕ · ПОДРОБНЕЕ");
+    Frame(dc, L"О системе · Подробнее");
     Panel(dc, 16, 68, 444, 396);
     Panel(dc, 472, 68, 312, 396);
     T(dc, 32, 96, L"ВЕРСИИ", 13, kMuted, 700);

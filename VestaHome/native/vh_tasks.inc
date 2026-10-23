@@ -137,7 +137,7 @@ static void TaskSortBtn(HDC dc, int x, const wchar_t* label, int key)
 static void DrawTasks(HDC dc)
 {
     wchar_t s[96], a[24], b[24];
-    Frame(dc, L"ДИСПЕТЧЕР ЗАДАЧ");
+    Frame(dc, L"Диспетчер задач");
     if (s_task.cpu10 >= 0)
         _snwprintf(s, 96, L"%d %%", (s_task.cpu10 + 5) / 10);
     else
@@ -315,7 +315,7 @@ static void WMedia(HDC dc, int x, int y)
     if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
         NetLoadList();
     if (s_netCur >= 0 && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
-        bool d = Widget(dc, x, y, kWgW2, kWgH, L"СЕЙЧАС ИГРАЕТ · ИНТЕРНЕТ-РАДИО", IC_NETRADIO, A_NAV, S_NETRADIO);
+        bool d = Widget(dc, x, y, kWgW2, kWgH, L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
         TriFill(x + 16, y + 42, 100, 100, 12);
         Ico(dc, IC_NETRADIO, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
         wchar_t s[160];
@@ -331,7 +331,7 @@ static void WMedia(HDC dc, int x, int y)
         IconBtn(dc, IC_FWD, x + 400, y + 122, 28, d ? kInk : kText, A_NRSTEP, 1);
         return;
     }
-    bool d = Widget(dc, x, y, kWgW2, kWgH, L"СЕЙЧАС ИГРАЕТ · МУЗЫКА", IC_MUSIC, A_NAV, S_AUDIO);
+    bool d = Widget(dc, x, y, kWgW2, kWgH, L"Сейчас играет · Музыка", IC_MUSIC, A_NAV, S_AUDIO);
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     TriFill(x + 16, y + 42, 100, 100, 12);
     Ico(dc, IC_MUSIC, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
@@ -376,7 +376,7 @@ static void WSpeed(HDC dc, int x, int y)
     GpsGet(&g);
     bool fix = GpsFresh(g, 5000);
     bool car = g.carTick && GetTickCount() - g.carTick < 3000;
-    Widget(dc, x, y, 248, 158, car ? L"СКОРОСТЬ · CAN" : L"СКОРОСТЬ · GPS", IC_NAV, A_NONE, 0, S_WSET_SPEED);
+    Widget(dc, x, y, 248, 158, car ? L"Скорость · CAN" : L"Скорость · GPS", IC_NAV, A_NONE, 0, S_WSET_SPEED);
     wchar_t v[64];
     if (car)
         _snwprintf(v, 8, L"%d", g.carSpeed);
@@ -414,8 +414,8 @@ static void WRadio(HDC dc, int x, int y)
     TunerGet(&t);
     wchar_t f[16];
     FreqText(t.f10, f, 16);
-    bool d = Widget(dc, x, y, 248, 158, t.band == 2 || (t.f10 > 0 && t.f10 < 3000) ? L"РАДИО · СВ"
-                    : t.band == 1 || (t.f10 >= 6500 && t.f10 < 8750) ? L"РАДИО · УКВ" : L"РАДИО · FM", IC_RADIO, A_NAV,
+    bool d = Widget(dc, x, y, 248, 158, t.band == 2 || (t.f10 > 0 && t.f10 < 3000) ? L"Радио · СВ"
+                    : t.band == 1 || (t.f10 >= 6500 && t.f10 < 8750) ? L"Радио · УКВ" : L"Радио · FM", IC_RADIO, A_NAV,
                     S_RADIO);
     T(dc, x + 16, y + 88, f, 44, d ? kInk : t.f10 ? kText : kDim, 700);
     // RDS's name, else the one known for the frequency
@@ -458,10 +458,9 @@ static void WWeather(HDC dc, int x, int y)
     WxGet(&w);
     wchar_t cap[64], s[100];
     if (w.have && w.place[0])
-        _snwprintf(cap, 64, L"ПОГОДА · %s", w.place);
+        _snwprintf(cap, 64, L"Погода · %s", w.place);
     else
-        wcscpy(cap, L"ПОГОДА");
-    CharUpperBuff(cap, (DWORD)wcslen(cap));
+        wcscpy(cap, L"Погода");
     bool d = Widget(dc, x, y, 248, 158, cap, IC_CLOUD, A_WXNOW, 0, S_WSET_WEATHER);
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     if (!w.have) {
@@ -508,7 +507,7 @@ static const wchar_t* CarSensorName(int id);
 // while one has no data.
 static void WCar(HDC dc, int x, int y)
 {
-    bool d = Widget(dc, x, y, 248, 158, L"АВТОМОБИЛЬ", IC_CAR, A_SCREEN, S_CAR, S_WSET_CAR);
+    bool d = Widget(dc, x, y, 248, 158, L"Автомобиль", IC_CAR, A_SCREEN, S_CAR, S_WSET_CAR);
     for (int i = 0; i < 3; i++) {
         if (s_cfg.carSens[i] < 0)
             continue;
@@ -578,8 +577,8 @@ static void TripTick()   // once a second
 
 static void WTrip(HDC dc, int x, int y)
 {
-    bool d = Widget(dc, x, y, kWgW2, kWgH, s_trip.src == 1 ? L"БОРТОВОЙ КОМПЬЮТЕР · ПОЕЗДКА · CAN"
-                    : L"БОРТОВОЙ КОМПЬЮТЕР · ПОЕЗДКА · GPS", IC_CLOCK, A_SCREEN, S_CAR);
+    bool d = Widget(dc, x, y, kWgW2, kWgH, s_trip.src == 1 ? L"Бортовой компьютер · Поездка · CAN"
+                    : L"Бортовой компьютер · Поездка · GPS", IC_CLOCK, A_SCREEN, S_CAR);
     wchar_t v[4][16];
     _snwprintf(v[0], 16, s_trip.km < 100 ? L"%.1f" : L"%.0f", s_trip.km);
     for (wchar_t* c = v[0]; *c; c++)
@@ -630,7 +629,7 @@ static void WDate(HDC dc, int x, int y)
     GetLocalTime(&t);
     wchar_t day[4];
     _snwprintf(day, 4, L"%d", t.wDay);
-    bool d = Widget(dc, x, y, 248, 158, L"КАЛЕНДАРЬ", IC_CLOCK, A_NAV, S_SETTINGS);
+    bool d = Widget(dc, x, y, 248, 158, L"Календарь", IC_CLOCK, A_NAV, S_SETTINGS);
     int end = T(dc, x + 16, y + 112, day, 64, d ? kInk : kText, 700);
     T(dc, end + 12, y + 84, kMonths[(t.wMonth + 11) % 12], 19, d ? kInk : kText, 700, AL_START, x + 232 - end - 12);
     T(dc, end + 12, y + 108, kDays[t.wDayOfWeek % 7], 15, d ? kInk : kMuted, 400, AL_START, x + 232 - end - 12);
@@ -656,7 +655,7 @@ static void WClimate(HDC dc, int x, int y)
 {
     Hvac h;
     if (HvacGet(&h)) {
-        Widget(dc, x, y, 248, 158, L"КЛИМАТ", IC_CAR, A_SCREEN, S_TEST_MCU, S_WSET_CAR);
+        Widget(dc, x, y, 248, 158, L"Климат", IC_CAR, A_SCREEN, S_TEST_MCU, S_WSET_CAR);
         wchar_t s[24];
         if (h.temp >= 0) {
             for (int i = 0; i < 16; i++) {   // the knob: blue to red, the set part lit
@@ -684,7 +683,7 @@ static void WClimate(HDC dc, int x, int y)
         }
         return;
     }
-    Widget(dc, x, y, 248, 158, L"КЛИМАТ · ДЕМО", IC_CAR, A_NONE, 0, S_WSET_CAR);
+    Widget(dc, x, y, 248, 158, L"Климат · Демо", IC_CAR, A_NONE, 0, S_WSET_CAR);
     T(dc, x + 16, y + 100, L"22,0°", 46, kText, 700);
     T(dc, x + 156, y + 72, L"АВТО", 15, kOrange, 700);
     for (int i = 0; i < 5; i++)   // fan speed 3 of 5
@@ -703,10 +702,10 @@ static void WPhone(HDC dc, int x, int y)
     BtState bt;
     bool proxy = BtGet(&bt, NULL), on = proxy && bt.hf == 2;
     wchar_t title[96], name[BT_TEXT], s[96];
-    wcscpy(title, L"ТЕЛЕФОН");
+    wcscpy(title, L"Телефон");
     if (on && bt.devName[0]) {
         BtText(bt.devName, name, BT_TEXT);
-        _snwprintf(title, 96, L"ТЕЛЕФОН · %s", name);
+        _snwprintf(title, 96, L"Телефон · %s", name);
         title[95] = 0;
     }
     bool d = Widget(dc, x, y, 248, 158, title, IC_PHONE, A_NAV, S_PHONE);
@@ -771,7 +770,7 @@ static void WPhone(HDC dc, int x, int y)
 // The first three programs of the list; the widget itself leads to all of them.
 static void WFavorites(HDC dc, int x, int y)
 {
-    bool d = Widget(dc, x, y, 248, 158, L"ПРИЛОЖЕНИЯ", IC_APPS, A_NAV, S_APPS);
+    bool d = Widget(dc, x, y, 248, 158, L"Приложения", IC_APPS, A_NAV, S_APPS);
     if (s_appCount == 0) {
         TWrap(dc, x + 16, y + 92, L"Добавьте программы в «Приложениях»", 16, d ? kInk : kMuted, 400, 216, 2, 22);
         return;
@@ -804,7 +803,7 @@ static void WNavi(HDC dc, int x, int y)
 {
     int app = NaviApp();
     const wchar_t* name = app >= 0 ? s_apps[app].name : L"OSMapsCE не найден";
-    bool d = Widget(dc, x, y, 248, 158, L"НАВИГАЦИЯ", IC_NAV, app >= 0 ? A_RUN : A_NAV, app >= 0 ? app : S_APPS);
+    bool d = Widget(dc, x, y, 248, 158, L"Навигация", IC_NAV, app >= 0 ? A_RUN : A_NAV, app >= 0 ? app : S_APPS);
     Ico(dc, IC_MAP, x + 16, y + 52, 48, d ? kInk : kText);
     T(dc, x + 78, y + 74, name, 19, d ? kInk : kText, 700, AL_START, 154);
     TWrap(dc, x + 78, y + 96, L"маршрут не задан", 15, d ? kInk : kMuted, 400, 154, 1, 0);
@@ -1037,7 +1036,7 @@ static void DtcInfoWindow(HDC dc)
 
 static void ScrObdDtc(HDC dc)
 {
-    Frame(dc, L"АВТОМОБИЛЬ · ОШИБКИ ДВИГАТЕЛЯ (OBD)");
+    Frame(dc, L"Автомобиль · Ошибки двигателя (OBD)");
     ObdInfo o;
     ObdGet(&o);
     bool on = o.state == OBD_ON, busy = o.dtcState == OBD_DTC_READING || o.dtcState == OBD_DTC_CLEARING;
@@ -1083,7 +1082,7 @@ static void ScrObdDtc(HDC dc)
 // Car -> its settings: the widget's three lines, from the sensors (a tap: in / out, in the order chosen)
 static void ScrWSetCar(HDC dc)
 {
-    Frame(dc, L"АВТОМОБИЛЬ · СТРОКИ ВИДЖЕТА");
+    Frame(dc, L"Автомобиль · Строки виджета");
     int n = 0;
     for (int i = 0; i < 3; i++)
         n += s_cfg.carSens[i] >= 0;

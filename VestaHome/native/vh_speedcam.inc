@@ -397,7 +397,7 @@ static void WaveDevsLog()
 
 static void ScrTestAv(HDC dc)
 {
-    Frame(dc, L"ЗВУК И ВИДЕО");
+    Frame(dc, L"Звук и видео");
     Panel(dc, 16, 68, 768, 396);
     const wchar_t* dir = AvDir();
     for (int i = 0; i < 10; i++) {

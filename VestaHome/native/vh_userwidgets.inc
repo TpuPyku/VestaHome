@@ -216,7 +216,6 @@ static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
         if (!dataSet)
             UserWgTemp(dataName, w->data);
     }
-    CharUpperBuff(w->title, (DWORD)wcslen(w->title));
     free(text);
     return true;
 }
@@ -735,7 +734,7 @@ static void ScrSetHome(HDC dc)
 {
     int pages = (WgCount() + 11) / 12;
     s_setHomePage = s_setHomePage >= pages ? pages - 1 : s_setHomePage;
-    Frame(dc, L"ГЛАВНАЯ · ВИДЖЕТЫ");
+    Frame(dc, L"Главная · Виджеты");
     Panel(dc, 16, 64, 768, 336);
     for (int i = s_setHomePage * 12; i < WgCount() && i < s_setHomePage * 12 + 12; i++) {
         int id = s_cfg.homeOrder[i], j = i % 12, x = 24 + j / 6 * 380, y = 70 + j % 6 * 54;
@@ -775,7 +774,7 @@ static void ScrSetHome(HDC dc)
 // The car's systems and the trip, opened from the widgets.
 static void ScrCar(HDC dc)   // all the car's sensors (2026-10-22, out of the demo): "—" without data
 {
-    Frame(dc, L"АВТОМОБИЛЬ");
+    Frame(dc, L"Автомобиль");
     Panel(dc, 16, 68, 768, 396);
     for (int id = 0; id < kCarSensors; id++) {   // three columns of nine
         int x = 28 + id / 9 * 252, y = 74 + id % 9 * 43;

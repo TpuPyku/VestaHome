@@ -19,7 +19,7 @@ static const Test kTests[10] = { { L"ЭКРАН", A_SCREEN, S_TEST_SCREEN }, { L
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
 static void ScrDiag(HDC dc)
 {
-    Frame(dc, L"ДИАГНОСТИКА");
+    Frame(dc, L"Диагностика");
     Panel(dc, 16, 68, 768, 396);
     for (int i = 0; i < 10 && kTests[i].label; i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
@@ -121,7 +121,7 @@ static void ScrTestMem(HDC dc)
 #else
     static const wchar_t* vols[5] = { L"C:\\", L"D:\\", L"E:\\", L"F:\\", L"G:\\" };
 #endif
-    Frame(dc, L"ДИАГНОСТИКА · ПАМЯТЬ И ДИСКИ");
+    Frame(dc, L"Диагностика · Память и диски");
     Panel(dc, 16, 68, 768, 396);
     for (int i = 0; i < 7; i++) {
         int y = 76 + i * 54;

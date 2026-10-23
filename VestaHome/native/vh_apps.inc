@@ -599,9 +599,9 @@ static void OpenKeysFor(wchar_t* target, int cap, const wchar_t* title, Screen b
 static void OpenKeys(int field)
 {
     if (field == F_NAME)
-        OpenKeysFor(s_edit.name, 47, L"НАЗВАНИЕ", S_EDIT);
+        OpenKeysFor(s_edit.name, 47, L"Название", S_EDIT);
     else
-        OpenKeysFor(s_edit.params, 199, L"ПАРАМЕТРЫ ЗАПУСКА", S_EDIT);
+        OpenKeysFor(s_edit.params, 199, L"Параметры запуска", S_EDIT);
 }
 
 static void KeyType(wchar_t ch)
@@ -932,7 +932,7 @@ static void AppIcon(HDC dc, const App& a, int x, int y, int size, bool d)
 // mode (the pencil in the top bar) the tiles are framed orange and open the editor. Page dots under the tiles.
 static void DrawApps(HDC dc)
 {
-    Frame(dc, s_editMode ? L"ПРИЛОЖЕНИЯ · ИЗМЕНЕНИЕ" : L"ПРИЛОЖЕНИЯ", A_BACK, IC_EDIT, A_EDITMODE, s_editMode,
+    Frame(dc, s_editMode ? L"Приложения · Изменение" : L"Приложения", A_BACK, IC_EDIT, A_EDITMODE, s_editMode,
           IC_TASKS, A_SCREEN, S_TASKS);
     int first = s_page * kAppsPerPage;
     int tiles = s_appCount + (s_appCount < kMaxApps ? 1 : 0);
@@ -982,7 +982,7 @@ static const wchar_t* kFieldEmpty[4] = { L"нажмите, чтобы ввест
 // A chosen icon has a "reset" button at the end of its field.
 static void DrawEdit(HDC dc)
 {
-    Frame(dc, s_editIdx < 0 ? L"НОВЫЙ ЯРЛЫК" : L"ИЗМЕНИТЬ ЯРЛЫК", A_CANCEL);
+    Frame(dc, s_editIdx < 0 ? L"Новый ярлык" : L"Изменить ярлык", A_CANCEL);
     for (int k = 0; k < 4; k++) {
         int y = 72 + k * 80;
         const wchar_t* v = k == F_NAME ? s_edit.name : k == F_PATH ? s_edit.path :
@@ -1058,7 +1058,7 @@ static void DrawKeys(HDC dc)
 // Choosing the program: the folder's path, folders and .exe files 2 x 5 per page.
 static void DrawFiles(HDC dc)
 {
-    Frame(dc, s_filesFor == F_ICON ? L"ВЫБОР ИКОНКИ" : s_filesFor == F_CAMS ? L"ФАЙЛ КАМЕР"
+    Frame(dc, s_filesFor == F_ICON ? L"Выбор иконки" : s_filesFor == F_CAMS ? L"Файл камер"
               : s_filesFor == F_TEXT ? L"ТЕКСТОВЫЕ ФАЙЛЫ (.ini, .txt, .cfg)" : L"ВЫБОР ПРОГРАММЫ",
           A_CANCEL);
     TTail(dc, 20, 84, s_fdir, 15, kMuted, 400, 760);

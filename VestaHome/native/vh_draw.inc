@@ -1646,33 +1646,125 @@ static void ListRow(HDC dc, int x, int y, int w, int h, const wchar_t* text, con
         T(dc, x + w - 16, y + h / 2 + 6, right, 16, mg, 600, AL_END);
 }
 
-// The browsers "volumes -> folders -> files" (music, video): the title "<prefix> · <the folder's name>"
-// ("НОСИТЕЛИ" at the top); inside a folder "Наверх" first, then the entries in columns of `rows` (folders end in '\\'
-// and are orange), the one playing (curName, NULL none) orange; nothing there - its line.
-static void DirEntries(HDC dc, const wchar_t* dir, wchar_t* const* names, int count, int page, int rows, int cols,
-                       int top, int h, int pitch, Action up, Action pick, Icon ic, const wchar_t* curName,
-                       const wchar_t* none, int noneY)
+// A volume's name for people ("\SDMemory\" -> "SD-карта"); *rest: the path after it. NULL: not a volume we know.
+static const wchar_t* VolName(const wchar_t* path, const wchar_t** rest)
 {
-    int cell = 0;   // cells in columns: `rows` down, then the next column
-    if (dir[0]) {
-        ListRow(dc, 16, top, 380, h, L"Наверх", NULL, L_N, IC_UP, NULL, NULL, up);
-        cell = 1;
+    static const wchar_t* vols[6][2] = { { L"\\SDMemory\\", L"SD-карта" }, { L"\\USBDisk\\", L"USB-диск" },
+                                         { L"\\USBDevice\\", L"USB-диск" }, { L"\\SDMMC\\", L"Встроенная карта" },
+                                         { L"\\StorageFlash\\", L"Память ГУ" }, { L"\\ResidentFlash\\", L"ResidentFlash" } };
+    for (int i = 0; i < 6; i++) {
+        size_t l = wcslen(vols[i][0]);
+        if (!_wcsnicmp(path, vols[i][0], l)) {
+            *rest = path + l;
+            return vols[i][1];
+        }
     }
-    int per = rows * cols - cell, first = page * per;
-    wchar_t s[MAX_PATH + 1];
-    for (int i = first; i < count && i < first + per; i++, cell++) {
+    *rest = path;
+    return NULL;
+}
+
+// The browsers' path line (design 0.6, y 108..152): "‹" one level up (inside a folder), then the volume and the
+// folders "SD-карта › Музыка › Rock" (the last white, the first ones dropped when it is too long; a tap on it - the
+// volumes), up to `right`.
+static void DirPath(HDC dc, const wchar_t* dir, Action up, int right)
+{
+    int x = 24;
+    if (dir[0]) {
+        IconBtn(dc, IC_BACK, 16, 116, 28, kMuted, up);
+        x = 60;
+    }
+    wchar_t part[8][MAX_PATH];   // the crumbs, the volume first
+    int n = 0;
+    const wchar_t* rest;
+    const wchar_t* vol = VolName(dir, &rest);
+    if (!dir[0]) {
+        wcscpy(part[n++], L"Носители");
+    } else {
+        if (vol) {
+            wcscpy(part[n++], vol);
+        } else {   // "C:\" (the PC)
+            wcsncpy(part[n], dir, 2);
+            part[n++][2] = 0;
+            rest = dir[2] == L'\\' ? dir + 3 : dir + 2;
+        }
+        while (*rest && n < 8) {
+            const wchar_t* e = wcschr(rest, L'\\');
+            int l = e ? (int)(e - rest) : (int)wcslen(rest);
+            if (n == 7) {   // too deep: the first ones go, the last one stays
+                memmove(part[1], part[2], 5 * sizeof(part[0]));
+                n = 6;
+            }
+            wcsncpy(part[n], rest, l);
+            part[n++][l] = 0;
+            rest = e ? e + 1 : rest + l;
+        }
+    }
+    int first = 0, sep = TextWidth(dc, L"  ›  ", 17, 700), w = 0;   // as many from the end as fit
+    for (int i = n - 1; i >= 0; i--) {
+        int pw = TextWidth(dc, part[i], 17, 700) + (i < n - 1 ? sep : 0);
+        if (w + pw > right - x && i < n - 1) {
+            first = i + 1;
+            break;
+        }
+        w += pw;
+    }
+    if (dir[0])
+        Zone(x, 108, w < right - x ? w : right - x, 44, up, 1);
+    for (int i = first; i < n; i++) {
+        bool last = i == n - 1;
+        x = T(dc, x, 137, part[i], 17, last ? kText : kMuted, 700, AL_START, right - x);
+        if (!last)
+            x = T(dc, x, 137, L"  ›  ", 17, kDim, 700);
+    }
+}
+
+// The browsers "volumes -> folders -> files" (music, video), design 0.6: the entries in columns of `rows` rows of
+// 52 px from y 160 (folders end in '\\', orange icon; volumes by their names), a file's second line its type and size
+// ("MP3 · 8,5 МБ"); the one playing (curName, NULL none) soft orange; nothing there - its line.
+static void DirEntries(HDC dc, const wchar_t* dir, wchar_t* const* names, int count, int page, int rows, int cols,
+                       Action pick, Icon ic, const wchar_t* curName, const wchar_t* none)
+{
+    int per = rows * cols, first = page * per, cw = (768 - (cols - 1) * 12) / cols;
+    wchar_t s[MAX_PATH + 1], sub[48], path[MAX_PATH];
+    for (int i = first, cell = 0; i < count && i < first + per; i++, cell++) {
         const wchar_t* n = names[i];
         bool isDir = n[wcslen(n) - 1] == L'\\';
-        wcsncpy(s, n, MAX_PATH);
+        const wchar_t* rest;
+        const wchar_t* vol = dir[0] ? NULL : VolName(n, &rest);
+        wcsncpy(s, vol ? vol : n, MAX_PATH);
         s[MAX_PATH] = 0;
-        if (isDir && s[0])
+        if (isDir && s[0] && s[wcslen(s) - 1] == L'\\')
             s[wcslen(s) - 1] = 0;
-        ListRow(dc, 16 + cell / rows * 388, top + cell % rows * pitch, 380, h, s, NULL,
-                !isDir && curName && !_wcsicmp(n, curName) ? L_CUR : L_N, isDir ? IC_FOLDER : ic, NULL, NULL, pick,
-                i, isDir ? kOrange : CLR_INVALID);   // folders orange, files muted
+        sub[0] = 0;
+        WIN32_FILE_ATTRIBUTE_DATA fa;
+        _snwprintf(path, MAX_PATH, L"%s%s", dir, n);
+        path[MAX_PATH - 1] = 0;
+        if (!isDir && GetFileAttributesEx(path, GetFileExInfoStandard, &fa)) {
+            const wchar_t* dot = wcsrchr(n, L'.');
+            wchar_t ext[8] = L"";
+            if (dot) {
+                wcsncpy(ext, dot + 1, 7);
+                ext[7] = 0;
+                CharUpperBuff(ext, (DWORD)wcslen(ext));
+            }
+            double kb = (fa.nFileSizeHigh * 4294967296.0 + fa.nFileSizeLow) / 1024;
+            if (kb >= 1024 * 1024)
+                _snwprintf(sub, 48, L"%s · %.1f ГБ", ext, kb / 1024 / 1024);
+            else if (kb >= 1024)
+                _snwprintf(sub, 48, L"%s · %.1f МБ", ext, kb / 1024);
+            else
+                _snwprintf(sub, 48, L"%s · %d КБ", ext, (int)kb + 1);
+            sub[47] = 0;
+            for (wchar_t* c = sub; *c; c++)   // "8,5 МБ"
+                if (*c == L'.' && c[1] >= L'0' && c[1] <= L'9')
+                    *c = L',';
+        }
+        ListRow(dc, 16 + cell / rows * (cw + 12), 160 + cell % rows * 58, cw, 52, s, NULL,
+                !isDir && curName && !_wcsicmp(n, curName) ? L_CUR : L_N, isDir ? IC_FOLDER : ic, sub[0] ? sub : NULL,
+                NULL, pick, i, isDir ? kOrange : CLR_INVALID);   // folders orange, files muted
     }
     if (!count)
-        T(dc, 40, dir[0] ? noneY + pitch : noneY, dir[0] ? none : L"Нет носителей", 18, kMuted, 400);
+        T(dc, 40, 190, dir[0] ? none : L"Нет носителей", 18, kMuted, 400);
 }
 
 // A list that scrolls by px - the internet radio's stations, the licenses, the contacts, the calls: the finger moves
@@ -1894,7 +1986,10 @@ static void DirTitle(HDC dc, const wchar_t* prefix, const wchar_t* dir)
     if (fl && folder[fl - 1] == L'\\')
         folder[--fl] = 0;
     const wchar_t* fn = wcsrchr(folder, L'\\');
-    _snwprintf(s, MAX_PATH + 32, L"%s · %s", prefix, !dir[0] ? L"НОСИТЕЛИ" : fn && fn[1] ? fn + 1 : folder);
+    const wchar_t* rest;
+    const wchar_t* vol = VolName(dir, &rest);
+    _snwprintf(s, MAX_PATH + 32, L"%s · %s", prefix, !dir[0] ? L"Носители" : vol && !*rest ? vol
+               : fn && fn[1] ? fn + 1 : folder);
     s[MAX_PATH + 31] = 0;
     Frame(dc, s);
 }
@@ -2014,7 +2109,7 @@ static void Settings(HDC dc, Screen active)
                                   { IC_BT, L"Bluetooth", S_SET_BT }, { IC_WIFI, L"Wi-Fi", S_SET_WIFI },
                                   { IC_VIDEO, L"Видео", S_SET_VIDEO }, { IC_PHOTO, L"Фото", S_SET_PHOTO },
                                   { IC_CAR, L"Автомобиль", S_SET_CAR }, { IC_INFO, L"О системе", S_INFO } };
-    Frame(dc, L"НАСТРОЙКИ");
+    Frame(dc, L"Настройки");
     for (int i = 0; i < 10; i++) {
         int x = 16 + (i % 2) * 110, y = 64 + (i / 2) * 68;
         bool on = items[i].to == active || (active == S_SET_BALANCE && items[i].to == S_SET_SOUND) ||
@@ -2071,8 +2166,7 @@ static void Road(HDC dc, int x, int y, int w, int h)   // night road: the video 
 
 static void Cover(HDC dc, Icon ic, int x, int y, int s)
 {
-    TriFill(x, y, s, s, 14);
-    R(dc, x, y, s, s, 14, CLR_INVALID, kLine);
+    TriFill(x, y, s, s, 20);   // design 0.6: no border
     int isz = s * 100 / 236;
     Ico(dc, ic, x + (s - isz) / 2, y + (s - isz) / 2, isz, Mix(kInk, kTriOr[1], 140));
 }

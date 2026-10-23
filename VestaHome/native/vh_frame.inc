@@ -86,8 +86,9 @@ static void DrawFrame(HDC dc)
         s_scroll = NULL;
     }
     DrawScreen(dc, s_screen);
-    if (Section(s_screen) >= 0)
-        NavBar(dc, Section(s_screen));
+    int sec = s_screen == S_AUDIO_LIST ? 2 : Section(s_screen);   // the music list has the bar too (not a tab of its own)
+    if (sec >= 0)
+        NavBar(dc, sec);
 }
 
 static int s_drawnMinute = -1;   // the minute on the clock of the last frame
@@ -316,7 +317,9 @@ static int SlideLeft()   // right of what stays: the settings' tiles
 
 static int SlideBottom()
 {
-    if (s_screen == S_AUDIO_LIST || s_screen == S_FILES)
+    if (s_screen == S_AUDIO_LIST)
+        return 392;   // the dots stay
+    if (s_screen == S_FILES)
         return 378;   // over their dots and dock
     if (s_screen == S_BT_PAIRED)
         return 382;

@@ -255,7 +255,7 @@ static void ScrRadio(HDC dc)
     else
         _snwprintf(band, 8, L"FM%d", page + 1);
     const wchar_t* name = t.ps[0] ? t.ps : RadioName(t, t.f10);
-    Frame(dc, L"РАДИО");
+    Frame(dc, L"Радио");
     Panel(dc, 16, 64, 768, 128);
     T(dc, 40, 146, f, 80, t.f10 ? kText : kDim, 700, AL_START, 250);
     T(dc, 300, 100, t.f10 ? band : L"нет данных — включаю радио…", 20, t.f10 ? kOrange : kDim, 700, AL_START, 460);
@@ -402,7 +402,7 @@ static void ScrRadioList(HDC dc)
     }
     Tuner t;
     TunerGet(&t);
-    Frame(dc, L"РАДИО · СПИСОК");
+    Frame(dc, L"Радио · Список");
     Panel(dc, 16, 68, 600, 322);
     int n = t.listCount < kTunList ? t.listCount : kTunList, pages = (n + 4) / 5;
     if (s_rlistPage >= pages)
@@ -488,7 +488,7 @@ static void PtySearch()
 
 static void ScrRadioPty(HDC dc)
 {
-    Frame(dc, L"РАДИО · ТИП ПРОГРАММЫ");
+    Frame(dc, L"Радио · Тип программы");
     for (int i = 0; i < 16; i++)
         Button(dc, 16 + (i % 4) * 196, 68 + (i / 4) * 80, 186, 70, kPtyTypes[i], i == s_ptySel ? B_SEL : B_FILL,
                IC_NONE, 16, 0, A_PTYSEL, i);
@@ -521,7 +521,7 @@ static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x890
 
 static void ScrAudioBt(HDC dc)
 {
-    Frame(dc, L"МЕДИА · BLUETOOTH");
+    Frame(dc, L"Медиа · Bluetooth");
     MediaTabs(dc, S_AUDIO_BT, IC_PHONE, A_SCREEN, S_PHONE, S_SET_BT);
     Cover(dc, IC_BT, 16, 124, 232);
     int vol, mute, src;
@@ -543,10 +543,9 @@ static void ScrAudioBt(HDC dc)
     wchar_t cap[160], title[BT_TEXT], artist[BT_TEXT], album[BT_TEXT], line[300];
     if (proxy && bt.devName[0]) {
         BtText(bt.devName, title, BT_TEXT);
-        _snwprintf(cap, 160, L"BLUETOOTH · %s", title);
-        CharUpperBuff(cap, (DWORD)wcslen(cap));
+        _snwprintf(cap, 160, L"Bluetooth · %s", title);
     } else {
-        wcscpy(cap, L"BLUETOOTH-МУЗЫКА");
+        wcscpy(cap, L"Bluetooth-музыка");
     }
     T(dc, 272, 150, cap, 14, kMuted, 600, AL_START, 512);
     if (proxy && bt.title[0]) {   // the track, as the phone tells it (AVRCP)
@@ -596,7 +595,7 @@ static void ScrAudioBt(HDC dc)
 
 static void ScrAux(HDC dc)
 {
-    Frame(dc, L"МЕДИА · AUX");
+    Frame(dc, L"Медиа · AUX");
     MediaTabs(dc, S_AUX, IC_NONE, A_NONE, 0, S_SET_SOUND);
     Cover(dc, IC_AUX, 16, 124, 232);
     T(dc, 272, 150, L"ВНЕШНИЙ ИСТОЧНИК", 14, kMuted, 600);
@@ -640,9 +639,9 @@ static void ScrPhone(HDC dc)
     wchar_t title[160], name[BT_TEXT], s[120];
     if (on && bt.devName[0]) {
         BtText(bt.devName, name, BT_TEXT);
-        _snwprintf(title, 160, L"ТЕЛЕФОН · %s", name);
+        _snwprintf(title, 160, L"Телефон · %s", name);
     } else {
-        wcscpy(title, L"ТЕЛЕФОН");
+        wcscpy(title, L"Телефон");
     }
     Frame(dc, title);
     Panel(dc, 16, 64, 356, 72, 12);
@@ -865,7 +864,7 @@ static bool PbHead(HDC dc, int list, int n, const wchar_t* what)
 
 static void ScrContacts(HDC dc)
 {
-    Frame(dc, L"ТЕЛЕФОН · КОНТАКТЫ");
+    Frame(dc, L"Телефон · Контакты");
     PhoneNav(dc, 1);
     PbNeed(BT_PB_PB);
     if (PbHead(dc, BT_PB_PB, s_bookN, s_pbStorage ? L"На SIM" : L"Контактов")) {
@@ -907,7 +906,7 @@ static void ScrContacts(HDC dc)
 
 static void ScrContact(HDC dc)
 {
-    Frame(dc, L"ТЕЛЕФОН · КОНТАКТ");
+    Frame(dc, L"Телефон · Контакт");
     PhoneNav(dc, 1);
     Panel(dc, 192, 68, 592, 322);
     if (s_pbContact < 0 || s_pbContact >= s_bookN) {
@@ -931,7 +930,7 @@ static void ScrContact(HDC dc)
 
 static void ScrCalls(HDC dc)
 {
-    Frame(dc, L"ТЕЛЕФОН · ЖУРНАЛ");
+    Frame(dc, L"Телефон · Журнал");
     PhoneNav(dc, 3);
     PbNeed(BT_PB_CCH);
     if (PbHead(dc, BT_PB_CCH, s_callsN, L"Звонков")) {
@@ -971,7 +970,7 @@ static void ScrCall(HDC dc)
         BtText(bt.callNumber, num, 40);
     else
         wcscpy(num, s_callOut[0] ? s_callOut : L"—");
-    Frame(dc, L"ТЕЛЕФОН");
+    Frame(dc, L"Телефон");
     Disc(dc, 128, 168, 88, kPanel2);
     Ico(dc, IC_CALL, 96, 136, 64, c == BT_CALL_ACTIVE ? kOk : kMuted);
     T(dc, 256, 112, st, 14, kMuted, 700);
@@ -1414,7 +1413,7 @@ static void PairTick()   // once a second: the visibility's end, a phone's reque
 // A phone's request: its name, address and the code it shows; ПРИНЯТЬ / ОТКЛОНИТЬ
 static void ScrBtPairAsk(HDC dc)
 {
-    Frame(dc, L"СОПРЯЖЕНИЕ BLUETOOTH");
+    Frame(dc, L"Сопряжение Bluetooth");
     Panel(dc, 120, 90, 560, 280);
     wchar_t s[96];
     BtText(s_pairAsk.name, s, 96);

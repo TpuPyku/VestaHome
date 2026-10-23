@@ -256,7 +256,7 @@ static void ScrTestCan(HDC dc)
     LeaveCriticalSection(&s_gpsCs);
 
     wchar_t s[160], gps[160], can[64];
-    _snwprintf(s, 160, L"ПОТОК ДАННЫХ · %s", s_cfg.gpsPort);
+    _snwprintf(s, 160, L"Поток данных · %s", s_cfg.gpsPort);
     Frame(dc, s);
     Panel(dc, 16, 68, 768, 396);
     GpsStatusText(gps, 160);
@@ -301,17 +301,17 @@ static void OpenCfgKeys(int which)
 {
     switch (which) {
     case K_WKEY:
-        OpenKeysFor(s_cfg.weatherKey[s_cfg.weatherProv], 63, L"КЛЮЧ API", S_WSET_WEATHER);
+        OpenKeysFor(s_cfg.weatherKey[s_cfg.weatherProv], 63, L"Ключ API", S_WSET_WEATHER);
         break;
     case K_HOMENAME:
-        OpenKeysFor(s_cfg.homeName, 47, L"ДОМАШНЯЯ ТОЧКА", S_WSET_WEATHER);
+        OpenKeysFor(s_cfg.homeName, 47, L"Домашняя точка", S_WSET_WEATHER);
         break;
     case K_HOMECOORD:
         if (s_cfg.homeLat || s_cfg.homeLon)
             _snwprintf(s_coordText, 48, L"%.5f, %.5f", s_cfg.homeLat, s_cfg.homeLon);
         else
             s_coordText[0] = 0;
-        OpenKeysFor(s_coordText, 47, L"ШИРОТА, ДОЛГОТА", S_WSET_WEATHER);
+        OpenKeysFor(s_coordText, 47, L"Широта, долгота", S_WSET_WEATHER);
         break;
     }
 }

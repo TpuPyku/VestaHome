@@ -455,7 +455,7 @@ static void NetPlayBtn(HDC dc, int cx, int cy, int r, int isz)
 static void ScrNetRadio(HDC dc)
 {
     NetLoadList();
-    Frame(dc, L"МЕДИА · ИНТЕРНЕТ-РАДИО");
+    Frame(dc, L"Медиа · Интернет-радио");
     MediaTabs(dc, S_NETRADIO, IC_LIST, A_SCREEN, S_NETRADIO_LIST, S_SET_SOUND);
     Cover(dc, IC_NETRADIO, 16, 124, 232);
     wchar_t s[160], title[160];
@@ -503,7 +503,7 @@ static void ScrNetRadioList(HDC dc)
                               s_netCur * kNetPitch + kNetPitch > s_netList.pos + kNetBottom - kNetTop))
             s_netList.pos = (s_netCur - 2) * kNetPitch;
     }
-    Frame(dc, L"ИНТЕРНЕТ-РАДИО · СТАНЦИИ");
+    Frame(dc, L"Интернет-радио · Станции");
     Panel(dc, 16, 68, 704, 322);
     ScrollBegin(dc, s_netList, 20, kNetTop, 716, kNetBottom);
     for (int i = 0; i < s_netCount; i++) {

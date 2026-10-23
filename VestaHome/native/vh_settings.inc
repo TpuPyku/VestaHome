@@ -620,7 +620,7 @@ static void FavToggle(const wchar_t* name, const wchar_t* num)
 
 static void ScrFavs(HDC dc)
 {
-    Frame(dc, L"ТЕЛЕФОН · ИЗБРАННОЕ");
+    Frame(dc, L"Телефон · Избранное");
     PhoneNav(dc, 2);
     Panel(dc, 192, 68, 592, 322);
     wchar_t names[kFavMax][48], nums[kFavMax][24];

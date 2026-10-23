@@ -232,7 +232,7 @@ static void ScrTextEdit(HDC dc)
 {
     const wchar_t* fn = wcsrchr(s_teFile, L'\\');
     wchar_t s[MAX_PATH + 32];
-    _snwprintf(s, MAX_PATH + 32, L"ТЕКСТ · %s%s", fn ? fn + 1 : s_teFile, s_teDirty ? L" *" : L"");
+    _snwprintf(s, MAX_PATH + 32, L"Текст · %s%s", fn ? fn + 1 : s_teFile, s_teDirty ? L" *" : L"");
     s[MAX_PATH + 31] = 0;
     Frame(dc, s, A_TEBACK);
     Panel(dc, 16, 64, 768, 330);

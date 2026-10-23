@@ -280,7 +280,7 @@ static void CamAutoUpdate()
 
 static void ScrCamDl(HDC dc)
 {
-    Frame(dc, L"БАЗА КАМЕР · SPEEDCAMONLINE.RU");
+    Frame(dc, L"База камер · speedcamonline.ru");
     Panel(dc, 16, 64, 768, 330);
     wchar_t s[200];
     RegionsText(s, 200);
@@ -309,7 +309,7 @@ static void ScrCamReg(HDC dc)
     int pages = (kCamRegionCount + kRegionsPerPage - 1) / kRegionsPerPage;
     if (s_regPage >= pages)
         s_regPage = 0;
-    Frame(dc, L"РЕГИОНЫ КАМЕР");
+    Frame(dc, L"Регионы камер");
     for (int k = 0; k < kRegionsPerPage; k++) {
         int i = s_regPage * kRegionsPerPage + k;
         if (i >= kCamRegionCount)

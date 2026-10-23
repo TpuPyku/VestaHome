@@ -100,22 +100,24 @@ static void VidTick()
 
 static int VidPages()
 {
-    int per = kVidRows * kVidCols - (s_vidDir[0] ? 1 : 0);
+    int per = kVidRows * kVidCols;
     return s_vidCount ? (s_vidCount + per - 1) / per : 1;
 }
 
-// Media -> video: the volumes, then folders and videos; a file plays its folder from it. Pages: a swipe, the dots.
+// Media -> video (design 0.6): the path line ("‹" up, a tap on the path - the volumes), then the volumes, folders
+// and videos; a file plays its folder from it. Pages: a swipe, the dots.
 static void ScrVideo(HDC dc)
 {
     if (!s_vidRead)
         VidOpenDir(s_cfg.videoDir[0] && GetFileAttributes(s_cfg.videoDir) != 0xFFFFFFFF ? s_cfg.videoDir : L"");
-    DirTitle(dc, L"МЕДИА · ВИДЕО", s_vidDir);
+    Frame(dc, L"Медиа · Видео");
     MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
     if (s_vidPage >= VidPages())
         s_vidPage = VidPages() - 1;
-    DirEntries(dc, s_vidDir, s_vids, s_vidCount, s_vidPage, kVidRows, kVidCols, 120, 60, 66, A_VUP, A_VFILE, IC_VIDEO,
-               s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) ? s_vp[s_vpCur] : NULL, L"Здесь нет папок и видео", 168);
-    PageDots(dc, s_vidPage, VidPages());
+    DirPath(dc, s_vidDir, A_VUP, 784);
+    DirEntries(dc, s_vidDir, s_vids, s_vidCount, s_vidPage, kVidRows, kVidCols, A_VFILE, IC_VIDEO,
+               s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) ? s_vp[s_vpCur] : NULL, L"Здесь нет папок и видео");
+    PageDots(dc, s_vidPage, VidPages(), 400, 396);
 }
 
 // The player: the picture (our child window) between the top bar and the dock: the bar (a tap seeks), the
@@ -124,7 +126,7 @@ static void ScrVideoPlay(HDC dc)
 {
     const wchar_t* name = s_vpCur >= 0 ? s_vp[s_vpCur] : NULL;
     wchar_t s[MAX_PATH + 16];
-    _snwprintf(s, MAX_PATH + 16, L"ВИДЕО · %s", name ? name : L"НЕТ ФАЙЛА");
+    _snwprintf(s, MAX_PATH + 16, L"Видео · %s", name ? name : L"Нет файла");
     s[MAX_PATH + 15] = 0;
     Frame(dc, s);
     Fill(dc, 0, 56, 800, 398, RGB(0, 0, 0));

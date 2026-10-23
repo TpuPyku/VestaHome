@@ -29,7 +29,7 @@ struct BassFileProcs { BassFileCloseProc close; BassFileLenProc length; BassFile
 typedef DWORD (WINAPI *BassStreamUserFn)(DWORD, DWORD, const BassFileProcs*, void*);
 enum { BASS_UNICODE_F = 0x80000000, BASS_SYNC_END_F = 2, BASS_SYNC_STALL_F = 6, BASS_ACTIVE_PLAYING_F = 1,
        BASS_ACTIVE_PAUSED_F = 3, BASS_STREAMFILE_BUFFER_F = 1, BASS_STREAM_BLOCK_F = 0x100000,
-       kPlMax = 400, kMusRows = 5, kMusCols = 2, kMusMax = 400 };
+       kPlMax = 400, kMusRows = 4, kMusCols = 2, kMusMax = 400 };
 
 static struct {
     int              state;   // 0 not loaded yet, 1 ready, -1 no bass.dll, -2 BASS_Init failed
@@ -476,7 +476,7 @@ static void PlayBtn(HDC dc, int cx, int cy, int r, int isz)
 // Media -> music: the track, the bar (a tap seeks), shuffle, previous, play/pause, next, repeat.
 static void ScrAudio(HDC dc)
 {
-    Frame(dc, L"МЕДИА · МУЗЫКА");
+    Frame(dc, L"Медиа · Музыка");
     MediaTabs(dc, S_AUDIO, IC_LIST, A_SCREEN, S_AUDIO_LIST, S_SET_SOUND);
     Cover(dc, IC_MUSIC, 16, 124, 232);
     wchar_t title[96], sub[200], s[160];
@@ -550,32 +550,34 @@ static void ScrAudio(HDC dc)
     IconBtn(dc, IC_REPEAT, 726, 316, 40, s_cfg.repeat ? kOrange : kDim, A_REPEAT);
 }
 
-// The file lists' pages (music, video): rows a page less the "Наверх" row inside a folder.
+// The file lists' pages (music, video).
 static int MusPages()
 {
-    int per = kMusRows * kMusCols - (s_musDir[0] ? 1 : 0);   // "Наверх" takes the first cell of every page
+    int per = kMusRows * kMusCols;
     return s_musCount ? (s_musCount + per - 1) / per : 1;
 }
 
-// Media -> list: the volumes, then folders and audio files; a file plays its folder from it. Pages: a swipe and
-// the dots, as everywhere (2026-10-20, the user: one way for every file list, no arrows).
+// Media -> music -> list (design 0.6): the sources' pills stay on top (the round button goes back to the player),
+// the path line ("‹" up, a tap on the path - the volumes; "Играть всё" at its right inside a folder), then the
+// volumes, folders and audio files; a file plays its folder from it. Pages: a swipe and the dots.
 static void ScrAudioList(HDC dc)
 {
     if (!s_musCount && !s_musDir[0])
         MusicOpenDir(s_cfg.musicDir[0] && GetFileAttributes(s_cfg.musicDir) != 0xFFFFFFFF ? s_cfg.musicDir : L"");
-    DirTitle(dc, L"МУЗЫКА", s_musDir);
+    Frame(dc, L"Медиа · Музыка");
+    MediaTabs(dc, S_AUDIO, IC_MUSIC, A_BACK, 0, S_SET_SOUND);
     if (s_musPage >= MusPages())
         s_musPage = MusPages() - 1;
-    DirEntries(dc, s_musDir, s_mus, s_musCount, s_musPage, kMusRows, kMusCols, 66, 56, 62, A_MUP, A_MFILE, IC_MUSIC,
+    int right = 784;
+    if (s_musDir[0]) {   // this folder and everything under it, in path order
+        Button(dc, 604, 110, 180, 40, L"Играть всё", B_SEL, IC_PLAY, 15, 18, A_MALL);
+        right = 588;
+    }
+    DirPath(dc, s_musDir, A_MUP, right);
+    DirEntries(dc, s_musDir, s_mus, s_musCount, s_musPage, kMusRows, kMusCols, A_MFILE, IC_MUSIC,
                s_chan && s_plCur >= 0 && !_wcsicmp(s_plDir, s_musDir) ? s_pl[s_plCur] : NULL,
-               L"Здесь нет папок и музыки", 114);
-    PageDots(dc, s_musPage, MusPages(), 400, 382);
-    Dock(dc);
-    Button(dc, 16, 410, 200, 58, L"НОСИТЕЛИ", B_N, IC_FOLDER, 16, 28, A_MUP, 1);
-    if (s_musDir[0])   // this folder and everything under it, in path order
-        Button(dc, 232, 410, 220, 58, L"ИГРАТЬ ВСЁ", B_N, IC_PLAY, 16, 26, A_MALL);
-    IconBtn(dc, IC_MUSIC, 600, 417, 44, kText, A_BACK);
-    IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_SOUND);
+               L"Здесь нет папок и музыки");
+    PageDots(dc, s_musPage, MusPages(), 400, 396);
 }
 
 // A browser's folder ("X\" form) -> its parent; the volume root ("\SDMemory\" or "C:\") -> "" (the volumes).

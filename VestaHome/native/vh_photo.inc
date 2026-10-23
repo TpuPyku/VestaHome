@@ -174,7 +174,7 @@ static void ScrPhoto(HDC dc)
         PhotoOpenDir(s_cfg.photoDir[0] && GetFileAttributes(s_cfg.photoDir) != 0xFFFFFFFF ? s_cfg.photoDir : L"");
     if (s_phPage >= PhotoPages())
         s_phPage = PhotoPages() - 1;
-    DirTitle(dc, L"МЕДИА · ФОТО", s_phDir);
+    DirTitle(dc, L"Медиа · Фото", s_phDir);
     MediaTabs(dc, S_PHOTO, IC_PLAY, A_PHPLAY, 0, S_SET_PHOTO);
     PhotoWantThumbs();
     for (int t = 0; t < kPhTiles; t++) {
@@ -275,7 +275,7 @@ static void ScrPhotoView(HDC dc)
                 at = n;
         }
     wchar_t s[MAX_PATH + 32];
-    _snwprintf(s, MAX_PATH + 32, L"ФОТО · %d / %d · %s", at, n, s_phCur >= 0 ? s_phs[s_phCur] : L"");
+    _snwprintf(s, MAX_PATH + 32, L"Фото · %d / %d · %s", at, n, s_phCur >= 0 ? s_phs[s_phCur] : L"");
     Frame(dc, s);
     R(dc, 0, 56, 800, 342, 0, kMargin);
     EnterCriticalSection(&s_phCs);
@@ -550,7 +550,7 @@ static void DoAction(const Btn& b)
             PbDial(s_book[b.arg / 4].num[b.arg % 4]);
         break;
     case A_PBRELOAD: PbAsk(b.arg); break;
-    case A_PBFIND:   OpenKeysFor(s_pbFind, 23, L"ПОИСК КОНТАКТА", S_CONTACTS); s_bookList.pos = 0; break;
+    case A_PBFIND:   OpenKeysFor(s_pbFind, 23, L"Поиск контакта", S_CONTACTS); s_bookList.pos = 0; break;
     case A_PBSIM:    // the other book: pulled anew
         s_pbStorage ^= 1;
         free(s_book);
