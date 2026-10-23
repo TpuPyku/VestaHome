@@ -243,7 +243,7 @@ def scr_settings():
     cur = 'Bluetooth'
     nav = ''.join('<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;'
                   'height:62px;border-radius:16px;%s">%s<span style="font-size:13px;%s">%s</span></div>' % (
-                      'background:var(--orS);color:var(--or)' if l == cur else 'color:var(--t2)', ico(n, 24),
+                      'background:var(--orS);color:var(--or)' if l == cur else 'background:var(--s1);color:var(--t2)', ico(n, 24),
                       'font-weight:bold' if l == cur else '', l) for n, l in secs)   # two columns, icons with names
     rows = ''
     for lab, sub, ctl in [('Redmi Note 13', 'подключён · музыка и звонки', '<span class="pill">Отключить</span>'),
@@ -254,7 +254,7 @@ def scr_settings():
         rows += ('<div class="lrow"><div style="flex:1"><div style="font-size:18px">%s</div><div class="t3" style="font-size:13px">%s'
                  '</div></div>%s</div>' % (lab, sub, ctl))
     return '''<div class="scr">%s
-<div style="position:absolute;left:16px;top:60px;width:196px;display:grid;grid-template-columns:1fr 1fr;gap:7px 4px">%s</div>
+<div style="position:absolute;left:16px;top:60px;width:196px;display:grid;grid-template-columns:1fr 1fr;gap:7px 8px">%s</div>
 <div class="card" style="left:228px;top:60px;width:548px;height:340px;padding:4px 24px">%s</div>
 %s</div>''' % (top('Настройки'), nav, rows, bot('gear'))
 
@@ -323,7 +323,7 @@ SCREENS = [
         'Скруглённые клавиши 56×52 с воздухом между ними; зелёная кнопка вызова — единственное исключение из оранжевого.',
         'Справа — недавние звонки списком без рамок между карточками, только тонкие разделители.']),
     ('Настройки', scr_settings, '26_settings_bt.png', [
-        'Разделы — значки с подписями под ними в два столбца, без подложек; ничего не сдвигается. Текущий — '
+        'Разделы — плитки «значок + подпись под ним» в два столбца; ничего не сдвигается. Текущая — '
         'мягкая оранжевая подложка, значок и подпись оранжевые.',
         'Сейчас 10 разделов — 5 строк по 62 px; при 11–12 разделах — 6 строк по ~52 px, колонка та же.',
         'Строки 60 px, подписи второй строкой тусклее, переключатели крупнее (52×30).',
