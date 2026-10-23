@@ -190,8 +190,30 @@ static char          s_pairAddr[18], s_oldPin[17];
 static volatile LONG s_pairOn, s_pairAsk;
 static DWORD         s_pairTick;
 
+static BtPair* s_pairShm;   // a phone's pairing request for VestaHome (btshm.h BtPair)
+static HANDLE  s_pairMap;
+
 static void PairWatch(int* ev)
 {
+    if (s_pairShm && (ev[0] == 4 || ev[0] == 5)) {   // a phone asks to pair (4) / a pairing ended (5)
+        __try {
+            const char* e = (const char*)ev;
+            if (ev[0] == 4) {
+                strncpy(s_pairShm->addr, e + 4, 17);
+                s_pairShm->addr[17] = 0;
+                strncpy(s_pairShm->name, e + 0x16, 63);
+                s_pairShm->name[63] = 0;
+                strncpy(s_pairShm->code, e + 0x116, 15);
+                s_pairShm->code[15] = 0;
+                s_pairShm->tick = GetTickCount();
+                InterlockedIncrement((LONG*)&s_pairShm->seq);
+            } else {
+                s_pairShm->result = (unsigned char)e[0x116];
+                InterlockedIncrement((LONG*)&s_pairShm->doneSeq);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+    }
     if (!s_pairOn || ev[0] == 0x08 || ev[0] == 0x09 || ev[0] == 0x0A)
         return;
     __try {
@@ -493,6 +515,17 @@ static DWORD WINAPI CmdThread(LPVOID)
                 r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_EnablePowerOnConnect])(on);
             else
                 r = ((int (*)(int, int))g_real[IDX_Flc_Bluetooth_Conn_EnableAutoAnswerIncomingCall])(on, 5);
+        } else if (cmd == BT_CMD_VISIBLE) {   // the scan mode: seen by phones / only connectable
+            r = s_shm->cmdText[0] == '1' ? ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_Enter_Pairing])()
+                                         : ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_Exit_Pairing])();
+            wchar_t b[48];
+            wsprintfW(b, L"VISIBLE %c -> %d", s_shm->cmdText[0] == '1' ? L'1' : L'0', r);
+            LogLine(b);
+        } else if (cmd == BT_CMD_PAIRCONFIRM) {   // a phone's request (BtPair) accepted / refused
+            r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_Pair_Confirm])(s_shm->cmdText[0] == '1' ? 1 : 0);
+            wchar_t b[48];
+            wsprintfW(b, L"PAIR_CONFIRM %c -> %d", s_shm->cmdText[0] == '1' ? L'1' : L'0', r);
+            LogLine(b);
         } else if (cmd == BT_CMD_GETOPTS) {
             int c = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_GetPowerOnConnectStatus])() & 0xFF;
             int a = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_GetAutoAnswerIncomingCallStatus])() & 0xFF;
@@ -572,6 +605,12 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
                 s_pb->pbap = -1;
                 s_pb->magic = BT_SHM_MAGIC;
             }
+        }
+        s_pairMap = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(BtPair), BT_PAIR_NAME);
+        if (s_pairMap) {
+            s_pairShm = (BtPair*)MapViewOfFile(s_pairMap, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(BtPair));
+            if (s_pairShm)
+                s_pairShm->magic = BT_SHM_MAGIC;
         }
         s_cmdEv = CreateEventW(NULL, FALSE, FALSE, BT_CMD_EVENT);
         wchar_t b[96];

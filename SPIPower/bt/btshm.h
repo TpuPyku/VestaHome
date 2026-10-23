@@ -52,7 +52,11 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
                            pull runs (ask again later) */,
        BT_CMD_SETOPT /* cmdText: "c 1" / "a 0" - the stack's connect at power-on (Conn_EnablePowerOnConnect) / the
                         auto answer after 5 s (Conn_EnableAutoAnswerIncomingCall, as the shell's settings) */,
-       BT_CMD_GETOPTS /* cmdResult: bit 0 connect at power-on, bit 1 auto answer (Conn_Get*Status) */ };
+       BT_CMD_GETOPTS /* cmdResult: bit 0 connect at power-on, bit 1 auto answer (Conn_Get*Status) */,
+       BT_CMD_VISIBLE /* cmdText "1" / "0": the unit seen by phones (Conn_Enter_Pairing: the stack's scan mode 3) or
+                         only connectable (Conn_Exit_Pairing: 2) - Ghidra 2026-10-23 */,
+       BT_CMD_PAIRCONFIRM /* cmdText "1" / "0": a phone's pairing request (BtPair) accepted / refused
+                             (Conn_Pair_Confirm) */ };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
 struct BtEvent {
@@ -127,6 +131,20 @@ struct BtPb {
     int           pbap;                       // 0x38 ev[1]: 2 connected, 0 not, -1 none yet
     DWORD         tick;                       // the state's last change
     BtPbEntry     e[BT_PB_MAX];
+};
+
+// A phone's pairing request (the SDK's event 4, NCL_BT's BT_CONN_PAIR_IND: the address at +4, the name at +0x16,
+// the code to compare at +0x116; event 5 = the pairing's end, its result at +0x116): beyond the 64 bytes the events'
+// ring keeps, so the proxy puts it here. The stock shell answers it with a window of its own; without the shell
+// VestaHome does (BT_CMD_PAIRCONFIRM).
+#define BT_PAIR_NAME L"VestaBTPair1"
+struct BtPair {
+    DWORD         magic;
+    volatile LONG seq;                        // +1 at each request (seq even/odd not used: one writer, short)
+    DWORD         tick;
+    char          addr[18], name[64], code[16];
+    volatile LONG doneSeq;                    // +1 at each pairing's end (event 5)
+    int           result;                     // its result (non-zero = paired)
 };
 
 #endif

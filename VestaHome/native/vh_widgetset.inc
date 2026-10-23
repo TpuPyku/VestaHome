@@ -316,10 +316,10 @@ static void ScrInfoMore(HDC dc)
         _snwprintf(id, 40, L"%s %s %s", inf.id, inf.idDate, inf.idNum);
     else
         wcscpy(id, L"—");
-    const wchar_t* rows[9][2] = { { L"Оболочка G3 (SW)", s }, { L"Windows CE", os }, { L"MCU (радио)", mcu },
+    const wchar_t* rows[9][2] = { { L"Прошивка ГУ (SW)", s }, { L"Windows CE", os }, { L"MCU (радио)", mcu },
                                   { L"Железо (HW)", hw }, { L"CAN-модуль", canv }, { L"Bluetooth-адрес", bt },
                                   { L"ID устройства", id }, { L"Proxy MCU", st > 0 ? L"работает" : L"нет" },
-                                  { L"VestaHome", L"0.5 · 2026-10-18" } };
+                                  { L"VestaHome", VhVersion() } };
     for (int i = 0; i < 9; i++) {
         int y = 100 + i * 33;
         T(dc, 32, y + 22, rows[i][0], 15, kMuted, 400);

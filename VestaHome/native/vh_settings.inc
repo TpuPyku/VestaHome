@@ -2,6 +2,7 @@
 
 // ---------------------------------------------------------------- services: settings, GPS, weather, cameras
 
+
 // ---- settings: VestaHome.ini next to the exe (UTF-8, key=value). The unit resets its registry on every boot;
 // only the card keeps them.
 enum { W_OMETEO, W_OWM, W_YANDEX, W_COUNT };

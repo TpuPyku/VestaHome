@@ -31,6 +31,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_SET_WIFI:    ScrSetWifi(dc); break;
     case S_SET_OBD:     ScrSetObd(dc); break;
     case S_BT_PAIRNEW:  ScrBtPairNew(dc); break;
+    case S_BT_PAIRASK:  ScrBtPairAsk(dc); break;
     case S_BT_PAIRED:   ScrBtPaired(dc); break;
     case S_SET_VIDEO:   ScrSetVideo(dc); break;
     case S_SET_PHOTO:   ScrSetPhoto(dc); break;

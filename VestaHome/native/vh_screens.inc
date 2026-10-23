@@ -1341,6 +1341,96 @@ static void ScrSetObd(HDC dc)
 // a phone with secure pairing shows a code to confirm - the proxy confirms on our side), then connected as the shell
 // connects one (BT_CMD_CONNECT). Without the proxy - nothing to do here.
 static char s_pnAddr[18];   // the phone picked
+static DWORD s_pnPairTick;  // our BT_CMD_PAIR (the proxy confirms its request itself)
+
+// A phone pairing from its side (2026-10-23): the unit seen for 2 min ("ВИДИМОСТЬ", BT_CMD_VISIBLE); the phone's
+// request (the proxy's BtPair: name, code) asked here - when we made the unit seen, or when no stock shell is there
+// to ask it (its own window); the answer BT_CMD_PAIRCONFIRM. Its end (event 5) - in the status line.
+enum { kVisibleMs = 120000 };
+static DWORD   s_visUntil;      // the unit seen till then (0 not)
+static BtPair* s_btPair;
+static LONG    s_pairSeen = -1, s_pairDoneSeen = -1;
+static BtPair  s_pairAsk;       // the request being asked
+
+static BtPair* PairShm()
+{
+    if (!s_btPair) {
+        HANDLE m = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(BtPair), BT_PAIR_NAME);
+        if (m)
+            s_btPair = (BtPair*)MapViewOfFile(m, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(BtPair));
+    }
+    return s_btPair && s_btPair->magic == BT_SHM_MAGIC ? s_btPair : NULL;
+}
+
+static void BtVisible(bool on)
+{
+    s_visUntil = on ? GetTickCount() + kVisibleMs : 0;
+    if (!s_visUntil && on)
+        s_visUntil = 1;
+    BtCmdText(BT_CMD_VISIBLE, on ? L"1" : L"0");
+    VLog(L"bt: видимость %s", on ? L"вкл (2 мин)" : L"выкл");
+}
+
+static void PairTick()   // once a second: the visibility's end, a phone's request, a pairing's end
+{
+    if (s_visUntil && (int)(GetTickCount() - s_visUntil) > 0)
+        BtVisible(false);
+    BtPair* p = PairShm();
+    if (!p)
+        return;
+    if (s_pairSeen < 0) {   // the first look: what was there before is not ours
+        s_pairSeen = p->seq;
+        s_pairDoneSeen = p->doneSeq;
+        return;
+    }
+    if (p->seq != s_pairSeen) {
+        s_pairSeen = p->seq;
+        s_pairAsk = *p;
+        s_pairAsk.addr[17] = s_pairAsk.name[63] = s_pairAsk.code[15] = 0;
+        bool ours = s_pnPairTick && GetTickCount() - s_pnPairTick < 60000 && !_stricmp(s_pairAsk.addr, s_pnAddr);
+        bool shell = FindWindow(NULL, L"RadioCommWindow") != NULL;
+        VLog(L"bt: запрос сопряжения %S «%S» код %S%s", s_pairAsk.addr, s_pairAsk.name, s_pairAsk.code,
+             ours ? L" (наш, подтверждает proxy)" : !s_visUntil && shell ? L" (спросит оболочка)" : L"");
+        if (!ours && (s_visUntil || !shell)) {
+            Go(S_BT_PAIRASK, true);
+            if (!IsWindowVisible(s_wnd) || GetForegroundWindow() != s_wnd) {
+                ShowWindow(s_wnd, SW_SHOW);
+                SetForegroundWindow(s_wnd);
+            }
+            Redraw();
+        }
+    }
+    if (p->doneSeq != s_pairDoneSeen) {
+        s_pairDoneSeen = p->doneSeq;
+        _snwprintf(s_status, 96, p->result ? L"телефон сопряжён" : L"сопряжение не удалось");
+        s_status[95] = 0;
+        VLog(L"bt: сопряжение закончено, результат %d", p->result);
+        BtCmd(BT_CMD_LISTPAIRED);
+        if (IsWindowVisible(s_wnd))
+            Redraw();
+    }
+}
+
+// A phone's request: its name, address and the code it shows; ПРИНЯТЬ / ОТКЛОНИТЬ
+static void ScrBtPairAsk(HDC dc)
+{
+    Frame(dc, L"СОПРЯЖЕНИЕ BLUETOOTH");
+    Panel(dc, 120, 90, 560, 280);
+    wchar_t s[96];
+    BtText(s_pairAsk.name, s, 96);
+    T(dc, 400, 140, s[0] ? s : L"телефон", 26, kText, 700, AL_MID, 520);
+    MultiByteToWideChar(CP_ACP, 0, s_pairAsk.addr, -1, s, 96);
+    T(dc, 400, 170, s, 15, kMuted, 400, AL_MID);
+    if (s_pairAsk.code[0]) {
+        T(dc, 400, 210, L"просит сопряжение. Код на телефоне тот же?", 17, kText, 400, AL_MID, 520);
+        MultiByteToWideChar(CP_ACP, 0, s_pairAsk.code, -1, s, 96);
+        T(dc, 400, 262, s, 40, kOrange, 700, AL_MID);
+    } else {
+        T(dc, 400, 230, L"просит сопряжение", 17, kText, 400, AL_MID, 520);
+    }
+    Button(dc, 160, 296, 220, 56, L"ОТКЛОНИТЬ", B_N, IC_NONE, 18, 0, A_PAIRANSWER, 0);
+    Button(dc, 420, 296, 220, 56, L"ПРИНЯТЬ", B_PRI, IC_NONE, 18, 0, A_PAIRANSWER, 1);
+}
 
 static void ScrBtPairNew(HDC dc)
 {
@@ -1374,9 +1464,17 @@ static void ScrBtPairNew(HDC dc)
     }
     Button(dc, 488, 270, 136, 40, L"СОПРЯЧЬ", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNPAIR : A_NONE);
     Button(dc, 632, 270, 136, 40, L"ПОДКЛЮЧИТЬ", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNCONN : A_NONE);
-    T(dc, 264, 340, L"Телефон спросит подтверждение (код или PIN выше) — согласитесь.", 14, kDim, 400, AL_START,
+    T(dc, 264, 336, L"Телефон спросит подтверждение — согласитесь, потом «ПОДКЛЮЧИТЬ».", 14, kDim, 400, AL_START,
       504);
-    T(dc, 264, 360, L"Потом «ПОДКЛЮЧИТЬ»; телефон появится в «Сопряжённых».", 14, kDim, 400, AL_START, 504);
+    // or from the phone's side: the unit seen for 2 min, the phone finds "it" and asks (ScrBtPairAsk)
+    wchar_t vis[64];
+    if (s_visUntil)
+        _snwprintf(vis, 64, L"ГУ ВИДНА ЕЩЁ %d С", (int)(s_visUntil - GetTickCount()) / 1000 + 1);
+    else
+        wcscpy(vis, L"СДЕЛАТЬ ГУ ВИДИМОЙ");
+    Button(dc, 256, 350, 260, 40, vis, !proxy ? B_DIS : s_visUntil ? B_SEL : B_N, IC_NONE, 14, 0,
+           proxy ? A_BTVISIBLE : A_NONE);
+    T(dc, 528, 376, L"найти ГУ с телефона", 13, kDim, 400, AL_START, 240);
 }
 
 // Settings -> Wi-Fi (wifi.cpp: Windows CE's WZC): the state, the networks in sight (strongest first, kWifiRows a
@@ -1535,7 +1633,7 @@ static void ScrInfo(HDC dc)
         wcscpy(os, L"?");
     CanStatusText(can, 64);
     const wchar_t* rows[5][2] = { { L"Модель", L"LADA Vesta · MMC" }, { L"Прошивка ГУ", shell }, { L"ОС", os },
-                                  { L"CAN-модуль", can }, { L"VestaHome", L"0.5 · 2026-10-18" } };
+                                  { L"CAN-модуль", can }, { L"VestaHome", VhVersion() } };
     Settings(dc, S_INFO);
     for (int i = 0; i < 5; i++) {
         int y = 64 + i * 44;

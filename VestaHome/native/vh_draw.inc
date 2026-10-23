@@ -1,5 +1,14 @@
 ﻿// vh_draw.inc - part of home.cpp (included there, in order): drawing: brushes, text, icons, skin pictures, the top bar, controls of the mockups.
 
+// VestaHome's version (VestaCore vversion.h): <big releases>.<significant changes>.<the build's date YYMMDD> - the
+// date comes by itself; the release ("0.5") raised by hand.
+#include "vversion.h"
+
+static const wchar_t* VhVersion()   // "0.5.261023"
+{
+    return AppVersion(L"0.5");
+}
+
 // ---------------------------------------------------------------- drawing helpers
 
 // Brushes and pens by colour (and width), made once: a frame draws dozens of plates, dots and lines, and each

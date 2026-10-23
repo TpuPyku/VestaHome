@@ -658,7 +658,16 @@ static void DoAction(const Btn& b)
             s_pnAddr[17] = 0;
         }
         break;
+    case A_BTVISIBLE:
+        BtVisible(!s_visUntil);
+        break;
+    case A_PAIRANSWER:   // a phone's request: accept (1) / refuse (0)
+        BtCmdText(BT_CMD_PAIRCONFIRM, b.arg ? L"1" : L"0");
+        VLog(L"bt: запрос сопряжения %S - %s", s_pairAsk.addr, b.arg ? L"принят" : L"отклонён");
+        Back();
+        break;
     case A_PNPAIR: {
+        s_pnPairTick = GetTickCount();
         wchar_t t[40];
         _snwprintf(t, 40, L"%S %S", s_pnAddr, kObdPins[s_obdPin]);
         t[39] = 0;
