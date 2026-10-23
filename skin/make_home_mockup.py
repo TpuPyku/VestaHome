@@ -229,23 +229,23 @@ def scr_radio():
 
     def seek(icon, left):   # the scale's end: its ticks go on into a rounded key with the arrow
         t = ''.join('<i style="position:absolute;bottom:6px;%s:%dpx;width:2px;height:%dpx;background:var(--t2)"></i>' % (
-            'right' if left else 'left', 10 + k * 9, 8 if k % 2 else 12) for k in range(3))
-        return ('<div style="position:relative;width:96px;height:44px;flex:none;background:var(--s1);border-radius:%s;'
-                'display:flex;align-items:center;justify-content:%s;padding:0 14px;color:var(--tx)">%s%s</div>' % (
-                    '22px 8px 8px 22px' if left else '8px 22px 22px 8px', 'flex-start' if left else 'flex-end', icon, t))
+            'right' if left else 'left', 4 + k * 9, 8 if k % 2 else 12) for k in range(3))
+        return ('<div style="position:relative;width:96px;height:44px;flex:none;display:flex;align-items:center;'
+                'justify-content:%s;padding:0 6px;color:var(--tx)">%s%s</div>' % (
+                    'flex-start' if left else 'flex-end', icon, t))
     return '''<div class="scr">%s
 <div style="position:absolute;left:24px;top:58px;right:24px;display:flex;align-items:flex-end;gap:14px">
   <div style="font-size:76px;font-weight:bold;line-height:.9">103,7</div>
   <div style="padding-bottom:6px"><span class="t2" style="font-size:20px">МГц · </span><span class="or" style="font-size:20px;font-weight:bold">FM1</span></div>
   <span style="flex:1"></span><span class="pill">PTY</span><span class="pill">%s Станции</span></div>
-<div style="position:absolute;left:24px;top:146px;right:24px">
+<div style="position:absolute;left:24px;top:136px;right:24px">
   <div class="mid">Relax FM</div><div class="t2" style="font-size:15px;margin-top:2px">RDS: Spokojnaya muzyka dlya otdykha</div></div>
 <div style="position:absolute;left:24px;right:24px;top:196px;display:flex;gap:6px;align-items:center">
   %s<div style="position:relative;flex:1;height:44px">%s</div>%s</div>
 <div style="position:absolute;left:24px;right:24px;top:252px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px 12px">%s</div>
 <div style="position:absolute;left:0;right:0;top:408px;display:flex;justify-content:center;gap:8px">%s</div>
-%s</div>''' % (top('Радио', play='radio'), ico('list', 18), seek(ico('prev', 24), True), ticks,
-               seek(ico('next', 24), False), pre, dots, bot('radio'))
+%s</div>''' % (top('Радио', play='radio'), ico('list', 18), seek(ico('prev', 32), True), ticks,
+               seek(ico('next', 32), False), pre, dots, bot('radio'))
 
 
 def scr_phone():
@@ -343,7 +343,7 @@ SCREENS = [
     ('Радио', scr_radio, '04_radio.png', [
         'Частота — самое крупное на экране (76 px); после «МГц» — текущая страница пресетов (FM1, FM2, FM3, УКВ, СВ) '
         'оранжевым: отдельная кнопка диапазона не нужна, диапазон — это страница.',
-        'Поиск — продолжение шкалы: её края переходят в скруглённые клавиши со стрелками; тап по клавише или по '
+        'Поиск — продолжение шкалы: её края переходят в стрелки без подложки; тап по стрелке или по '
         'краю шкалы — поиск станции назад / вперёд. Отдельных кнопок поиска и «Скан» нет.',
         'Пресеты — 8 карточек (две строки по 4), под ними точки страниц: видно, что листаются пальцем. '
         'Текущая станция — оранжевая.',
