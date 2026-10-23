@@ -1014,6 +1014,8 @@ static void GpsStatusText(wchar_t* s, int n, bool brief = false);
 
 // Six rows of 48 px: the zone, the clock by hand (hours, minutes), its sync from GPS. The GPS port went to
 // "Car" (it is the CAN module's port), "Factory settings" to "About the system".
+static const wchar_t* AccentName();   // (with the settings' data)
+
 static void ScrSetGeneral(HDC dc)
 {
     static const wchar_t* fmt[2] = { L"12", L"24" };
@@ -1041,9 +1043,15 @@ static void ScrSetGeneral(HDC dc)
     Toggle(dc, 688, 214, T_GPS_TIME);
     SetRow(dc, 256, L"Формат времени", NULL, false, A_NONE, 0, H);
     Seg(dc, 560, 260, 200, 40, fmt, 2, G_TIME_FMT);
-    SetRow(dc, 304, L"Виджеты главной", NULL, true, A_SCREEN, S_SET_HOME, H);
+    SetRow(dc, 304, L"Виджеты главной", NULL, false, A_SCREEN, S_SET_HOME, H);
     Chevron(dc, 728, 312);
+    wchar_t acc[48];
+    _snwprintf(acc, 48, L"акцент: %s", AccentName());
+    SetRow(dc, 352, L"Тема", acc, true, A_SCREEN, S_SET_THEME, H);
+    Disc(dc, 700, 376, 9, kOrange);
+    Chevron(dc, 728, 360);
 }
+
 
 static void ScrSetSound(HDC dc);
 static void ScrSetBalance(HDC dc);

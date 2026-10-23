@@ -351,6 +351,11 @@ static void DoAction(const Btn& b)
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;
     case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
+    case A_ACCENT:   // Settings -> General -> Theme: the accent colour
+        s_cfg.accent = b.arg >= 0 && b.arg < kAccentCount ? b.arg : 0;
+        ApplyAccent();
+        SaveCfg();
+        break;
     case A_NAV: {   // a section of the bottom bar (or a widget's screen): the bar's pill slides there
         int from = NavSection(s_screen);
         Nav((Screen)b.arg);

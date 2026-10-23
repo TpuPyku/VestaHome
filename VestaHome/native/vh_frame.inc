@@ -56,6 +56,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_WSET_SPEED:  ScrWSetSpeed(dc); break;
     case S_WSET_CAR:    ScrWSetCar(dc); break;
     case S_SET_HOME:    ScrSetHome(dc); break;
+    case S_SET_THEME:   ScrSetTheme(dc); break;
     case S_SET_CAR:     ScrSetCar(dc); break;
     case S_TEST_CAN:    ScrTestCan(dc); break;
     case S_TEST_MCU:    ScrTestMcu(dc); break;
