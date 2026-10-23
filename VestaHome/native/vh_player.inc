@@ -477,7 +477,7 @@ static void PlayBtn(HDC dc, int cx, int cy, int r, int isz)
 static void ScrAudio(HDC dc)
 {
     Frame(dc, L"Медиа · Музыка");
-    MediaTabs(dc, S_AUDIO, IC_LIST, A_SCREEN, S_AUDIO_LIST, S_SET_SOUND);
+    MediaTabs(dc, S_AUDIO, IC_LIST, A_SCREEN, S_AUDIO_LIST);
     Cover(dc, IC_MUSIC, 16, 124, 232);
     wchar_t title[96], sub[200], s[160];
     double pos = 0, len = 0;
@@ -565,7 +565,7 @@ static void ScrAudioList(HDC dc)
     if (!s_musCount && !s_musDir[0])
         MusicOpenDir(s_cfg.musicDir[0] && GetFileAttributes(s_cfg.musicDir) != 0xFFFFFFFF ? s_cfg.musicDir : L"");
     Frame(dc, L"Медиа · Музыка");
-    MediaTabs(dc, S_AUDIO, IC_MUSIC, A_BACK, 0, S_SET_SOUND);
+    MediaTabs(dc, S_AUDIO, IC_MUSIC, A_BACK, 0);
     if (s_musPage >= MusPages())
         s_musPage = MusPages() - 1;
     int right = 784;

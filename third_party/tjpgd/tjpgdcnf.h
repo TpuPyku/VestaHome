@@ -5,7 +5,7 @@
 #define	JD_SZBUF		4096
 /* Specifies size of stream input buffer */
 
-#define JD_FORMAT		1
+#define JD_FORMAT		0   /* VestaHome: RGB888 (the viewer is 32-bit, thumbnails made RGB565 after) */
 /* Specifies output pixel format.
 /  0: RGB888 (24-bit/pix)
 /  1: RGB565 (16-bit/pix)

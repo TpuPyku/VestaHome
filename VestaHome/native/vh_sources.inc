@@ -111,7 +111,7 @@ static void ScrVideo(HDC dc)
     if (!s_vidRead)
         VidOpenDir(s_cfg.videoDir[0] && GetFileAttributes(s_cfg.videoDir) != 0xFFFFFFFF ? s_cfg.videoDir : L"");
     Frame(dc, L"Медиа · Видео");
-    MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
+    MediaTabs(dc, S_VIDEO, IC_NONE, A_NONE, 0);
     if (s_vidPage >= VidPages())
         s_vidPage = VidPages() - 1;
     DirPath(dc, s_vidDir, A_VUP, 0, 1, 784);

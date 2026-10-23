@@ -11,8 +11,8 @@
 #include "stb_image.h"
 
 enum {
-    kStbMaxPx = 2600000,         // stb decodes the whole picture (3 bytes a pixel, then 2): ~2.6 MP at most
-    kDecMaxBytes = 6 * 1024 * 1024,   // the scaled JPEG in memory before fitting
+    kStbMaxPx = 2600000,         // stb decodes the whole picture (3 bytes a pixel, then 4): ~2.6 MP at most
+    kDecMaxBytes = 12 * 1024 * 1024,  // the scaled JPEG in memory before fitting (4 bytes a pixel)
     kPoolBytes = 16 * 1024,      // TJpgDec's working memory (JD_SZBUF 4096 + tables)
     kExifRead = 128 * 1024       // the head of the file looked at for EXIF
 };
@@ -33,16 +33,25 @@ void PicFree(Pic* p)
 {
     if (p->px)
         free(p->px);
+    if (p->px32)
+        free(p->px32);
     p->px = NULL;
+    p->px32 = NULL;
     p->w = p->h = 0;
 }
 
-static bool PicAlloc(Pic* p, int w, int h)
+static bool PicAlloc(Pic* p, int w, int h, bool deep)
 {
-    p->px = (unsigned short*)malloc((size_t)w * h * 2);
-    p->w = p->px ? w : 0;
-    p->h = p->px ? h : 0;
-    return p->px != NULL;
+    p->px = NULL;
+    p->px32 = NULL;
+    if (deep)
+        p->px32 = (DWORD*)malloc((size_t)w * h * 4);
+    else
+        p->px = (unsigned short*)malloc((size_t)w * h * 2);
+    bool ok = p->px || p->px32;
+    p->w = ok ? w : 0;
+    p->h = ok ? h : 0;
+    return ok;
 }
 
 // ---- EXIF: the orientation (1 normal, 3 upside down, 6 a quarter clockwise, 8 counter-clockwise; the mirrored
@@ -142,14 +151,15 @@ static int JpgOut(JDEC* jd, void* bitmap, JRECT* r)
 {
     JpgSrc* s = (JpgSrc*)jd->device;
     Pic* d = s->dst;
-    const unsigned short* src = (const unsigned short*)bitmap;
+    const uint8_t* src = (const uint8_t*)bitmap;   // RGB888 (JD_FORMAT 0)
     int rw = r->right - r->left + 1;
-    for (int y = r->top; y <= r->bottom; y++, src += rw) {
+    for (int y = r->top; y <= r->bottom; y++, src += rw * 3) {
         if (y >= d->h)
             continue;
         int n = r->left + rw > d->w ? d->w - r->left : rw;
-        if (n > 0)
-            memcpy(d->px + y * d->w + r->left, src, n * 2);
+        DWORD* dst = d->px32 + y * d->w + r->left;
+        for (int i = 0; i < n; i++)
+            dst[i] = (DWORD)src[i * 3] << 16 | src[i * 3 + 1] << 8 | src[i * 3 + 2];
     }
     return 1;
 }
@@ -185,15 +195,15 @@ static int JpgDecode(JpgSrc* s, int bw, int bh, bool fill, Pic* out, int* srcW, 
     int sc = 3;
     while (sc > 0 && ((jd.width >> sc) < needW || (jd.height >> sc) < needH))
         sc--;
-    while (sc < 3 && (size_t)((jd.width + (1 << sc) - 1) >> sc) * ((jd.height + (1 << sc) - 1) >> sc) * 2 >
+    while (sc < 3 && (size_t)((jd.width + (1 << sc) - 1) >> sc) * ((jd.height + (1 << sc) - 1) >> sc) * 4 >
                          (size_t)kDecMaxBytes)
         sc++;
     int w = (jd.width + (1 << sc) - 1) >> sc, h = (jd.height + (1 << sc) - 1) >> sc;
-    if ((size_t)w * h * 2 > (size_t)kDecMaxBytes || !PicAlloc(out, w, h)) {
+    if ((size_t)w * h * 4 > (size_t)kDecMaxBytes || !PicAlloc(out, w, h, true)) {
         free(pool);
-        return (size_t)w * h * 2 > (size_t)kDecMaxBytes ? PIC_BIG : PIC_MEMORY;
+        return (size_t)w * h * 4 > (size_t)kDecMaxBytes ? PIC_BIG : PIC_MEMORY;
     }
-    memset(out->px, 0, (size_t)w * h * 2);
+    memset(out->px32, 0, (size_t)w * h * 4);
     s->dst = out;
     JRESULT r = jd_decomp(&jd, JpgOut, (uint8_t)sc);
     free(pool);
@@ -239,29 +249,30 @@ static int StbDecode(const wchar_t* path, Pic* out, int* srcW, int* srcH)
     free(data);
     if (!rgb)
         return PIC_FORMAT;
-    if (!PicAlloc(out, w, h)) {
+    if (!PicAlloc(out, w, h, true)) {
         stbi_image_free(rgb);
         return PIC_MEMORY;
     }
     for (int i = 0; i < w * h; i++) {
         const unsigned char* p = rgb + i * 3;
-        out->px[i] = (unsigned short)((p[0] & 0xF8) << 8 | (p[1] & 0xFC) << 3 | p[2] >> 3);
+        out->px32[i] = (DWORD)p[0] << 16 | p[1] << 8 | p[2];
     }
     stbi_image_free(rgb);
     return PIC_OK;
 }
 
-// ---- fitting: each output pixel the average of 4 samples of the source (a quarter turn rot applied)
+// ---- fitting: each output pixel the average of 4 samples of the 32-bit source (a quarter turn rot applied), into a
+// 32-bit or an RGB565 picture
 
-static unsigned short Avg4(unsigned a, unsigned b, unsigned c, unsigned d)
+static DWORD Avg4(DWORD a, DWORD b, DWORD c, DWORD d)
 {
-    unsigned r = ((a >> 11) + (b >> 11) + (c >> 11) + (d >> 11)) >> 2;
-    unsigned g = (((a >> 5) & 63) + ((b >> 5) & 63) + ((c >> 5) & 63) + ((d >> 5) & 63)) >> 2;
-    unsigned bl = ((a & 31) + (b & 31) + (c & 31) + (d & 31)) >> 2;
-    return (unsigned short)(r << 11 | g << 5 | bl);
+    DWORD r = ((a >> 16 & 255) + (b >> 16 & 255) + (c >> 16 & 255) + (d >> 16 & 255) + 2) >> 2;
+    DWORD g = ((a >> 8 & 255) + (b >> 8 & 255) + (c >> 8 & 255) + (d >> 8 & 255) + 2) >> 2;
+    DWORD bl = ((a & 255) + (b & 255) + (c & 255) + (d & 255) + 2) >> 2;
+    return r << 16 | g << 8 | bl;
 }
 
-static int Fit(const Pic* src, int rot, int boxW, int boxH, bool fill, Pic* out)
+static int Fit(const Pic* src, int rot, int boxW, int boxH, bool fill, Pic* out, bool deep)
 {
     rot &= 3;
     int rw = rot & 1 ? src->h : src->w, rh = rot & 1 ? src->w : src->h;   // the turned picture's size
@@ -271,7 +282,7 @@ static int Fit(const Pic* src, int rot, int boxW, int boxH, bool fill, Pic* out)
     int ow = fill ? boxW : (int)(rw * f + 0.5), oh = fill ? boxH : (int)(rh * f + 0.5);
     ow = ow < 1 ? 1 : ow > boxW ? boxW : ow;
     oh = oh < 1 ? 1 : oh > boxH ? boxH : oh;
-    if (!PicAlloc(out, ow, oh))
+    if (!PicAlloc(out, ow, oh, deep))
         return PIC_MEMORY;
     double ox = (rw - ow / f) / 2, oy = (rh - oh / f) / 2;   // fill: the cut, centred
     int step = (int)(65536 / f), q = step / 4;
@@ -280,7 +291,7 @@ static int Fit(const Pic* src, int rot, int boxW, int boxH, bool fill, Pic* out)
         int vy = y0 + y * step;
         for (int x = 0; x < ow; x++) {
             int vx = x0 + x * step;
-            unsigned smp[4];
+            DWORD smp[4];
             for (int k = 0; k < 4; k++) {   // the turned picture's point -> the source's
                 int tx = (vx + (k & 1 ? 3 * q : q)) >> 16, ty = (vy + (k & 2 ? 3 * q : q)) >> 16;
                 tx = tx < 0 ? 0 : tx >= rw ? rw - 1 : tx;
@@ -292,9 +303,13 @@ static int Fit(const Pic* src, int rot, int boxW, int boxH, bool fill, Pic* out)
                 case 3:  sx = src->w - 1 - ty; sy = tx;              break;
                 default: sx = tx;              sy = ty;              break;
                 }
-                smp[k] = src->px[sy * src->w + sx];
+                smp[k] = src->px32[sy * src->w + sx];
             }
-            out->px[y * ow + x] = Avg4(smp[0], smp[1], smp[2], smp[3]);
+            DWORD v = Avg4(smp[0], smp[1], smp[2], smp[3]);
+            if (deep)
+                out->px32[y * ow + x] = v;
+            else
+                out->px[y * ow + x] = (unsigned short)((v >> 8 & 0xF800) | (v >> 5 & 0x07E0) | (v >> 3 & 0x001F));
         }
     }
     return PIC_OK;
@@ -348,9 +363,10 @@ static int Decode(const wchar_t* path, int bw, int bh, bool fill, Pic* dec, int*
 }
 
 int PicLoad(const wchar_t* path, int boxW, int boxH, bool fill, int rot, bool exifRot, Pic* out, int* srcW,
-            int* srcH)
+            int* srcH, bool deep)
 {
     out->px = NULL;
+    out->px32 = NULL;
     out->w = out->h = 0;
     int turn = rot;
     if (exifRot && IsJpegName(path)) {
@@ -365,11 +381,11 @@ int PicLoad(const wchar_t* path, int boxW, int boxH, bool fill, int rot, bool ex
     }
     // needed in the source's orientation: the box turned back; fill needs the box covered, fit inside it
     int bw = turn & 1 ? boxH : boxW, bh = turn & 1 ? boxW : boxH;
-    Pic dec = { 0, 0, NULL };
+    Pic dec = { 0, 0, NULL, NULL };
     int r = Decode(path, bw, bh, fill, &dec, srcW, srcH);
     if (r != PIC_OK)
         return r;
-    r = Fit(&dec, turn, boxW, boxH, fill, out);
+    r = Fit(&dec, turn, boxW, boxH, fill, out, deep);
     PicFree(&dec);
     return r;
 }
@@ -377,6 +393,7 @@ int PicLoad(const wchar_t* path, int boxW, int boxH, bool fill, int rot, bool ex
 int PicThumb(const wchar_t* path, int w, int h, bool exifRot, Pic* out)
 {
     out->px = NULL;
+    out->px32 = NULL;
     out->w = out->h = 0;
     int turn = 0;
     if (IsJpegName(path)) {
@@ -390,10 +407,10 @@ int PicThumb(const wchar_t* path, int w, int h, bool exifRot, Pic* out)
             int r = PIC_FORMAT;
             if (e.thumb) {   // the camera's own small JPEG
                 JpgSrc s = { INVALID_HANDLE_VALUE, e.thumb, (size_t)e.thumbLen, 0, NULL };
-                Pic dec = { 0, 0, NULL };
+                Pic dec = { 0, 0, NULL, NULL };
                 r = JpgDecode(&s, turn & 1 ? h : w, turn & 1 ? w : h, true, &dec, NULL, NULL);
                 if (r == PIC_OK) {
-                    r = Fit(&dec, turn, w, h, true, out);
+                    r = Fit(&dec, turn, w, h, true, out, false);
                     PicFree(&dec);
                 }
             }
@@ -402,11 +419,11 @@ int PicThumb(const wchar_t* path, int w, int h, bool exifRot, Pic* out)
                 return r;
         }
     }
-    Pic dec = { 0, 0, NULL };
+    Pic dec = { 0, 0, NULL, NULL };
     int r = Decode(path, turn & 1 ? h : w, turn & 1 ? w : h, true, &dec, NULL, NULL);
     if (r != PIC_OK)
         return r;
-    r = Fit(&dec, turn, w, h, true, out);
+    r = Fit(&dec, turn, w, h, true, out, false);
     PicFree(&dec);
     return r;
 }

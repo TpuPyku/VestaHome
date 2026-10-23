@@ -456,7 +456,7 @@ static void ScrNetRadio(HDC dc)
 {
     NetLoadList();
     Frame(dc, L"Медиа · Интернет-радио");
-    MediaTabs(dc, S_NETRADIO, IC_LIST, A_SCREEN, S_NETRADIO_LIST, S_SET_SOUND);
+    MediaTabs(dc, S_NETRADIO, IC_LIST, A_SCREEN, S_NETRADIO_LIST);
     Cover(dc, IC_NETRADIO, 16, 124, 232);
     wchar_t s[160], title[160];
     if (s_netCount <= 0) {

@@ -868,6 +868,10 @@ static bool LoadBackground(const wchar_t* path, Pix* bits)
 }
 
 enum { kTileW = 64, kTileH = 480 };   // design 0.6: a column of the mosaic's cells (64 x 112), the whole height
+// The orange glow at the top right (the mockup's radial gradient: 7 % of the accent at 85 %, 0 fading out by 55 % of
+// a 120 % x 90 % ellipse): its strength (of 255) over x kGlowX..800, y 0..kGlowH, made once.
+enum { kGlowX = 152, kGlowW = 800 - kGlowX, kGlowH = 238 };
+static unsigned char* s_glow;
 
 // Night: a third less brightness, as C() does.
 static Pix DimPix(Pix p)
@@ -943,6 +947,13 @@ static void BuildBackground()
             s_tileW = kTileW;
             s_tileH = kTileH;
         }
+        s_glow = (unsigned char*)malloc(kGlowW * kGlowH);
+        if (s_glow)
+            for (int y = 0; y < kGlowH; y++)
+                for (int x = 0; x < kGlowW; x++) {
+                    double dx = (kGlowX + x - 680) / 528.0, dy = y / 238.0, e = sqrt(dx * dx + dy * dy);
+                    s_glow[y * kGlowW + x] = (unsigned char)(e < 1 ? (1 - e) * 255 + 0.5 : 0);
+                }
     }
     if (s_skinBg[0]) {
         s_bg = MakeDib(800, 480, &s_bgBits);
@@ -953,7 +964,9 @@ static void BuildBackground()
     }
 }
 
-// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top).
+// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top); the glow over it.
+static void Glow(int top, int bottom);
+
 static void Pattern(int top, int bottom, int anchor)
 {
     const Pix* t = s_tile[s_night ? 1 : 0];
@@ -973,6 +986,31 @@ static void Pattern(int top, int bottom, int anchor)
             int o = x % s_tileW, n = s_tileW - o < s_clip.right - x ? s_tileW - o : s_clip.right - x;
             memcpy(dst + x, src + o, n * sizeof(Pix));
             x += n;
+        }
+    }
+    Glow(top, bottom);
+}
+
+// The orange glow at the top right over the background just copied (rows [top, bottom), inside the clip).
+static void Glow(int top, int bottom)
+{
+    if (!s_glow)
+        return;
+    COLORREF o = C(kOrange);
+    int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o);
+    const int kMax = 4588;   // 7 % of 65536
+    int x0 = s_clip.left > kGlowX ? s_clip.left : kGlowX;
+    for (int y = top; y < bottom && y < kGlowH; y++) {
+        const unsigned char* g = s_glow + y * kGlowW - kGlowX;
+        Pix* row = s_backBits + (479 - y) * 800;
+        for (int x = x0; x < s_clip.right; x++) {
+            int a = g[x] * kMax / 255;   // of 65536
+            if (!a)
+                continue;
+            Pix p = row[x];
+            int r = PR(p), gg = PG(p), b = PB(p);
+            row[x] = PIX(r + ((orr - r) * a + 32768) / 65536, gg + ((og - gg) * a + 32768) / 65536,
+                         b + ((ob - b) * a + 32768) / 65536);
         }
     }
 }
@@ -2065,8 +2103,12 @@ static void PageDots(HDC dc, int page, int pages, int cx = 400, int y = 398)
     if (pages < 2)
         return;
     Zone(cx - 120, y - 6, 240, 16, A_PAGE);
-    int w = 28 + (pages - 1) * 28, dx = cx - w / 2;
-    for (int p = 0; p < pages; p++) {
+    // at most 5 dots (the user 2026-10-23: a long folder's went off the screen): a window round the page shown
+    int n = pages < 5 ? pages : 5, first = page - 2;
+    first = first > pages - n ? pages - n : first;
+    first = first < 0 ? 0 : first;
+    int w = 28 + (n - 1) * 28, dx = cx - w / 2;
+    for (int p = first; p < first + n; p++) {
         int dw = p == page ? 28 : 20;
         R(dc, dx, y, dw, 6, 3, p == page ? kOrange : kDim);
         dx += dw + 8;
@@ -2179,9 +2221,9 @@ static void Cover(HDC dc, Icon ic, int x, int y, int s)
 }
 
 // Sources of the media main screens as pills on top (music from USB, internet radio, Bluetooth, AUX, video, photo),
-// each as wide as its name, then up to two round buttons of the source: its own (list, player, slides) and its
-// settings.
-static void MediaTabs(HDC dc, Screen active, Icon ic, Action a, int arg, Screen settings)
+// each as wide as its name, then a round button of the source's own (the list, the phone), if it has one (the play
+// and settings buttons gone: the user 2026-10-23; the settings are in "Настройки").
+static void MediaTabs(HDC dc, Screen active, Icon ic, Action a, int arg)
 {
     static const Tab tabs[6] = { { IC_MUSIC, L"Музыка", S_AUDIO }, { IC_RADIO, L"Интернет", S_NETRADIO },
                                  { IC_BT, L"Bluetooth", S_AUDIO_BT }, { IC_AUX, L"AUX", S_AUX },
@@ -2189,13 +2231,12 @@ static void MediaTabs(HDC dc, Screen active, Icon ic, Action a, int arg, Screen 
     int w[6], sum = 0;
     for (int i = 0; i < 6; i++)
         sum += w[i] = TextWidth(dc, tabs[i].label, 15, 700) + 36;
-    int gap = (592 - sum) / 5;   // up to x 608: the round buttons after
+    int gap = (704 - sum) / 5;   // up to x 720: the round button after
     gap = gap > 10 ? 10 : gap < 2 ? 2 : gap;
     for (int i = 0, x = 16; i < 6; x += w[i] + gap, i++) {
         bool on = tabs[i].to == active;
         Button(dc, x, 68, w[i], 40, tabs[i].label, on ? B_SEL : B_N, IC_NONE, 15, 0, on ? A_NONE : A_TAB, tabs[i].to);
     }
     if (ic != IC_NONE)
-        Button(dc, 668, 64, 48, 48, NULL, B_N, ic, 18, 26, a, arg);
-    Button(dc, 736, 64, 48, 48, NULL, B_N, IC_GEAR, 18, 26, A_SCREEN, settings);
+        Button(dc, 736, 64, 48, 48, NULL, B_N, ic, 18, 26, a, arg);
 }

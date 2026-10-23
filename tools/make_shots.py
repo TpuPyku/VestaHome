@@ -30,7 +30,7 @@ HOME, RADIO, MEDIA, PHONE, APPS, SETTINGS = (60, 440), (170, 440), (282, 440), (
 SET = {'general': (60, 90), 'sound': (170, 90), 'screen': (60, 160), 'radio': (170, 160), 'bt': (60, 230),
        'wifi': (170, 230), 'video': (60, 300), 'photo': (170, 300), 'car': (60, 370), 'info': (170, 370)}
 TAB = {'music': (62, 88), 'net': (160, 88), 'bt': (260, 88), 'aux': (360, 88), 'video': (458, 88),
-       'photo': (557, 88), 'list': (692, 88), 'gear': (760, 88)}
+       'photo': (557, 88), 'list': (760, 88)}
 SHOTS = [
     ('home', [HOME]), ('home_page2', [HOME, ('swipe',)]), ('home_page3', [HOME, ('swipe',)]),   # the page stays: from page 2
     ('radio', [RADIO]), ('radio_list', [RADIO, (712, 98)]), ('radio_pty', [RADIO, (594, 98)]),

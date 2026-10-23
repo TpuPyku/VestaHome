@@ -49,9 +49,9 @@ static DWORD WINAPI PhotoThread(LPVOID)
             LeaveCriticalSection(&s_phCs);
             if (!view && slot < 0)
                 break;
-            Pic pic = { 0, 0, NULL };
+            Pic pic = { 0, 0, NULL, NULL };
             int w = 0, h = 0;
-            int res = view ? PicLoad(path, kPhBoxW, kPhBoxH, fill, rot, exif, &pic, &w, &h)
+            int res = view ? PicLoad(path, kPhBoxW, kPhBoxH, fill, rot, exif, &pic, &w, &h, true)   // full colour
                            : PicThumb(path, kThW, kThH, exif, &pic);
             EnterCriticalSection(&s_phCs);
             if (view && s_pvState == 2 && !wcscmp(path, s_pvPath) && rot == s_pvRot && fill == s_pvFill) {
@@ -62,10 +62,12 @@ static DWORD WINAPI PhotoThread(LPVOID)
                 s_pvH = h;
                 s_pvState = 3;
                 pic.px = NULL;
+                pic.px32 = NULL;
             } else if (!view && s_th[slot].state == 1 && !wcscmp(path, s_th[slot].path)) {
                 s_th[slot].pic = pic;
                 s_th[slot].state = res == PIC_OK ? 2 : 3;
                 pic.px = NULL;
+                pic.px32 = NULL;
             }
             LeaveCriticalSection(&s_phCs);
             PicFree(&pic);   // (a request changed meanwhile: not wanted any more)
@@ -123,10 +125,11 @@ static int PhotoTileEntry(int t)   // tile t of the page: its entry, -2 none
     return k < s_phCount ? k : -2;
 }
 
-// The picture into the frame at x, y (cut at the frame and at the partial redraw's area).
+// The picture into the frame at x, y (cut at the frame and at the partial redraw's area): the viewer's 32-bit, the
+// thumbnails RGB565 widened.
 static void BlitPic(const Pic& p, int x, int y)
 {
-    if (!p.px)
+    if (!p.px && !p.px32)
         return;
 #ifndef UNDER_CE
     GdiFlush();
@@ -136,7 +139,12 @@ static void BlitPic(const Pic& p, int x, int y)
         if (fy < s_clip.top || fy >= s_clip.bottom)
             continue;
         int x0 = x < s_clip.left ? s_clip.left : x, x1 = x + p.w > s_clip.right ? s_clip.right : x + p.w;
-        Pix* dst = s_backBits + (479 - fy) * 800;   // the picture is RGB565 (memory), the frame 32-bit
+        Pix* dst = s_backBits + (479 - fy) * 800;
+        if (p.px32) {
+            if (x1 > x0)
+                memcpy(dst + x0, p.px32 + r * p.w + (x0 - x), (x1 - x0) * sizeof(Pix));
+            continue;
+        }
         const unsigned short* src = p.px + r * p.w - x;
         for (int i = x0; i < x1; i++) {
             unsigned q = src[i];
@@ -176,7 +184,7 @@ static void ScrPhoto(HDC dc)
     if (s_phPage >= PhotoPages())
         s_phPage = PhotoPages() - 1;
     Frame(dc, L"Медиа · Фото");
-    MediaTabs(dc, S_PHOTO, IC_PLAY, A_PHPLAY, 0, S_SET_PHOTO);
+    MediaTabs(dc, S_PHOTO, IC_NONE, A_NONE, 0);
     DirPath(dc, s_phDir, A_PHFILE, -1, -3, 784);
     PhotoWantThumbs();
     for (int t = 0; t < kPhTiles; t++) {   // design 0.6: 4 x 2, the picture without a frame, its name under it

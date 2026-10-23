@@ -536,7 +536,7 @@ static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x890
 static void ScrAudioBt(HDC dc)
 {
     Frame(dc, L"Медиа · Bluetooth");
-    MediaTabs(dc, S_AUDIO_BT, IC_PHONE, A_SCREEN, S_PHONE, S_SET_BT);
+    MediaTabs(dc, S_AUDIO_BT, IC_PHONE, A_SCREEN, S_PHONE);
     Cover(dc, IC_BT, 16, 124, 232);
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
@@ -610,7 +610,7 @@ static void ScrAudioBt(HDC dc)
 static void ScrAux(HDC dc)
 {
     Frame(dc, L"Медиа · AUX");
-    MediaTabs(dc, S_AUX, IC_NONE, A_NONE, 0, S_SET_SOUND);
+    MediaTabs(dc, S_AUX, IC_NONE, A_NONE, 0);
     Cover(dc, IC_AUX, 16, 124, 232);
     T(dc, 272, 150, L"Внешний источник", 14, kMuted, 600);
     T(dc, 272, 200, L"AUX", 52, kText, 700);
