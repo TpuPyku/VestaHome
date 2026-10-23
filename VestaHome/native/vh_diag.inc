@@ -10,11 +10,11 @@ static POINT s_touch[kTouchMax];  // the touch test's trail, oldest first
 static int   s_touchCount;
 
 struct Test { const wchar_t* label; Action a; int arg; };
-static const Test kTests[10] = { { L"ЭКРАН", A_SCREEN, S_TEST_SCREEN }, { L"КАСАНИЯ", A_SCREEN, S_TEST_TOUCH },
-                                { L"КАЛИБРОВКА", A_CALIBRATE, 0 }, { L"ПАМЯТЬ И ДИСКИ", A_SCREEN, S_TEST_MEM },
-                                { L"КНОПКИ · MCU", A_SCREEN, S_TEST_MCU }, { L"ЗВУК И ВИДЕО", A_SCREEN, S_TEST_AV },
-                                { L"CAN / UART · ПОТОК", A_SCREEN, S_TEST_CAN }, { L"GPS", A_SCREEN, S_TEST_CAN },
-                                { L"ТЕКСТОВЫЕ ФАЙЛЫ", A_TEXTFILES, 0 }, { NULL, A_NONE, 0 } };
+static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L"Касания", A_SCREEN, S_TEST_TOUCH },
+                                { L"Калибровка", A_CALIBRATE, 0 }, { L"Память и диски", A_SCREEN, S_TEST_MEM },
+                                { L"Кнопки · MCU", A_SCREEN, S_TEST_MCU }, { L"Звук и видео", A_SCREEN, S_TEST_AV },
+                                { L"CAN / UART · Поток", A_SCREEN, S_TEST_CAN }, { L"GPS", A_SCREEN, S_TEST_CAN },
+                                { L"Текстовые файлы", A_TEXTFILES, 0 }, { NULL, A_NONE, 0 } };
 
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
 static void ScrDiag(HDC dc)
@@ -232,7 +232,7 @@ static void ScrWarning(HDC dc)
     Frame(dc, L"", A_NONE);
     Panel(dc, 100, 84, 600, 320, 16);
     Ico(dc, IC_WARN, 132, 112, 56, kText);
-    T(dc, 204, 150, L"ВНИМАНИЕ", 26, kText, 700);
+    T(dc, 204, 150, L"Внимание", 26, kText, 700);
     T(dc, 132, 212, L"Не отвлекайтесь от дороги. Управляйте системой", 19, kMuted, 400, AL_START, 540);
     T(dc, 132, 242, L"только когда это безопасно. Правила дорожного", 19, kMuted, 400, AL_START, 540);
     T(dc, 132, 272, L"движения важнее подсказок навигации.", 19, kMuted, 400, AL_START, 540);
@@ -311,7 +311,7 @@ static void ScrIncoming(HDC dc)
     Panel(dc, 100, 84, 600, 340, 16);
     Disc(dc, 196, 184, 64, kPanel2);
     Ico(dc, IC_CALL, 172, 160, 48, kOk);
-    T(dc, 286, 150, L"ВХОДЯЩИЙ ВЫЗОВ", 14, kMuted, 700);
+    T(dc, 286, 150, L"Входящий вызов", 14, kMuted, 700);
     T(dc, 286, 200, num[0] ? num : L"номер скрыт", 32, kText, 700, AL_START, 400);
     bool d = Zone(124, 300, 266, 92, A_PHONEANS);   // green and red: here the colour carries the meaning
     R(dc, 124, 300, 266, 92, 12, d ? Mix(kOk, kInk, 160) : kOk);
@@ -332,15 +332,15 @@ static void ScrVolume(HDC dc)
     // the wheel)
     int vol, mute, src;
     bool have = VolGet(&vol, &mute, &src);
-    const wchar_t* name = src == 0 ? L"ГРОМКОСТЬ · РАДИО" : src == 6 || src == 7 ? L"ГРОМКОСТЬ · МЕДИА"
-                        : src == 9 ? L"ГРОМКОСТЬ · BLUETOOTH" : L"ГРОМКОСТЬ";
+    const wchar_t* name = src == 0 ? L"Громкость · Радио" : src == 6 || src == 7 ? L"Громкость · Медиа"
+                        : src == 9 ? L"Громкость · Bluetooth" : L"Громкость";
     Ico(dc, IC_VOL, 182, 182, 48, have && !mute ? kText : kDim);
     T(dc, 246, 216, name, 15, kMuted, 700);
     wchar_t s[16];
     if (!have)
         wcscpy(s, L"–");
     else if (mute)
-        wcscpy(s, L"БЕЗ ЗВУКА");
+        wcscpy(s, L"Без звука");
     else
         _snwprintf(s, 16, L"%d", vol);
     T(dc, 618, 222, s, mute ? 28 : 48, mute ? kMuted : kText, 700, AL_END);

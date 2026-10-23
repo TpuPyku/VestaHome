@@ -458,7 +458,7 @@ static void ScrRadioList(HDC dc)
     R(dc, 632, 292, 152, 98, 12, kPanel);
     wchar_t c[8];
     _snwprintf(c, 8, L"%d", n);
-    T(dc, 708, 322, L"НАЙДЕНО", 13, kMuted, 600, AL_MID);
+    T(dc, 708, 322, L"Найдено", 13, kMuted, 600, AL_MID);
     T(dc, 708, 362, c, 36, kText, 700, AL_MID);
     RadioDock(dc, true);
 }
@@ -487,9 +487,9 @@ static void RadioScanTick()
 // Radio -> PTY: the RDS programme type (its codes 0..15 in order; 0 = all) chosen, then "search" as the stock shell
 // does it - its ext key 0xA4 (the PTY list), then SPApi_SendCurrentAdjustPty(type) (CRadioListDlg, Ghidra
 // 2026-10-22; to verify on the unit).
-static const wchar_t* const kPtyTypes[16] = { L"ВСЕ", L"НОВОСТИ", L"СОБЫТИЯ", L"ИНФОРМАЦИЯ", L"СПОРТ", L"ОБРАЗОВАНИЕ",
-                                              L"ДРАМА", L"КУЛЬТУРА", L"НАУКА", L"РАЗНОЕ", L"ПОП", L"РОК", L"ЛЁГКАЯ",
-                                              L"ЛЁГКАЯ КЛАССИКА", L"КЛАССИКА", L"ДРУГАЯ" };
+static const wchar_t* const kPtyTypes[16] = { L"Все", L"Новости", L"События", L"Информация", L"Спорт", L"Образование",
+                                              L"Драма", L"Культура", L"Наука", L"Разное", L"Поп", L"Рок", L"Лёгкая",
+                                              L"Лёгкая классика", L"Классика", L"Другая" };
 static int s_ptySel = 11;
 
 static void PtySearch()
@@ -612,7 +612,7 @@ static void ScrAux(HDC dc)
     Frame(dc, L"Медиа · AUX");
     MediaTabs(dc, S_AUX, IC_NONE, A_NONE, 0, S_SET_SOUND);
     Cover(dc, IC_AUX, 16, 124, 232);
-    T(dc, 272, 150, L"ВНЕШНИЙ ИСТОЧНИК", 14, kMuted, 600);
+    T(dc, 272, 150, L"Внешний источник", 14, kMuted, 600);
     T(dc, 272, 200, L"AUX", 52, kText, 700);
     T(dc, 272, 236, L"Звук идёт с разъёма 3,5 мм. Управляйте", 18, kMuted, 400, AL_START, 512);
     T(dc, 272, 260, L"воспроизведением на самом устройстве.", 18, kMuted, 400, AL_START, 512);
@@ -976,9 +976,9 @@ static void ScrCall(HDC dc)
     BtState bt;
     BtGet(&bt, NULL);
     int c = bt.call[0];
-    const wchar_t* st = c == BT_CALL_INCOMING ? L"ВХОДЯЩИЙ ВЫЗОВ" : c == BT_CALL_DIALING ? L"НАБОР НОМЕРА"
-                      : c == BT_CALL_ALERTING ? L"ВЫЗОВ" : c == BT_CALL_ACTIVE ? L"РАЗГОВОР"
-                      : c == BT_CALL_HELD ? L"НА УДЕРЖАНИИ" : c == BT_CALL_WAITING ? L"ОЖИДАЕТ" : L"ЗВОНОК";
+    const wchar_t* st = c == BT_CALL_INCOMING ? L"Входящий вызов" : c == BT_CALL_DIALING ? L"Набор номера"
+                      : c == BT_CALL_ALERTING ? L"Вызов" : c == BT_CALL_ACTIVE ? L"Разговор"
+                      : c == BT_CALL_HELD ? L"На удержании" : c == BT_CALL_WAITING ? L"Ожидает" : L"Звонок";
     wchar_t num[40];
     if (bt.callNumber[0] && c != BT_CALL_DIALING && c != BT_CALL_ALERTING)
         BtText(bt.callNumber, num, 40);
@@ -1484,7 +1484,7 @@ static void ScrBtPairNew(HDC dc)
     if (s_visUntil)
         _snwprintf(vis, 64, L"ГУ ВИДНА ЕЩЁ %d С", (int)(s_visUntil - GetTickCount()) / 1000 + 1);
     else
-        wcscpy(vis, L"СДЕЛАТЬ ГУ ВИДИМОЙ");
+        wcscpy(vis, L"Сделать ГУ видимой");
     Button(dc, 256, 350, 260, 40, vis, !proxy ? B_DIS : s_visUntil ? B_SEL : B_N, IC_NONE, 14, 0,
            proxy ? A_BTVISIBLE : A_NONE);
     T(dc, 528, 376, L"найти ГУ с телефона", 13, kDim, 400, AL_START, 240);
@@ -1537,7 +1537,7 @@ static void ScrSetWifi(HDC dc)
                A_WIFISCAN);
     if (w.state == WIFI_AP) {   // the unit is the access point: what to type on the phone
         Panel(dc, 256, 124, 512, 168, 12);
-        T(dc, 276, 160, w.apAuto ? L"ТОЧКА ДОСТУПА (ФИКС XIAOMI)" : L"ТОЧКА ДОСТУПА", 14, kMuted, 700);
+        T(dc, 276, 160, w.apAuto ? L"Точка доступа (фикс Xiaomi)" : L"Точка доступа", 14, kMuted, 700);
         _snwprintf(s, 120, L"Сеть: %s", w.apSsid);
         T(dc, 276, 198, s, 22, kText, 700, AL_START, 470);
         _snwprintf(s, 120, L"Пароль: %s", w.apPass);
@@ -1600,7 +1600,7 @@ static void ScrSetWifi(HDC dc)
 // car moves (off: only the sound, the rules of the road). Both kept in the ini.
 static void ScrSetVideo(HDC dc)
 {
-    static const wchar_t* scale[2] = { L"ВПИСАТЬ", L"РАСТЯНУТЬ" };
+    static const wchar_t* scale[2] = { L"Вписать", L"Растянуть" };
     Settings(dc, S_SET_VIDEO);
     SetRow(dc, 64, L"Масштаб");
     Seg(dc, 512, 70, 248, 44, scale, 2, G_VIDEO_SCALE, 15);

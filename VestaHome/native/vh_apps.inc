@@ -945,7 +945,7 @@ static void DrawApps(HDC dc)
             else
                 DashRect(dc, x, y, 184, 150, 14, kLine);
             Ico(dc, IC_ADD, x + 68, y + 30, 48, d ? kInk : kDim);
-            T(dc, x + 92, y + 124, L"ДОБАВИТЬ", 15, d ? kInk : kDim, 600, AL_MID);
+            T(dc, x + 92, y + 124, L"Добавить", 15, d ? kInk : kDim, 600, AL_MID);
             continue;
         }
         const App& a = s_apps[i];
@@ -974,7 +974,7 @@ static void DrawApps(HDC dc)
     PageDots(dc, s_page, AppsPages());
 }
 
-static const wchar_t* kFieldCaption[4] = { L"НАЗВАНИЕ", L"ПРОГРАММА", L"ПАРАМЕТРЫ ЗАПУСКА", L"ИКОНКА" };
+static const wchar_t* kFieldCaption[4] = { L"Название", L"Программа", L"Параметры запуска", L"Иконка" };
 static const wchar_t* kFieldEmpty[4] = { L"нажмите, чтобы ввести", L"нажмите, чтобы выбрать exe", L"нет",
     L"своя у программы; нажмите, чтобы выбрать png, ico или exe" };
 
@@ -1059,7 +1059,7 @@ static void DrawKeys(HDC dc)
 static void DrawFiles(HDC dc)
 {
     Frame(dc, s_filesFor == F_ICON ? L"Выбор иконки" : s_filesFor == F_CAMS ? L"Файл камер"
-              : s_filesFor == F_TEXT ? L"ТЕКСТОВЫЕ ФАЙЛЫ (.ini, .txt, .cfg)" : L"ВЫБОР ПРОГРАММЫ",
+              : s_filesFor == F_TEXT ? L"Текстовые файлы (.ini, .txt, .cfg)" : L"Выбор программы",
           A_CANCEL);
     TTail(dc, 20, 84, s_fdir, 15, kMuted, 400, 760);
     int first = s_filePage * kFilesPerPage;

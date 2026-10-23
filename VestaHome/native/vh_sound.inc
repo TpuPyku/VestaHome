@@ -4,9 +4,9 @@
 // balance/fader -8..8 (CAudioFieldDlg), sent to the MCU as G3NavHMI sends them. The MCU keeps them itself; what
 // VestaHome shows is what it last sent (VestaHome.ini).
 struct EqPreset { const wchar_t* name; int v[3]; };
-static const EqPreset kEqPresets[5] = { { L"РОВНО", { 0, 0, 0 } }, { L"ПОП", { -1, 2, 1 } },
-                                        { L"РОК", { 4, -1, 3 } }, { L"ДЖАЗ", { 2, 1, 3 } },
-                                        { L"ГОЛОС", { -2, 3, 1 } } };
+static const EqPreset kEqPresets[5] = { { L"Ровно", { 0, 0, 0 } }, { L"Поп", { -1, 2, 1 } },
+                                        { L"Рок", { 4, -1, 3 } }, { L"Джаз", { 2, 1, 3 } },
+                                        { L"Голос", { -2, 3, 1 } } };
 static const int kEqBand[3] = { 2, 1, 0 };   // low, mid, high -> the MCU's band (0 = high, OnTimerHighSlot)
 
 static DWORD s_sndSentTick;   // our last EQ / balance: the MCU's echoes of older values are not taken back meanwhile
@@ -88,7 +88,7 @@ static void BalanceAt(int x, int y, bool save)
 // Equalizer: presets, three sliders (a tap on a slider sets the value there), balance and volumes as buttons.
 static void ScrSetSound(HDC dc)
 {
-    static const wchar_t* bands[3] = { L"НИЗКИЕ", L"СРЕДНИЕ", L"ВЫСОКИЕ" };
+    static const wchar_t* bands[3] = { L"Низкие", L"Средние", L"Высокие" };
     static DWORD s_seen;   // opened: the shell's key of its equalizer screen - the MCU takes the changes only after it
     if (s_seen != s_screenTick) {   // (HU 2026-10-18-2: ours alone had no answer, the shell's 0xE6 first had)
         s_seen = s_screenTick;
@@ -138,13 +138,13 @@ static void ScrSetBalance(HDC dc)
     Disc(dc, cx, cy, 6, kInk);
     wchar_t b[24], f[24];
     if (s_cfg.balance)
-        _snwprintf(b, 24, L"%s %d", s_cfg.balance < 0 ? L"ЛЕВО" : L"ПРАВО", abs(s_cfg.balance));
+        _snwprintf(b, 24, L"%s %d", s_cfg.balance < 0 ? L"Лево" : L"Право", abs(s_cfg.balance));
     else
-        wcscpy(b, L"ЦЕНТР");
+        wcscpy(b, L"Центр");
     if (s_cfg.fader)
-        _snwprintf(f, 24, L"%s %d", s_cfg.fader < 0 ? L"ПЕРЕД" : L"ЗАД", abs(s_cfg.fader));
+        _snwprintf(f, 24, L"%s %d", s_cfg.fader < 0 ? L"Перед" : L"Зад", abs(s_cfg.fader));
     else
-        wcscpy(f, L"ЦЕНТР");
+        wcscpy(f, L"Центр");
     T(dc, 504, 96, L"Баланс", 19, kText, 700);
     Stepper(dc, 504, 108, 256, b, 48, 20, A_BAL);
     T(dc, 504, 184, L"Фейдер", 19, kText, 700);
@@ -214,7 +214,7 @@ static void ScrSetVolume(HDC dc)
                                          { L"Телефон", L"разговор по Bluetooth" },
                                          { L"Дорожные сообщения", L"RDS TA" },
                                          { L"Макс. при включении", L"была громче — убавит до неё" } };
-    static const wchar_t* speed[4] = { L"ВЫКЛ", L"+2", L"+3", L"+4" };
+    static const wchar_t* speed[4] = { L"Выкл", L"+2", L"+3", L"+4" };
     enum { H = 52 };
     Settings(dc, S_SET_SOUND);
     for (int i = 0; i < 5; i++) {

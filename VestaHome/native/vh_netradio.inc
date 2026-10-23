@@ -460,7 +460,7 @@ static void ScrNetRadio(HDC dc)
     Cover(dc, IC_NETRADIO, 16, 124, 232);
     wchar_t s[160], title[160];
     if (s_netCount <= 0) {
-        T(dc, 272, 170, L"НЕТ СТАНЦИЙ", 22, kText, 700, AL_START, 512);
+        T(dc, 272, 170, L"Нет станций", 22, kText, 700, AL_START, 512);
         _snwprintf(s, 160, L"нет %sradio.txt", s_dir);
         s[159] = 0;
         T(dc, 272, 200, s, 15, kMuted, 400, AL_START, 512);
@@ -468,7 +468,7 @@ static void ScrNetRadio(HDC dc)
         return;
     }
     if (s_netCur < 0) {
-        T(dc, 272, 170, L"ВЫБЕРИТЕ СТАНЦИЮ", 22, kText, 700, AL_START, 512);
+        T(dc, 272, 170, L"Выберите станцию", 22, kText, 700, AL_START, 512);
         T(dc, 272, 200, L"Кнопка списка вверху или ▶ — первая станция", 16, kMuted, 400, AL_START, 512);
     } else {
         _snwprintf(s, 160, L"СТАНЦИЯ %d ИЗ %d", s_netCur + 1, s_netCount);

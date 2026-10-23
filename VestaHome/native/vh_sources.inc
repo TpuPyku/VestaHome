@@ -131,11 +131,11 @@ static void ScrVideoPlay(HDC dc)
     Frame(dc, s);
     Fill(dc, 0, 56, 800, 398, RGB(0, 0, 0));
     if (s_vidState == VID_ERROR || s_vidState == VID_NONE) {
-        T(dc, 400, 210, s_vidState == VID_ERROR ? L"ВИДЕО НЕ ИГРАЕТ" : L"НИЧЕГО НЕ ОТКРЫТО", 22, kText, 700, AL_MID, 720);
+        T(dc, 400, 210, s_vidState == VID_ERROR ? L"Видео не играет" : L"Ничего не открыто", 22, kText, 700, AL_MID, 720);
         T(dc, 400, 244, s_vidState == VID_ERROR ? s_vidMsg : L"Выберите файл в «Медиа → Видео»", 16, kMuted, 400,
           AL_MID, 720);
     } else if (s_vidMoving) {
-        T(dc, 400, 210, L"В ДВИЖЕНИИ — ПАУЗА", 22, kText, 700, AL_MID, 720);
+        T(dc, 400, 210, L"В движении — пауза", 22, kText, 700, AL_MID, 720);
         T(dc, 400, 244, L"Картинка вернётся на остановке (или включите её в настройках видео)", 16, kMuted, 400,
           AL_MID, 720);
     }

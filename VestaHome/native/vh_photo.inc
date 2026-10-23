@@ -285,8 +285,8 @@ static void ScrPhotoView(HDC dc)
     if (state == 1 || state == 2) {
         T(dc, 400, 236, L"Загрузка…", 20, kMuted, 600, AL_MID);
     } else if (state == 3 && err != PIC_OK) {
-        static const wchar_t* why[5] = { L"", L"ФОРМАТ НЕ ПОДДЕРЖИВАЕТСЯ", L"СЛИШКОМ БОЛЬШОЕ ИЗОБРАЖЕНИЕ",
-                                         L"ФАЙЛ НЕ ЧИТАЕТСЯ", L"НЕ ХВАТАЕТ ПАМЯТИ" };
+        static const wchar_t* why[5] = { L"", L"Формат не поддерживается", L"Слишком большое изображение",
+                                         L"Файл не читается", L"Не хватает памяти" };
         Panel(dc, 220, 110, 360, 230);
         Ico(dc, IC_PHOTO, 360, 140, 80, kOff);
         Line(dc, 352, 140, 448, 220, 4, kMuted);
@@ -309,7 +309,7 @@ static void ScrPhotoView(HDC dc)
 
 static void ScrSetPhoto(HDC dc)
 {
-    static const wchar_t* scale[2] = { L"ВПИСАТЬ", L"ЗАПОЛН." };
+    static const wchar_t* scale[2] = { L"Вписать", L"Заполн." };
     Settings(dc, S_SET_PHOTO);
     SetRow(dc, 64, L"Интервал слайд-шоу");
     wchar_t iv[16];

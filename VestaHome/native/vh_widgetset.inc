@@ -23,7 +23,7 @@ static void WRow(HDC dc, int y, const wchar_t* label, const wchar_t* sub, Action
 
 static void ScrWSetWeather(HDC dc)
 {
-    static const wchar_t* prov[W_COUNT] = { L"OPEN-METEO", L"OPENWEATHER", L"ЯНДЕКС" };
+    static const wchar_t* prov[W_COUNT] = { L"Open-Meteo", L"OpenWeather", L"Яндекс" };
     Frame(dc, L"Погода · Настройки");
     Panel(dc, 16, 64, 768, 400);
     wchar_t s[120];
@@ -66,13 +66,13 @@ static void RegionsText(wchar_t* s, int n);
 
 static void ScrWSetSpeed(HDC dc)
 {
-    static const wchar_t* dist[4] = { L"ПО СКОРОСТИ", L"200 М", L"400 М", L"600 М" };
+    static const wchar_t* dist[4] = { L"По скорости", L"200 м", L"400 м", L"600 м" };
     Frame(dc, L"Скорость и камеры");
     Panel(dc, 16, 64, 768, 400);
     wchar_t s[160], label[48];
     WRow(dc, 68, L"Предупреждать о камерах", L"знак на виджете и в верхнем баре", A_NONE, 0, 640);
     Toggle(dc, 688, 78, T_CAM_ALERT);
-    static const wchar_t* snd[5] = { L"ВЫКЛ", L"ВСЕГДА", L"> ЛИМИТ", L"+10", L"+20" };
+    static const wchar_t* snd[5] = { L"Выкл", L"Всегда", L"> лимит", L"+10", L"+20" };
     WRow(dc, 124, L"Звуковой сигнал", L"всегда или если скорость выше лимита камеры", A_NONE, 0, 340);
     Seg(dc, 352, 130, 416, 44, snd, 5, G_CAMSND, 14);
     WRow(dc, 180, L"Дистанция", L"по скорости: за 10 с, 100–500 м", A_NONE, 0, 340);
@@ -270,7 +270,7 @@ static void ScrInfoMore(HDC dc)
     Frame(dc, L"О системе · Подробнее");
     Panel(dc, 16, 68, 444, 396);
     Panel(dc, 472, 68, 312, 396);
-    T(dc, 32, 96, L"ВЕРСИИ", 13, kMuted, 700);
+    T(dc, 32, 96, L"Версии", 13, kMuted, 700);
     WIN32_FIND_DATA fd;
     HANDLE f = FindFirstFile(L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", &fd);
     if (f != INVALID_HANDLE_VALUE) {
@@ -328,7 +328,7 @@ static void ScrInfoMore(HDC dc)
     Button(dc, 32, 412, 200, 44, L"Запросить", st > 0 ? B_N : B_DIS, IC_REFRESH, 14, 22, A_MCUREQ);
     Button(dc, 244, 412, 200, 44, L"Данные MCU", B_N, IC_NONE, 14, 0, A_SCREEN, S_TEST_MCU);
 
-    T(dc, 488, 96, L"СОСТОЯНИЕ", 13, kMuted, 700);
+    T(dc, 488, 96, L"Состояние", 13, kMuted, 700);
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
@@ -367,7 +367,7 @@ static void ScrInfoMore(HDC dc)
 // over the screen; the text scrolls with the finger or the arrows.
 struct LicItem { const wchar_t* title; const wchar_t* text; };
 static const LicItem kLicenses[] = {
-    { L"БИБЛИОТЕКИ (В СОСТАВЕ VESTAHOME)", NULL },
+    { L"Библиотеки (в составе VestaHome)", NULL },
     { L"BearSSL 0.6", L"Thomas Pornin · лицензия MIT · bearssl.org. HTTPS: погода Яндекса, база камер." },
     { L"Корневые сертификаты Mozilla", L"Mozilla CA Certificate Store · MPL 2.0. Проверка серверов HTTPS "
                                       L"(часть сертификатов, встроена в программу)." },
@@ -385,7 +385,7 @@ static const LicItem kLicenses[] = {
                            L"Весь текст VestaHome (папка Fonts, там же OFL.txt)." },
     { L"Значки Lucide 1.61", L"Lucide Contributors · лицензия ISC (части из Feather — MIT) · lucide.dev. Значки "
                              L"VestaHome (папка Skin)." },
-    { L"СЕРВИСЫ", NULL },
+    { L"Сервисы", NULL },
     { L"Open-Meteo.com", L"Weather data by Open-Meteo.com, CC BY 4.0. Погода по умолчанию, без ключа." },
     { L"OpenWeatherMap", L"openweathermap.org. Погода, если выбрана и задан свой ключ." },
     { L"Яндекс Погода", L"yandex.ru/pogoda. Погода, если выбрана и задан свой ключ (тариф «погода для умного "
@@ -394,7 +394,7 @@ static const LicItem kLicenses[] = {
     { L"Интернет-радио", L"Потоки станций из radio.txt принадлежат самим станциям." },
     { L"Свои виджеты", L"Загружают адреса из своих .ini (url=) через HTTPS VestaHome; данные принадлежат их источникам. "
                        L"Пример probki.ini - баллы Яндекс Пробок (неофициальный адрес export.yandex.ru)." },
-    { L"ИЗ ПРОШИВКИ ГУ (НЕ ВХОДИТ В VESTAHOME)", NULL },
+    { L"Из прошивки ГУ (не входит в VestaHome)", NULL },
     { NULL, L"Видео — GStreamer штатного плеера; Bluetooth — стек FLC оболочки; радио, звук и кнопки — MCU через "
             L"SPIPowerMgr; шрифт Tahoma; Windows CE 6." },
 };
@@ -407,7 +407,7 @@ static void ScrLicenses(HDC dc)
     Zone(0, 0, 800, 480, A_BACK);   // a tap beside the window closes it
     Zone(40, 40, 720, 400, A_NONE);
     Panel(dc, 40, 40, 720, 400, 16);
-    T(dc, 64, 82, L"ЛИЦЕНЗИИ И СЕРВИСЫ", 17, kText, 700);
+    T(dc, 64, 82, L"Лицензии и сервисы", 17, kText, 700);
     Button(dc, 696, 52, 52, 44, NULL, B_N, IC_CLOSE, 15, 24, A_BACK);
     Sep(dc, 56, kLicTop - 6, 688);
     ScrollBegin(dc, s_licList, 56, kLicTop, 704, kLicBottom);

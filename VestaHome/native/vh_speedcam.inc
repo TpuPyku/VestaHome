@@ -340,11 +340,11 @@ static void DtmfPlay(wchar_t k)
 // a USB disk or next to the exe.
 struct AvTest { const wchar_t* label; const wchar_t* file; bool video; };
 static const AvTest kAvTests[10] = {
-    { L"ПИСК ПОВЕРХ РАДИО", NULL, false },     { L"ЛЕВО → ПРАВО (MP3)", L"lr.mp3", false },
+    { L"Писк поверх радио", NULL, false },     { L"Лево → право (MP3)", L"lr.mp3", false },
     { L"СВИП 40 Гц – 12 кГц", L"sweep.mp3", false }, { L"MP3 + теги", L"test.mp3", false },
     { L"M4A (AAC)", L"test.m4a", false },      { L"FLAC", L"test.flac", false },
-    { L"WAV", L"test.wav", false },            { L"ВИДЕО MP4 (H.264)", L"test.mp4", true },
-    { L"ВИДЕО AVI (XviD)", L"test.avi", true }, { L"ВИДЕО MKV (H.264)", L"test.mkv", true } };
+    { L"WAV", L"test.wav", false },            { L"Видео MP4 (H.264)", L"test.mp4", true },
+    { L"Видео AVI (XviD)", L"test.avi", true }, { L"Видео MKV (H.264)", L"test.mkv", true } };
 
 // The TestMedia folder with a trailing '\', or "" when there is none.
 static const wchar_t* AvDir()
@@ -589,7 +589,7 @@ static bool HvacChip(wchar_t* s, int n)
         _snwprintf(t, 16, L" %d/16", h.temp);
     if (h.blower >= 0)
         _snwprintf(b, 16, L" · ВЕНТ %d", h.blower);
-    _snwprintf(s, n, L"КЛИМАТ%s%s%s%s", t, b, h.ac == 1 ? L" · A/C" : L"", h.autoMode == 2 ? L" · АВТО" : L"");
+    _snwprintf(s, n, L"Климат%s%s%s%s", t, b, h.ac == 1 ? L" · A/C" : L"", h.autoMode == 2 ? L" · Авто" : L"");
     s[n - 1] = 0;
     return true;
 }

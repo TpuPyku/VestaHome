@@ -497,7 +497,7 @@ static void ScrAudio(HDC dc)
         T(dc, 272, 192, title, 34, kText, 700, AL_START, 512);
         T(dc, 272, 222, sub, 20, kMuted, 400, AL_START, 512);
     } else if (s_bass.state < 0) {
-        T(dc, 272, 170, L"НЕТ БИБЛИОТЕКИ ЗВУКА", 22, kText, 700, AL_START, 512);
+        T(dc, 272, 170, L"Нет библиотеки звука", 22, kText, 700, AL_START, 512);
         if (s_bass.state == -1) {   // where it was looked for: the folder bass\ next to the exe
             wchar_t where[MAX_PATH + 16];
             _snwprintf(where, MAX_PATH + 16, L"нет %sbass\\bass.dll", s_dir);

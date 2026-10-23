@@ -6,7 +6,7 @@
 
 static const wchar_t* VhVersion()   // "0.5.261023"
 {
-    return AppVersion(L"0.5");
+    return AppVersion(L"0.6");
 }
 
 // ---------------------------------------------------------------- drawing helpers
@@ -90,7 +90,7 @@ static void FillDot(HDC dc, int x, int y, int size, double cx, double cy, double
 // Equilateral-triangle mosaic, three close shades (the 2018 Vesta trim).
 static void Triangles(HDC dc, int l, int t, int r, int b, const COLORREF* shades, int nshades)
 {
-    const int w = 48, h = 42;
+    const int w = 64, h = 56;   // design 0.6: a larger mosaic
     HRGN clip = CreateRectRgn(l, t, r, b);
     SelectClipRgn(dc, clip);
     for (int row = 0; t + row * h < b; row++) {
@@ -1366,7 +1366,7 @@ static unsigned short Px(COLORREF c)
 // Shade index of the triangle mosaic at (u, v) from its origin: the same tiling as Triangles().
 static int TriIndex(int u, int v, int n)
 {
-    const int w = 48, h = 42;
+    const int w = 64, h = 56;   // design 0.6: a larger mosaic
     int row = v / h, f = v % h, col = u / (w / 2), d = u % (w / 2);
     bool up = ((row + col) & 1) == 0;
     // this half-cell holds the left half of triangle col and the right half of triangle col - 1

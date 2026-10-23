@@ -142,21 +142,21 @@ static void DrawTasks(HDC dc)
         _snwprintf(s, 96, L"%d %%", (s_task.cpu10 + 5) / 10);
     else
         wcscpy(s, L"...");
-    TaskGraph(dc, 16, 64, 380, L"ПРОЦЕССОР", s, s_task.cpuHist, kOrange);
+    TaskGraph(dc, 16, 64, 380, L"Процессор", s, s_task.cpuHist, kOrange);
     DWORD total = s_task.memTotalKB, used = total - s_task.memAvailKB;
     MemText(a, 24, used);
     MemText(b, 24, total);
     _snwprintf(s, 96, L"%s из %s · %u %%", a, b, total ? (unsigned)(used * 100 / total) : 0);
-    TaskGraph(dc, 404, 64, 380, L"ПАМЯТЬ", s, s_task.memHist, kText);
+    TaskGraph(dc, 404, 64, 380, L"Память", s, s_task.memHist, kText);
 
     _snwprintf(s, 96, L"ПРОЦЕССЫ %d", s_task.procCount);
     Button(dc, 16, 176, 172, 48, s, s_taskTab == 0 ? B_SEL : B_N, IC_NONE, 16, 0, A_TASKTAB, 0);
     _snwprintf(s, 96, L"ОКНА %d", s_task.winCount);
     Button(dc, 196, 176, 128, 48, s, s_taskTab == 1 ? B_SEL : B_N, IC_NONE, 16, 0, A_TASKTAB, 1);
     if (s_taskTab == 0) {
-        TaskSortBtn(dc, 336, L"ИМЯ", TS_NAME);
+        TaskSortBtn(dc, 336, L"Имя", TS_NAME);
         TaskSortBtn(dc, 446, L"ЦП", TS_CPU);
-        TaskSortBtn(dc, 556, L"ПАМЯТЬ", TS_MEM);
+        TaskSortBtn(dc, 556, L"Память", TS_MEM);
     }
     int pages = TaskPages();
     if (s_taskPage >= pages)
@@ -744,9 +744,9 @@ static void WClimate(HDC dc, int x, int y)
         R(dc, x + 16, y + 120, 56, 28, 14, h.ac == 1 ? kOrange : kPanel2);
         T(dc, x + 44, y + 140, L"A/C", 14, h.ac == 1 ? kInk : kMuted, 700, AL_MID);
         R(dc, x + 80, y + 120, 64, 28, 14, h.autoMode == 2 ? kOrange : kPanel2);
-        T(dc, x + 112, y + 140, L"АВТО", 13, h.autoMode == 2 ? kInk : kMuted, 700, AL_MID);
+        T(dc, x + 112, y + 140, L"Авто", 13, h.autoMode == 2 ? kInk : kMuted, 700, AL_MID);
         R(dc, x + 152, y + 120, 80, 28, 14, h.rear == 1 ? kOrange : kPanel2);
-        T(dc, x + 192, y + 140, L"ОБОГРЕВ", 12, h.rear == 1 ? kInk : kMuted, 700, AL_MID);
+        T(dc, x + 192, y + 140, L"Обогрев", 12, h.rear == 1 ? kInk : kMuted, 700, AL_MID);
         if (h.outer > -100) {
             _snwprintf(s, 24, L"за бортом %+d°", h.outer);
             T(dc, x + 232, y + 54, s, 13, kMuted, 600, AL_END);
@@ -755,13 +755,13 @@ static void WClimate(HDC dc, int x, int y)
     }
     Widget(dc, x, y, 248, 158, L"Климат · Демо", IC_CAR, A_NONE, 0, S_WSET_CAR);
     T(dc, x + 16, y + 100, L"22,0°", 46, kText, 700);
-    T(dc, x + 156, y + 72, L"АВТО", 15, kOrange, 700);
+    T(dc, x + 156, y + 72, L"Авто", 15, kOrange, 700);
     for (int i = 0; i < 5; i++)   // fan speed 3 of 5
         R(dc, x + 156 + i * 15, y + 100 - (8 + i * 4), 10, 8 + i * 4, 2, i < 3 ? kText : kLine);
     R(dc, x + 16, y + 116, 64, 30, 8, kOrange);
     T(dc, x + 48, y + 137, L"A/C", 15, kInk, 700, AL_MID);
     R(dc, x + 88, y + 116, 104, 30, 15, kPanel2);
-    T(dc, x + 140, y + 137, L"РЕЦИРК.", 13, kMuted, 700, AL_MID);
+    T(dc, x + 140, y + 137, L"Рецирк.", 13, kMuted, 700, AL_MID);
 }
 
 // The phone (2026-10-21, out of the demo): the shell's Bluetooth through our proxy - the phone connected, its
@@ -802,9 +802,9 @@ static void WPhone(HDC dc, int x, int y)
     }
     int call = bt.call[0] ? bt.call[0] : bt.call[1];
     if (call) {   // a call: its state, the number, answer / hang up
-        const wchar_t* st = call == BT_CALL_INCOMING || call == BT_CALL_WAITING ? L"ВХОДЯЩИЙ"
-                          : call == BT_CALL_DIALING || call == BT_CALL_ALERTING ? L"ВЫЗОВ"
-                          : call == BT_CALL_HELD ? L"НА УДЕРЖАНИИ" : L"РАЗГОВОР";
+        const wchar_t* st = call == BT_CALL_INCOMING || call == BT_CALL_WAITING ? L"Входящий"
+                          : call == BT_CALL_DIALING || call == BT_CALL_ALERTING ? L"Вызов"
+                          : call == BT_CALL_HELD ? L"На удержании" : L"Разговор";
         T(dc, x + 16, y + 66, st, 13, d ? kInk : kOrange, 700);
         wchar_t num[40];
         MultiByteToWideChar(CP_ACP, 0, bt.callNumber, -1, num, 40);

@@ -152,7 +152,7 @@ static void TeEdit(int i, bool isNew)
     s_teAt = i;
     s_teBuf[0] = 0;
     if (isNew) {
-        wcscpy(s_teTitle, L"НОВАЯ СТРОКА");
+        wcscpy(s_teTitle, L"Новая строка");
     } else {
         const wchar_t* s = s_teLine[i];
         int k = TeKeyLen(s);

@@ -344,7 +344,7 @@ static void NightAuto(bool force)
 // brightness: the display takes only the day and the night levels - HU 2026-10-20, the user.)
 static void ScrSetScreen(HDC dc)
 {
-    static const wchar_t* saver[5] = { L"ВЫКЛ", L"1", L"3", L"5", L"10" };
+    static const wchar_t* saver[5] = { L"Выкл", L"1", L"3", L"5", L"10" };
     Settings(dc, S_SET_SCREEN);
     wchar_t sub[48];
     int a, b;
