@@ -23,7 +23,7 @@ P = {
     'pause': '!pause', 'prev': '!skip-back', 'next': '!skip-forward', 'shuffle': 'shuffle', 'repeat': 'repeat',
     'list': 'list', 'cloud': 'cloud', 'car': 'car', 'clock': 'clock', 'user': 'user', 'star': 'star',
     'keypad': 'grid-3x3', 'warn': 'triangle-alert', 'search': 'search', 'chev': 'chevron-right', 'back': 'chevron-left',
-    'sd': 'save', 'call': 'phone', 'end': 'phone-off', 'trip': 'route', 'fuel': 'fuel', 'drop': 'droplet', 'bolt': 'zap',
+    'sd': 'save', 'info': 'info', 'media': 'clapperboard', 'call': 'phone', 'end': 'phone-off', 'trip': 'route', 'fuel': 'fuel', 'drop': 'droplet', 'bolt': 'zap',
 }
 
 
@@ -240,9 +240,9 @@ def scr_phone():
 def scr_settings():
     nav = ''
     for name, label in [('gear', 'Общие'), ('vol', 'Звук'), ('moon', 'Экран'), ('radio', 'Радио'), ('bt', 'Bluetooth'),
-                        ('wifi', 'Wi-Fi'), ('car', 'Автомобиль')]:
+                        ('wifi', 'Wi-Fi'), ('media', 'Медиа'), ('car', 'Автомобиль')]:
         a = label == 'Bluetooth'
-        nav += ('<div style="display:flex;align-items:center;gap:12px;height:42px;padding:0 14px;border-radius:14px;%s">%s'
+        nav += ('<div style="display:flex;align-items:center;gap:12px;height:38px;padding:0 14px;border-radius:14px;%s">%s'
                 '<span style="font-size:16px;%s">%s</span></div>' % ('background:var(--orS);color:var(--or)' if a else 'color:var(--t2)',
                                                                       ico(name, 20), 'font-weight:bold' if a else '', label))
     rows = ''
@@ -254,9 +254,10 @@ def scr_settings():
         rows += ('<div class="lrow"><div style="flex:1"><div style="font-size:18px">%s</div><div class="t3" style="font-size:13px">%s'
                  '</div></div>%s</div>' % (lab, sub, ctl))
     return '''<div class="scr">%s
-<div style="position:absolute;left:16px;top:60px;width:196px">%s</div>
+<div style="position:absolute;left:16px;top:58px;width:196px">%s
+  <div style="margin:6px 8px 0;border-top:1px solid var(--sep);padding:8px 6px 0;display:flex;align-items:center;gap:10px;color:var(--t3);font-size:14px">%s О системе · 0.6</div></div>
 <div class="card" style="left:228px;top:60px;width:548px;height:340px;padding:4px 24px">%s</div>
-%s</div>''' % (top('Настройки'), nav, rows, bot('gear'))
+%s</div>''' % (top('Настройки'), nav, ico('info', 18), rows, bot('gear'))
 
 
 def scr_car():
@@ -324,6 +325,9 @@ SCREENS = [
         'Справа — недавние звонки списком без рамок между карточками, только тонкие разделители.']),
     ('Настройки', scr_settings, '26_settings_bt.png', [
         'Разделы — список слева (значок + подпись) вместо сетки плиток 2×5; текущий — оранжевая «таблетка».',
+        'Разделов 8 вместо 10: «Видео» и «Фото» — один раздел «Медиа» (две группы на одной странице, как «Медиа» '
+        'в нижней панели); «О системе» — не раздел списка, а мелкая строка внизу колонки под линией: заходят редко, '
+        'но видна всегда (с номером версии).',
         'Строки 60 px, подписи второй строкой тусклее, переключатели крупнее (52×30).',
         'Одна карточка справа вместо панели с рамкой.']),
     ('Автомобиль', scr_car, '38_car_sensors.png', [
