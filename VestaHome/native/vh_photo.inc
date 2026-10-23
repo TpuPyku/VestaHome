@@ -351,6 +351,11 @@ static void DoAction(const Btn& b)
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;
     case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
+    case A_SAVERBG:   // Settings -> General -> Theme: the saver's background
+        s_cfg.saverBg = b.arg == 1 ? 1 : 0;
+        ApplyAccent();
+        SaveCfg();
+        break;
     case A_ACCENT:   // Settings -> General -> Theme: the accent colour
         s_cfg.accent = b.arg >= 0 && b.arg < kAccentCount ? b.arg : 0;
         ApplyAccent();

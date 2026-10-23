@@ -1074,22 +1074,13 @@ static void MainBackground(HDC dc)
         BlitNight(dc, s_bg);
 }
 
-// The screen saver's picture: loaded on its first frame, freed when it closes (SaverFree); none - plain dark.
-static void SaverBackground(HDC dc)
-{
-    if (!s_saverBg && s_skinSaver[0]) {
-        s_saverBg = MakeDib(800, 480, &s_saverBits);
-        if (s_saverBg && !LoadBackground(s_skinSaver, s_saverBits)) {
-            DeleteObject(s_saverBg);
-            s_saverBg = NULL;
-            s_skinSaver[0] = 0;   // not again
-        }
-    }
-    if (s_saverBg)
-        BlitNight(dc, s_saverBg);
-    else
-        Fill(dc, 0, 0, 800, 480, kInk);
-}
+// The screen saver's background (Settings -> General -> Theme, the user 2026-10-23): 0 the mosaic - the skin's saver
+// picture without a light, the soft spot over the clock drawn in the accent colour; 1 the headlights (saver2.png,
+// its own orange lights). Loaded on its first frame, freed when it closes (SaverFree); none - plain dark.
+static int            s_saverSel;       // the choice (ApplyAccent sets it from the settings)
+static int            s_saverLoaded = -1;
+static bool           s_saverFailed[2];
+static unsigned char* s_saverGlow;      // the spot's strength (of 255) at half the resolution, 400 x 240
 
 static void SaverFree()
 {
@@ -1097,6 +1088,71 @@ static void SaverFree()
         DeleteObject(s_saverBg);
         s_saverBg = NULL;
     }
+    free(s_saverGlow);
+    s_saverGlow = NULL;
+    s_saverLoaded = -1;
+}
+
+// The spot in the accent colour: 16 % in the middle (400, 192), a Gaussian fall-off (as make_saver.py drew it).
+static void SaverSpot()
+{
+    if (!s_saverGlow) {
+        s_saverGlow = (unsigned char*)malloc(400 * 240);
+        if (!s_saverGlow)
+            return;
+        for (int y = 0; y < 240; y++)
+            for (int x = 0; x < 400; x++) {
+                double dx = (x * 2 - 400) / 330.0, dy = (y * 2 - 192) / 200.0;
+                s_saverGlow[y * 400 + x] = (unsigned char)(255 * exp(-2.2 * (dx * dx + dy * dy)) + 0.5);
+            }
+    }
+#ifndef UNDER_CE
+    GdiFlush();
+#endif
+    COLORREF o = C(kOrange);
+    int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o);
+    const int kMax = 10486;   // 16 % of 65536
+    for (int y = s_clip.top; y < s_clip.bottom; y++) {
+        const unsigned char* g = s_saverGlow + (y / 2) * 400;
+        Pix* row = s_backBits + (479 - y) * 800;
+        for (int x = s_clip.left; x < s_clip.right; x++) {
+            int a = g[x / 2] * kMax / 255;
+            if (!a)
+                continue;
+            Pix p = row[x];
+            int r = PR(p), gg = PG(p), b = PB(p);
+            row[x] = PIX(r + ((orr - r) * a + 32768) / 65536, gg + ((og - gg) * a + 32768) / 65536,
+                         b + ((ob - b) * a + 32768) / 65536);
+        }
+    }
+}
+
+static void SaverBackground(HDC dc)
+{
+    int sel = s_saverSel == 1 ? 1 : 0;
+    if (s_saverLoaded != sel)
+        SaverFree();
+    if (!s_saverBg && !s_saverFailed[sel]) {
+        wchar_t path[MAX_PATH];
+        if (sel == 1)
+            _snwprintf(path, MAX_PATH, L"%sSkin\\saver2.png", s_dir);
+        else
+            wcscpy(path, s_skinSaver);
+        path[MAX_PATH - 1] = 0;
+        s_saverBg = path[0] ? MakeDib(800, 480, &s_saverBits) : NULL;
+        if (s_saverBg && !LoadBackground(path, s_saverBits)) {
+            DeleteObject(s_saverBg);
+            s_saverBg = NULL;
+        }
+        s_saverFailed[sel] = !s_saverBg;   // not again
+        s_saverLoaded = sel;
+    }
+    if (s_saverBg)
+        BlitNight(dc, s_saverBg);
+    else
+        Fill(dc, 0, 0, 800, 480, kInk);
+    if (sel == 0)
+        SaverSpot();
 }
 
 // a over b with alpha 0..255

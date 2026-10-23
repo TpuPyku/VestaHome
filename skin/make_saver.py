@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """make_saver.py - the screen saver's background of design 0.6 -> VestaHome/VestaHome/Skin/saver.png (800 x 480).
 
-As the mockup's saver (make_home_mockup.py, .saver): the rhombus mosaic in cells of 64 x 112, darkened downwards, a
-soft orange spot over the clock's place - a Gaussian fall-off, as the previous picture's light (the user
-2026-10-23). Full 24-bit colour: VestaHome draws in 32 bits (the unit's screen is more than 16-bit). The previous
+As the mockup's saver (make_home_mockup.py, .saver): the rhombus mosaic in cells of 64 x 112, darkened downwards.
+No light: VestaHome draws the soft spot over the clock itself, in the accent colour chosen (Settings -> General ->
+Theme, the user 2026-10-23). Full 24-bit colour: VestaHome draws in 32 bits. The previous
 picture (the headlights) stays as saver2.png: "saver = saver2.png" in skin.ini brings it back.
 
 Usage: python VestaHome/skin/make_saver.py
 """
-import math
 import os
 
 from PIL import Image, ImageDraw
@@ -19,7 +18,6 @@ W, H = 800, 480
 CW, CH = 64, 112   # a mosaic cell: four triangles meeting in its middle
 SHADES = {'left': (0x17, 0x1a, 0x20), 'right': (0x12, 0x14, 0x19), 'top': (0x1b, 0x1e, 0x24), 'bottom': (0x0f, 0x11, 0x14)}
 INK = (0x0e, 0x10, 0x13)   # VestaHome's background
-ORANGE = (0xff, 0x6b, 0x1a)
 
 
 def mosaic():
@@ -38,15 +36,11 @@ def mosaic():
 def main():
     base = mosaic()
     px = base.load()
-    gx, gy, rx, ry = W * 0.5, H * 0.4, 330.0, 200.0   # the spot: its middle, the ellipse of its fall-off
     for y in range(H):
         dark = 0.6 + 0.25 * y / (H - 1)   # the shade over the mosaic, more towards the bottom
         for x in range(W):
             r, g, b = px[x, y]
             r, g, b = (c * (1 - dark) + i * dark for c, i in zip((r, g, b), INK))
-            e = ((x - gx) / rx) ** 2 + ((y - gy) / ry) ** 2
-            a = 0.16 * math.exp(-2.2 * e)   # the orange, a soft Gaussian spot
-            r, g, b = (c * (1 - a) + o * a for c, o in zip((r, g, b), ORANGE))
             px[x, y] = (int(r + 0.5), int(g + 0.5), int(b + 0.5))
     base.save(OUT, optimize=True)
     print('%s %d B' % (os.path.normpath(OUT), os.path.getsize(OUT)))

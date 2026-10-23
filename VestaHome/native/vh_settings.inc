@@ -81,6 +81,7 @@ struct Cfg {
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
     int     accent;                    // the accent: kAccents' index (0 Марс = the skin's own)
+    int     saverBg;                   // the saver's background: 0 the mosaic with the accent's spot, 1 the headlights
     int     homeOrder[kWgMax];         // the main screen's widgets (WG_*, then the user's) in their order
     wchar_t homeRaw[400];              // home.widgets as read: keeps the user widgets not found now (no card)
     int     homeHidden;                // bit 1 << WG_*: hidden
@@ -152,14 +153,14 @@ static void SaveCfg();
 
 // The accent colours (Settings -> General -> Theme, the user 2026-10-23): Lada Vesta's paints that can be an accent
 // on the dark grey. The paint (kraska-auto.ru/tsveta-lada-vesta, its table's swatch colour) with its hue kept and its
-// lightness raised to 55 % when darker (Сердолик #811717, Гарфилд #612B0F, Криптон #172911, Дайвинг #325AA5 would not
+// lightness raised to 55 % when darker (Сердолик #811717, Криптон #172911, Дайвинг #325AA5 would not
 // show on the grey); the light ones as they are (Карфаген, Булат, Платина). 0 Марс (#CB390A) is the skin's own accent,
 // the design's orange.
-enum { kAccentCount = 8 };
+enum { kAccentCount = 7 };   // (Гарфилд left out: too close to Марс)
 struct Accent { int code; const wchar_t* name; COLORREF c; };
 static const Accent kAccents[kAccentCount] = {
     { 130, L"Марс", RGB(0xff, 0x6b, 0x1a) },     { 195, L"Сердолик", RGB(0xdc, 0x3c, 0x3c) },
-    { 293, L"Гарфилд", RGB(0xe0, 0x72, 0x38) },  { 247, L"Карфаген", RGB(0xc3, 0xb8, 0x9c) },
+    { 247, L"Карфаген", RGB(0xc3, 0xb8, 0x9c) },
     { 372, L"Криптон", RGB(0x72, 0xc0, 0x59) },  { 476, L"Дайвинг", RGB(0x4f, 0x7a, 0xca) },
     { 619, L"Булат", RGB(0xab, 0xba, 0xd8) },    { 691, L"Платина", RGB(0xee, 0xee, 0xee) } };
 static COLORREF s_skinAccent = RGB(0xff, 0x6b, 0x1a);   // the skin's (or the built-in) accent, kept for Марс
@@ -193,6 +194,7 @@ static void ApplyAccent()
     kTriOr[1] = Scale(a, 76);
     kTriOr[2] = Scale(a, 66);
     kTriOr[3] = Scale(a, 90);
+    s_saverSel = s_cfg.saverBg;
 }
 static const wchar_t* AccentName()
 {
@@ -205,19 +207,19 @@ static void ScrSetTheme(HDC dc)
 {
     Settings(dc, S_SET_THEME);
     T(dc, 264, 96, L"Цвет акцента", 19, kText, 700);
-    T(dc, 264, 118, L"цвета кузова LADA Vesta, тёмные — высветлены для экрана", 14, kMuted, 400, AL_START, 500);
-    for (int i = 0; i < kAccentCount; i++) {
-        int x = 256 + (i % 4) * 130, y = 140 + (i / 4) * 128;
-        bool on = i == s_cfg.accent, d = Zone(x, y, 122, 120, A_ACCENT, i);
-        RSel(dc, x, y, 122, 120, 16, on, d);
-        Disc(dc, x + 61, y + 42, 26, kAccents[i].c);
+    for (int i = 0; i < kAccentCount; i++) {   // 4 + 3 tiles: a circle of the colour, its name
+        int x = 256 + (i % 4) * 130, y = 112 + (i / 4) * 112;
+        bool on = i == s_cfg.accent, d = Zone(x, y, 122, 104, A_ACCENT, i);
+        RSel(dc, x, y, 122, 104, 16, on, d);
+        Disc(dc, x + 61, y + 40, 24, kAccents[i].c);
         if (on)
-            Disc(dc, x + 61, y + 42, 31, CLR_INVALID, kText);
-        wchar_t code[8];
-        _snwprintf(code, 8, L"%d", kAccents[i].code);
-        T(dc, x + 61, y + 92, kAccents[i].name, 15, d ? kInk : on ? kOrange : kText, 700, AL_MID, 116);
-        T(dc, x + 61, y + 110, code, 12, d ? kInk : kMuted, 400, AL_MID);
+            Disc(dc, x + 61, y + 40, 29, CLR_INVALID, kText);
+        T(dc, x + 61, y + 90, kAccents[i].name, 15, d ? kInk : on ? kOrange : kText, 700, AL_MID, 116);
     }
+    SetRow(dc, 344, L"Фон заставки", s_cfg.saverBg ? L"фары" : L"мозаика, свет — цвет акцента", true, A_NONE, 0, 56);
+    static const wchar_t* bg[2] = { L"Мозаика", L"Фары" };
+    for (int i = 0; i < 2; i++)
+        Button(dc, 528 + i * 124, 352, 116, 40, bg[i], s_cfg.saverBg == i ? B_SEL : B_N, IC_NONE, 15, 0, A_SAVERBG, i);
 }
 
 static void RadioCacheLoad(const wchar_t* k, const wchar_t* v);   // the tuner's last state, the stations' names
@@ -468,6 +470,8 @@ static void LoadCfg()
             s_cfg.keyVol = _wtoi(v) < -1 ? -1 : _wtoi(v) > 30 ? 30 : _wtoi(v);
         } else if (!wcscmp(k, L"sound.speedvol")) {
             s_cfg.speedVol = _wtoi(v) < 0 ? 0 : _wtoi(v) > 3 ? 3 : _wtoi(v);
+        } else if (!wcscmp(k, L"screen.saverbg")) {
+            s_cfg.saverBg = _wtoi(v) == 1 ? 1 : 0;
         } else if (!wcscmp(k, L"screen.accent")) {
             s_cfg.accent = AccentByCode(_wtoi(v));
         } else if (!wcscmp(k, L"screen.saver")) {
@@ -590,7 +594,9 @@ static void SaveCfg()
     n += RadioCacheText(text + n, 12000 - n);
     {
         int k = _snwprintf(text + n, 12000 - n, L"# screen.accent: the accent colour, a Lada Vesta paint code (Settings -> "
-                           L"General -> Theme; 130 Марс = the skin's)\r\nscreen.accent=%d\r\n", kAccents[s_cfg.accent].code);
+                           L"General -> Theme; 130 Марс = the skin's)\r\nscreen.accent=%d\r\n"
+                           L"# screen.saverbg: the saver's background, 0 the mosaic (the accent's light), 1 the headlights\r\n"
+                           L"screen.saverbg=%d\r\n", kAccents[s_cfg.accent].code, s_cfg.saverBg);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {
