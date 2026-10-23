@@ -1665,12 +1665,12 @@ static const wchar_t* VolName(const wchar_t* path, const wchar_t** rest)
 
 // The browsers' path line (design 0.6, y 108..152): "‹" one level up (inside a folder), then the volume and the
 // folders "SD-карта › Музыка › Rock" (the last white, the first ones dropped when it is too long; a tap on it - the
-// volumes), up to `right`.
-static void DirPath(HDC dc, const wchar_t* dir, Action up, int right)
+// volumes: rootArg), up to `right`.
+static void DirPath(HDC dc, const wchar_t* dir, Action up, int upArg, int rootArg, int right)
 {
     int x = 24;
     if (dir[0]) {
-        IconBtn(dc, IC_BACK, 16, 116, 28, kMuted, up);
+        IconBtn(dc, IC_BACK, 16, 116, 28, kMuted, up, upArg);
         x = 60;
     }
     wchar_t part[8][MAX_PATH];   // the crumbs, the volume first
@@ -1709,7 +1709,7 @@ static void DirPath(HDC dc, const wchar_t* dir, Action up, int right)
         w += pw;
     }
     if (dir[0])
-        Zone(x, 108, w < right - x ? w : right - x, 44, up, 1);
+        Zone(x, 108, w < right - x ? w : right - x, 44, up, rootArg);
     for (int i = first; i < n; i++) {
         bool last = i == n - 1;
         x = T(dc, x, 137, part[i], 17, last ? kText : kMuted, 700, AL_START, right - x);

@@ -114,7 +114,7 @@ static void ScrVideo(HDC dc)
     MediaTabs(dc, S_VIDEO, IC_PLAY, A_SCREEN, S_VIDEO_PLAY, S_SET_VIDEO);
     if (s_vidPage >= VidPages())
         s_vidPage = VidPages() - 1;
-    DirPath(dc, s_vidDir, A_VUP, 784);
+    DirPath(dc, s_vidDir, A_VUP, 0, 1, 784);
     DirEntries(dc, s_vidDir, s_vids, s_vidCount, s_vidPage, kVidRows, kVidCols, A_VFILE, IC_VIDEO,
                s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) ? s_vp[s_vpCur] : NULL, L"Здесь нет папок и видео");
     PageDots(dc, s_vidPage, VidPages(), 400, 396);

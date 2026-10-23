@@ -107,9 +107,9 @@ static void PhotoOpenDir(const wchar_t* dir)
     }
 }
 
-static int PhotoPer()   // the folder's entries a page: in a folder "up" is the first tile of every page
+static int PhotoPer()   // the folder's entries a page ("up" is the path line's arrow)
 {
-    return kPhTiles - (s_phDir[0] ? 1 : 0);
+    return kPhTiles;
 }
 
 static int PhotoPages()
@@ -117,12 +117,9 @@ static int PhotoPages()
     return s_phCount > 0 ? (s_phCount + PhotoPer() - 1) / PhotoPer() : 1;
 }
 
-static int PhotoTileEntry(int t)   // tile t of the page: its entry, -1 "up", -2 none
+static int PhotoTileEntry(int t)   // tile t of the page: its entry, -2 none
 {
-    int up = s_phDir[0] ? 1 : 0;
-    if (up && t == 0)
-        return -1;
-    int k = s_phPage * PhotoPer() + t - up;
+    int k = s_phPage * PhotoPer() + t;
     return k < s_phCount ? k : -2;
 }
 
@@ -174,37 +171,39 @@ static void ScrPhoto(HDC dc)
         PhotoOpenDir(s_cfg.photoDir[0] && GetFileAttributes(s_cfg.photoDir) != 0xFFFFFFFF ? s_cfg.photoDir : L"");
     if (s_phPage >= PhotoPages())
         s_phPage = PhotoPages() - 1;
-    DirTitle(dc, L"Медиа · Фото", s_phDir);
+    Frame(dc, L"Медиа · Фото");
     MediaTabs(dc, S_PHOTO, IC_PLAY, A_PHPLAY, 0, S_SET_PHOTO);
+    DirPath(dc, s_phDir, A_PHFILE, -1, -3, 784);
     PhotoWantThumbs();
-    for (int t = 0; t < kPhTiles; t++) {
-        int k = PhotoTileEntry(t), x = 16 + (t % 4) * 194, y = 124 + (t / 4) * 138;
+    for (int t = 0; t < kPhTiles; t++) {   // design 0.6: 4 x 2, the picture without a frame, its name under it
+        int k = PhotoTileEntry(t), x = 22 + (t % 4) * 194, y = 160 + (t / 4) * 118;
         if (k == -2)
             break;
-        bool down = Zone(x, y, 184, 128, A_PHFILE, k);   // k -1: up
-        bool dir = k < 0 || PhIsDir(k);
-        bool cur = !dir && k == s_phCur;
-        R(dc, x, y, 184, 128, 12, down || cur ? kOrange : kPanel, down || cur ? CLR_INVALID : kLine);
+        bool down = Zone(x - 6, y - 4, 184, 116, A_PHFILE, k);
+        bool dir = PhIsDir(k);
+        bool cur = !dir && k == s_phCur;   // the last one viewed: an orange outline
         wchar_t name[MAX_PATH];
-        if (k < 0)
-            wcscpy(name, L"НАВЕРХ");
-        else {
-            wcscpy(name, s_phs[k]);
-            if (dir && name[0] && name[wcslen(name) - 1] == L'\\')
-                name[wcslen(name) - 1] = 0;
-        }
+        const wchar_t* rest;
+        const wchar_t* vol = s_phDir[0] ? NULL : VolName(s_phs[k], &rest);   // the volumes by their names
+        wcscpy(name, vol ? vol : s_phs[k]);
+        if (dir && name[0] && name[wcslen(name) - 1] == L'\\')
+            name[wcslen(name) - 1] = 0;
+        if (down || cur)
+            R(dc, x - 4, y - 4, kThW + 8, kThH + 8, 16, down ? kOrange : CLR_INVALID, kOrange);
         if (dir) {
-            Ico(dc, k < 0 ? IC_UP : IC_FOLDER, x + 64, y + 22, 56, down ? kInk : k < 0 ? kMuted : kOrange);
+            R(dc, x, y, kThW, kThH, 14, down ? kOrange : kPanel);
+            Ico(dc, IC_FOLDER, x + kThW / 2 - 24, y + kThH / 2 - 24, 48, down ? kInk : kOrange);
         } else {
-            R(dc, x + 6, y + 6, kThW, kThH, 0, kMargin);
+            R(dc, x, y, kThW, kThH, 0, kMargin);
             EnterCriticalSection(&s_phCs);
             if (s_th[t].state == 2)
-                BlitPic(s_th[t].pic, x + 6, y + 6);
+                BlitPic(s_th[t].pic, x, y);
             else
-                Ico(dc, IC_PHOTO, x + 6 + kThW / 2 - 22, y + 6 + kThH / 2 - 22, 44, s_th[t].state == 3 ? kOff : kDim);
+                Ico(dc, IC_PHOTO, x + kThW / 2 - 22, y + kThH / 2 - 22, 44, s_th[t].state == 3 ? kOff : kDim);
             LeaveCriticalSection(&s_phCs);
         }
-        T(dc, x + 92, y + 118, name, 14, down || cur ? kInk : kMuted, 700, AL_MID, 172);
+        T(dc, x, y + kThH + 18, name, 13, cur || down ? kOrange : dir ? kText : kMuted, dir ? 700 : 400, AL_START,
+          kThW);
     }
     if (!s_phCount)
         T(dc, 400, 250, s_phDir[0] ? L"Здесь нет папок и фото (JPG, PNG, BMP)" : L"Нет носителей", 18, kMuted, 400,
@@ -342,8 +341,10 @@ static void DoAction(const Btn& b)
     case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
     case A_NAV:      Nav((Screen)b.arg); break;
     case A_NIGHT:    SetTheme(!s_night); break;   // the bar: the theme (the backlight: in the settings)
-    case A_PHFILE:   // a tile: up, a folder, a picture (the viewer)
-        if (b.arg < 0) {
+    case A_PHFILE:   // a tile: a folder, a picture (the viewer); the path line: -1 up, -3 the volumes
+        if (b.arg == -3) {
+            PhotoOpenDir(L"");
+        } else if (b.arg < 0) {
             wchar_t d[MAX_PATH];
             wcscpy(d, s_phDir);
             ParentDir(d);

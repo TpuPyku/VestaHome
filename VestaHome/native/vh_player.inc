@@ -573,7 +573,7 @@ static void ScrAudioList(HDC dc)
         Button(dc, 604, 110, 180, 40, L"Играть всё", B_SEL, IC_PLAY, 15, 18, A_MALL);
         right = 588;
     }
-    DirPath(dc, s_musDir, A_MUP, right);
+    DirPath(dc, s_musDir, A_MUP, 0, 1, right);
     DirEntries(dc, s_musDir, s_mus, s_musCount, s_musPage, kMusRows, kMusCols, A_MFILE, IC_MUSIC,
                s_chan && s_plCur >= 0 && !_wcsicmp(s_plDir, s_musDir) ? s_pl[s_plCur] : NULL,
                L"Здесь нет папок и музыки");
