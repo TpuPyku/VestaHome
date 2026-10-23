@@ -628,6 +628,7 @@ static const WidgetDef kWidgets[WG_COUNT] = {
 // A widget by its id (built-in or the user's): the only way to it for the layout, the settings and the screen.
 static const wchar_t* WgName(int id) { return id < WG_COUNT ? kWidgets[id].name : s_uw[id - WG_COUNT].title; }
 static bool WgWide(int id) { return id < WG_COUNT ? kWidgets[id].wide : s_uw[id - WG_COUNT].wide; }
+static bool WgBig(int id) { return id < WG_COUNT && kWidgets[id].wide; }   // the built-in doubles: 2 x 2 (design 0.6)
 static Icon WgIcon(int id) { return id < WG_COUNT ? kWidgets[id].ic : s_uw[id - WG_COUNT].ic; }
 static void WgDraw(int id, HDC dc, int x, int y)
 {
@@ -652,7 +653,8 @@ static bool WgShown(int id)
 }
 
 // Where each shown widget goes: in their order, each into the first free place (a double needs two free cells
-// side by side in a row), so the later ones close up the gaps. page < 0: not placed. Returns the pages.
+// side by side in a row, a big one the page's left 2 x 2), so the later ones close up the gaps. page < 0: not
+// placed. Returns the pages.
 struct WgPlace { int page, x, y; };
 static int HomeLayout(WgPlace* at)
 {
@@ -664,14 +666,17 @@ static int HomeLayout(WgPlace* at)
         at[id].page = -1;
         if (!WgShown(id))
             continue;
-        bool wide = WgWide(id);
+        bool wide = WgWide(id), big = WgBig(id);
         for (int k = 0; k < kWgPages * 6 && at[id].page < 0; k++) {
             int pg = k / 6, c = k % 6;
-            if (used[pg][c] || (wide && (c % 3 == 2 || used[pg][c + 1])))
+            if (used[pg][c] || (wide && (c % 3 == 2 || used[pg][c + 1])) ||
+                (big && (c || used[pg][3] || used[pg][4])))
                 continue;
             used[pg][c] = true;
             if (wide)
                 used[pg][c + 1] = true;
+            if (big)
+                used[pg][3] = used[pg][4] = true;
             at[id].page = pg;
             at[id].x = 16 + c % 3 * (kWgW + kWgGap);
             at[id].y = 64 + c / 3 * (kWgH + kWgGap);
@@ -698,7 +703,7 @@ static bool HomeRect(int id, RECT* rc)
     rc->left = at[id].x;
     rc->top = at[id].y;
     rc->right = at[id].x + (WgWide(id) ? kWgW2 : kWgW);
-    rc->bottom = at[id].y + kWgH;
+    rc->bottom = at[id].y + (WgBig(id) ? kWgH2 : kWgH);
     return true;
 }
 
@@ -742,7 +747,7 @@ static void ScrSetHome(HDC dc)
         if (j % 6)
             Sep(dc, x, y - 2, 368);
         Ico(dc, WgIcon(id), x + 8, y + 12, 26, shown ? kOrange : kDim);
-        const wchar_t* sub = WgWide(id) ? L"двойной" : NULL;
+        const wchar_t* sub = WgBig(id) ? L"большой" : WgWide(id) ? L"двойной" : NULL;
         wchar_t usub[48];
         if (id >= WG_COUNT) {
             _snwprintf(usub, 48, L"%s.ini · изменить%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");

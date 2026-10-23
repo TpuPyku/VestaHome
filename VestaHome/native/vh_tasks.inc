@@ -212,8 +212,9 @@ static void DrawTasks(HDC dc)
 }
 
 static int s_homePage;
-// The widgets' grid: 3 x 2 on a page, a single 248 x 158, a double two singles and the gap.
-enum { kWgW = 248, kWgH = 158, kWgGap = 12, kWgW2 = kWgW * 2 + kWgGap, kWgPages = 6 };
+// The widgets' grid: 3 x 2 on a page, a single 248 x 158, a double two singles and the gap; a big one (design 0.6:
+// the playing one, the trip) 2 x 2 at the page's left.
+enum { kWgW = 248, kWgH = 158, kWgGap = 12, kWgW2 = kWgW * 2 + kWgGap, kWgH2 = kWgH * 2 + kWgGap, kWgPages = 6 };
 
 // Widget panel with its caption; pressed = orange like a tile (returns it: the content follows in ink).
 // With a settings screen the caption strip is a button of its own (a gear at its end) leading there.
@@ -310,45 +311,114 @@ static Icon SaverNowPlaying(wchar_t* s, int n)
     return IC_RADIO;
 }
 
+// The big widget's parts (design 0.6, 508 x 328): the cover (the orange facets with the source's icon), up to three
+// lines of text, the bar (k of 468, -1 none) with its times, the transport row's centre.
+static void WMediaBody(HDC dc, int x, int y, bool d, Icon ic, const wchar_t* title, const wchar_t* sub,
+                       const wchar_t* third, int k, const wchar_t* t0, const wchar_t* t1)
+{
+    COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
+    TriFill(x + 20, y + 52, 132, 132, 18);
+    Ico(dc, ic, x + 54, y + 86, 64, Mix(kInk, kTriOr[1], 140));
+    T(dc, x + 172, y + 98, title, 28, fg, 700, AL_START, 316);
+    TWrap(dc, x + 172, y + 126, sub, 17, mg, 400, 316, 1, 0);
+    if (third)
+        TWrap(dc, x + 172, y + 152, third, 14, d ? kInk : kDim, 400, 316, 1, 0);
+    if (k >= 0) {
+        R(dc, x + 20, y + 206, 468, 6, 3, d ? kInk : kLine);
+        R(dc, x + 20, y + 206, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
+        T(dc, x + 20, y + 234, t0, 15, mg, 600);
+        T(dc, x + 488, y + 234, t1, 15, mg, 600, AL_END);
+    }
+}
+
+// The radio's page name of the tuner ("FM1", "УКВ", "СВ").
+static void TunerPage(const Tuner& t, wchar_t* s, int n)
+{
+    if (t.band == 1 || t.band == 2)
+        wcscpy(s, t.band == 1 ? L"УКВ" : L"СВ");
+    else
+        _snwprintf(s, n, L"FM%d", t.cur >= 0 && t.cur < 24 ? t.cur / 8 + 1 : 1);
+}
+
+// What plays now, big (design 0.6; the user 2026-10-23: the radio too): our internet radio, our music, the radio
+// (the MCU's source), the phone's music; nothing - the last of ours to go on with. The transport row at the bottom.
 static void WMedia(HDC dc, int x, int y)
 {
+    int cx = x + kWgW2 / 2, cy = y + 282;   // the transport row
+    int vol, mute, src;
+    bool srcKnown = VolGet(&vol, &mute, &src);
+    bool ours = s_netOn || PlayerPlaying();
+    if (!ours && srcKnown && src == 0) {   // the radio: its name, frequency and page, RDS; the presets step
+        Tuner t;
+        TunerGet(&t);
+        bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Радио", IC_RADIO, A_NAV, S_RADIO);
+        wchar_t f[16], pg[8], sub[48], rt[68];
+        FreqText(t.f10, f, 16);
+        TunerPage(t, pg, 8);
+        _snwprintf(sub, 48, L"%s %s · %s", f, t.band == 2 ? L"кГц" : L"МГц", pg);
+        _snwprintf(rt, 68, L"%s%s", t.rt[0], t.rt[1]);
+        rt[67] = 0;
+        const wchar_t* nm = t.ps[0] ? t.ps : RadioName(t, t.f10);
+        WMediaBody(dc, x, y, d, IC_RADIO, nm[0] ? nm : f, t.f10 ? sub : L"нет данных от радио", rt, -1, NULL, NULL);
+        if (t.presets > 0) {   // previous / next preset of the page playing (none playing: from the first)
+            int cur = t.cur >= 0 && t.cur < 24 ? t.cur : 0, page = cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
+            IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_PRESET, page + (cur - page + per - 1) % per);
+            IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_PRESET,
+                    t.cur >= 0 ? page + (cur - page + 1) % per : cur);
+        }
+        T(dc, cx, cy + 12, f, 34, d ? kInk : t.f10 ? kOrange : kDim, 700, AL_MID);
+        return;
+    }
+    BtState bt;
+    if (!ours && srcKnown && src == 9 && BtGet(&bt, NULL) && bt.title[0]) {   // the phone's music (AVRCP)
+        bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV, S_AUDIO_BT);
+        wchar_t title[BT_TEXT], artist[BT_TEXT], t0[16] = L"", t1[16] = L"";
+        BtText(bt.title, title, BT_TEXT);
+        BtText(bt.artist, artist, BT_TEXT);
+        int len = bt.lengthMs > 0 ? bt.lengthMs : bt.durationMs, k = -1;
+        if (len > 0) {
+            int pos = bt.posMs;
+            if (bt.playing == 1 && bt.playTick)
+                pos += (int)(GetTickCount() - bt.playTick);
+            pos = pos < 0 ? 0 : pos > len ? len : pos;
+            k = 468 * (pos / 1000) / (len / 1000 > 0 ? len / 1000 : 1);
+            _snwprintf(t0, 16, L"%d:%02d", pos / 60000, pos / 1000 % 60);
+            _snwprintf(t1, 16, L"%d:%02d", len / 60000, len / 1000 % 60);
+        }
+        WMediaBody(dc, x, y, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1);
+        bool playing = bt.playing ? bt.playing == 1 : bt.av == 2;
+        IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_BTCMD, BT_CMD_PREV);
+        bool down = Zone(cx - 36, cy - 36, 72, 72, A_BTCMD, BT_CMD_PLAYPAUSE);
+        Disc(dc, cx, cy, 36, down ? kFacet : kOrange);
+        Ico(dc, playing ? IC_PAUSE : IC_PLAY, cx - 16, cy - 16, 32, kInk);
+        IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_BTCMD, BT_CMD_NEXT);
+        return;
+    }
     if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
         NetLoadList();
     if (s_netCur >= 0 && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
-        bool d = Widget(dc, x, y, kWgW2, kWgH, L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
-        TriFill(x + 16, y + 42, 100, 100, 12);
-        Ico(dc, IC_NETRADIO, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
+        bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
         wchar_t s[160];
         EnterCriticalSection(&s_netCs);
         wcscpy(s, s_netTitle);
         LeaveCriticalSection(&s_netCs);
         if (!s[0] || s_netState != NR_PLAY)
             NetStateText(s, 160);
-        T(dc, x + 136, y + 70, s_stations[s_netCur].name, 26, d ? kInk : kText, 700, AL_START, 352);
-        TWrap(dc, x + 136, y + 94, s, 16, d ? kInk : kMuted, 400, 352, 1, 0);
-        IconBtn(dc, IC_PREV, x + 196, y + 122, 28, d ? kInk : kText, A_NRSTEP, -1);
-        NetPlayBtn(dc, x + 312, y + 136, 20, 22);
-        IconBtn(dc, IC_FWD, x + 400, y + 122, 28, d ? kInk : kText, A_NRSTEP, 1);
+        WMediaBody(dc, x, y, d, IC_NETRADIO, s_stations[s_netCur].name, s, NULL, -1, NULL, NULL);
+        IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_NRSTEP, -1);
+        NetPlayBtn(dc, cx, cy, 36, 32);
+        IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_NRSTEP, 1);
         return;
     }
-    bool d = Widget(dc, x, y, kWgW2, kWgH, L"Сейчас играет · Музыка", IC_MUSIC, A_NAV, S_AUDIO);
-    COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
-    TriFill(x + 16, y + 42, 100, 100, 12);
-    Ico(dc, IC_MUSIC, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
-    int tx = x + 136;
+    bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Музыка", IC_MUSIC, A_NAV, S_AUDIO);
     wchar_t title[96], sub[200], s[48], a[16], b[16];
     double pos = 0, len = 0;
     if (PlayerNow(title, sub, 96, &pos, &len)) {
-        T(dc, tx, y + 70, title, 26, fg, 700, AL_START, 352);
         _snwprintf(s, 48, L"трек %d из %d", s_plCur + 1, s_plCount);
-        TWrap(dc, tx, y + 94, sub[0] ? sub : s, 16, mg, 400, 260, 1, 0);
         Mmss(a, 16, pos);
         Mmss(b, 16, len);
-        _snwprintf(s, 48, L"%s / %s", a, b);
-        T(dc, x + kWgW2 - 16, y + 94, s, 15, mg, 600, AL_END);
-        int k = len > 0 ? (int)(pos * 352 / len) : 0;
-        R(dc, tx, y + 106, 352, 6, 3, d ? kInk : kLine);
-        R(dc, tx, y + 106, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
+        WMediaBody(dc, x, y, d, IC_MUSIC, title, sub[0] ? sub : s, sub[0] ? s : NULL,
+                   len > 0 ? (int)(pos * 468 / len) : 0, a, b);
     } else {   // nothing loaded: the last track (dim) to go on with, or a dash
         wchar_t last[MAX_PATH];
         const wchar_t* fn = wcsrchr(s_cfg.musicFile, L'\\');
@@ -356,14 +426,12 @@ static void WMedia(HDC dc, int x, int y)
         wchar_t* dot = wcsrchr(last, L'.');
         if (dot)
             *dot = 0;
-        T(dc, tx, y + 70, last[0] ? last : L"—", 26, last[0] ? mg : fg, 700, AL_START, 352);
-        TWrap(dc, tx, y + 94, last[0] ? L"последний трек · ▶ — продолжить" : L"выберите музыку в «Медиа»", 16, mg,
-              400, 352, 1, 0);
-        R(dc, tx, y + 106, 352, 6, 3, d ? kInk : kLine);
+        WMediaBody(dc, x, y, d, IC_MUSIC, last[0] ? last : L"—",
+                   last[0] ? L"последний трек · ▶ — продолжить" : L"выберите музыку в «Медиа»", NULL, -1, NULL, NULL);
     }
-    IconBtn(dc, IC_PREV, tx + 60, y + 122, 28, fg, A_PREVTRK);
-    PlayBtn(dc, tx + 176, y + 136, 20, 22);
-    IconBtn(dc, IC_FWD, tx + 264, y + 122, 28, fg, A_NEXTTRK);
+    IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_PREVTRK);
+    PlayBtn(dc, cx, cy, 36, 32);
+    IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_NEXTTRK);
 }
 
 static const wchar_t* kHeadings[8] = { L"С", L"СВ", L"В", L"ЮВ", L"Ю", L"ЮЗ", L"З", L"СЗ" };
@@ -457,10 +525,12 @@ static void WWeather(HDC dc, int x, int y)
     Weather w;
     WxGet(&w);
     wchar_t cap[64], s[100];
-    if (w.have && w.place[0])
+    if (w.have && w.place[0]) {
         _snwprintf(cap, 64, L"Погода · %s", w.place);
-    else
+        CharUpperBuff(cap + 9, 1);   // the place as a name
+    } else {
         wcscpy(cap, L"Погода");
+    }
     bool d = Widget(dc, x, y, 248, 158, cap, IC_CLOUD, A_WXNOW, 0, S_WSET_WEATHER);
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     if (!w.have) {
@@ -577,7 +647,7 @@ static void TripTick()   // once a second
 
 static void WTrip(HDC dc, int x, int y)
 {
-    bool d = Widget(dc, x, y, kWgW2, kWgH, s_trip.src == 1 ? L"Бортовой компьютер · Поездка · CAN"
+    bool d = Widget(dc, x, y, kWgW2, kWgH2, s_trip.src == 1 ? L"Бортовой компьютер · Поездка · CAN"
                     : L"Бортовой компьютер · Поездка · GPS", IC_CLOCK, A_SCREEN, S_CAR);
     wchar_t v[4][16];
     _snwprintf(v[0], 16, s_trip.km < 100 ? L"%.1f" : L"%.0f", s_trip.km);
@@ -593,15 +663,13 @@ static void WTrip(HDC dc, int x, int y)
         _snwprintf(v[3], 16, L"%d", s_trip.maxKmh);
     else
         wcscpy(v[3], L"—");
-    const wchar_t* head[4] = { L"ПРОБЕГ", L"В ДВИЖЕНИИ", L"СРЕДНЯЯ", L"МАКС." };
+    const wchar_t* head[4] = { L"Пробег", L"В движении", L"Средняя", L"Максимальная" };
     const wchar_t* unit[4] = { L"км", L"ч:мин", L"км/ч", L"км/ч" };
-    for (int i = 0; i < 4; i++) {
-        int cx = x + 16 + i * 120;
-        if (i)
-            Fill(dc, cx - 8, y + 50, cx - 6, y + 126, d ? kInk : kLine);
-        T(dc, cx, y + 62, head[i], 12, d ? kInk : kMuted, 700, AL_START, 108);
-        T(dc, cx, y + 102, v[i], 32, d ? kInk : kText, 700, AL_START, 108);
-        T(dc, cx, y + 122, unit[i], 14, d ? kInk : kMuted, 400);
+    for (int i = 0; i < 4; i++) {   // big (design 0.6): 2 x 2, the number large with its unit after it
+        int cx = x + 20 + i % 2 * 244, cy = y + 50 + i / 2 * 98;
+        T(dc, cx, cy + 18, head[i], 14, d ? kInk : kMuted, 400, AL_START, 228);
+        int end = T(dc, cx, cy + 70, v[i], 46, d ? kInk : kText, 700, AL_START, 160);
+        T(dc, end + 8, cy + 70, unit[i], 16, d ? kInk : kMuted, 400);
     }
     wchar_t s[96], f[48] = L"расход и запас хода — с OBD";
     double m = TripMean();
@@ -613,12 +681,14 @@ static void WTrip(HDC dc, int x, int y)
     else if (s_trip.fuelL > 0)
         _snwprintf(f, 48, L"сожжено %d,%d л", (int)s_trip.fuelL, (int)(s_trip.fuelL * 10) % 10);
     f[47] = 0;
-    if (s_trip.started)
-        _snwprintf(s, 96, L"Поездка с %02d:%02d · %s", s_trip.start.wHour, s_trip.start.wMinute, f);
-    else
-        wcscpy(s, f);
-    s[95] = 0;
-    T(dc, x + 16, y + 146, s, 14, d ? kInk : kDim, 400, AL_START, kWgW2 - 32);
+    CharUpperBuff(f, 1);
+    Sep(dc, x + 20, y + 246, kWgW2 - 40);
+    T(dc, x + 20, y + 280, f, 18, d ? kInk : kText, 700, AL_START, kWgW2 - 40);
+    if (s_trip.started) {
+        _snwprintf(s, 96, L"поездка с %02d:%02d", s_trip.start.wHour, s_trip.start.wMinute);
+        s[95] = 0;
+        T(dc, x + 20, y + 306, s, 14, d ? kInk : kDim, 400, AL_START, kWgW2 - 40);
+    }
 }
 
 static bool SunNight(int* rise, int* set);
@@ -1101,7 +1171,7 @@ static void ScrWSetCar(HDC dc)
             wcscpy(label, kCarSensor[id][0]);
         int bx = 16 + id / 9 * 258, by = 104 + id % 9 * 41;
         Button(dc, bx, by, 250, 37, NULL, at >= 0 ? B_SEL : B_N, IC_NONE, 14, 0, A_CARSENS, id);
-        T(dc, bx + 12, by + 25, label, 13, at >= 0 ? kInk : kText, 700, AL_START, 150);
-        T(dc, bx + 238, by + 25, have ? v : L"—", 13, at >= 0 ? kInk : kMuted, 600, AL_END, 90);
+        T(dc, bx + 12, by + 25, label, 13, at >= 0 ? kOrange : kText, 700, AL_START, 150);
+        T(dc, bx + 238, by + 25, have ? v : L"—", 13, at >= 0 ? kOrange : kMuted, 600, AL_END, 90);
     }
 }

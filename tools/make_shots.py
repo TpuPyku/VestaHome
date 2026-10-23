@@ -32,7 +32,7 @@ SET = {'general': (60, 90), 'sound': (170, 90), 'screen': (60, 160), 'radio': (1
 TAB = {'music': (62, 88), 'net': (160, 88), 'bt': (260, 88), 'aux': (360, 88), 'video': (458, 88),
        'photo': (557, 88), 'list': (692, 88), 'gear': (760, 88)}
 SHOTS = [
-    ('home', [HOME]), ('home_page2', [HOME, ('swipe',)]), ('home_page3', [HOME, ('swipe',), ('swipe',)]),
+    ('home', [HOME]), ('home_page2', [HOME, ('swipe',)]), ('home_page3', [HOME, ('swipe',)]),   # the page stays: from page 2
     ('radio', [RADIO]), ('radio_list', [RADIO, (712, 98)]), ('radio_pty', [RADIO, (594, 98)]),
     ('music', [MEDIA, TAB['music']]), ('music_list', [MEDIA, TAB['music'], TAB['list']]),
     ('netradio', [MEDIA, TAB['net']]), ('netradio_list', [MEDIA, TAB['net'], TAB['list']]),
@@ -48,8 +48,8 @@ SHOTS = [
     ('info_more', [SETTINGS, SET['info'], (355, 355)]), ('diagnostics', [SETTINGS, SET['info'], (590, 355)]),
     ('licenses', [SETTINGS, SET['info'], (355, 355), (627, 433)]),
     ('power', [SETTINGS, SET['info'], (728, 356)]),
-    ('car_sensors', [HOME, ('swipe',), ('sleep', 2), (130, 330)]),
-    ('car_widget_set', [HOME, ('swipe',), ('sleep', 2), (240, 256)]),
+    ('car_sensors', [HOME, ('swipeback',), ('sleep', 2), (130, 330)]),   # from page 3 to 2: the car widget
+    ('car_widget_set', [HOME, ('sleep', 2), (240, 256)]),
 ]
 
 k32 = ctypes.windll.kernel32
