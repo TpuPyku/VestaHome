@@ -1213,6 +1213,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
         return 0;
     }
     VLog(L"=== VestaHome %s запущен", VhVersion());
+    {   // the screen's real colour depth (VestaHome itself draws into an RGB565 buffer)
+        HDC sdc = GetDC(NULL);
+        VLog(L"экран: %d x %d, %d бит на точку", GetDeviceCaps(sdc, HORZRES), GetDeviceCaps(sdc, VERTRES),
+             GetDeviceCaps(sdc, BITSPIXEL) * GetDeviceCaps(sdc, PLANES));
+        ReleaseDC(NULL, sdc);
+    }
 
     WNDCLASS wc;
     memset(&wc, 0, sizeof(wc));

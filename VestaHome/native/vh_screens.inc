@@ -306,7 +306,7 @@ static void ScrRadio(HDC dc)
         bool cur = !down && have && n == t.cur;   // the one playing: soft orange
         wchar_t pfs[16];
         FreqText(pf, pfs, 16);
-        R(dc, x, y, 184, 64, 16, down ? kOrange : cur ? OrSoft() : kPanel);
+        RSel(dc, x, y, 184, 64, 16, cur, down);
         COLORREF fg = down ? kInk : cur ? kOrange : have ? kText : kDim;
         T(dc, x + 16, y + 29, have ? pfs : L"—", 21, fg, 700);
         const wchar_t* nm = have ? RadioName(t, pf) : L"";

@@ -867,9 +867,27 @@ static bool LoadBackground(const wchar_t* path, unsigned short* bits)
     return true;
 }
 
-enum { kTileW = 64, kTileH = 480 };
-enum { kGlowX = 152, kGlowW = 324, kGlowH = 120 };   // the glow's map: x 152..800, y 0..240, every 2nd pixel
-static unsigned char* s_glow;   // design 0.6: a column of the mosaic's cells (64 x 112), the whole height
+enum { kTileW = 64, kTileH = 480 };   // design 0.6: a column of the mosaic's cells (64 x 112), the whole height
+
+// The RGB565 colour nearest to r, g, b that keeps its tint: of the 8 around it the one whose brightness and channel
+// differences (green - red, blue - green) are closest - plain rounding pushed the mosaic's dark greys red or green.
+static unsigned short Q565(int r, int g, int b)
+{
+    int best = 0x7FFFFFFF;
+    unsigned short q = 0;
+    for (int i = 0; i < 8; i++) {
+        int qr = (r & ~7) + (i & 1 ? 8 : 0), qg = (g & ~3) + (i & 2 ? 4 : 0), qb = (b & ~7) + (i & 4 ? 8 : 0);
+        if (qr > 248 || qg > 252 || qb > 248 || (g >= r && qg < qr) || (b >= g && qb < qg))
+            continue;   // (nor the channels' order turned: a cool grey stays cool)
+        int dl = (2 * (qr - r) + 5 * (qg - g) + (qb - b)), dgr = (qg - qr) - (g - r), dbg = (qb - qg) - (b - g);
+        int cost = dl * dl / 4 + 4 * dgr * dgr + 4 * dbg * dbg;
+        if (cost < best) {
+            best = cost;
+            q = RGB565(qr, qg, qb);
+        }
+    }
+    return q;
+}
 
 // Night: a third less brightness, as C() does (RGB565).
 static unsigned short Dim565(unsigned p)
@@ -922,25 +940,23 @@ static void BuildBackground()
     if (s_skinTile[0] && !LoadTile(s_skinTile))
         s_skinTile[0] = 0;   // (the triangles below)
     if (!s_skinTile[0]) {   // design 0.6, as the mockup: rhombi of four triangles meeting in a 64 x 112 cell's
-        // middle, darkened towards the bottom (to 25 % .. 70 % of the background), dithered against the 16-bit bands
-        static const int kBayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+        // middle, darkened towards the bottom (25 % .. 70 % of the background) row of cells by row; each triangle one
+        // solid colour, the nearest RGB565 one (the user 2026-10-23: no dither noise, no glow)
         s_tile[0] = (unsigned short*)malloc(kTileW * kTileH * 2);
         s_tile[1] = (unsigned short*)malloc(kTileW * kTileH * 2);
         if (s_tile[0] && s_tile[1]) {
             int ir = GetRValue(kInk), ig = GetGValue(kInk), ib = GetBValue(kInk);
             for (int y = 0; y < kTileH; y++) {
-                int a = 64 + 115 * y / (kTileH - 1);   // the shade over it, of 256
+                int cy = y / 112 * 112 + 56, a = 64 + 115 * (cy < kTileH ? cy : kTileH - 1) / (kTileH - 1);
                 int fy = y % 112 - 56;
                 for (int x = 0; x < kTileW; x++) {
                     int fx = x - 32;
                     // which of the four: the diagonals through the middle (|fx| / 32 against |fy| / 56)
                     int k = abs(fx) * 56 > abs(fy) * 32 ? (fx < 0 ? 0 : 1) : (fy < 0 ? 2 : 3);
                     COLORREF c = kTri[k];
-                    int d = kBayer[y & 3][x & 3];   // 0..15: an offset of 0..15/16 of a step before RGB565 cuts
-                    int r = (GetRValue(c) * (256 - a) + ir * a + d * 128) / 256;   // + d/16 of a step of 8
-                    int g = (GetGValue(c) * (256 - a) + ig * a + d * 64) / 256;    // + d/16 of a step of 4
-                    int b = (GetBValue(c) * (256 - a) + ib * a + d * 128) / 256;
-                    unsigned short p = RGB565(r > 255 ? 255 : r, g > 255 ? 255 : g, b > 255 ? 255 : b);
+                    int r = (GetRValue(c) * (256 - a) + ir * a) / 256, g = (GetGValue(c) * (256 - a) + ig * a) / 256,
+                        b = (GetBValue(c) * (256 - a) + ib * a) / 256;
+                    unsigned short p = Q565(r, g, b);
                     s_tile[0][y * kTileW + x] = p;
                     s_tile[1][y * kTileW + x] = Dim565(p);
                 }
@@ -948,15 +964,6 @@ static void BuildBackground()
             s_tileW = kTileW;
             s_tileH = kTileH;
         }
-        // the orange glow at the top right (the mockup's radial gradient at 85 %, 0: 7 % of the accent fading out
-        // by 55 % of a 120 % x 90 % ellipse), its strength at half the resolution
-        s_glow = (unsigned char*)malloc(kGlowW * kGlowH);
-        if (s_glow)
-            for (int y = 0; y < kGlowH; y++)
-                for (int x = 0; x < kGlowW; x++) {
-                    double dx = (kGlowX + x * 2 - 680) / 528.0, dy = y * 2 / 238.0, e = sqrt(dx * dx + dy * dy);
-                    s_glow[y * kGlowW + x] = (unsigned char)(e < 1 ? (1 - e) * 0.10 * 256 : 0);
-                }
     }
     if (s_skinBg[0]) {
         s_bg = MakeDib(800, 480, &s_bgBits);
@@ -967,9 +974,7 @@ static void BuildBackground()
     }
 }
 
-// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top); the glow over it.
-static void Glow(int top, int bottom);
-
+// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top).
 static void Pattern(int top, int bottom, int anchor)
 {
     const unsigned short* t = s_tile[s_night ? 1 : 0];
@@ -991,34 +996,6 @@ static void Pattern(int top, int bottom, int anchor)
             x += n;
         }
     }
-    Glow(top, bottom);
-}
-
-// The orange glow at the top right over the background just copied (rows [top, bottom), inside the clip).
-static void Glow(int top, int bottom)
-{
-    if (!s_glow)
-        return;
-    COLORREF o = C(kOrange);
-    int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o);
-    int x0 = s_clip.left > kGlowX ? s_clip.left : kGlowX;
-    static const int kBayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
-    for (int y = top; y < bottom && y < kGlowH * 2; y++) {
-        const unsigned char* g = s_glow + (y / 2) * kGlowW;
-        unsigned short* row = s_backBits + (479 - y) * 800;
-        for (int x = x0; x < s_clip.right; x++) {
-            int a = g[(x - kGlowX) / 2];
-            if (!a)
-                continue;
-            unsigned p = row[x];
-            int r = ((p >> 8) & 0xF8), gg = ((p >> 3) & 0xFC), b = ((p << 3) & 0xF8);
-            int d = kBayer[y & 3][x & 3];   // dithered: the glow's fine steps between the screen's
-            r += ((orr - r) * a + d * 128) / 256;
-            gg += ((og - gg) * a + d * 64) / 256;
-            b += ((ob - b) * a + d * 128) / 256;
-            row[x] = RGB565(r > 255 ? 255 : r < 0 ? 0 : r, gg > 255 ? 255 : gg < 0 ? 0 : gg, b > 255 ? 255 : b < 0 ? 0 : b);
-        }
-    }
 }
 
 // ---------------------------------------------------------------- the other screens
@@ -1035,7 +1012,7 @@ static void Blit(HDC dc, HBITMAP bmp)
     DeleteDC(src);
 }
 
-// The mosaic under the top bar too (design 0.6), the glow at the top right.
+// The mosaic under the top bar too (design 0.6).
 static void SubBackground(HDC dc)
 {
     Pattern(0, 480, 0);
@@ -1111,12 +1088,6 @@ static COLORREF Mix(COLORREF a, COLORREF b, int alpha)
     return RGB((GetRValue(a) * alpha + GetRValue(b) * (255 - alpha)) / 255,
                (GetGValue(a) * alpha + GetGValue(b) * (255 - alpha)) / 255,
                (GetBValue(a) * alpha + GetBValue(b) * (255 - alpha)) / 255);
-}
-
-// The soft orange of the selected (design 0.6): the accent at 16 % over the background; its text is orange.
-static COLORREF OrSoft()
-{
-    return Mix(kOrange, kInk, 41);
 }
 
 struct FontEnt { int size, weight; HFONT f; };
@@ -1441,6 +1412,47 @@ static void Shade(int x, int y, int w, int h, int a0, int a1)
     }
 }
 
+// The selected's soft orange (design 0.6): the accent at 16 % over what is drawn there (the mosaic shows through,
+// as the mockup's rgba), a rounded rectangle. The background is drawn again under every redraw, so it never piles up.
+static void RSoft(int x, int y, int w, int h, int rx)
+{
+#ifndef UNDER_CE
+    GdiFlush();
+#endif
+    COLORREF o = C(kOrange);
+    int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o), a = 41;
+    for (int py = y; py < y + h; py++) {
+        if (py < s_clip.top || py >= s_clip.bottom)
+            continue;
+        unsigned short* row = s_backBits + (479 - py) * 800;
+        int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
+        for (int px = x; px < x + w; px++) {
+            if (px < s_clip.left || px >= s_clip.right)
+                continue;
+            int dx = px < x + rx ? x + rx - px : px >= x + w - rx ? px - (x + w - rx - 1) : 0;
+            if (dx && dy && dx * dx + dy * dy > rx * rx)
+                continue;
+            unsigned p = row[px];
+            int r = (p >> 8) & 0xF8, g = (p >> 3) & 0xFC, b = (p << 3) & 0xF8;
+            r += ((orr - r) * a + 128) / 256;
+            g += ((og - g) * a + 128) / 256;
+            b += ((ob - b) * a + 128) / 256;
+            row[px] = RGB565(Round565(r, 8), Round565(g, 4), Round565(b, 8));
+        }
+    }
+}
+
+// A tile's or row's plate: plain (fill), selected (the soft orange over the background), pressed (the orange).
+static void RSel(HDC dc, int x, int y, int w, int h, int rx, bool sel, bool down, COLORREF fill = kPanel)
+{
+    if (down)
+        R(dc, x, y, w, h, rx, kOrange);
+    else if (sel)
+        RSoft(x, y, w, h, rx);
+    else if (fill != CLR_INVALID)
+        R(dc, x, y, w, h, rx, fill);
+}
+
 // ---- widgets of the mockups (make_v01_screens.py helpers of the same names)
 
 // Registers a button of the current screen; true while it is pressed.
@@ -1506,7 +1518,7 @@ static void Button(HDC dc, int x, int y, int w, int h, const wchar_t* label, int
         R(dc, x, y, w, h, rx, kOrange);
         fg = kInk;
     } else if (state == B_SEL) {
-        R(dc, x, y, w, h, rx, OrSoft());
+        RSoft(x, y, w, h, rx);
         fg = kOrange;
     } else if (state == B_DIS) {
         R(dc, x, y, w, h, rx, kPanel);
@@ -1641,7 +1653,7 @@ static void ListRow(HDC dc, int x, int y, int w, int h, const wchar_t* text, con
     bool cur = state == L_CUR && !down;
     COLORREF fg = down ? kInk : cur ? kOrange : state == L_DIM ? kOff : kText,
              mg = down ? kInk : cur ? kOrange : kMuted;
-    R(dc, x, y, w, h, 14, down ? kOrange : cur ? OrSoft() : kPanel);
+    RSel(dc, x, y, w, h, 14, cur, down);
     int tx = x + 16;
     if (num) {
         T(dc, tx, y + h / 2 + 6, num, 16, down ? kInk : cur ? kOrange : kDim, 700);
@@ -2057,7 +2069,7 @@ static void NavBar(HDC dc, int active)
         int w = on ? 18 + 24 + 8 + TextWidth(dc, kNav[i].label, 15, 700) + 18 : 64, x = cx - w / 2;
         x = x < 16 ? 16 : x + w > 784 ? 784 - w : x;
         if (on || d)
-            R(dc, x, 426, w, 44, 22, d ? kOrange : OrSoft());
+            RSel(dc, x, 426, w, 44, 22, on, d, CLR_INVALID);
         COLORREF fg = d ? kInk : on ? kOrange : kMuted;
         if (on) {
             Ico(dc, ic, x + 18, 436, 24, fg);
@@ -2102,7 +2114,7 @@ static void SideTabs(HDC dc, const Tab* tabs, int n, int active, int step, int h
     for (int i = 0; i < n; i++) {
         int y = y0 + i * step;
         bool on = i == active, d = Zone(16, y, 160, h, on || tabs[i].to == S_NONE ? A_NONE : A_TAB, tabs[i].to);
-        R(dc, 16, y, 160, h, 16, d ? kOrange : on ? OrSoft() : kPanel);
+        RSel(dc, 16, y, 160, h, 16, on, d);
         COLORREF fg = d ? kInk : on ? kOrange : kMuted;
         Ico(dc, tabs[i].ic, 30, y + (h - 30) / 2, 30, fg);
         T(dc, 72, y + h / 2 + 6, tabs[i].label, 15, fg, on ? 700 : 400, AL_START, 100);
@@ -2132,7 +2144,7 @@ static void Settings(HDC dc, Screen active)
                   ((active == S_SET_OBD || active == S_BT_PAIRED || active == S_BT_PAIRNEW) &&
                    items[i].to == S_SET_BT);
         bool d = Zone(x, y, 102, 62, items[i].to == active ? A_NONE : A_TAB, items[i].to);
-        R(dc, x, y, 102, 62, 16, d ? kOrange : on ? OrSoft() : kPanel);
+        RSel(dc, x, y, 102, 62, 16, on, d);
         COLORREF fg = d ? kInk : on ? kOrange : kMuted;
         Ico(dc, items[i].ic, x + 38, y + 8, 26, fg);
         T(dc, x + 51, y + 53, items[i].label, 13, fg, on ? 700 : 400, AL_MID, 94);
