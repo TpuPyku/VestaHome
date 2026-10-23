@@ -616,19 +616,20 @@ static void WUser(HDC dc, int x, int y, int u)
     }
 }
 
-struct WidgetDef { const wchar_t* name; bool wide; Icon ic; void (*draw)(HDC dc, int x, int y); };
+// cells: 1 a single, 2 a double (1 x 2), 4 a big one (2 x 2, design 0.6).
+struct WidgetDef { const wchar_t* name; int cells; Icon ic; void (*draw)(HDC dc, int x, int y); };
 static const WidgetDef kWidgets[WG_COUNT] = {
-    { L"Сейчас играет", true, IC_MUSIC, WMedia }, { L"Скорость", false, IC_NAV, WSpeed },
-    { L"Радио", false, IC_RADIO, WRadio }, { L"Погода", false, IC_CLOUD, WWeather },
-    { L"Приложения", false, IC_APPS, WFavorites }, { L"Поездка", true, IC_CLOCK, WTrip },
-    { L"Климат", false, IC_CAR, WClimate }, { L"Календарь", false, IC_CLOCK, WDate },
-    { L"Телефон", false, IC_PHONE, WPhone }, { L"Автомобиль", false, IC_CAR, WCar },
-    { L"Навигация", false, IC_NAV, WNavi } };
+    { L"Сейчас играет", 4, IC_MUSIC, WMedia }, { L"Скорость", 1, IC_NAV, WSpeed },
+    { L"Радио", 1, IC_RADIO, WRadio }, { L"Погода", 1, IC_CLOUD, WWeather },
+    { L"Приложения", 1, IC_APPS, WFavorites }, { L"Поездка", 4, IC_CLOCK, WTrip },
+    { L"Климат", 1, IC_CAR, WClimate }, { L"Календарь", 1, IC_CLOCK, WDate },
+    { L"Телефон", 1, IC_PHONE, WPhone }, { L"Автомобиль", 1, IC_CAR, WCar },
+    { L"Навигация", 1, IC_NAV, WNavi }, { L"Сейчас играет · компактный", 2, IC_MUSIC, WMediaSmall } };
 
 // A widget by its id (built-in or the user's): the only way to it for the layout, the settings and the screen.
 static const wchar_t* WgName(int id) { return id < WG_COUNT ? kWidgets[id].name : s_uw[id - WG_COUNT].title; }
-static bool WgWide(int id) { return id < WG_COUNT ? kWidgets[id].wide : s_uw[id - WG_COUNT].wide; }
-static bool WgBig(int id) { return id < WG_COUNT && kWidgets[id].wide; }   // the built-in doubles: 2 x 2 (design 0.6)
+static bool WgWide(int id) { return id < WG_COUNT ? kWidgets[id].cells >= 2 : s_uw[id - WG_COUNT].wide; }
+static bool WgBig(int id) { return id < WG_COUNT && kWidgets[id].cells == 4; }
 static Icon WgIcon(int id) { return id < WG_COUNT ? kWidgets[id].ic : s_uw[id - WG_COUNT].ic; }
 static void WgDraw(int id, HDC dc, int x, int y)
 {
@@ -705,6 +706,18 @@ static bool HomeRect(int id, RECT* rc)
     rc->right = at[id].x + (WgWide(id) ? kWgW2 : kWgW);
     rc->bottom = at[id].y + (WgBig(id) ? kWgH2 : kWgH);
     return true;
+}
+
+// The "now playing" widgets on the page shown (the big one, the compact one, both): their area.
+static bool HomeMediaRect(RECT* rc)
+{
+    RECT a, b;
+    bool ha = HomeRect(WG_MEDIA, &a), hb = HomeRect(WG_MEDIA2, &b);
+    if (ha && hb)
+        UnionRect(rc, &a, &b);
+    else if (ha || hb)
+        *rc = ha ? a : b;
+    return ha || hb;
 }
 
 // The main screen: the date as the title, the widgets of the page, the page dots.

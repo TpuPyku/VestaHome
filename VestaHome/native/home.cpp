@@ -728,7 +728,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 Redraw();
             else if (s_screen == S_AUDIO && PlayerPlaying())
                 RedrawArea(256, 130, 800, 300);   // the track's position (the knob, r 11, from x 261)
-            else if (s_screen == S_HOME && HomeRect(WG_MEDIA, &wr) && PlayerPlaying())
+            else if (s_screen == S_HOME && HomeMediaRect(&wr) && PlayerPlaying())
                 RedrawArea(wr.left, wr.top, wr.right, wr.bottom);   // the media widget
             else if (s_screen == S_NETRADIO && s_netState == NR_WAIT)
                 RedrawArea(272, 262, 800, 300);   // "again in N s"
@@ -781,7 +781,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RECT wr;
             if (s_screen == S_NETRADIO)
                 RedrawArea(272, 130, 800, 390);   // the station's lines and its buttons
-            else if (s_screen == S_HOME && HomeRect(WG_MEDIA, &wr))
+            else if (s_screen == S_HOME && HomeMediaRect(&wr))
                 RedrawArea(wr.left, wr.top, wr.right, wr.bottom);   // the media widget
             else if (s_screen == S_NETRADIO_LIST)
                 Redraw();

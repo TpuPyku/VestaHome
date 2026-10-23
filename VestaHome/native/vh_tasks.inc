@@ -311,24 +311,72 @@ static Icon SaverNowPlaying(wchar_t* s, int n)
     return IC_RADIO;
 }
 
-// The big widget's parts (design 0.6, 508 x 328): the cover (the orange facets with the source's icon), up to three
-// lines of text, the bar (k of 468, -1 none) with its times, the transport row's centre.
-static void WMediaBody(HDC dc, int x, int y, bool d, Icon ic, const wchar_t* title, const wchar_t* sub,
+// The "now playing" widgets' parts (design 0.6): big 508 x 328 or compact 508 x 158 (1 x 2). The cover (the orange
+// facets with the source's icon), up to three lines of text (the third only big), the bar (k of BarW, -1 none) with
+// its times; the transport row below (MediaRow).
+struct MediaGeo {
+    bool big;
+    int  x, y, h, cx, cy, isz, step, r, play, barW;
+};
+
+static MediaGeo MediaGeoOf(int x, int y, bool big)
+{
+    MediaGeo g;
+    g.big = big;
+    g.x = x;
+    g.y = y;
+    g.h = big ? kWgH2 : kWgH;
+    g.cx = big ? x + kWgW2 / 2 : x + 312;   // the compact one: right of the cover
+    g.cy = big ? y + 282 : y + 136;
+    g.isz = big ? 36 : 28;
+    g.step = big ? 114 : 102;               // the arrows' centres from the middle
+    g.r = big ? 36 : 20;
+    g.play = big ? 32 : 22;
+    g.barW = big ? 468 : 352;
+    return g;
+}
+
+static void WMediaBody(HDC dc, const MediaGeo& g, bool d, Icon ic, const wchar_t* title, const wchar_t* sub,
                        const wchar_t* third, int k, const wchar_t* t0, const wchar_t* t1)
 {
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
-    TriFill(x + 20, y + 52, 132, 132, 18);
-    Ico(dc, ic, x + 54, y + 86, 64, Mix(kInk, kTriOr[1], 140));
-    T(dc, x + 172, y + 98, title, 28, fg, 700, AL_START, 316);
-    TWrap(dc, x + 172, y + 126, sub, 17, mg, 400, 316, 1, 0);
-    if (third)
-        TWrap(dc, x + 172, y + 152, third, 14, d ? kInk : kDim, 400, 316, 1, 0);
-    if (k >= 0) {
-        R(dc, x + 20, y + 206, 468, 6, 3, d ? kInk : kLine);
-        R(dc, x + 20, y + 206, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
-        T(dc, x + 20, y + 234, t0, 15, mg, 600);
-        T(dc, x + 488, y + 234, t1, 15, mg, 600, AL_END);
+    int x = g.x, y = g.y;
+    if (g.big) {
+        TriFill(x + 20, y + 52, 132, 132, 18);
+        Ico(dc, ic, x + 54, y + 86, 64, Mix(kInk, kTriOr[1], 140));
+        T(dc, x + 172, y + 98, title, 28, fg, 700, AL_START, 316);
+        TWrap(dc, x + 172, y + 126, sub, 17, mg, 400, 316, 1, 0);
+        if (third)
+            TWrap(dc, x + 172, y + 152, third, 14, d ? kInk : kDim, 400, 316, 1, 0);
+        if (k >= 0) {
+            R(dc, x + 20, y + 206, g.barW, 6, 3, d ? kInk : kLine);
+            R(dc, x + 20, y + 206, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
+            T(dc, x + 20, y + 234, t0, 15, mg, 600);
+            T(dc, x + 488, y + 234, t1, 15, mg, 600, AL_END);
+        }
+        return;
     }
+    TriFill(x + 16, y + 42, 100, 100, 14);
+    Ico(dc, ic, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
+    T(dc, x + 136, y + 70, title, 26, fg, 700, AL_START, 352);
+    wchar_t times[40] = L"";
+    if (k >= 0 && t0 && t1 && t0[0])
+        _snwprintf(times, 40, L"%s / %s", t0, t1);
+    int tw = times[0] ? TextWidth(dc, times, 15, 600) + 12 : 0;
+    TWrap(dc, x + 136, y + 94, sub, 16, mg, 400, 352 - tw, 1, 0);
+    if (times[0])
+        T(dc, x + kWgW2 - 20, y + 94, times, 15, mg, 600, AL_END);
+    if (k >= 0) {
+        R(dc, x + 136, y + 106, g.barW, 6, 3, d ? kInk : kLine);
+        R(dc, x + 136, y + 106, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
+    }
+}
+
+// The transport row: previous, the middle (a play button of its own, drawn by the caller), next.
+static void MediaArrows(HDC dc, const MediaGeo& g, bool d, Action pa, int prevArg, Action na, int nextArg)
+{
+    IconBtn(dc, IC_PREV, g.cx - g.step - g.isz / 2, g.cy - g.isz / 2, g.isz, d ? kInk : kText, pa, prevArg);
+    IconBtn(dc, IC_FWD, g.cx + g.step - g.isz / 2, g.cy - g.isz / 2, g.isz, d ? kInk : kText, na, nextArg);
 }
 
 // The radio's page name of the tuner ("FM1", "УКВ", "СВ").
@@ -340,18 +388,18 @@ static void TunerPage(const Tuner& t, wchar_t* s, int n)
         _snwprintf(s, n, L"FM%d", t.cur >= 0 && t.cur < 24 ? t.cur / 8 + 1 : 1);
 }
 
-// What plays now, big (design 0.6; the user 2026-10-23: the radio too): our internet radio, our music, the radio
-// (the MCU's source), the phone's music; nothing - the last of ours to go on with. The transport row at the bottom.
-static void WMedia(HDC dc, int x, int y)
+// What plays now (design 0.6; the user 2026-10-23: the radio too): our internet radio, our music, the radio (the
+// MCU's source), the phone's music; nothing - the last of ours to go on with. Big (2 x 2) or compact (1 x 2).
+static void WMediaAt(HDC dc, int x, int y, bool big)
 {
-    int cx = x + kWgW2 / 2, cy = y + 282;   // the transport row
+    MediaGeo g = MediaGeoOf(x, y, big);
     int vol, mute, src;
     bool srcKnown = VolGet(&vol, &mute, &src);
     bool ours = s_netOn || PlayerPlaying();
     if (!ours && srcKnown && src == 0) {   // the radio: its name, frequency and page, RDS; the presets step
         Tuner t;
         TunerGet(&t);
-        bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Радио", IC_RADIO, A_NAV, S_RADIO);
+        bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Радио", IC_RADIO, A_NAV, S_RADIO);
         wchar_t f[16], pg[8], sub[48], rt[68];
         FreqText(t.f10, f, 16);
         TunerPage(t, pg, 8);
@@ -359,19 +407,18 @@ static void WMedia(HDC dc, int x, int y)
         _snwprintf(rt, 68, L"%s%s", t.rt[0], t.rt[1]);
         rt[67] = 0;
         const wchar_t* nm = t.ps[0] ? t.ps : RadioName(t, t.f10);
-        WMediaBody(dc, x, y, d, IC_RADIO, nm[0] ? nm : f, t.f10 ? sub : L"нет данных от радио", rt, -1, NULL, NULL);
+        WMediaBody(dc, g, d, IC_RADIO, nm[0] ? nm : f, t.f10 ? sub : L"нет данных от радио", rt, -1, NULL, NULL);
         if (t.presets > 0) {   // previous / next preset of the page playing (none playing: from the first)
             int cur = t.cur >= 0 && t.cur < 24 ? t.cur : 0, page = cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
-            IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_PRESET, page + (cur - page + per - 1) % per);
-            IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_PRESET,
-                    t.cur >= 0 ? page + (cur - page + 1) % per : cur);
+            MediaArrows(dc, g, d, A_PRESET, page + (cur - page + per - 1) % per, A_PRESET,
+                        t.cur >= 0 ? page + (cur - page + 1) % per : cur);
         }
-        T(dc, cx, cy + 12, f, 34, d ? kInk : t.f10 ? kOrange : kDim, 700, AL_MID);
+        T(dc, g.cx, g.cy + (big ? 12 : 8), f, big ? 34 : 22, d ? kInk : t.f10 ? kOrange : kDim, 700, AL_MID);
         return;
     }
     BtState bt;
     if (!ours && srcKnown && src == 9 && BtGet(&bt, NULL) && bt.title[0]) {   // the phone's music (AVRCP)
-        bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV, S_AUDIO_BT);
+        bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV, S_AUDIO_BT);
         wchar_t title[BT_TEXT], artist[BT_TEXT], t0[16] = L"", t1[16] = L"";
         BtText(bt.title, title, BT_TEXT);
         BtText(bt.artist, artist, BT_TEXT);
@@ -381,44 +428,42 @@ static void WMedia(HDC dc, int x, int y)
             if (bt.playing == 1 && bt.playTick)
                 pos += (int)(GetTickCount() - bt.playTick);
             pos = pos < 0 ? 0 : pos > len ? len : pos;
-            k = 468 * (pos / 1000) / (len / 1000 > 0 ? len / 1000 : 1);
+            k = g.barW * (pos / 1000) / (len / 1000 > 0 ? len / 1000 : 1);
             _snwprintf(t0, 16, L"%d:%02d", pos / 60000, pos / 1000 % 60);
             _snwprintf(t1, 16, L"%d:%02d", len / 60000, len / 1000 % 60);
         }
-        WMediaBody(dc, x, y, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1);
+        WMediaBody(dc, g, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1);
         bool playing = bt.playing ? bt.playing == 1 : bt.av == 2;
-        IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_BTCMD, BT_CMD_PREV);
-        bool down = Zone(cx - 36, cy - 36, 72, 72, A_BTCMD, BT_CMD_PLAYPAUSE);
-        Disc(dc, cx, cy, 36, down ? kFacet : kOrange);
-        Ico(dc, playing ? IC_PAUSE : IC_PLAY, cx - 16, cy - 16, 32, kInk);
-        IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_BTCMD, BT_CMD_NEXT);
+        MediaArrows(dc, g, d, A_BTCMD, BT_CMD_PREV, A_BTCMD, BT_CMD_NEXT);
+        bool down = Zone(g.cx - g.r, g.cy - g.r, 2 * g.r, 2 * g.r, A_BTCMD, BT_CMD_PLAYPAUSE);
+        Disc(dc, g.cx, g.cy, g.r, down ? kFacet : kOrange);
+        Ico(dc, playing ? IC_PAUSE : IC_PLAY, g.cx - g.play / 2, g.cy - g.play / 2, g.play, kInk);
         return;
     }
     if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
         NetLoadList();
     if (s_netCur >= 0 && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
-        bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
+        bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
         wchar_t s[160];
         EnterCriticalSection(&s_netCs);
         wcscpy(s, s_netTitle);
         LeaveCriticalSection(&s_netCs);
         if (!s[0] || s_netState != NR_PLAY)
             NetStateText(s, 160);
-        WMediaBody(dc, x, y, d, IC_NETRADIO, s_stations[s_netCur].name, s, NULL, -1, NULL, NULL);
-        IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_NRSTEP, -1);
-        NetPlayBtn(dc, cx, cy, 36, 32);
-        IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_NRSTEP, 1);
+        WMediaBody(dc, g, d, IC_NETRADIO, s_stations[s_netCur].name, s, NULL, -1, NULL, NULL);
+        MediaArrows(dc, g, d, A_NRSTEP, -1, A_NRSTEP, 1);
+        NetPlayBtn(dc, g.cx, g.cy, g.r, g.play);
         return;
     }
-    bool d = Widget(dc, x, y, kWgW2, kWgH2, L"Сейчас играет · Музыка", IC_MUSIC, A_NAV, S_AUDIO);
+    bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Музыка", IC_MUSIC, A_NAV, S_AUDIO);
     wchar_t title[96], sub[200], s[48], a[16], b[16];
     double pos = 0, len = 0;
     if (PlayerNow(title, sub, 96, &pos, &len)) {
         _snwprintf(s, 48, L"трек %d из %d", s_plCur + 1, s_plCount);
         Mmss(a, 16, pos);
         Mmss(b, 16, len);
-        WMediaBody(dc, x, y, d, IC_MUSIC, title, sub[0] ? sub : s, sub[0] ? s : NULL,
-                   len > 0 ? (int)(pos * 468 / len) : 0, a, b);
+        WMediaBody(dc, g, d, IC_MUSIC, title, sub[0] ? sub : s, sub[0] ? s : NULL,
+                   len > 0 ? (int)(pos * g.barW / len) : 0, a, b);
     } else {   // nothing loaded: the last track (dim) to go on with, or a dash
         wchar_t last[MAX_PATH];
         const wchar_t* fn = wcsrchr(s_cfg.musicFile, L'\\');
@@ -426,12 +471,21 @@ static void WMedia(HDC dc, int x, int y)
         wchar_t* dot = wcsrchr(last, L'.');
         if (dot)
             *dot = 0;
-        WMediaBody(dc, x, y, d, IC_MUSIC, last[0] ? last : L"—",
+        WMediaBody(dc, g, d, IC_MUSIC, last[0] ? last : L"—",
                    last[0] ? L"последний трек · ▶ — продолжить" : L"выберите музыку в «Медиа»", NULL, -1, NULL, NULL);
     }
-    IconBtn(dc, IC_PREV, cx - 132, cy - 18, 36, d ? kInk : kText, A_PREVTRK);
-    PlayBtn(dc, cx, cy, 36, 32);
-    IconBtn(dc, IC_FWD, cx + 96, cy - 18, 36, d ? kInk : kText, A_NEXTTRK);
+    MediaArrows(dc, g, d, A_PREVTRK, 0, A_NEXTTRK, 0);
+    PlayBtn(dc, g.cx, g.cy, g.r, g.play);
+}
+
+static void WMedia(HDC dc, int x, int y)   // big, 2 x 2
+{
+    WMediaAt(dc, x, y, true);
+}
+
+static void WMediaSmall(HDC dc, int x, int y)   // compact, 1 x 2
+{
+    WMediaAt(dc, x, y, false);
 }
 
 static const wchar_t* kHeadings[8] = { L"С", L"СВ", L"В", L"ЮВ", L"Ю", L"ЮЗ", L"З", L"СЗ" };
