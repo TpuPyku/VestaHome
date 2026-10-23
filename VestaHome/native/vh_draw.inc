@@ -1441,6 +1441,12 @@ static bool Zone(int x, int y, int w, int h, Action a, int arg = 0)
 // Icon in any colour: the skin's picture (as is in the text colour, otherwise tinted) or the built-in drawing.
 static void Ico(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
 {
+    for (int k = 0; k < 2; k++)   // the skin's picture at its first use (once: a bad file is not tried again)
+        if (s_iconPath[ic][k]) {
+            LoadImg(s_iconPath[ic][k], &s_icons[ic][k]);
+            free(s_iconPath[ic][k]);
+            s_iconPath[ic][k] = NULL;
+        }
     const Img& im = s_icons[ic][0];
     const Img& dn = s_icons[ic][1];
     if (c == kInk && dn.px)

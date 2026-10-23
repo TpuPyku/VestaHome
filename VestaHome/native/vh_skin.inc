@@ -102,9 +102,9 @@ static void LoadSkin()
         int down = len > 5 && !_wcsicmp(line + len - 5, L"_down");
         if (down)
             line[len - 5] = 0;
-        for (int ic = 0; ic < IC_COUNT; ic++)
-            if (kIconKey[ic] && !_wcsicmp(line, kIconKey[ic]) && !s_icons[ic][down].px)
-                LoadImg(file, &s_icons[ic][down]);
+        for (int ic = 0; ic < IC_COUNT; ic++)   // kept by name: loaded at its first use (Ico) - only the drawn ones
+            if (kIconKey[ic] && !_wcsicmp(line, kIconKey[ic]) && !s_iconPath[ic][down] && !s_icons[ic][down].px)
+                s_iconPath[ic][down] = _wcsdup(file);
     }
     free(buf);
 }

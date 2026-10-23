@@ -70,10 +70,17 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
             IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_NETRADIO, IC_BTMUSIC, IC_COUNT };
 
-// Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing.
-static const wchar_t* kIconKey[IC_COUNT] = { NULL, NULL, NULL, L"radio", L"music", L"phone", L"settings", L"home",
-    L"night", L"prev", L"day", L"apps", L"video", L"next", L"exit", L"folder", L"shift", L"backspace", L"aux_ico",
-    L"photo", L"info", L"rew", L"fwd", L"pause" };
+// Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing. Since
+// design 0.6 (2026-10-23) every icon has one: Lucide's, drawn by skin/make_icons.py (the built-in drawing - when the
+// skin gives none).
+static const wchar_t* kIconKey[IC_COUNT] = { NULL, L"map", L"nav", L"radio", L"music", L"phone", L"settings",
+    L"home", L"night", L"prev", L"day", L"apps", L"video", L"next", L"exit", L"folder", L"shift", L"backspace",
+    L"aux_ico", L"photo", L"info", L"rew", L"fwd", L"pause", L"bt", L"usb", L"list", L"vol", L"search", L"shuffle",
+    L"repeat", L"call", L"hangup", L"wifi", L"star", L"star_f", L"user", L"users", L"clock", L"keypad", L"mic_off",
+    L"handover", L"play", L"rot_l", L"rot_r", L"warn", L"call_in", L"call_out", L"call_miss", L"lock", L"refresh",
+    L"eq", L"disc", L"eye", L"power", L"edit", L"add", L"file", L"up", L"car", L"cloud", L"tasks", L"sd", L"down",
+    L"gallery", L"full", L"unfull", L"netradio", L"btmusic" };
+typedef char kIconKeyCount[sizeof(kIconKey) / sizeof(kIconKey[0]) == IC_COUNT ? 1 : -1];
 
 // A_NAV opens a main screen from the bottom bar (no history), A_SCREEN opens a screen over the current one,
 // A_TAB opens it instead of the current one (sections, sources), A_BACK returns. A_TOGGLE, A_SEG, A_KEY and A_DEL
@@ -143,6 +150,8 @@ static int   kBtnCount;
 // Skin pictures, premultiplied RGBA; px == NULL = the built-in drawing is used.
 struct Img { int w, h; unsigned char* px; };
 static Img     s_icons[IC_COUNT][2];   // [1] = pressed variant
+static wchar_t* s_iconPath[IC_COUNT][2];   // the skin's picture not loaded yet (Ico loads it at its first use)
+static bool LoadImg(const wchar_t* path, Img* im);
 static wchar_t s_skinBg[MAX_PATH];     // main menu background picture, optional
 static wchar_t s_skinSaver[MAX_PATH];  // the screen saver's picture, optional
 static wchar_t s_skinTile[MAX_PATH];   // the background's tile (all screens), optional: the mosaic otherwise
