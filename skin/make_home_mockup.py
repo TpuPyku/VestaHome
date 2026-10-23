@@ -23,7 +23,7 @@ P = {
     'pause': '!pause', 'prev': '!skip-back', 'next': '!skip-forward', 'shuffle': 'shuffle', 'repeat': 'repeat',
     'list': 'list', 'cloud': 'cloud', 'car': 'car', 'clock': 'clock', 'user': 'user', 'star': 'star',
     'keypad': 'grid-3x3', 'warn': 'triangle-alert', 'search': 'search', 'chev': 'chevron-right', 'back': 'chevron-left',
-    'sd': 'save', 'info': 'info', 'media': 'clapperboard', 'call': 'phone', 'end': 'phone-off', 'trip': 'route', 'fuel': 'fuel', 'drop': 'droplet', 'bolt': 'zap',
+    'sd': 'save', 'info': 'info', 'media': 'clapperboard', 'photo': 'image', 'sun': 'sun', 'call': 'phone', 'end': 'phone-off', 'trip': 'route', 'fuel': 'fuel', 'drop': 'droplet', 'bolt': 'zap',
 }
 
 
@@ -238,14 +238,22 @@ def scr_phone():
 
 
 def scr_settings():
+    secs = [('gear', 'Общие'), ('vol', 'Звук'), ('sun', 'Экран'), ('radio', 'Радио'), ('bt', 'Bluetooth'),
+            ('wifi', 'Wi-Fi'), ('media', 'Видео'), ('photo', 'Фото'), ('car', 'Автомобиль'), ('info', 'О системе')]
+    cur = 'Bluetooth'
     nav = ''
-    for name, label in [('gear', 'Общие'), ('vol', 'Звук'), ('moon', 'Экран'), ('radio', 'Радио'), ('bt', 'Bluetooth'),
-                        ('wifi', 'Wi-Fi'), ('media', 'Медиа'), ('car', 'Автомобиль'), ('info', 'О системе')]:
-        a = label == 'Bluetooth'   # icons only, two columns; the current one a pill across both with its name
-        nav += ('<div style="display:flex;align-items:center;justify-content:center;gap:10px;height:58px;'
-                'border-radius:18px;%s">%s%s</div>' % (
-                    'grid-column:span 2;background:var(--orS);color:var(--or)' if a else 'background:var(--s1);color:var(--t2)',
-                    ico(name, 26 if not a else 22), '<b style="font-size:17px">%s</b>' % label if a else ''))
+    for k in range(0, len(secs), 2):   # two columns always, icons without backing; the current one a pill with its
+        row = secs[k:k + 2]            # name, its neighbour in the row moved aside to the edge to make room
+        if cur in (row[0][1], row[1][1]):
+            cells = ['<span style="flex:1;display:flex;align-items:center;gap:10px;height:50px;padding:0 16px;'
+                     'border-radius:25px;background:var(--orS);color:var(--or)">%s<b style="font-size:17px">%s</b></span>'
+                     % (ico(n, 24), l) if l == cur else
+                     '<span style="width:44px;display:flex;justify-content:center;color:var(--t2)">%s</span>' % ico(n, 26)
+                     for n, l in row]
+        else:
+            cells = ['<span style="flex:1;display:flex;justify-content:center;color:var(--t2)">%s</span>' % ico(n, 26)
+                     for n, l in row]
+        nav += '<div style="display:flex;align-items:center;gap:10px;height:68px">%s</div>' % ''.join(cells)
     rows = ''
     for lab, sub, ctl in [('Redmi Note 13', 'подключён · музыка и звонки', '<span class="pill">Отключить</span>'),
                           ('Сопряжённые устройства', '3 устройства', ico('chev', 22, 'var(--t3)')),
@@ -255,8 +263,8 @@ def scr_settings():
         rows += ('<div class="lrow"><div style="flex:1"><div style="font-size:18px">%s</div><div class="t3" style="font-size:13px">%s'
                  '</div></div>%s</div>' % (lab, sub, ctl))
     return '''<div class="scr">%s
-<div style="position:absolute;left:16px;top:60px;width:164px;display:grid;grid-template-columns:1fr 1fr;gap:12px 12px;grid-auto-flow:dense">%s</div>
-<div class="card" style="left:196px;top:60px;width:580px;height:340px;padding:4px 24px">%s</div>
+<div style="position:absolute;left:16px;top:60px;width:196px">%s</div>
+<div class="card" style="left:228px;top:60px;width:548px;height:340px;padding:4px 24px">%s</div>
 %s</div>''' % (top('Настройки'), nav, rows, bot('gear'))
 
 
@@ -324,12 +332,10 @@ SCREENS = [
         'Скруглённые клавиши 56×52 с воздухом между ними; зелёная кнопка вызова — единственное исключение из оранжевого.',
         'Справа — недавние звонки списком без рамок между карточками, только тонкие разделители.']),
     ('Настройки', scr_settings, '26_settings_bt.png', [
-        'Разделы — значки в два столбца без подписей (как нижняя панель); текущий — оранжевая «таблетка» на '
-        'всю ширину колонки со своим названием. Колонка узкая (164 px), карточке справа больше места.',
-        'Разделов 9 вместо 10: «Видео» и «Фото» — один раздел «Медиа» (две группы на одной странице, как «Медиа» '
-        'в нижней панели): 8 значков в 4 строки + текущий отдельной строкой = 5 строк по 58 px.',
-        'Цена: при смене раздела значки под текущим сдвигаются (он занимает целую строку); значки должны быть '
-        'узнаваемы без подписи.',
+        'Разделы — 10 значков без подложек в два столбца по 5 строк (как нижняя панель, без подписей); строки '
+        'на своих местах всегда.',
+        'Текущий — оранжевая «таблетка» со своим названием; соседний значок в его строке сдвигается к краю, '
+        'освобождая место под подпись. Остальные строки не двигаются.',
         'Строки 60 px, подписи второй строкой тусклее, переключатели крупнее (52×30).',
         'Одна карточка справа вместо панели с рамкой.']),
     ('Автомобиль', scr_car, '38_car_sensors.png', [
