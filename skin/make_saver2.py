@@ -6,15 +6,13 @@ cool rim light on its edges, the grille's lines faint behind the clock, and the 
 tuned Vesta (MAIN/Saver/images(1).jfif) in orange: a bracket under each headlight - along its lower edge inwards,
 a sharp turn down beside the grille, a round corner out along the bottom - thin at the ends and thickest low,
 a white-hot core in an orange glow.
-Drawn 4x larger and scaled down (smooth edges), then dithered to RGB565 so the dark gradients don't band on the
-unit's 16-bit screen. VestaHome draws the clock, the date, the weather and what plays over it; at night it dims
+Drawn 4x larger and scaled down (smooth edges), in full 24-bit colour (VestaHome draws in 32 bits). VestaHome draws the clock, the date, the weather and what plays over it; at night it dims
 the picture by a third.
 
     python make_saver2.py           (needs Pillow)
 """
 import math
 import os
-import random
 from PIL import Image, ImageDraw, ImageFilter
 
 W, H, S = 800, 480, 4
@@ -130,16 +128,6 @@ def main():
         ImageDraw.Draw(core).polygon(sc(tapered(r, DRL_W, 0.45)), fill=255)
         img = Image.composite(Image.new('RGB', img.size, CORE), img, core.filter(ImageFilter.GaussianBlur(0.4 * S)))
     img = img.resize((W, H), Image.LANCZOS)
-    # dither to RGB565: the unit keeps 5/6/5 bits, so pick those levels here with noise instead of bands
-    rnd = random.Random(1)
-    px = img.load()
-    for y in range(H):
-        for x in range(W):
-            r, g_, b = px[x, y]
-            r = min(255, r + rnd.randrange(8)) & 0xF8
-            g_ = min(255, g_ + rnd.randrange(4)) & 0xFC
-            b = min(255, b + rnd.randrange(8)) & 0xF8
-            px[x, y] = (r, g_, b)
     img.save(OUT, optimize=True)
     print('written:', os.path.normpath(OUT), os.path.getsize(OUT), 'bytes')
 
