@@ -869,24 +869,14 @@ static bool LoadBackground(const wchar_t* path, unsigned short* bits)
 
 enum { kTileW = 64, kTileH = 480 };   // design 0.6: a column of the mosaic's cells (64 x 112), the whole height
 
-// The RGB565 colour nearest to r, g, b that keeps its tint: of the 8 around it the one whose brightness and channel
-// differences (green - red, blue - green) are closest - plain rounding pushed the mosaic's dark greys red or green.
-static unsigned short Q565(int r, int g, int b)
+// The mosaic's greys in RGB565 (2026-10-23, the user: the tile went red and blue - the dark greys nearest each shade
+// had different tints): one cool ramp, the cards' family (r, r + 4, r + 8): (8,12,16), (16,20,24), (24,28,32)...;
+// a shade takes the step nearest its brightness, so every triangle has the same tint.
+static unsigned short CoolGrey(int r, int g, int b)
 {
-    int best = 0x7FFFFFFF;
-    unsigned short q = 0;
-    for (int i = 0; i < 8; i++) {
-        int qr = (r & ~7) + (i & 1 ? 8 : 0), qg = (g & ~3) + (i & 2 ? 4 : 0), qb = (b & ~7) + (i & 4 ? 8 : 0);
-        if (qr > 248 || qg > 252 || qb > 248 || (g >= r && qg < qr) || (b >= g && qb < qg))
-            continue;   // (nor the channels' order turned: a cool grey stays cool)
-        int dl = (2 * (qr - r) + 5 * (qg - g) + (qb - b)), dgr = (qg - qr) - (g - r), dbg = (qb - qg) - (b - g);
-        int cost = dl * dl / 4 + 4 * dgr * dgr + 4 * dbg * dbg;
-        if (cost < best) {
-            best = cost;
-            q = RGB565(qr, qg, qb);
-        }
-    }
-    return q;
+    int k = ((r + g + b) / 3 - 4 + 4) / 8;   // the step: its brightness 8k + 4
+    k = k < 0 ? 0 : k > 30 ? 30 : k;
+    return RGB565(8 * k, 8 * k + 4, 8 * k + 8);
 }
 
 // Night: a third less brightness, as C() does (RGB565).
@@ -941,7 +931,7 @@ static void BuildBackground()
         s_skinTile[0] = 0;   // (the triangles below)
     if (!s_skinTile[0]) {   // design 0.6, as the mockup: rhombi of four triangles meeting in a 64 x 112 cell's
         // middle, darkened towards the bottom (25 % .. 70 % of the background) row of cells by row; each triangle one
-        // solid colour, the nearest RGB565 one (the user 2026-10-23: no dither noise, no glow)
+        // solid colour of one cool ramp (CoolGrey; the user 2026-10-23: no dither noise, no glow, no red / blue)
         s_tile[0] = (unsigned short*)malloc(kTileW * kTileH * 2);
         s_tile[1] = (unsigned short*)malloc(kTileW * kTileH * 2);
         if (s_tile[0] && s_tile[1]) {
@@ -956,9 +946,8 @@ static void BuildBackground()
                     COLORREF c = kTri[k];
                     int r = (GetRValue(c) * (256 - a) + ir * a) / 256, g = (GetGValue(c) * (256 - a) + ig * a) / 256,
                         b = (GetBValue(c) * (256 - a) + ib * a) / 256;
-                    unsigned short p = Q565(r, g, b);
-                    s_tile[0][y * kTileW + x] = p;
-                    s_tile[1][y * kTileW + x] = Dim565(p);
+                    s_tile[0][y * kTileW + x] = CoolGrey(r, g, b);
+                    s_tile[1][y * kTileW + x] = CoolGrey(r * 2 / 3, g * 2 / 3, b * 2 / 3);   // night: the same ramp
                 }
             }
             s_tileW = kTileW;
