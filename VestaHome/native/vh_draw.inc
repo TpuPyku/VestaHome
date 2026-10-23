@@ -1075,9 +1075,11 @@ static void MainBackground(HDC dc)
 }
 
 // The screen saver's background (Settings -> General -> Theme, the user 2026-10-23): 0 the mosaic - the skin's saver
-// picture without a light, the soft spot over the clock drawn in the accent colour; 1 the headlights (saver2.png,
-// its own orange lights). Loaded on its first frame, freed when it closes (SaverFree); none - plain dark.
+// picture without a light, the soft spot over the clock drawn in the accent colour; 1 a picture of one's own (any
+// PNG / JPG / BMP, fitted to cover the screen the way the photos are: scaled down while decoding; the example, the
+// headlights, is Skin\saver2.png). Loaded on its first frame, freed when it closes (SaverFree); none - plain dark.
 static int            s_saverSel;       // the choice (ApplyAccent sets it from the settings)
+static wchar_t        s_saverFile[MAX_PATH];   // its own picture's full path (ApplyAccent)
 static int            s_saverLoaded = -1;
 static bool           s_saverFailed[2];
 static unsigned char* s_saverGlow;      // the spot's strength (of 255) at half the resolution, 400 x 240
@@ -1133,14 +1135,23 @@ static void SaverBackground(HDC dc)
     if (s_saverLoaded != sel)
         SaverFree();
     if (!s_saverBg && !s_saverFailed[sel]) {
-        wchar_t path[MAX_PATH];
-        if (sel == 1)
-            _snwprintf(path, MAX_PATH, L"%sSkin\\saver2.png", s_dir);
-        else
-            wcscpy(path, s_skinSaver);
-        path[MAX_PATH - 1] = 0;
+        const wchar_t* path = sel == 1 ? s_saverFile : s_skinSaver;
         s_saverBg = path[0] ? MakeDib(800, 480, &s_saverBits) : NULL;
-        if (s_saverBg && !LoadBackground(path, s_saverBits)) {
+        bool ok = false;
+        if (s_saverBg && sel == 1) {
+            Pic pic = { 0, 0, NULL, NULL };
+            if (PicLoad(path, 800, 480, true, 0, true, &pic, NULL, NULL, true) == PIC_OK && pic.px32) {
+                for (int y = 0; y < 480; y++)   // (the DIB is bottom-up)
+                    for (int x = 0; x < 800; x++)
+                        s_saverBits[(479 - y) * 800 + x] = x < pic.w && y < pic.h ? pic.px32[y * pic.w + x]
+                                                 : PIX(GetRValue(kInk), GetGValue(kInk), GetBValue(kInk));
+                ok = true;
+            }
+            PicFree(&pic);
+        } else if (s_saverBg) {
+            ok = LoadBackground(path, s_saverBits);
+        }
+        if (s_saverBg && !ok) {
             DeleteObject(s_saverBg);
             s_saverBg = NULL;
         }

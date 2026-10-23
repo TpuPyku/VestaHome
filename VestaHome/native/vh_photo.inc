@@ -351,9 +351,14 @@ static void DoAction(const Btn& b)
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;
     case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
-    case A_SAVERBG:   // Settings -> General -> Theme: the saver's background
-        s_cfg.saverBg = b.arg == 1 ? 1 : 0;
+    case A_SAVERBG:   // Settings -> General -> Theme: the saver's background - the mosaic, or a picture (the files)
+        if (b.arg == 1) {
+            OpenFiles(F_SAVER);
+            break;
+        }
+        s_cfg.saverBg = 0;
         ApplyAccent();
+        SaverFree();
         SaveCfg();
         break;
     case A_ACCENT:   // Settings -> General -> Theme: the accent colour
@@ -844,7 +849,8 @@ static void DoAction(const Btn& b)
         } else if (s_screen == S_KEYS) {
             s_screen = s_keysBack;
         } else {
-            s_screen = s_filesFor == F_CAMS ? S_WSET_SPEED : s_filesFor == F_TEXT ? S_DIAG : S_EDIT;
+            s_screen = s_filesFor == F_SAVER ? S_SET_THEME : s_filesFor == F_CAMS ? S_WSET_SPEED
+                     : s_filesFor == F_TEXT ? S_DIAG : S_EDIT;
             s_status[0] = 0;
         }
         break;

@@ -81,7 +81,8 @@ struct Cfg {
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
     int     accent;                    // the accent: kAccents' index (0 Марс = the skin's own)
-    int     saverBg;                   // the saver's background: 0 the mosaic with the accent's spot, 1 the headlights
+    int     saverBg;                   // the saver's background: 0 the mosaic with the accent's spot, 1 its own picture
+    wchar_t saverFile[MAX_PATH];       // that picture (inside our folder relative; the example: the headlights)
     int     homeOrder[kWgMax];         // the main screen's widgets (WG_*, then the user's) in their order
     wchar_t homeRaw[400];              // home.widgets as read: keeps the user widgets not found now (no card)
     int     homeHidden;                // bit 1 << WG_*: hidden
@@ -136,6 +137,7 @@ static void CfgDefaults()
         s_cfg.homeOrder[i] = i;
     s_cfg.homeHidden = 1 << WG_MEDIA2;   // the compact "now playing": the big one is there
     wcscpy(s_cfg.wifiApSsid, L"VestaHome");
+    wcscpy(s_cfg.saverFile, L"Skin\\saver2.png");   // the example: the headlights
     s_cfg.camDist = 0;
     wcscpy(s_cfg.camFile, kCamDefault);
     wcscpy(s_cfg.camKinds, L"0,14,11,110,2,3");   // the speed cameras
@@ -173,6 +175,16 @@ static int AccentByCode(int code)
     return 0;
 }
 
+// The saver's own picture as a full path (inside our folder it is kept relative).
+static void SaverFilePath(wchar_t* out)
+{
+    if (s_cfg.saverFile[0] == L'\\' || wcschr(s_cfg.saverFile, L':'))
+        wcscpy(out, s_cfg.saverFile);
+    else
+        _snwprintf(out, MAX_PATH, L"%s%s", s_dir, s_cfg.saverFile);
+    out[MAX_PATH - 1] = 0;
+}
+
 static COLORREF Scale(COLORREF c, int pct)
 {
     return RGB(GetRValue(c) * pct / 100, GetGValue(c) * pct / 100, GetBValue(c) * pct / 100);
@@ -195,6 +207,8 @@ static void ApplyAccent()
     kTriOr[2] = Scale(a, 66);
     kTriOr[3] = Scale(a, 90);
     s_saverSel = s_cfg.saverBg;
+    SaverFilePath(s_saverFile);
+    s_saverFailed[0] = s_saverFailed[1] = false;   // (a new choice: tried again)
 }
 static const wchar_t* AccentName()
 {
@@ -216,10 +230,12 @@ static void ScrSetTheme(HDC dc)
             Disc(dc, x + 61, y + 40, 29, CLR_INVALID, kText);
         T(dc, x + 61, y + 90, kAccents[i].name, 15, d ? kInk : on ? kOrange : kText, 700, AL_MID, 116);
     }
-    SetRow(dc, 344, L"Фон заставки", s_cfg.saverBg ? L"фары" : L"мозаика, свет — цвет акцента", true, A_NONE, 0, 56);
-    static const wchar_t* bg[2] = { L"Мозаика", L"Фары" };
-    for (int i = 0; i < 2; i++)
-        Button(dc, 528 + i * 124, 352, 116, 40, bg[i], s_cfg.saverBg == i ? B_SEL : B_N, IC_NONE, 15, 0, A_SAVERBG, i);
+    const wchar_t* fn = wcsrchr(s_cfg.saverFile, L'\\');
+    SetRow(dc, 344, L"Фон заставки", s_cfg.saverBg ? (fn ? fn + 1 : s_cfg.saverFile) : L"мозаика, свет — цвет акцента",
+           true, A_NONE, 0, 56);
+    // the mosaic, or a picture of one's own (a tap: the files, the example - the headlights - in Skin)
+    Button(dc, 468, 352, 116, 40, L"Мозаика", s_cfg.saverBg == 0 ? B_SEL : B_N, IC_NONE, 15, 0, A_SAVERBG, 0);
+    Button(dc, 592, 352, 176, 40, L"Своя картинка", s_cfg.saverBg == 1 ? B_SEL : B_N, IC_PHOTO, 15, 20, A_SAVERBG, 1);
 }
 
 static void RadioCacheLoad(const wchar_t* k, const wchar_t* v);   // the tuner's last state, the stations' names
@@ -470,6 +486,8 @@ static void LoadCfg()
             s_cfg.keyVol = _wtoi(v) < -1 ? -1 : _wtoi(v) > 30 ? 30 : _wtoi(v);
         } else if (!wcscmp(k, L"sound.speedvol")) {
             s_cfg.speedVol = _wtoi(v) < 0 ? 0 : _wtoi(v) > 3 ? 3 : _wtoi(v);
+        } else if (!wcscmp(k, L"screen.saverfile") && v[0]) {
+            wcsncpy(s_cfg.saverFile, v, MAX_PATH - 1);
         } else if (!wcscmp(k, L"screen.saverbg")) {
             s_cfg.saverBg = _wtoi(v) == 1 ? 1 : 0;
         } else if (!wcscmp(k, L"screen.accent")) {
@@ -595,8 +613,9 @@ static void SaveCfg()
     {
         int k = _snwprintf(text + n, 12000 - n, L"# screen.accent: the accent colour, a Lada Vesta paint code (Settings -> "
                            L"General -> Theme; 130 Марс = the skin's)\r\nscreen.accent=%d\r\n"
-                           L"# screen.saverbg: the saver's background, 0 the mosaic (the accent's light), 1 the headlights\r\n"
-                           L"screen.saverbg=%d\r\n", kAccents[s_cfg.accent].code, s_cfg.saverBg);
+                           L"# screen.saverbg: the saver's background, 0 the mosaic (the accent's light), 1 its own picture "
+                           L"(screen.saverfile: PNG / JPG / BMP, fitted to the screen)\r\nscreen.saverbg=%d\r\nscreen.saverfile=%s\r\n",
+                           kAccents[s_cfg.accent].code, s_cfg.saverBg, s_cfg.saverFile);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {
