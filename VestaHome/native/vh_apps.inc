@@ -950,7 +950,7 @@ static void DrawApps(HDC dc)
         }
         const App& a = s_apps[i];
         bool d = Zone(x, y, 184, 150, A_RUN, i);
-        R(dc, x, y, 184, 150, 14, d ? kOrange : kPanel, d ? CLR_INVALID : s_editMode ? kOrange : kLine);
+        R(dc, x, y, 184, 150, 18, d ? kOrange : kPanel, d || !s_editMode ? CLR_INVALID : kOrange);   // editing: outlined
         if (!d) {   // orange facet in the top right corner, following the rounded corner (radius 14)
             POINT f[12];
             int n = 0;
@@ -990,7 +990,7 @@ static void DrawEdit(HDC dc)
         bool reset = k == F_ICON && v[0];
         int w = reset ? 640 : 768;
         bool d = Zone(16, y, w, 70, A_FIELD, k);
-        R(dc, 16, y, w, 70, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
+        R(dc, 16, y, w, 70, 16, d ? kOrange : kPanel);
         T(dc, 36, y + 26, kFieldCaption[k], 13, d ? kInk : kMuted, 700);
         if (v[0])
             TTail(dc, 36, y + 55, v, 22, d ? kInk : kText, 700, w - 88);
@@ -998,14 +998,14 @@ static void DrawEdit(HDC dc)
             T(dc, 36, y + 55, kFieldEmpty[k], 18, d ? kInk : kDim, 400, AL_START, w - 88);
         Ico(dc, IC_NEXT, 16 + w - 48, y + 19, 32, d ? kInk : kMuted);
         if (reset)
-            Button(dc, 668, y, 116, 70, L"СБРОС", B_N, IC_NONE, 17, 0, A_NOICON);
+            Button(dc, 668, y, 116, 70, L"Сброс", B_N, IC_NONE, 17, 0, A_NOICON);
     }
     Dock(dc);
-    Button(dc, 16, 410, 220, 58, L"ОТМЕНА", B_N, IC_NONE, 18, 0, A_CANCEL);
+    Button(dc, 16, 410, 220, 58, L"Отмена", B_N, IC_NONE, 18, 0, A_CANCEL);
     if (s_editIdx >= 0)   // the second press deletes
-        Button(dc, 290, 410, 220, 58, s_delArmed ? L"ТОЧНО УДАЛИТЬ?" : L"УДАЛИТЬ", s_delArmed ? B_FILL : B_N,
+        Button(dc, 290, 410, 220, 58, s_delArmed ? L"Точно удалить?" : L"Удалить", s_delArmed ? B_FILL : B_N,
                IC_NONE, 18, 0, A_DELETE);
-    Button(dc, 564, 410, 220, 58, L"СОХРАНИТЬ", B_PRI, IC_NONE, 18, 0, A_SAVE);
+    Button(dc, 564, 410, 220, 58, L"Сохранить", B_PRI, IC_NONE, 18, 0, A_SAVE);
 }
 
 // On-screen keyboard (like the mockup's Wi-Fi keyboard): the field and "Done" on top, 4 rows of 12 keys,
@@ -1014,14 +1014,14 @@ static void DrawKeys(HDC dc)
 {
     Frame(dc, s_keysTitle, A_CANCEL);
     if (s_clipMenu) {   // after a long press on the field, in its place; any other tap closes it
-        Button(dc, 16, 68, 194, 60, L"КОПИРОВАТЬ", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
+        Button(dc, 16, 68, 194, 60, L"Копировать", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
                s_keysText[0] ? A_CLIPCOPY : A_NONE);
-        Button(dc, 219, 68, 194, 60, L"ВСТАВИТЬ", B_FILL, IC_NONE, 17, 0, A_CLIPPASTE);
-        Button(dc, 422, 68, 194, 60, L"ОЧИСТИТЬ", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
+        Button(dc, 219, 68, 194, 60, L"Вставить", B_FILL, IC_NONE, 17, 0, A_CLIPPASTE);
+        Button(dc, 422, 68, 194, 60, L"Очистить", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
                s_keysText[0] ? A_CLIPCLEAR : A_NONE);
     } else {
         Zone(16, 68, 600, 70, A_KEYFIELD);   // the finger: the cursor (WndProc); held still: copy / paste
-        R(dc, 16, 68, 600, 60, 10, kPanel, kLine);
+        R(dc, 16, 68, 600, 60, 16, kPanel);
         int cx = KeysLayout(dc);
         wchar_t shown[400];
         wcsncpy(shown, s_keysText + s_keysView, s_keysVisN);
@@ -1035,7 +1035,7 @@ static void DrawKeys(HDC dc)
         Disc(dc, cx, 124, 13, kOrange);
         R(dc, cx - 1, 108, 3, 6, 0, kOrange);
     }
-    Button(dc, 628, 68, 156, 60, L"ГОТОВО", B_PRI, IC_NONE, 18, 0, A_OK);
+    Button(dc, 628, 68, 156, 60, L"Готово", B_PRI, IC_NONE, 18, 0, A_OK);
     const wchar_t** rows = s_keysEn ? kKeysEn : kKeysRu;
     for (int r = 0; r < 4; r++)
         for (int c = 0; rows[r][c]; c++) {
@@ -1044,13 +1044,13 @@ static void DrawKeys(HDC dc)
             if (s_keysShift)
                 CharUpperBuff(ch, 1);
             bool d = Zone(x, y, 60, 60, A_CHAR, ch[0]);
-            R(dc, x, y, 60, 60, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
+            R(dc, x, y, 60, 60, 14, d ? kOrange : kPanel);
             T(dc, x + 30, y + 40, ch, 24, d ? kInk : kText, 700, AL_MID);
         }
     Button(dc, 13, 404, 125, 60, NULL, s_keysShift ? B_SEL : B_FILL, IC_SHIFT, 18, 32, A_SHIFT);
-    Button(dc, 143, 404, 125, 60, s_keysEn ? L"ENG" : L"РУС", B_FILL, IC_NONE, 20, 0, A_LANG);
+    Button(dc, 143, 404, 125, 60, s_keysEn ? L"ENG" : L"Рус", B_FILL, IC_NONE, 20, 0, A_LANG);
     bool d = Zone(273, 404, 385, 60, A_CHAR, L' ');
-    R(dc, 273, 404, 385, 60, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
+    R(dc, 273, 404, 385, 60, 14, d ? kOrange : kPanel);
     R(dc, 397, 438, 136, 4, 2, d ? kInk : kMuted);
     Button(dc, 663, 404, 125, 60, NULL, B_FILL, IC_BKSP, 18, 36, A_BKSP);
 }
@@ -1075,5 +1075,5 @@ static void DrawFiles(HDC dc)
     PageDots(dc, s_filePage, FilePages(), 400, 382);
     Dock(dc);
     Button(dc, 16, 410, 120, 58, NULL, B_N, IC_UP, 18, 0, A_UP);
-    Button(dc, 664, 410, 120, 58, L"ОТМЕНА", B_N, IC_NONE, 18, 0, A_CANCEL);
+    Button(dc, 664, 410, 120, 58, L"Отмена", B_N, IC_NONE, 18, 0, A_CANCEL);
 }

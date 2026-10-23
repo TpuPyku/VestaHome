@@ -103,7 +103,7 @@ static void TaskClose(HWND h)
 static void TaskGraph(HDC dc, int x, int y, int w, const wchar_t* caption, const wchar_t* value,
                       const unsigned char* hist, COLORREF c)
 {
-    R(dc, x, y, w, 104, 14, kPanel, kLine);
+    R(dc, x, y, w, 104, 18, kPanel);
     T(dc, x + 14, y + 26, caption, 15, kMuted, 700);
     T(dc, x + w - 14, y + 26, value, 15, kText, 700, AL_END, w - 120);
     int gx = x + 14, gy = y + 36, gw = w - 28, gh = 56;
@@ -194,7 +194,7 @@ static void DrawTasks(HDC dc)
             if (sys || self)
                 T(dc, 700, y + 28, sys ? L"система" : L"эта программа", 14, kDim, 600, AL_MID);
             else
-                Button(dc, 624, y + 4, 152, 36, s_taskArm == p.pid ? L"ТОЧНО?" : L"ЗАВЕРШИТЬ",
+                Button(dc, 624, y + 4, 152, 36, s_taskArm == p.pid ? L"Точно?" : L"Завершить",
                        s_taskArm == p.pid ? B_PRI : B_N, IC_NONE, 15, 0, A_TASKKILL, (int)p.pid);
         } else {
             if (i >= s_task.winCount)
@@ -203,8 +203,8 @@ static void DrawTasks(HDC dc)
             R(dc, 16, y, 768, 44, 10, kPanel);
             T(dc, 32, y + 29, w.title, 18, kText, 700, AL_START, 300);
             T(dc, 346, y + 28, w.proc, 15, kMuted, 400, AL_START, 190);
-            Button(dc, 544, y + 4, 112, 36, L"ПЕРЕЙТИ", B_N, IC_NONE, 15, 0, A_TASKSWITCH, (int)(INT_PTR)w.h);
-            Button(dc, 664, y + 4, 112, 36, L"ЗАКРЫТЬ", B_N, IC_NONE, 15, 0, A_TASKCLOSE, (int)(INT_PTR)w.h);
+            Button(dc, 544, y + 4, 112, 36, L"Перейти", B_N, IC_NONE, 15, 0, A_TASKSWITCH, (int)(INT_PTR)w.h);
+            Button(dc, 664, y + 4, 112, 36, L"Закрыть", B_N, IC_NONE, 15, 0, A_TASKCLOSE, (int)(INT_PTR)w.h);
         }
     }
     if (s_taskTab == 1 && !s_task.winCount)
@@ -671,11 +671,11 @@ static void WClimate(HDC dc, int x, int y)
             _snwprintf(s, 24, L"вент %d", h.blower);
             T(dc, x + 112, y + 112, s, 14, kMuted, 600);
         }
-        R(dc, x + 16, y + 120, 56, 28, 8, h.ac == 1 ? kOrange : CLR_INVALID, h.ac == 1 ? CLR_INVALID : kLine);
+        R(dc, x + 16, y + 120, 56, 28, 14, h.ac == 1 ? kOrange : kPanel2);
         T(dc, x + 44, y + 140, L"A/C", 14, h.ac == 1 ? kInk : kMuted, 700, AL_MID);
-        R(dc, x + 80, y + 120, 64, 28, 8, h.autoMode == 2 ? kOrange : CLR_INVALID, h.autoMode == 2 ? CLR_INVALID : kLine);
+        R(dc, x + 80, y + 120, 64, 28, 14, h.autoMode == 2 ? kOrange : kPanel2);
         T(dc, x + 112, y + 140, L"АВТО", 13, h.autoMode == 2 ? kInk : kMuted, 700, AL_MID);
-        R(dc, x + 152, y + 120, 80, 28, 8, h.rear == 1 ? kOrange : CLR_INVALID, h.rear == 1 ? CLR_INVALID : kLine);
+        R(dc, x + 152, y + 120, 80, 28, 14, h.rear == 1 ? kOrange : kPanel2);
         T(dc, x + 192, y + 140, L"ОБОГРЕВ", 12, h.rear == 1 ? kInk : kMuted, 700, AL_MID);
         if (h.outer > -100) {
             _snwprintf(s, 24, L"за бортом %+d°", h.outer);
@@ -690,7 +690,7 @@ static void WClimate(HDC dc, int x, int y)
         R(dc, x + 156 + i * 15, y + 100 - (8 + i * 4), 10, 8 + i * 4, 2, i < 3 ? kText : kLine);
     R(dc, x + 16, y + 116, 64, 30, 8, kOrange);
     T(dc, x + 48, y + 137, L"A/C", 15, kInk, 700, AL_MID);
-    R(dc, x + 88, y + 116, 104, 30, 8, CLR_INVALID, kLine);
+    R(dc, x + 88, y + 116, 104, 30, 15, kPanel2);
     T(dc, x + 140, y + 137, L"РЕЦИРК.", 13, kMuted, 700, AL_MID);
 }
 
@@ -1031,7 +1031,7 @@ static void DtcInfoWindow(HDC dc)
         T(dc, 88, y + 20, s, 13, kDim, 400, AL_START, 624);
         y += 34;
     }
-    Button(dc, 300, 348, 200, 48, L"ЗАКРЫТЬ", B_N, IC_NONE, 17, 0, A_DTCINFO, -1);
+    Button(dc, 300, 348, 200, 48, L"Закрыть", B_N, IC_NONE, 17, 0, A_DTCINFO, -1);
 }
 
 static void ScrObdDtc(HDC dc)
@@ -1065,15 +1065,15 @@ static void ScrObdDtc(HDC dc)
             MultiByteToWideChar(CP_ACP, 0, o.dtc[i], -1, c, 8);
             int x = 32 + i % 4 * 184, y = 160 + i / 4 * 52;
             bool d = Zone(x, y, 172, 44, A_DTCINFO, i);   // a tap: its meaning
-            R(dc, x, y, 172, 44, 10, d ? kOrange : kPanel2, d ? CLR_INVALID : kLine);
+            R(dc, x, y, 172, 44, 22, d ? kOrange : kPanel2);
             T(dc, x + 86, y + 30, c, 22, d ? kInk : kText, 700, AL_MID, 160);
         }
     T(dc, 32, 380, L"P — двигатель и коробка, C — шасси, B — кузов, U — сеть. Нажмите на код — расшифровка.", 14,
       kDim, 400, AL_START, 736);
     Dock(dc);
-    Button(dc, 200, 412, 190, 52, L"ПРОЧИТАТЬ", on && !busy ? B_N : B_DIS, IC_NONE, 17, 0,
+    Button(dc, 200, 412, 190, 52, L"Прочитать", on && !busy ? B_N : B_DIS, IC_NONE, 17, 0,
            on && !busy ? A_DTCREAD : A_NONE);
-    Button(dc, 410, 412, 190, 52, s_dtcArm ? L"ТОЧНО СБРОСИТЬ?" : L"СБРОСИТЬ",
+    Button(dc, 410, 412, 190, 52, s_dtcArm ? L"Точно сбросить?" : L"Сбросить",
            !on || busy ? B_DIS : s_dtcArm ? B_FILL : B_N, IC_NONE, 17, 0, on && !busy ? A_DTCCLEAR : A_NONE);
     if (s_dtcCode[0])
         DtcInfoWindow(dc);

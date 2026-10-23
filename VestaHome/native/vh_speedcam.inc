@@ -410,7 +410,7 @@ static void ScrTestAv(HDC dc)
     wchar_t b[96];
     _snwprintf(b, 96, L"УСТРОЙСТВО ПИСКА: %s", s);
     Button(dc, 40, 356, 470, 42, b, B_N, IC_NONE, 15, 0, A_AVDEV);   // the next device and a beep on it
-    Button(dc, 520, 356, 240, 42, L"СТЕКЛО (ОШИБКА OBD)", B_N, IC_NONE, 15, 0, A_AVTEST, 100);
+    Button(dc, 520, 356, 240, 42, L"Стекло (ошибка OBD)", B_N, IC_NONE, 15, 0, A_AVTEST, 100);
     if (dir[0])
         _snwprintf(s, 160, L"Файлы: %s. Писк — через канал голоса навигации (радио тише).", dir);
     else

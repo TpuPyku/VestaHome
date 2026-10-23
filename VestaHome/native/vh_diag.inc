@@ -88,7 +88,7 @@ static void ScrTestTouch(HDC dc)
     } else {
         T(dc, 16, 36, L"Проведите пальцем по экрану, углы и края тоже", 18, kMuted, 400);
     }
-    Button(dc, 680, 8, 112, 48, L"ВЫХОД", B_FILL, IC_NONE, 16, 0, A_BACK);
+    Button(dc, 680, 8, 112, 48, L"Выход", B_FILL, IC_NONE, 16, 0, A_BACK);
 }
 
 static void AddTouch(int x, int y)
@@ -236,7 +236,7 @@ static void ScrWarning(HDC dc)
     T(dc, 132, 212, L"Не отвлекайтесь от дороги. Управляйте системой", 19, kMuted, 400, AL_START, 540);
     T(dc, 132, 242, L"только когда это безопасно. Правила дорожного", 19, kMuted, 400, AL_START, 540);
     T(dc, 132, 272, L"движения важнее подсказок навигации.", 19, kMuted, 400, AL_START, 540);
-    Button(dc, 452, 324, 216, 60, L"ПРИНЯТЬ", B_PRI, IC_NONE, 19, 0, A_BACK);
+    Button(dc, 452, 324, 216, 60, L"Принять", B_PRI, IC_NONE, 19, 0, A_BACK);
     T(dc, 132, 360, L"Окно закроется само через 10 с", 15, kDim, 400, AL_START, 310);
 }
 
@@ -278,10 +278,10 @@ static void ScrExit(HDC dc)
       520);
     T(dc, 142, 242, L"Штатная — закроется, на экране штатная оболочка.", 16, kMuted, 400, AL_START, 520);
     T(dc, 142, 264, L"Выход — закроется, появится рабочий стол.", 16, kMuted, 400, AL_START, 520);
-    Button(dc, 134, 284, 124, 60, L"ОТМЕНА", B_N, IC_NONE, 16, 0, A_BACK);
-    Button(dc, 266, 284, 124, 60, L"СВЕРНУТЬ", B_N, IC_NONE, 16, 0, A_MINIMIZE);
-    Button(dc, 398, 284, 124, 60, L"ШТАТНАЯ", B_N, IC_NONE, 16, 0, A_SHELL);
-    Button(dc, 530, 284, 136, 60, L"ВЫХОД", B_PRI, IC_POWER, 16, 24, A_EXIT);
+    Button(dc, 134, 284, 124, 60, L"Отмена", B_N, IC_NONE, 16, 0, A_BACK);
+    Button(dc, 266, 284, 124, 60, L"Свернуть", B_N, IC_NONE, 16, 0, A_MINIMIZE);
+    Button(dc, 398, 284, 124, 60, L"Штатная", B_N, IC_NONE, 16, 0, A_SHELL);
+    Button(dc, 530, 284, 136, 60, L"Выход", B_PRI, IC_POWER, 16, 24, A_EXIT);
 }
 
 // The knob held 5 s (MCU 0x1102 18): the MCU reboots the unit 5 s later. The stock shell shows its own window
@@ -298,7 +298,7 @@ static void ScrReboot(HDC dc)
     _snwprintf(s, 48, L"ПЕРЕЗАГРУЗКА ЧЕРЕЗ %d С", left < 0 ? 0 : left);
     T(dc, 246, 198, s, 24, kText, 700, AL_START, 380);
     T(dc, 182, 250, L"Крутилка громкости удержана. Отменить?", 17, kMuted, 400, AL_START, 440);
-    Button(dc, 250, 274, 300, 60, L"ОТМЕНА", B_PRI, IC_NONE, 18, 0, A_REBOOTNO);
+    Button(dc, 250, 274, 300, 60, L"Отмена", B_PRI, IC_NONE, 18, 0, A_REBOOTNO);
 }
 
 static void ScrIncoming(HDC dc)

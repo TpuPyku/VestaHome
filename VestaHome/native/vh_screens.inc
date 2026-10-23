@@ -454,7 +454,7 @@ static void ScrRadioList(HDC dc)
         Button(dc, 632, 232, 72, 48, NULL, s_rlistPage ? B_N : B_DIS, IC_BACK, 18, 28, A_RLISTPAGE, -1);
         Button(dc, 712, 232, 72, 48, NULL, s_rlistPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 28, A_RLISTPAGE, 1);
     }
-    Button(dc, 632, 68, 152, 72, scanning ? L"СТОП" : L"АВТОПОИСК", scanning ? B_SEL : B_N, IC_SEARCH, 15, 0, A_RSCAN);
+    Button(dc, 632, 68, 152, 72, scanning ? L"Стоп" : L"Автопоиск", scanning ? B_SEL : B_N, IC_SEARCH, 15, 0, A_RSCAN);
     R(dc, 632, 292, 152, 98, 12, kPanel);
     wchar_t c[8];
     _snwprintf(c, 8, L"%d", n);
@@ -507,11 +507,11 @@ static void ScrRadioPty(HDC dc)
         Button(dc, 16 + (i % 4) * 196, 68 + (i / 4) * 80, 186, 70, kPtyTypes[i], i == s_ptySel ? B_SEL : B_FILL,
                IC_NONE, 16, 0, A_PTYSEL, i);
     Dock(dc);
-    Button(dc, 16, 410, 180, 58, L"ОТМЕНА", B_N, IC_NONE, 18, 0, A_BACK);
+    Button(dc, 16, 410, 180, 58, L"Отмена", B_N, IC_NONE, 18, 0, A_BACK);
     wchar_t s[64];
     _snwprintf(s, 64, L"Ищет станции с типом «%s»", kPtyTypes[s_ptySel]);
     T(dc, 400, 446, s, 17, kMuted, 400, AL_MID, 390);
-    Button(dc, 604, 410, 180, 58, L"ИСКАТЬ", B_PRI, IC_SEARCH, 18, 0, A_PTYGO);
+    Button(dc, 604, 410, 180, 58, L"Искать", B_PRI, IC_SEARCH, 18, 0, A_PTYGO);
 }
 
 // Media -> music and its list: the player (BASS), defined with it below.
@@ -596,7 +596,7 @@ static void ScrAudioBt(HDC dc)
           18, kMuted, 400, AL_START, 512);
     }
     if (!on)   // not the source (the phone not connected, or the switch did not take): by hand
-        Button(dc, 584, 124, 200, 40, L"ВКЛЮЧИТЬ ЗВУК", B_N, IC_BT, 14, 20, A_BTMUSIC);
+        Button(dc, 584, 124, 200, 40, L"Включить звук", B_N, IC_BT, 14, 20, A_BTMUSIC);
     bool ctl = proxy && bt.av >= 1;   // the buttons: the SDK's AVRCP keys, through the proxy
     bool playing = bt.playing ? bt.playing == 1 : bt.av == 2;
     Button(dc, 392, 312, 64, 56, NULL, ctl ? B_N : B_DIS, IC_PREV, 18, 40, A_BTCMD, BT_CMD_PREV);
@@ -677,9 +677,9 @@ static void ScrPhone(HDC dc)
         if (BtLastAddr()[0]) {
             _snwprintf(s, 120, L"последний: %s", last[0] ? last : BtLastAddr());
             T(dc, 32, 218, s, 16, kMuted, 400, AL_START, 324);
-            Button(dc, 32, 240, 150, 44, L"ПОДКЛЮЧИТЬ", B_PRI, IC_NONE, 14, 0, A_BTCONNECT);
+            Button(dc, 32, 240, 150, 44, L"Подключить", B_PRI, IC_NONE, 14, 0, A_BTCONNECT);
         }
-        Button(dc, BtLastAddr()[0] ? 194 : 32, 240, 162, 44, L"СОПРЯЖЁННЫЕ", B_N, IC_NONE, 14, 0, A_SCREEN, S_BT_PAIRED);
+        Button(dc, BtLastAddr()[0] ? 194 : 32, 240, 162, 44, L"Сопряжённые", B_N, IC_NONE, 14, 0, A_SCREEN, S_BT_PAIRED);
         T(dc, 32, 316, L"Новый телефон: найдите «VESTA» в его Bluetooth", 14, kDim, 400, AL_START, 324);
     } else {
         T(dc, 32, 190, bt.devName[0] ? name : L"Телефон", 22, kText, 700, AL_START, 324);
@@ -696,13 +696,13 @@ static void ScrPhone(HDC dc)
         T(dc, 32, 250, s, 17, kMuted, 400, AL_START, 324);
         T(dc, 32, 300, bt.av >= 1 ? L"музыка: подключена" : L"музыка: нет", 15, kDim, 400, AL_START, 324);
     }
-    Button(dc, 16, 354, 172, 44, L"КОНТАКТЫ", B_N, IC_USERS, 15, 24, A_SCREEN, S_CONTACTS);
-    Button(dc, 200, 354, 172, 44, L"ЖУРНАЛ", B_N, IC_CLOCK, 15, 24, A_SCREEN, S_CALLS);
+    Button(dc, 16, 354, 172, 44, L"Контакты", B_N, IC_USERS, 15, 24, A_SCREEN, S_CONTACTS);
+    Button(dc, 200, 354, 172, 44, L"Журнал", B_N, IC_CLOCK, 15, 24, A_SCREEN, S_CALLS);
     for (int i = 0; i < 12; i++) {   // keypad 3 x 4
         int x = 388 + (i % 3) * 136, y = 64 + (i / 3) * 62;
         wchar_t k[2] = { keys[i], 0 };
         bool d = Zone(x, y, 124, 56, A_KEY, K_DIAL * 65536 + keys[i]);
-        R(dc, x, y, 124, 56, 10, d ? kOrange : kPanel, d ? CLR_INVALID : kLine);
+        R(dc, x, y, 124, 56, 16, d ? kOrange : kPanel);
         T(dc, x + 62, y + 39, k, 30, d ? kInk : kText, 700, AL_MID);
         if (keys[i] == L'0')   // held: "+"
             T(dc, x + 100, y + 38, L"+", 16, d ? kInk : kMuted, 700, AL_MID);
@@ -862,12 +862,12 @@ static bool PbHead(HDC dc, int list, int n, const wchar_t* what)
         _snwprintf(s, 64, L"%s: %d", what, n < 0 ? 0 : n);
     T(dc, 216, 100, s, 17, s_pbFail ? kStop : kMuted, 600, AL_START, list == BT_PB_PB ? 160 : 300);
     if (list == BT_PB_PB) {   // the book: the phone's / the SIM's, the search
-        Button(dc, 384, 76, 80, 36, s_pbStorage ? L"SIM" : L"ТЕЛ.", s_pbStorage ? B_SEL : B_N, IC_NONE, 14, 0,
+        Button(dc, 384, 76, 80, 36, s_pbStorage ? L"SIM" : L"Тел.", s_pbStorage ? B_SEL : B_N, IC_NONE, 14, 0,
                s_pbWant >= 0 ? A_NONE : A_PBSIM);
         Button(dc, 472, 76, 80, 36, s_pbFind[0] ? s_pbFind : NULL, s_pbFind[0] ? B_SEL : B_N, IC_SEARCH, 14, 20,
                A_PBFIND);
     }
-    Button(dc, 560, 76, 152, 36, L"ОБНОВИТЬ", s_pbWant >= 0 ? B_DIS : B_N, IC_REFRESH, 14, 20,
+    Button(dc, 560, 76, 152, 36, L"Обновить", s_pbWant >= 0 ? B_DIS : B_N, IC_REFRESH, 14, 20,
            s_pbWant >= 0 ? A_NONE : A_PBRELOAD, list);
     if (s_pbFail && n < 0) {
         T(dc, 216, 160, L"Разрешите на телефоне доступ к контактам и журналу", 16, kMuted, 400, AL_START, 480);
@@ -937,7 +937,7 @@ static void ScrContact(HDC dc)
     Button(dc, 712, 78, 56, 48, NULL, fav ? B_SEL : B_N, fav ? IC_STAR_F : IC_STAR, 15, 26, A_PBFAV, s_pbContact);
     for (int k = 0; k < BT_PB_NUMS && e.num[k][0]; k++) {
         BtText(e.num[k], w, 64);
-        ListRow(dc, 208, 140 + k * 64, 560, 56, w, L"ПОЗВОНИТЬ", L_N, IC_CALL, NULL, NULL, A_PBDIAL,
+        ListRow(dc, 208, 140 + k * 64, 560, 56, w, L"Позвонить", L_N, IC_CALL, NULL, NULL, A_PBDIAL,
                 s_pbContact * 4 + k);
     }
 }
@@ -1139,7 +1139,7 @@ static void ScrSetBt(HDC dc)
         SetRow(dc, 112, L"Связь", s, false, A_NONE, 0, H);
         SetRow(dc, 160, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник", false, A_NONE, 0, H);
         if (src != 9)
-            Button(dc, 560, 164, 200, 40, L"ВКЛЮЧИТЬ", B_N, IC_BT, 15, 22, A_BTMUSIC);
+            Button(dc, 560, 164, 200, 40, L"Включить", B_N, IC_BT, 15, 22, A_BTMUSIC);
         SetRow(dc, 208, L"Автосоединение", L"последний телефон — при включении ГУ", false, A_NONE, 0, H);
         Toggle(dc, 688, 214, T_AUTOCONNECT);
         SetRow(dc, 256, L"Автоответ", L"входящий звонок принимается через 5 с", false, A_NONE, 0, H);
@@ -1158,7 +1158,7 @@ static void ScrSetBt(HDC dc)
         SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен proxy MCU)");
         SetRow(dc, 120, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");
         if (src != 9)
-            Button(dc, 560, 126, 200, 44, L"ВКЛЮЧИТЬ", B_N, IC_BT, 15, 22, A_BTMUSIC);
+            Button(dc, 560, 126, 200, 44, L"Включить", B_N, IC_BT, 15, 22, A_BTMUSIC);
         SetRow(dc, 176, L"Сопряжение и подключение", L"пока в штатной оболочке: Телефон → Bluetooth", true);
         T(dc, 264, 268, L"Подключённый телефон и его связь появятся здесь с proxy Bluetooth", 15, kMuted, 400,
           AL_START, 500);
@@ -1190,7 +1190,7 @@ static void ScrBtPaired(HDC dc)
         s_pairedPage = 0;   // (the dots go round)
     if (!n)
         SetRow(dc, 64, L"Сопряжённых нет", L"новый телефон — кнопка ниже", true);
-    Button(dc, 256, 340, 220, 40, L"+ НОВЫЙ ТЕЛЕФОН", B_N, IC_NONE, 15, 0, A_SCREEN, S_BT_PAIRNEW);
+    Button(dc, 256, 340, 220, 40, L"+ Новый телефон", B_N, IC_NONE, 15, 0, A_SCREEN, S_BT_PAIRNEW);
     for (int k = 0; k < kPairedRows; k++) {
         int i = s_pairedPage * kPairedRows + k, y = 64 + k * 44;
         if (i >= n)
@@ -1202,7 +1202,7 @@ static void ScrBtPaired(HDC dc)
         sub[63] = 0;
         T(dc, 264, y + 20, nm[0] ? nm : L"без имени", 17, kText, 700, AL_START, 360);
         T(dc, 264, y + 38, sub, 13, on ? kOrange : kMuted, 400, AL_START, 360);
-        Button(dc, 640, y + 4, 128, 36, s_pairedAsk == i ? L"ТОЧНО?" : L"УДАЛИТЬ", s_pairedAsk == i ? B_SEL : B_N,
+        Button(dc, 640, y + 4, 128, 36, s_pairedAsk == i ? L"Точно?" : L"Удалить", s_pairedAsk == i ? B_SEL : B_N,
                IC_NONE, 14, 0, A_BTUNPAIR, i);
         if (k + 1 < kPairedRows && i + 1 < n)
             Sep(dc, 256, y + 43, 512);
@@ -1305,7 +1305,7 @@ static void ScrSetObd(HDC dc)
     s[159] = 0;
     SetRow(dc, 64, L"OBD-адаптер (ELM327)", s);
     bool searching = s_obdEvSeen >= 0 && GetTickCount() - s_obdSearchTick < 15000;
-    Button(dc, 656, 70, 112, 44, searching ? L"ПОИСК…" : L"НАЙТИ", !proxy ? B_DIS : searching ? B_SEL : B_N, IC_NONE,
+    Button(dc, 656, 70, 112, 44, searching ? L"Поиск…" : L"Найти", !proxy ? B_DIS : searching ? B_SEL : B_N, IC_NONE,
            15, 0, proxy ? A_OBDSCAN : A_NONE);
     for (int i = 0; i < s_obdFoundN; i++) {
         if (s_obdFound[i].name[0])
@@ -1327,9 +1327,9 @@ static void ScrSetObd(HDC dc)
     }
     bool can = addr[0] != 0;
     bool busy = o.state == OBD_CONNECTING || o.state == OBD_ON;
-    Button(dc, 488, 270, 136, 40, L"СОПРЯЧЬ", can && proxy ? B_N : B_DIS, IC_NONE, 15, 0,
+    Button(dc, 488, 270, 136, 40, L"Сопрячь", can && proxy ? B_N : B_DIS, IC_NONE, 15, 0,
            can && proxy ? A_OBDPAIR : A_NONE);
-    Button(dc, 632, 270, 136, 40, busy ? L"ОТКЛЮЧИТЬ" : L"ПОДКЛЮЧИТЬ", can || busy ? (busy ? B_SEL : B_N) : B_DIS,
+    Button(dc, 632, 270, 136, 40, busy ? L"Отключить" : L"Подключить", can || busy ? (busy ? B_SEL : B_N) : B_DIS,
            IC_NONE, 15, 0, can || busy ? A_OBDCONN : A_NONE);
     int y = 336, first = 1;   // four lines fit, or the values and three
     if (o.state == OBD_ON) {
@@ -1441,8 +1441,8 @@ static void ScrBtPairAsk(HDC dc)
     } else {
         T(dc, 400, 230, L"просит сопряжение", 17, kText, 400, AL_MID, 520);
     }
-    Button(dc, 160, 296, 220, 56, L"ОТКЛОНИТЬ", B_N, IC_NONE, 18, 0, A_PAIRANSWER, 0);
-    Button(dc, 420, 296, 220, 56, L"ПРИНЯТЬ", B_PRI, IC_NONE, 18, 0, A_PAIRANSWER, 1);
+    Button(dc, 160, 296, 220, 56, L"Отклонить", B_N, IC_NONE, 18, 0, A_PAIRANSWER, 0);
+    Button(dc, 420, 296, 220, 56, L"Принять", B_PRI, IC_NONE, 18, 0, A_PAIRANSWER, 1);
 }
 
 static void ScrBtPairNew(HDC dc)
@@ -1453,7 +1453,7 @@ static void ScrBtPairNew(HDC dc)
     bool searching = s_obdEvSeen >= 0 && GetTickCount() - s_obdSearchTick < 15000;
     SetRow(dc, 64, L"Новый телефон", searching ? L"ищу устройства (около 10 с)…"
                    : L"на телефоне — Bluetooth и видимость");
-    Button(dc, 656, 70, 112, 44, searching ? L"ПОИСК…" : L"НАЙТИ", !proxy ? B_DIS : searching ? B_SEL : B_N, IC_NONE,
+    Button(dc, 656, 70, 112, 44, searching ? L"Поиск…" : L"Найти", !proxy ? B_DIS : searching ? B_SEL : B_N, IC_NONE,
            15, 0, proxy ? A_OBDSCAN : A_NONE);
     wchar_t nm[48];
     for (int i = 0; i < s_obdFoundN; i++) {
@@ -1475,8 +1475,8 @@ static void ScrBtPairNew(HDC dc)
         MultiByteToWideChar(CP_ACP, 0, kObdPins[i], -1, p, 8);
         Button(dc, 304 + i * 88, 270, 80, 40, p, i == s_obdPin ? B_SEL : B_N, IC_NONE, 15, 0, A_OBDPIN, i);
     }
-    Button(dc, 488, 270, 136, 40, L"СОПРЯЧЬ", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNPAIR : A_NONE);
-    Button(dc, 632, 270, 136, 40, L"ПОДКЛЮЧИТЬ", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNCONN : A_NONE);
+    Button(dc, 488, 270, 136, 40, L"Сопрячь", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNPAIR : A_NONE);
+    Button(dc, 632, 270, 136, 40, L"Подключить", can ? B_N : B_DIS, IC_NONE, 15, 0, can ? A_PNCONN : A_NONE);
     T(dc, 264, 336, L"Телефон спросит подтверждение — согласитесь, потом «ПОДКЛЮЧИТЬ».", 14, kDim, 400, AL_START,
       504);
     // or from the phone's side: the unit seen for 2 min, the phone finds "it" and asks (ScrBtPairAsk)
@@ -1533,7 +1533,7 @@ static void ScrSetWifi(HDC dc)
     SetRow(dc, 64, L"Wi-Fi", s);
     Toggle(dc, 696, 74, T_WIFI);
     if (w.state >= WIFI_DISCONNECTED)
-        Button(dc, 556, 70, 124, 44, w.scanning ? L"ПОИСК…" : L"НАЙТИ", w.scanning ? B_SEL : B_N, IC_NONE, 15, 0,
+        Button(dc, 556, 70, 124, 44, w.scanning ? L"Поиск…" : L"Найти", w.scanning ? B_SEL : B_N, IC_NONE, 15, 0,
                A_WIFISCAN);
     if (w.state == WIFI_AP) {   // the unit is the access point: what to type on the phone
         Panel(dc, 256, 124, 512, 168, 12);
@@ -1574,7 +1574,7 @@ static void ScrSetWifi(HDC dc)
         if (n.sec != WSEC_OPEN)
             Ico(dc, IC_LOCK, 724, y + 12, 28, hl ? kInk : kDim);
         if (n.known)   // drawn last: its button wins over the row's
-            Button(dc, 604, y + 9, 108, 34, L"ЗАБЫТЬ", hl ? B_FILL : B_N, IC_NONE, 13, 0, A_WIFIFORGET, i);
+            Button(dc, 604, y + 9, 108, 34, L"Забыть", hl ? B_FILL : B_N, IC_NONE, 13, 0, A_WIFIFORGET, i);
     }
     if (!w.count && w.state >= WIFI_DISCONNECTED)
         T(dc, 272, 160, w.scanning ? L"Ищу сети…" : L"Сетей не видно — нажмите «НАЙТИ»", 16, kMuted, 400);
@@ -1583,7 +1583,7 @@ static void ScrSetWifi(HDC dc)
     // the unit's own access point: by hand, or automatically when no known network is in sight
     if (w.state >= WIFI_AP) {
         bool apOn = w.state == WIFI_AP && !w.apAuto;
-        Button(dc, 256, 352, 196, 40, apOn ? L"ТОЧКА ДОСТУПА: ВКЛ" : L"ТОЧКА ДОСТУПА", apOn ? B_SEL : B_N, IC_NONE,
+        Button(dc, 256, 352, 196, 40, apOn ? L"Точка доступа: вкл" : L"Точка доступа", apOn ? B_SEL : B_N, IC_NONE,
                14, 0, A_WIFIAP);
         T(dc, 466, 378, L"Фикс Xiaomi", 14, kMuted, 600);
         Toggle(dc, 572, 354, T_WIFI_AP_AUTO);
@@ -1677,7 +1677,7 @@ static void ScrInfo(HDC dc)
     }
     T(dc, 760, 304, sd, 17, kText, 700, AL_END, 180);
     // what the stock "Info" and its engineering screens show; diagnostics; closing / minimizing VestaHome
-    Button(dc, 256, 324, 200, 64, L"ПОДРОБНЕЕ", B_N, IC_INFO, 15, 26, A_SCREEN, S_INFO_MORE);
-    Button(dc, 464, 324, 216, 64, L"ДИАГНОСТИКА", B_N, IC_SEARCH, 15, 26, A_SCREEN, S_DIAG);
+    Button(dc, 256, 324, 200, 64, L"Подробнее", B_N, IC_INFO, 15, 26, A_SCREEN, S_INFO_MORE);
+    Button(dc, 464, 324, 216, 64, L"Диагностика", B_N, IC_SEARCH, 15, 26, A_SCREEN, S_DIAG);
     Button(dc, 688, 324, 80, 64, NULL, B_N, IC_POWER, 18, 36, A_SCREEN, S_EXIT);
 }

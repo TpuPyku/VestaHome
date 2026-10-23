@@ -359,9 +359,9 @@ static void ScrSetScreen(HDC dc)
         Action act = row ? A_LIGHT : A_THEME;
         SetRow(dc, y, row ? L"Подсветка" : L"Тема",
                row ? (light < 0 ? L"нет данных от MCU" : light ? L"сейчас ночная" : L"сейчас дневная") : sub);
-        Button(dc, 456, y + 6, 96, 44, L"АВТО", mode == 0 ? B_SEL : B_N, IC_NONE, 15, 0, act, 0);
-        Button(dc, 560, y + 6, 96, 44, L"ДЕНЬ", mode == 1 ? B_SEL : B_N, IC_SUN, 15, 22, act, 1);
-        Button(dc, 664, y + 6, 104, 44, L"НОЧЬ", mode == 2 ? B_SEL : B_N, IC_MOON, 15, 22, act, 2);
+        Button(dc, 456, y + 6, 96, 44, L"Авто", mode == 0 ? B_SEL : B_N, IC_NONE, 15, 0, act, 0);
+        Button(dc, 560, y + 6, 96, 44, L"День", mode == 1 ? B_SEL : B_N, IC_SUN, 15, 22, act, 1);
+        Button(dc, 664, y + 6, 104, 44, L"Ночь", mode == 2 ? B_SEL : B_N, IC_MOON, 15, 22, act, 2);
     }
     SetRow(dc, 176, L"Заставка, мин", L"часы и дата без касаний");
     for (int i = 0; i < 5; i++)

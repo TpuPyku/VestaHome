@@ -43,7 +43,7 @@ static void ScrWSetWeather(HDC dc)
     else
         wcscpy(s, L"не заданы — ввести или взять из GPS");
     WRow(dc, 292, L"Координаты дома", s, A_KEYS, K_HOMECOORD, 568);
-    Button(dc, 576, 298, 192, 44, L"ИЗ GPS", B_N, IC_NAV, 15, 22, A_HOMEGPS);
+    Button(dc, 576, 298, 192, 44, L"Из GPS", B_N, IC_NAV, 15, 22, A_HOMEGPS);
     Weather w;
     WxGet(&w);
     if (s_wxBusy)
@@ -55,7 +55,7 @@ static void ScrWSetWeather(HDC dc)
     else
         wcscpy(s, L"ещё не загружалась");
     WRow(dc, 348, L"Состояние", s, A_NONE, 0, 568, true);
-    Button(dc, 576, 354, 192, 44, L"ОБНОВИТЬ", B_PRI, IC_REFRESH, 15, 22, A_WXNOW);
+    Button(dc, 576, 354, 192, 44, L"Обновить", B_PRI, IC_REFRESH, 15, 22, A_WXNOW);
     // Open-Meteo's data is CC BY 4.0: its credit wherever it is shown in detail (here; also "About the system")
     bool om = p == W_OMETEO || (w.have && w.prov == W_OMETEO);
     T(dc, 36, 440, om ? L"Обновляется раз в 30 мин. Weather data by Open-Meteo.com (CC BY 4.0)"
@@ -154,7 +154,7 @@ static void ScrSetCar(HDC dc)
     SetRow(dc, 208, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU, H);
     Chevron(dc, 728, 216);
     SetRow(dc, 256, L"Камера заднего хода — своя", L"видео и разметка VestaHome", false, A_NONE, 0, H);
-    Button(dc, 552, 262, 124, 40, L"ПОКАЗАТЬ", B_N, IC_NONE, 14, 0, A_RVCVIEW);   // by hand; a tap closes it
+    Button(dc, 552, 262, 124, 40, L"Показать", B_N, IC_NONE, 14, 0, A_RVCVIEW);   // by hand; a tap closes it
     Toggle(dc, 688, 262, T_RVC_OWN);
     wchar_t tank[16];
     _snwprintf(tank, 16, L"%d Л", s_cfg.tank);
@@ -253,9 +253,9 @@ static void ScrTestMcu(HDC dc)
     else
         wcscpy(s, L"запись выключена");
     T(dc, 32, 432, s, 14, rec ? kOrange : kDim, 400, AL_START, 280);
-    Button(dc, 320, 400, 120, 52, L"ЗАПРОС", state > 0 ? B_N : B_DIS, IC_NONE, 14, 0, A_MCUREQ);
-    Button(dc, 448, 400, 152, 52, rec ? L"СТОП ЗАПИСИ" : L"ЗАПИСЬ", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_MCULOG);
-    Button(dc, 608, 400, 160, 52, L"МЕТКА", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
+    Button(dc, 320, 400, 120, 52, L"Запрос", state > 0 ? B_N : B_DIS, IC_NONE, 14, 0, A_MCUREQ);
+    Button(dc, 448, 400, 152, 52, rec ? L"Стоп записи" : L"Запись", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_MCULOG);
+    Button(dc, 608, 400, 160, 52, L"Метка", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
 }
 
 // "About the system -> Details": what the stock "Info" and its engineering "Software" / "System status" show
@@ -325,8 +325,8 @@ static void ScrInfoMore(HDC dc)
         T(dc, 32, y + 22, rows[i][0], 15, kMuted, 400);
         T(dc, 444, y + 22, rows[i][1], 15, kText, 700, AL_END, 260);
     }
-    Button(dc, 32, 412, 200, 44, L"ЗАПРОСИТЬ", st > 0 ? B_N : B_DIS, IC_REFRESH, 14, 22, A_MCUREQ);
-    Button(dc, 244, 412, 200, 44, L"ДАННЫЕ MCU", B_N, IC_NONE, 14, 0, A_SCREEN, S_TEST_MCU);
+    Button(dc, 32, 412, 200, 44, L"Запросить", st > 0 ? B_N : B_DIS, IC_REFRESH, 14, 22, A_MCUREQ);
+    Button(dc, 244, 412, 200, 44, L"Данные MCU", B_N, IC_NONE, 14, 0, A_SCREEN, S_TEST_MCU);
 
     T(dc, 488, 96, L"СОСТОЯНИЕ", 13, kMuted, 700);
     MEMORYSTATUS ms;
@@ -359,7 +359,7 @@ static void ScrInfoMore(HDC dc)
         T(dc, 488, y + 18, right[i][0], 13, kMuted, 400);
         T(dc, 488, y + 37, right[i][1], 15, kText, 700, AL_START, 284);
     }
-    Button(dc, 488, 412, 280, 44, L"ЛИЦЕНЗИИ И СЕРВИСЫ", B_N, IC_INFO, 13, 22, A_SCREEN, S_LICENSES);
+    Button(dc, 488, 412, 280, 44, L"Лицензии и сервисы", B_N, IC_INFO, 13, 22, A_SCREEN, S_LICENSES);
 }
 
 // "Details -> Licenses and services": what VestaHome brings that the unit's firmware doesn't have - the libraries

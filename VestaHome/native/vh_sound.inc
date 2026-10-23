@@ -110,8 +110,8 @@ static void ScrSetSound(HDC dc)
         for (int k = 0; k <= 12; k++)   // 13 tap zones down the slider, top = +6
             Zone(x - 30, Y - 6 + (12 - k) * H / 12, 60, H / 12 + 1, A_EQ, i * 16 + k);
     }
-    Button(dc, 600, 160, 168, 64, L"БАЛАНС", B_N, IC_EQ, 15, 28, A_SCREEN, S_SET_BALANCE);
-    Button(dc, 600, 236, 168, 64, L"ГРОМКОСТЬ", B_N, IC_VOL, 15, 28, A_SCREEN, S_SET_VOLUME);
+    Button(dc, 600, 160, 168, 64, L"Баланс", B_N, IC_EQ, 15, 28, A_SCREEN, S_SET_BALANCE);
+    Button(dc, 600, 236, 168, 64, L"Громкость", B_N, IC_VOL, 15, 28, A_SCREEN, S_SET_VOLUME);
     Sep(dc, 256, 350, 512);
     T(dc, 264, 384, L"Тонкомпенсация", 19, kText, 700);   // the MCU's keys 0x93 / 0x94 (to verify on the unit)
     Toggle(dc, 688, 358, T_LOUDNESS);
@@ -149,7 +149,7 @@ static void ScrSetBalance(HDC dc)
     Stepper(dc, 504, 108, 256, b, 48, 20, A_BAL);
     T(dc, 504, 184, L"Фейдер", 19, kText, 700);
     Stepper(dc, 504, 196, 256, f, 48, 20, A_FADE);
-    Button(dc, 504, 280, 256, 48, L"В ЦЕНТР", B_N, IC_NONE, 16, 0, A_BALCENTER);
+    Button(dc, 504, 280, 256, 48, L"В центр", B_N, IC_NONE, 16, 0, A_BALCENTER);
 }
 
 // The volume by speed (the user 2026-10-22: the MCU has no key for it - our own): the volume the user set (the
@@ -292,8 +292,8 @@ static void ScrTestCan(HDC dc)
     else
         wcscpy(s, L"запись выключена: включите и делайте действия в машине, отмечая их МЕТКОЙ");
     T(dc, 32, 412, s, 14, rec ? kOrange : kDim, 400, AL_START, 400);
-    Button(dc, 440, 400, 160, 52, rec ? L"СТОП ЗАПИСИ" : L"ЗАПИСЬ", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_CANLOG);
-    Button(dc, 608, 400, 160, 52, L"МЕТКА", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
+    Button(dc, 440, 400, 160, 52, rec ? L"Стоп записи" : L"Запись", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_CANLOG);
+    Button(dc, 608, 400, 160, 52, L"Метка", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
 }
 
 // The keyboard opened from these screens: which setting it edits.

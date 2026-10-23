@@ -286,9 +286,9 @@ static void ScrCamDl(HDC dc)
     RegionsText(s, 200);
     WRow(dc, 68, L"Регионы", s, A_SCREEN, S_CAMREG, 776);
     T(dc, 36, 150, L"Типы камер", 19, kText, 700);
-    Button(dc, 372, 126, 136, 36, L"СКОРОСТЬ", B_N, IC_NONE, 13, 0, A_KINDS, 0);
-    Button(dc, 516, 126, 136, 36, L"БЕЗ МОБИЛЬНЫХ", B_N, IC_NONE, 13, 0, A_KINDS, 1);
-    Button(dc, 660, 126, 108, 36, L"ВСЕ", B_N, IC_NONE, 13, 0, A_KINDS, 2);
+    Button(dc, 372, 126, 136, 36, L"Скорость", B_N, IC_NONE, 13, 0, A_KINDS, 0);
+    Button(dc, 516, 126, 136, 36, L"Без мобильных", B_N, IC_NONE, 13, 0, A_KINDS, 1);
+    Button(dc, 660, 126, 108, 36, L"Все", B_N, IC_NONE, 13, 0, A_KINDS, 2);
     for (int k = 0; k < 18; k++)
         Button(dc, 28 + (k % 4) * 188, 174 + (k / 4) * 43, 180, 37, kCamKinds[k].name, KindOn(k) ? B_SEL : B_N,
                IC_NONE, 12, 0, A_KIND, k);
@@ -298,9 +298,9 @@ static void ScrCamDl(HDC dc)
                    s_cfg.camUpdated / 10000);
     T(dc, 20, 446, s_dlStatus[0] ? s_dlStatus : L"файл speedcam\\speedcam.txt (iGO) в папке VestaHome", 15, kMuted, 400,
       AL_START, 360);
-    Button(dc, 392, 410, 176, 58, L"РАЗ В НЕДЕЛЮ", s_on[T_CAM_WEEKLY] ? B_SEL : B_N, IC_REFRESH, 13, 24, A_TOGGLE,
+    Button(dc, 392, 410, 176, 58, L"Раз в неделю", s_on[T_CAM_WEEKLY] ? B_SEL : B_N, IC_REFRESH, 13, 24, A_TOGGLE,
            T_CAM_WEEKLY);
-    Button(dc, 576, 410, 208, 58, s_dlBusy ? L"ЗАГРУЗКА…" : L"СКАЧАТЬ", s_dlBusy ? B_DIS : B_PRI, IC_NONE, 18, 0,
+    Button(dc, 576, 410, 208, 58, s_dlBusy ? L"Загрузка…" : L"Скачать", s_dlBusy ? B_DIS : B_PRI, IC_NONE, 18, 0,
            s_dlBusy ? A_NONE : A_CAMDL);
 }
 
@@ -328,5 +328,5 @@ static void ScrCamReg(HDC dc)
     _snwprintf(s, 16, L"%d / %d", s_regPage + 1, pages);
     T(dc, 210, 448, s, 22, kText, 700, AL_MID);
     Button(dc, 284, 410, 120, 58, NULL, B_N, IC_NEXT, 18, 0, A_PAGESTEP, 1);
-    Button(dc, 584, 410, 200, 58, L"ГОТОВО", B_PRI, IC_NONE, 18, 0, A_BACK);
+    Button(dc, 584, 410, 200, 58, L"Готово", B_PRI, IC_NONE, 18, 0, A_BACK);
 }
