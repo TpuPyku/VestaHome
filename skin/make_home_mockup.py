@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """make_home_mockup.py - VestaHome 0.6 mockup ("more air", after Škoda's Flow HMI) -> vesta-home-v0.6.html + .pdf.
 
-Screens 800 x 480 drawn in HTML/CSS (Tahoma only - the unit has no other face), the orange accent and the rhombus
+Screens 800 x 480 drawn in HTML/CSS in VestaHome's own face Golos Text (its Fonts\ folder; the unit has only Tahoma), the orange accent and the rhombus
 mosaic of VestaHome kept; beside each one the current screen (docs/shots, made by tools/make_shots.py) for
 comparison. The PDF is printed by headless Edge (as make_maps_mockup.py).
 
@@ -72,12 +72,14 @@ FACET = ('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="70" viewBox
          '<path d="M0 0h40L20 35z" fill="%23ff6b1a"/><path d="M0 70h40L20 35z" fill="%23a83f09"/></svg>')
 
 CSS = '''
+@font-face { font-family: 'Golos Text'; font-weight: 400; src: url('../VestaHome/VestaHome/Fonts/GolosText-Regular.ttf'); }
+@font-face { font-family: 'Golos Text'; font-weight: 700; src: url('../VestaHome/VestaHome/Fonts/GolosText-Bold.ttf'); }
 @page { size: 297mm 210mm; margin: 0; }
 :root { --bg:#0e1013; --s1:#1a1d22; --s2:#23272e; --sep:#2a2f37; --tx:#f5f3ee; --t2:#aab0b8; --t3:#6c727c;
         --or:#ff6b1a; --orS:rgba(255,107,26,.16); --ok:#33c27a; }
 * { box-sizing: border-box; }
 html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body { margin: 0; background: #08090b; color: var(--tx); font-family: Tahoma, sans-serif; }
+body { margin: 0; background: #08090b; color: var(--tx); font-family: 'Golos Text', Tahoma, sans-serif; }
 .page { width: 297mm; height: 210mm; padding: 9mm 12mm; page-break-after: always; position: relative; overflow: hidden;
         display: flex; flex-direction: column; background: #08090b; }
 .zoom { zoom: 1.08; align-self: center; }
@@ -351,7 +353,7 @@ def main():
     pages = ['''<div class="page"><h1>VestaHome 0.6 — больше воздуха</h1>
 <p class="lead">Макет 2026-10-23 по мотивам Škoda Flow HMI (Superb / Kodiaq / Enyaq 2024: «modern and minimalist design with
 flatter 2D graphics», постоянная нижняя панель, верхняя — состояние и быстрые функции). Наше остаётся: тёмная тема, оранжевый
-акцент, ромбы, 800×480, шрифт Tahoma (другого на ГУ нет).</p>
+акцент, ромбы, 800×480; шрифт — свой, Golos Text (в папке VestaHome, на ГУ только Tahoma).</p>
 <div class="row"><div class="note" style="flex:1"><h2>Что меняется</h2><ul>
 <li><b>Меньше элементов на экране, больше пустого места.</b> Отступ от края 24 px, между карточками 16 px.</li>
 <li><b>Без рамок.</b> Карточки отличаются от фона тоном (поверхность #1a1d22 на #0e1013), разделители в списках — 1 px.</li>
