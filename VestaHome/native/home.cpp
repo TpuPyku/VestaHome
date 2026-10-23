@@ -323,6 +323,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CREATE: {
         s_wnd = hwnd;
         s_back = MakeDib(800, 480, &s_backBits);
+        {
+            int nf = FontsLoad();
+            VLog(L"шрифт: %s (своих загружено %d из 2)", s_face, nf);
+        }
         LoadSkin();
         BuildBackground();
 #ifdef UNDER_CE

@@ -792,6 +792,26 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
 
 // ---------------------------------------------------------------- frame
 
+// The text's face (2026-10-23, the user: Golos Text, design 0.6): VestaHome's own - Fonts\ in its folder (SIL OFL,
+// static TrueType instances, autohinted for the unsmoothed text below), added at the start (FontsLoad: AddFontResource,
+// no registry - the unit resets it); not there or not taken - the unit's Tahoma.
+static const wchar_t* s_face = L"Tahoma";
+
+static int FontsLoad()   // the fonts taken (2 = both: the face is ours)
+{
+    static const wchar_t* files[2] = { L"GolosText-Regular.ttf", L"GolosText-Bold.ttf" };
+    int ok = 0;
+    for (int i = 0; i < 2; i++) {
+        wchar_t p[MAX_PATH];
+        _snwprintf(p, MAX_PATH, L"%sFonts\\%s", s_dir, files[i]);
+        p[MAX_PATH - 1] = 0;
+        ok += AddFontResource(p) > 0;   // (the PC: for this session)
+    }
+    if (ok == 2)
+        s_face = L"Golos Text";
+    return ok;
+}
+
 static HFONT MakeFont(int height, int weight)
 {
     LOGFONT lf;
@@ -802,7 +822,7 @@ static HFONT MakeFont(int height, int weight)
     // no smoothing: on the unit ANTIALIASED_QUALITY comes out as ClearType - coloured fringes in the 16-bit
     // frame, small text blurred; Tahoma is hinted for crisp unsmoothed pixels
     lf.lfQuality = NONANTIALIASED_QUALITY;
-    wcscpy(lf.lfFaceName, L"Tahoma");
+    wcscpy(lf.lfFaceName, s_face);
     return CreateFontIndirect(&lf);
 }
 

@@ -381,6 +381,8 @@ static const LicItem kLicenses[] = {
                                                                     L"FLAC, Apple Lossless, Opus, WavPack." },
     { L"BASS_AAC 2.4.5, BASS_MPC 2.4.1.3", L"MaresWEB · дополнения к BASS. AAC и M4A, Musepack." },
     { L"tags.dll (18)", L"Дополнение к BASS. Названия, исполнители и альбомы из тегов треков." },
+    { L"Шрифт Golos Text", L"The Golos Text Project Authors · SIL Open Font License 1.1 · github.com/googlefonts/golos-text. "
+                           L"Весь текст VestaHome (папка Fonts, там же OFL.txt)." },
     { L"СЕРВИСЫ", NULL },
     { L"Open-Meteo.com", L"Weather data by Open-Meteo.com, CC BY 4.0. Погода по умолчанию, без ключа." },
     { L"OpenWeatherMap", L"openweathermap.org. Погода, если выбрана и задан свой ключ." },
