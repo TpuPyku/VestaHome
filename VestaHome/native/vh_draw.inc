@@ -2033,6 +2033,8 @@ static int StatusMarks(HDC dc, int end, int minLeft)
     return x;
 }
 
+static Action s_frameBack = A_NONE;   // this frame's "back" (Frame sets it, BackButton draws it at the bottom)
+
 static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act = IC_NONE, Action a = A_NONE,
                   bool sel = false, Icon act2 = IC_NONE, Action a2 = A_NONE, int arg2 = 0)
 {
@@ -2080,10 +2082,14 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         right = cx - 8;
     }
     if (back != A_NONE && (back != A_BACK || s_histLen > 0)) {
-        bool d = Zone(0, 0, 64, 56, back);
-        R(dc, 8, 8, 48, 40, 20, d ? kOrange : kPanel);
-        Ico(dc, IC_BACK, 14, 10, 36, d ? kInk : kText);
-        x = 72;
+        if (s_screen == S_KEYS) {   // the keyboard fills the bottom: its "back" stays up here
+            bool d = Zone(0, 0, 64, 56, back);
+            R(dc, 8, 8, 48, 40, 20, d ? kOrange : kPanel);
+            Ico(dc, IC_BACK, 14, 10, 36, d ? kInk : kText);
+            x = 72;
+        } else {
+            s_frameBack = back;   // drawn at the bottom left over the screen (BackButton, the user 2026-10-24)
+        }
     }
     int end = title[0] ? T(dc, x, 37, title, 22, kText, 600, AL_START, s_status[0] ? 300 : right - x) : x;
     if (s_status[0])
@@ -2136,10 +2142,28 @@ static int Section(Screen s)
     }
 }
 
-// The section of the bottom bar a screen shows (the music list counts as the media's).
+// The section whose bottom bar a screen shows: the main screens only - their sub-pages (the balance, the paired
+// phones, the theme, the music list...) have none, their "back" sits there instead (the user 2026-10-24).
 static int NavSection(Screen s)
 {
-    return s == S_AUDIO_LIST ? 2 : Section(s);
+    switch (s) {
+    case S_SET_BALANCE: case S_SET_VOLUME: case S_SET_OBD: case S_BT_PAIRED: case S_BT_PAIRNEW: case S_SET_THEME:
+    case S_AUDIO_LIST:
+        return -1;
+    default:
+        return Section(s);
+    }
+}
+
+// The "back" of a nested screen (Frame's), at the bottom left where the bar's home is: over the screen, its button
+// the last one (it wins a tap over what lies under it).
+static void BackButton(HDC dc)
+{
+    if (s_frameBack == A_NONE)
+        return;
+    bool d = Zone(8, 412, 72, 68, s_frameBack);
+    Disc(dc, 44, 446, 26, d ? kOrange : kPanel2);
+    Ico(dc, IC_BACK, 30, 432, 28, d ? kInk : kText);
 }
 
 // The bar's change of section, animated (the user 2026-10-23): the pill of the section left shrinks with its name to

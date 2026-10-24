@@ -155,7 +155,6 @@ static void ScrVideoPlay(HDC dc)
     T(dc, 16, 414, s, 15, kMuted, 600);
     Mmss(s, 16, len);
     T(dc, 784, 414, s, 15, kMuted, 600, AL_END);
-    IconBtn(dc, IC_HOME, 24, 430, 40, kText, A_NAV, S_HOME);
     IconBtn(dc, IC_LIST, 124, 430, 40, kText, A_BACK);
     IconBtn(dc, IC_PREV, 236, 430, 40, kText, A_VPREV);
     bool down = Zone(376, 426, 48, 48, A_VPLAY);

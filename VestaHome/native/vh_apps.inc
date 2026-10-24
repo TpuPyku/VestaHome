@@ -1001,7 +1001,6 @@ static void DrawEdit(HDC dc)
             Button(dc, 668, y, 116, 70, L"Сброс", B_N, IC_NONE, 17, 0, A_NOICON);
     }
     Dock(dc);
-    Button(dc, 16, 410, 220, 58, L"Отмена", B_N, IC_NONE, 18, 0, A_CANCEL);
     if (s_editIdx >= 0)   // the second press deletes
         Button(dc, 290, 410, 220, 58, s_delArmed ? L"Точно удалить?" : L"Удалить", s_delArmed ? B_FILL : B_N,
                IC_NONE, 18, 0, A_DELETE);

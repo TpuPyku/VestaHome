@@ -29,8 +29,8 @@ static void ScrDiag(HDC dc)
     T(dc, 40, 384, L"«Звук и видео» — писк поверх радио и тестовые файлы (папка TestMedia).", 14, kDim, 400,
       AL_START, 720);
     Sep(dc, 40, 400, 720);
-    T(dc, 40, 428, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
-    T(dc, 40, 450, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 560);
+    T(dc, 96, 428, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn); right of "back"
+    T(dc, 96, 450, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 570);
     Toggle(dc, 688, 414, T_LOGS);
 }
 
@@ -252,9 +252,13 @@ static void Under(HDC dc, int alpha)
     s_histLen--;      // as it was drawn: the window is not in its history
     if (prev == S_HOME)
         MainBackground(dc);
+    s_frameBack = A_NONE;
     DrawScreen(dc, prev);
-    if (Section(prev) >= 0)
-        NavBar(dc, Section(prev));
+    if (NavSection(prev) >= 0)
+        NavBar(dc, NavSection(prev));
+    else
+        BackButton(dc);   // (the screen's look under the window; its button goes with the others below)
+    s_frameBack = A_NONE;   // the window has none of its own
     s_histLen++;
     s_pressed = pressed;
     if (s_partial) {   // the screen under the window has no buttons (nor list)

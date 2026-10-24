@@ -87,10 +87,13 @@ static void DrawFrame(HDC dc)
         kBtnCount = 0;
         s_scroll = NULL;
     }
+    s_frameBack = A_NONE;
     DrawScreen(dc, s_screen);
-    int sec = NavSection(s_screen);   // the music list has the bar too (not a tab of its own)
+    int sec = NavSection(s_screen);
     if (sec >= 0)
         NavBar(dc, sec);
+    else
+        BackButton(dc);
 }
 
 static int s_drawnMinute = -1;   // the minute on the clock of the last frame

@@ -325,8 +325,8 @@ static void ScrInfoMore(HDC dc)
         T(dc, 32, y + 22, rows[i][0], 15, kMuted, 400);
         T(dc, 444, y + 22, rows[i][1], 15, kText, 700, AL_END, 260);
     }
-    Button(dc, 32, 412, 200, 44, L"Запросить", st > 0 ? B_N : B_DIS, IC_REFRESH, 14, 22, A_MCUREQ);
-    Button(dc, 244, 412, 200, 44, L"Данные MCU", B_N, IC_NONE, 14, 0, A_SCREEN, S_TEST_MCU);
+    Button(dc, 96, 412, 168, 44, L"Запросить", st > 0 ? B_N : B_DIS, IC_REFRESH, 14, 22, A_MCUREQ);   // (right of "back")
+    Button(dc, 276, 412, 168, 44, L"Данные MCU", B_N, IC_NONE, 14, 0, A_SCREEN, S_TEST_MCU);
 
     T(dc, 488, 96, L"Состояние", 13, kMuted, 700);
     MEMORYSTATUS ms;

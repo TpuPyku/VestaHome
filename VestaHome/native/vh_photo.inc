@@ -348,7 +348,6 @@ static void ScrPhotoView(HDC dc)
           15, kDim, 400, AL_MID, 336);
     }
     Dock(dc);
-    IconBtn(dc, IC_GALLERY, 24, 417, 44, kText, A_BACK);
     IconBtn(dc, IC_PREV, 132, 417, 44, kText, A_PHSTEP, -1);
     IconBtn(dc, IC_ROT_L, 244, 417, 44, kText, A_PHROT, -1);
     bool d = Zone(330, 410, 140, 58, A_PHSHOW);   // the slide show: orange while it runs

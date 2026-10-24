@@ -507,7 +507,6 @@ static void ScrRadioPty(HDC dc)
         Button(dc, 16 + (i % 4) * 196, 68 + (i / 4) * 80, 186, 70, kPtyTypes[i], i == s_ptySel ? B_SEL : B_FILL,
                IC_NONE, 16, 0, A_PTYSEL, i);
     Dock(dc);
-    Button(dc, 16, 410, 180, 58, L"Отмена", B_N, IC_NONE, 18, 0, A_BACK);
     wchar_t s[64];
     _snwprintf(s, 64, L"Ищет станции с типом «%s»", kPtyTypes[s_ptySel]);
     T(dc, 400, 446, s, 17, kMuted, 400, AL_MID, 390);
@@ -1001,12 +1000,12 @@ static void ScrCall(HDC dc)
     R(dc, 216, 296, 368, 96, 12, d ? Mix(kStop, kInk, 160) : kStop);
     Ico(dc, IC_HANGUP, 376, 320, 48, kInk);
     Dock(dc);   // in a call the volume is the main control: the MCU's, as it is now
-    IconBtn(dc, IC_VOL, 24, 417, 44, kMuted, A_SCREEN, S_VOLUME);
+    IconBtn(dc, IC_VOL, 104, 417, 44, kMuted, A_SCREEN, S_VOLUME);   // (right of "back")
     int vol, mute, src;
     wchar_t v[16] = L"—";
     if (VolGet(&vol, &mute, &src))
         _snwprintf(v, 16, mute ? L"без звука" : L"%d", vol);
-    T(dc, 88, 452, v, 22, kText, 700);
+    T(dc, 168, 452, v, 22, kText, 700);
 }
 
 static int TzMinutes();

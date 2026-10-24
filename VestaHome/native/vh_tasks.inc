@@ -10,7 +10,7 @@
 // and memory graphs over the last 2 minutes. Sampled every 2 s while the screen is in front, never in the
 // background. A process ends on the second press of its button; system ones and VestaHome itself can't.
 
-enum { kTaskRows = 5 };
+enum { kTaskRows = 4 };   // (above y 408: "back" at the bottom left)
 static TaskInfo s_task;
 static int      s_taskTab;       // 0 processes, 1 windows
 static int      s_taskPage;
@@ -171,40 +171,40 @@ static void DrawTasks(HDC dc)
         return;
     }
     for (int k = 0; k < kTaskRows; k++) {
-        int i = s_taskPage * kTaskRows + k, y = 232 + k * 48;
+        int i = s_taskPage * kTaskRows + k, y = 232 + k * 44;
         if (s_taskTab == 0) {
             if (i >= s_task.procCount)
                 break;
             const TaskProc& p = s_task.proc[i];
             bool self = p.pid == GetCurrentProcessId(), sys = TaskIsSystem(p.name);
-            R(dc, 16, y, 768, 44, 10, kPanel);
-            T(dc, 32, y + 29, p.name, 18, self ? kOrange : kText, 700, AL_START, 250);
+            R(dc, 16, y, 768, 40, 10, kPanel);
+            T(dc, 32, y + 27, p.name, 18, self ? kOrange : kText, 700, AL_START, 250);
             _snwprintf(s, 96, L"%d пот.", p.threads);
-            T(dc, 296, y + 28, s, 15, kMuted, 400);
+            T(dc, 296, y + 26, s, 15, kMuted, 400);
             if (p.cpu10 >= 0)
                 _snwprintf(s, 96, L"%d,%d %%", p.cpu10 / 10, p.cpu10 % 10);
             else
                 wcscpy(s, L"...");
-            T(dc, 470, y + 29, s, 17, p.cpu10 >= 200 ? kOrange : kText, 700, AL_END);
+            T(dc, 470, y + 27, s, 17, p.cpu10 >= 200 ? kOrange : kText, 700, AL_END);
             if (p.memKB)
                 MemText(s, 96, p.memKB);
             else
                 wcscpy(s, L"-");
-            T(dc, 604, y + 29, s, 17, kText, 700, AL_END);
+            T(dc, 604, y + 27, s, 17, kText, 700, AL_END);
             if (sys || self)
-                T(dc, 700, y + 28, sys ? L"система" : L"эта программа", 14, kDim, 600, AL_MID);
+                T(dc, 700, y + 26, sys ? L"система" : L"эта программа", 14, kDim, 600, AL_MID);
             else
-                Button(dc, 624, y + 4, 152, 36, s_taskArm == p.pid ? L"Точно?" : L"Завершить",
+                Button(dc, 624, y + 2, 152, 36, s_taskArm == p.pid ? L"Точно?" : L"Завершить",
                        s_taskArm == p.pid ? B_PRI : B_N, IC_NONE, 15, 0, A_TASKKILL, (int)p.pid);
         } else {
             if (i >= s_task.winCount)
                 break;
             const TaskWin& w = s_task.win[i];
-            R(dc, 16, y, 768, 44, 10, kPanel);
-            T(dc, 32, y + 29, w.title, 18, kText, 700, AL_START, 300);
-            T(dc, 346, y + 28, w.proc, 15, kMuted, 400, AL_START, 190);
-            Button(dc, 544, y + 4, 112, 36, L"Перейти", B_N, IC_NONE, 15, 0, A_TASKSWITCH, (int)(INT_PTR)w.h);
-            Button(dc, 664, y + 4, 112, 36, L"Закрыть", B_N, IC_NONE, 15, 0, A_TASKCLOSE, (int)(INT_PTR)w.h);
+            R(dc, 16, y, 768, 40, 10, kPanel);
+            T(dc, 32, y + 27, w.title, 18, kText, 700, AL_START, 300);
+            T(dc, 346, y + 26, w.proc, 15, kMuted, 400, AL_START, 190);
+            Button(dc, 544, y + 2, 112, 36, L"Перейти", B_N, IC_NONE, 15, 0, A_TASKSWITCH, (int)(INT_PTR)w.h);
+            Button(dc, 664, y + 2, 112, 36, L"Закрыть", B_N, IC_NONE, 15, 0, A_TASKCLOSE, (int)(INT_PTR)w.h);
         }
     }
     if (s_taskTab == 1 && !s_task.winCount)
@@ -1223,9 +1223,9 @@ static void ScrWSetCar(HDC dc)
         _snwprintf(label, 64, at >= 0 ? L"%d. %s" : L"%s", at + 1, kCarSensor[id][0]);
         if (at < 0)
             wcscpy(label, kCarSensor[id][0]);
-        int bx = 16 + id / 9 * 258, by = 104 + id % 9 * 41;
-        Button(dc, bx, by, 250, 37, NULL, at >= 0 ? B_SEL : B_N, IC_NONE, 14, 0, A_CARSENS, id);
-        T(dc, bx + 12, by + 25, label, 13, at >= 0 ? kOrange : kText, 700, AL_START, 150);
-        T(dc, bx + 238, by + 25, have ? v : L"—", 13, at >= 0 ? kOrange : kMuted, 600, AL_END, 90);
+        int bx = 16 + id / 9 * 258, by = 104 + id % 9 * 34;   // (above y 408: "back" at the bottom left)
+        Button(dc, bx, by, 250, 30, NULL, at >= 0 ? B_SEL : B_N, IC_NONE, 14, 0, A_CARSENS, id);
+        T(dc, bx + 12, by + 21, label, 13, at >= 0 ? kOrange : kText, 700, AL_START, 150);
+        T(dc, bx + 238, by + 21, have ? v : L"—", 13, at >= 0 ? kOrange : kMuted, 600, AL_END, 90);
     }
 }

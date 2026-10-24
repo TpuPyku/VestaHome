@@ -323,10 +323,10 @@ static void ScrCamReg(HDC dc)
                A_REGION, i);
     }
     Dock(dc);
-    Button(dc, 16, 410, 120, 58, NULL, B_N, IC_BACK, 18, 0, A_PAGESTEP, -1);
+    Button(dc, 96, 410, 120, 58, NULL, B_N, IC_BACK, 18, 0, A_PAGESTEP, -1);   // (right of "back")
     wchar_t s[16];
     _snwprintf(s, 16, L"%d / %d", s_regPage + 1, pages);
-    T(dc, 210, 448, s, 22, kText, 700, AL_MID);
-    Button(dc, 284, 410, 120, 58, NULL, B_N, IC_NEXT, 18, 0, A_PAGESTEP, 1);
+    T(dc, 290, 448, s, 22, kText, 700, AL_MID);
+    Button(dc, 364, 410, 120, 58, NULL, B_N, IC_NEXT, 18, 0, A_PAGESTEP, 1);
     Button(dc, 584, 410, 200, 58, L"Готово", B_PRI, IC_NONE, 18, 0, A_BACK);
 }

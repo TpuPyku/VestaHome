@@ -214,8 +214,8 @@ def main():
             print('%02d %s' % (n + 1, name))
             if name == 'power':
                 tap(194, 314)   # "ОТМЕНА"
-            for i in range(4):   # back to a main screen (the nested ones have no nav bar), then home
-                tap(30, 28)
+            for i in range(4):   # back to a main screen ("back" at the bottom left of the nested ones), then home
+                tap(44, 446)
             if u32.IsIconic(h):
                 u32.ShowWindow(h, 9)   # SW_RESTORE
             tap(60, 440)

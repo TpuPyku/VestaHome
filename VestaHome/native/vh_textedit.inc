@@ -271,13 +271,13 @@ static void ScrTextEdit(HDC dc)
         T(dc, 400, 220, L"Файл пуст — «+ СТРОКА» добавит первую", 18, kMuted, 400, AL_MID);
     Dock(dc);
     bool ro = TeReadOnly();
-    Button(dc, 16, 410, 180, 58, L"+ Строка", ro || s_teCount >= kTeMax ? B_DIS : B_N, IC_NONE, 17, 0,
-           ro ? A_NONE : A_TEADD);
+    Button(dc, 88, 410, 168, 58, L"+ Строка", ro || s_teCount >= kTeMax ? B_DIS : B_N, IC_NONE, 17, 0,   // (right of
+           ro ? A_NONE : A_TEADD);                                                                         //  "back")
     bool can = s_teSel >= 0 && !ro;
-    Button(dc, 208, 410, 180, 58, s_teDelArm ? L"Точно удалить?" : L"Удалить", !can ? B_DIS : s_teDelArm ? B_FILL : B_N,
+    Button(dc, 264, 410, 168, 58, s_teDelArm ? L"Точно удалить?" : L"Удалить", !can ? B_DIS : s_teDelArm ? B_FILL : B_N,
            IC_NONE, 17, 0, can ? A_TEDEL : A_NONE);
-    Button(dc, 400, 410, 180, 58, L"Изменить", can ? B_N : B_DIS, IC_NONE, 17, 0, can ? A_TELINE : A_NONE, s_teSel);
-    Button(dc, 592, 410, 192, 58, L"Сохранить", s_teDirty && !ro ? B_PRI : B_DIS, IC_NONE, 17, 0,
+    Button(dc, 440, 410, 168, 58, L"Изменить", can ? B_N : B_DIS, IC_NONE, 17, 0, can ? A_TELINE : A_NONE, s_teSel);
+    Button(dc, 616, 410, 168, 58, L"Сохранить", s_teDirty && !ro ? B_PRI : B_DIS, IC_NONE, 17, 0,
            s_teDirty && !ro ? A_TESAVE : A_NONE);
 }
 
