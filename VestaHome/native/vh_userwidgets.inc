@@ -776,7 +776,8 @@ static void ScrSetHome(HDC dc)
         Button(dc, x + 222, y + 7, 44, 40, NULL, i ? B_N : B_DIS, IC_UP, 15, 24, A_WGMOVE, id * 2);
         Button(dc, x + 270, y + 7, 44, 40, NULL, i < WgCount() - 1 ? B_N : B_DIS, IC_DOWN, 15, 24, A_WGMOVE,
                id * 2 + 1);
-        Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, IC_EYE, 15, 24, A_WGVIS, id);
+        Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, shown ? IC_EYE : IC_EYE_OFF, 15, 24, A_WGVIS,
+               id);   // hidden: the eye crossed out (the user 2026-10-24)
     }
     T(dc, 96, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
                    L"VestaWidgets\\*.ini на SD или \\SDMMC", 13, kDim, 400, AL_START, 490);   // (to the page buttons)

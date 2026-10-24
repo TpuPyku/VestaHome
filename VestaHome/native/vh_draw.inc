@@ -520,9 +520,12 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.Circle(24, 24, 5);
         break;
     case IC_EYE:
+    case IC_EYE_OFF:   // (crossed out: a hidden widget)
         p.ArcE(24, 24, 20, 9, 180, 360);
         p.ArcE(24, 24, 20, 9, 0, 180);
         p.Circle(24, 24, 6);
+        if (ic == IC_EYE_OFF)
+            p.L2(6, 6, 42, 42);
         break;
     case IC_POWER:
         p.ArcP(24, 24.69, 15, 237.8, -57.8);
