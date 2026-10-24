@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""make_vh_payload.py - pack VestaHome (exe, Fonts, Skin, radio.txt, obd_codes.txt, VestaNMEA.dll, bass) into vh_payload.bin, embedded by VestaHomeInstall.
+"""make_vh_payload.py - pack VestaHome (exe, Fonts, Skin, radio.txt, obd_codes.txt, VestaNMEA.dll, VestaModem.dll, bass) into vh_payload.bin, embedded by VestaHomeInstall.
 
 Format (the same as LaunchInstall's payload.bin):
     [u32 count][count x (u16 nameLen, name UTF-8 with '/', u32 dataLen, data)][u32 CRC-32 of all before]
@@ -26,7 +26,8 @@ def main():
     entries = [('VestaHome.exe', os.path.join(VH, 'VestaHome.exe')),
                ('radio.txt', os.path.join(VH, 'radio.txt')),
                ('obd_codes.txt', os.path.join(VH, 'obd_codes.txt')),   # tools/make_obd_codes.py
-               ('VestaNMEA.dll', os.path.join(HERE, '..', '..', 'VestaNMEA', 'VestaNMEA', 'VestaNMEA.dll'))]   # COM6
+               ('VestaNMEA.dll', os.path.join(HERE, '..', '..', 'VestaNMEA', 'VestaNMEA', 'VestaNMEA.dll')),   # COM6
+               ('VestaModem.dll', os.path.join(HERE, '..', '..', 'VestaModem', 'VestaModem', 'VestaModem.dll'))]   # USB modem
     fonts = os.path.join(VH, 'Fonts')   # Golos Text (SIL OFL) + its licence: the text's own face
     for name in sorted(os.listdir(fonts)):
         entries.append(('Fonts/' + name, os.path.join(fonts, name)))

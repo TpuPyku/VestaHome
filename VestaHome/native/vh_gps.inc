@@ -112,6 +112,48 @@ static void NmeaPortSet(bool on)
 #endif
 }
 
+// ---- The USB modem's probe (2026-10-24, VestaModem/native): its client driver copied into \Windows and its keys
+// written - USBD reads them when a device comes, so the modem goes in after this. Only Huawei's stick for now: its
+// CD-ROM mode (12D1:155B) and the modem (12D1:1506), whole devices (Default\Default); the registry is new at every
+// boot, so it lasts until the unit restarts. The driver logs into VestaLogs\VestaModem.log.
+// (its state: s_modemState, s_modemErr - in vh_diag.inc, which shows it)
+
+static void ModemUsbSet()
+{
+#ifdef UNDER_CE
+    static const wchar_t* kKeys[2] = { L"Drivers\\USB\\LoadClients\\4817_5467\\Default\\Default\\VestaModem",
+                                       L"Drivers\\USB\\LoadClients\\4817_5382\\Default\\Default\\VestaModem" };
+    wchar_t src[MAX_PATH];
+    _snwprintf(src, MAX_PATH, L"%sVestaModem.dll", s_dir);
+    s_modemErr = 0;
+    if (!CopyFile(src, L"\\Windows\\VestaModem.dll", FALSE) &&
+        GetFileAttributes(L"\\Windows\\VestaModem.dll") == 0xFFFFFFFF) {   // (loaded already: the copy there)
+        s_modemErr = GetLastError();
+        s_modemState = -1;
+        VLog(L"USB-модем: нет %s (%lu)", src, s_modemErr);
+        return;
+    }
+    for (int i = 0; i < 2; i++) {
+        HKEY k;
+        DWORD disp;
+        LONG r = RegCreateKeyEx(HKEY_LOCAL_MACHINE, kKeys[i], 0, NULL, 0, 0, NULL, &k, &disp);
+        if (r != ERROR_SUCCESS) {
+            s_modemErr = r;
+            s_modemState = -1;
+            VLog(L"USB-модем: ключ %s - ошибка %ld", kKeys[i], r);
+            return;
+        }
+        RegStr(k, L"DLL", L"VestaModem.dll");
+        RegCloseKey(k);
+    }
+    s_modemState = 1;
+    VLog(L"USB-модем: драйвер зарегистрирован (Huawei 12D1:155B, 12D1:1506) - вставьте модем");
+#else
+    s_modemState = 1;   // PC: the driver is the unit's only
+    VLog(L"USB-модем: ПК - только отмечено");
+#endif
+}
+
 // The stream (G3NavHMI: rn2::CanMessageParser on COM4, a copy of COM3, 115200): '$' = NMEA, '@' = the CAN
 // module ("@,<speed km/h>,<version>*hh", "@ANG,<steering angle | null>,*hh"). The monitor counts every type and
 // can record the stream (can.log next to the exe): raw bytes while this program reads the port, the checked

@@ -16,6 +16,9 @@ static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L
                                 { L"CAN / UART · Поток", A_SCREEN, S_TEST_CAN }, { L"GPS", A_SCREEN, S_TEST_CAN },
                                 { L"Текстовые файлы", A_TEXTFILES, 0 }, { NULL, A_NONE, 0 } };
 
+static int   s_modemState;   // the USB modem's probe (vh_gps.inc ModemUsbSet): 0 not yet, 1 registered, -1 failed
+static DWORD s_modemErr;
+
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
 static void ScrDiag(HDC dc)
 {
@@ -24,6 +27,12 @@ static void ScrDiag(HDC dc)
     for (int i = 0; i < 10 && kTests[i].label; i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
                kTests[i].a == A_SOON ? B_DIS : B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
+    wchar_t m[48];   // the USB modem's probe (vh_gps.inc ModemUsbSet): the last place
+    if (s_modemState < 0)
+        _snwprintf(m, 48, L"USB-модем: ошибка %lu", s_modemErr);
+    else
+        wcscpy(m, s_modemState ? L"USB-модем: вставьте модем" : L"USB-модем (проба)");
+    Button(dc, 408, 288, 352, 44, m, s_modemState > 0 ? B_SEL : B_N, IC_NONE, 16, 0, A_MODEMTEST);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
     T(dc, 40, 390, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 600);

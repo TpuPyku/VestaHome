@@ -1,0 +1,5 @@
+LIBRARY VestaModem
+EXPORTS
+    USBDeviceAttach
+    USBInstallDriver
+    USBUnInstallDriver
