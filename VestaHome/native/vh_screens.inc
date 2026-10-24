@@ -617,8 +617,8 @@ static void ScrAux(HDC dc)
     T(dc, 272, 200, L"AUX", 52, kText, 700);
     T(dc, 272, 236, L"Звук идёт с разъёма 3,5 мм. Управляйте", 18, kMuted, 400, AL_START, 512);
     T(dc, 272, 260, L"воспроизведением на самом устройстве.", 18, kMuted, 400, AL_START, 512);
-    T(dc, 272, 326, L"Уровень входа", 19, kText, 700);
-    Stepper(dc, 560, 296, 224, L"+2", 52);
+    // (no input level: the MCU has no AUX gain - the shell has none either, Ghidra 2026-10-24; the mockup's stepper
+    // did nothing)
 }
 
 static void ScrPhoto(HDC dc);       // (with the photos' worker, below)
