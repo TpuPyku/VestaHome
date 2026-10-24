@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверки на ГУ</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  body { font: 10.5pt/1.3 "Segoe UI", Arial, sans-serif; color: #000; background: #fff; margin: 0 auto; max-width: 190mm; }
+  h1 { font-size: 15pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 5mm 0 1.5mm; border-bottom: 1.5pt solid #000; padding-bottom: 0.5mm; page-break-after: avoid; }
+  p, li { margin: 0.8mm 0; }
+  .note { font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1mm; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 0.6pt solid #555; padding: 1mm 1.5mm; vertical-align: top; text-align: left; }
+  th { background: #e6e6e6; font-size: 9.5pt; }
+  td.n { width: 8mm; text-align: center; font-weight: 600; }
+  td.ok { width: 7mm; }
+  td.ok::before { content: ""; display: inline-block; width: 3.2mm; height: 3.2mm; border: 0.8pt solid #000; }
+  td.memo { width: 38mm; }
+</style>
+</head>
+<body>
+
+<h1>Проверки на ГУ — двенадцатый лист</h1>
+<p class="note">Составлено 2026-10-24 по исправлениям после проверки 24 октября (загрузка, кнопка «назад», свайпы, плеер, фото, камера), выбору порта для навигаторов, камерам Москвы, Wi-Fi и OBD. Одиннадцатый лист остаётся в силе. ☐ — «сделано», «Заметки» — что увидели. Журналы — «Диагностика → Журналы» включены, SD-карта вставлена.</p>
+<h2>1. Установщик (Tests\SDMemory\VestaHomeInstall)</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">1</td><td>Запустить установщик.</td><td>Панель задач WinCE скрыта, нижние кнопки видны целиком; выбранные пункты — оранжевые с галочкой.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">2</td><td>«VestaHome + загрузчик» → «УСТАНОВИТЬ / ОБНОВИТЬ»; отчёт длинный — потянуть пальцем.</td><td>Отчёт прокручивается, справа полоска; после выхода панель задач вернулась. «О системе»: версия 0.6.261024.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>2. Загрузка ГУ</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">3</td><td>Выключить зажигание, дождаться сна, включить. Повторить 3 раза.</td><td>Каждый раз запускается VestaHome, не штатная оболочка. В «Диспетчере задач» нет G3NavHMI_orig.exe.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">4</td><td>Открыть VestaLogs\VestaStub.log.</td><td>Записи с самого начала загрузки (сначала в памяти, потом перенесены на карту): «ждём SD… / VestaHome запущен». Если запустилась штатная — записать, что в журнале перед этим.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">5</td><td>После загрузки VestaHome: переключить источник, включить задний ход, открыть OSMapsCE.</td><td>Нет «спора» за источник; камера заднего хода — поверх OSMapsCE.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>3. Кнопка «назад» и вложенные экраны</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">6</td><td>Пройти вложенные экраны: настройки (Wi-Fi, Bluetooth, камеры, тема), Диагностика, Данные MCU, Поток GPS/CAN, Память и диски, Диспетчер задач, файлы.</td><td>«Назад» — стрелка возврата слева внизу; нижней панели разделов там нет; кнопка не накрывает содержимое.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">7</td><td>Окно поверх экрана (например, подтверждение, ввод PIN).</td><td>Своей кнопки «назад» у окна нет, окно не перекрыто.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">8</td><td>Диагностика; Данные MCU → «Запись», «Метка».</td><td>Под кнопками нет пояснений, «Журналы» выше; кнопки записи — в нижней полосе справа от «назад», строка записи видна.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">9</td><td>Клавиатура (ввод пароля Wi-Fi).</td><td>Здесь «назад» по-прежнему слева вверху, клавиши не перекрыты.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>4. Свайпы, плеер, фото, файлы</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">10</td><td>Главная: листать страницы свайпом, коротким и длинным, с нажимом.</td><td>Страница перелистывается с первого раза; тап не принимается за свайп и наоборот.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">11</td><td>Музыка: короткий файл (несколько секунд) — пауза; «Играть всё».</td><td>Пауза срабатывает, следующий трек сам не включается; «Играть всё» не налезает на список.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">12</td><td>Фото: открыть снимок, кнопка «во весь экран», тап.</td><td>Снимок на весь экран без рамок; тап — обратно.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">13</td><td>«Тема → Своя картинка» — выбор файла.</td><td>Миниатюры; мелкие файлы (значки) не показаны.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">14</td><td>Текстовые файлы (редактор своих виджетов): зайти в папку.</td><td>Сверху строка пути, «‹» — уровень выше.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">15</td><td>Медиа → Bluetooth: кнопка воспроизведения.</td><td>Такая же, как у музыки; управляет телефоном.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">16</td><td>Главная: виджеты, свечение, анимация нижней панели.</td><td>Виджеты светлее, свечение справа сверху заметнее; панель переключается быстрее прежнего.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>5. Камера заднего хода</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">17</td><td>Задний ход (VestaHome без штатной оболочки).</td><td>Своя камера с разметкой; после выключения заднего — возврат на экран, где были.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">18</td><td>«Автомобиль → Камера — Показать» без заднего хода.</td><td>Картинка, если камера питается, иначе «Нет сигнала камеры…»; тап закрывает.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>6. Порт для навигаторов и Навител</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">19</td><td>«Настройки → Автомобиль → Порт для навигаторов»: стрелками выбрать COM7, включить.</td><td>Подпись «только NMEA · работает»; в журнале «порт NMEA: COM7 загружен».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">20</td><td>Запустить Навител напрямую (не через vestanavi.mscr — тот запускает GpsGate).</td><td>Автопоиск находит COM7, есть фикс, скорость совпадает с приборкой.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">21</td><td>Закрыть Навител; в VestaHome сменить порт на COM6 и обратно на COM7.</td><td>Каждый раз «работает»; в журнале выгружен → загружен под новым номером, без ошибки.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>7. Камеры скорости</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">22</td><td>«Скачать базу камер»: регионы — «Москва» и «Московская» (плюс свой), скачать.</td><td>Качаются по одному («1 из 3»…), итог — число камер; для Москвы с областью ≈ 7 000.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">23</td><td>Журнал VestaHome: строка «камеры: N в 150 км из M».</td><td>Записать N и M; N не упирается в 6000.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>8. Wi-Fi (Mi Note 13 Pro) и OBD</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">24</td><td>Настройки → Wi-Fi: открыть экран и подождать.</td><td>Список и состояние обновляются раз в секунду сами.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">25</td><td>В VestaHome «Забыть» MiNote13Pro; подключиться к ней штатным менеджером Wi-Fi WinCE (если доступен).</td><td>Записать: держится ли связь, есть ли адрес, через сколько секунд обрыв. Тот же обрыв через 4–5 с — дело не в VestaHome.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">26</td><td>OBD: на телефоне выключить Bluetooth; ГУ после перезагрузки; «Настройки → Bluetooth → OBD-адаптер (проверка)» → «Подключить».</td><td>Подключается; если нет — записать код ошибки с экрана, время.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>9. Что прислать</h2>
+<ul>
+  <li><b>\SDMemory\VestaLogs\</b>: VestaStub.log, VestaHome.log, BTProxy.log, SPIPower.log.</li>
+  <li>Если Навител не нашёл порт — его Userdata\settings.005.ini.</li>
+  <li>Этот лист с заметками.</li>
+</ul>
+</body>
+</html>
