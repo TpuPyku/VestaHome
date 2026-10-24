@@ -258,7 +258,7 @@ static void ScrTestCan(HDC dc)
     wchar_t s[160], gps[160], can[64];
     _snwprintf(s, 160, L"Поток данных · %s", s_cfg.gpsPort);
     Frame(dc, s);
-    Panel(dc, 16, 68, 768, 396);
+    Panel(dc, 16, 68, 768, 336);   // (its buttons in the bottom strip)
     GpsStatusText(gps, 160);
     CanStatusText(can, 64);
     _snwprintf(s, 160, L"GPS: %s", gps);
@@ -291,9 +291,9 @@ static void ScrTestCan(HDC dc)
                    (unsigned)(kCanLogMax / 1024), s_canMarks);
     else
         wcscpy(s, L"запись выключена: включите и делайте действия в машине, отмечая их МЕТКОЙ");
-    T(dc, 32, 412, s, 14, rec ? kOrange : kDim, 400, AL_START, 400);
-    Button(dc, 440, 400, 160, 52, rec ? L"Стоп записи" : L"Запись", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_CANLOG);
-    Button(dc, 608, 400, 160, 52, L"Метка", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
+    TWrap(dc, 96, 436, s, 13, rec ? kOrange : kDim, 400, 330, 2, 16);   // the bottom strip, right of "back"
+    Button(dc, 440, 414, 160, 52, rec ? L"Стоп записи" : L"Запись", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_CANLOG);
+    Button(dc, 608, 414, 176, 52, L"Метка", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
 }
 
 // The keyboard opened from these screens: which setting it edits.

@@ -20,18 +20,14 @@ static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L
 static void ScrDiag(HDC dc)
 {
     Frame(dc, L"Диагностика");
-    Panel(dc, 16, 68, 768, 396);
+    Panel(dc, 16, 68, 768, 336);   // (above y 404: "back" at the bottom left)
     for (int i = 0; i < 10 && kTests[i].label; i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
                kTests[i].a == A_SOON ? B_DIS : B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
-    T(dc, 40, 362, L"«Кнопки» — монитор MCU (нажатия руля и панели приходят оттуда). GPS и CAN — один поток.",
-      14, kDim, 400, AL_START, 720);
-    T(dc, 40, 384, L"«Звук и видео» — писк поверх радио и тестовые файлы (папка TestMedia).", 14, kDim, 400,
-      AL_START, 720);
-    Sep(dc, 40, 400, 720);
-    T(dc, 96, 428, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn); right of "back"
-    T(dc, 96, 450, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 570);
-    Toggle(dc, 688, 414, T_LOGS);
+    Sep(dc, 40, 340, 720);
+    T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
+    T(dc, 40, 390, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 600);
+    Toggle(dc, 688, 354, T_LOGS);
 }
 
 // Screen test: full-screen white, red, green, blue, black (dead pixels, uniformity), a grey ramp (banding) and a
@@ -122,9 +118,9 @@ static void ScrTestMem(HDC dc)
     static const wchar_t* vols[5] = { L"C:\\", L"D:\\", L"E:\\", L"F:\\", L"G:\\" };
 #endif
     Frame(dc, L"Диагностика · Память и диски");
-    Panel(dc, 16, 68, 768, 396);
+    Panel(dc, 16, 68, 768, 336);   // (above y 404: "back" at the bottom left)
     for (int i = 0; i < 7; i++) {
-        int y = 76 + i * 54;
+        int y = 74 + i * 46;
         wchar_t label[40], free_[24], total[24], v[64];
         int pct = -1;
         if (i == 0) {
@@ -155,14 +151,14 @@ static void ScrTestMem(HDC dc)
             }
         }
         v[63] = 0;
-        T(dc, 40, y + 33, label, 17, kMuted, 400, AL_START, 220);
+        T(dc, 40, y + 29, label, 17, kMuted, 400, AL_START, 220);
         if (pct >= 0) {
-            R(dc, 270, y + 22, 180, 10, 5, kLine);
-            R(dc, 270, y + 22, pct * 180 / 100 > 10 ? pct * 180 / 100 : 10, 10, 5, pct > 90 ? kStop : kMuted);
+            R(dc, 270, y + 18, 180, 10, 5, kLine);
+            R(dc, 270, y + 18, pct * 180 / 100 > 10 ? pct * 180 / 100 : 10, 10, 5, pct > 90 ? kStop : kMuted);
         }
-        T(dc, 760, y + 33, v, 17, kText, 700, AL_END, 290);
+        T(dc, 760, y + 29, v, 17, kText, 700, AL_END, 290);
         if (i < 6)
-            Sep(dc, 32, y + 52, 736);
+            Sep(dc, 32, y + 44, 736);
     }
 }
 

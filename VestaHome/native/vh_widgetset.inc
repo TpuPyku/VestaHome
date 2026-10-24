@@ -195,7 +195,7 @@ static void ScrTestMcu(HDC dc)
 
     wchar_t s[160];
     Frame(dc, L"Данные MCU");
-    Panel(dc, 16, 68, 768, 396);
+    Panel(dc, 16, 68, 768, 336);   // (its buttons in the bottom strip)
     LONG attach, wraps;
     int state = McuState(&attach, &wraps);
     if (state < 0)
@@ -252,10 +252,10 @@ static void ScrTestMcu(HDC dc)
         _snwprintf(s, 160, L"запись: mcu.log · %u КБ · меток %d", (unsigned)(logBytes / 1024), s_marks);
     else
         wcscpy(s, L"запись выключена");
-    T(dc, 32, 432, s, 14, rec ? kOrange : kDim, 400, AL_START, 280);
-    Button(dc, 320, 400, 120, 52, L"Запрос", state > 0 ? B_N : B_DIS, IC_NONE, 14, 0, A_MCUREQ);
-    Button(dc, 448, 400, 152, 52, rec ? L"Стоп записи" : L"Запись", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_MCULOG);
-    Button(dc, 608, 400, 160, 52, L"Метка", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
+    TWrap(dc, 96, 436, s, 13, rec ? kOrange : kDim, 400, 216, 2, 16);   // the bottom strip, right of "back"
+    Button(dc, 320, 414, 120, 52, L"Запрос", state > 0 ? B_N : B_DIS, IC_NONE, 14, 0, A_MCUREQ);
+    Button(dc, 448, 414, 152, 52, rec ? L"Стоп записи" : L"Запись", rec ? B_SEL : B_N, IC_NONE, 15, 0, A_MCULOG);
+    Button(dc, 608, 414, 176, 52, L"Метка", rec ? B_N : B_DIS, IC_NONE, 15, 0, A_CANMARK);
 }
 
 // "About the system -> Details": what the stock "Info" and its engineering "Software" / "System status" show

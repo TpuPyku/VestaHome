@@ -37,7 +37,7 @@ ICONS = {
     'eq': 'sliders-vertical', 'disc': 'disc', 'eye': 'eye', 'power': 'power', 'edit': 'pencil', 'add': 'plus',
     'file': 'file', 'up': 'chevron-up', 'car': 'car', 'cloud': 'cloud', 'tasks': 'activity', 'sd': 'save',
     'down': 'chevron-down', 'gallery': 'images', 'full': 'maximize', 'unfull': 'minimize',
-    'netradio': 'radio-tower', 'btmusic': 'music+bluetooth',
+    'netradio': 'radio-tower', 'btmusic': 'music+bluetooth', 'return': 'undo-2',
 }
 
 

@@ -2241,7 +2241,7 @@ static void TextC(HDC dc, const RECT* rc, const wchar_t* s, COLORREF c, HFONT f)
 // The report is several lines (status line + firmware gate table). Split it on newlines
 // and word-wrap each paragraph to the box width so it fits the 480 px screen; the same
 // text is always written to the log in full by LogMsg().
-static void DrawBlock(HDC dc, int x, int y, int w, int yMax, const wchar_t* s, COLORREF c, HFONT f)
+static int DrawBlock(HDC dc, int x, int y, int w, int yMax, const wchar_t* s, COLORREF c, HFONT f)
 {
     HGDIOBJ of = SelectObject(dc, f);
     SetTextColor(dc, c);
@@ -2261,6 +2261,20 @@ static void DrawBlock(HDC dc, int x, int y, int w, int yMax, const wchar_t* s, C
         s = nl + 1;
     }
     SelectObject(dc, of);
+    return y;
+}
+
+// The report box: its text scrolls with the finger (2026-10-24, the user: the last lines could not be seen).
+enum { kBoxL = 20, kBoxT = 70, kBoxR = 780, kBoxB = 292 };
+static int g_scroll, g_textH;           // scrolled by / the text's height (px)
+static int g_dragY = -1, g_dragFrom;    // the finger's y at the press in the box, the scroll then
+
+static void ScrollTo(int px)
+{
+    int max = g_textH - (kBoxB - kBoxT - 16);
+    g_scroll = px > max ? max : px;
+    if (g_scroll < 0)
+        g_scroll = 0;
 }
 
 static void Paint(HDC dc)
@@ -2272,11 +2286,21 @@ static void Paint(HDC dc)
     TextL(dc, 24, 46, L"Отметьте, что ставить или удалять. SD-карта в слоте. Прошивка не 4120 — proxy не встанет.",
           C_MUTED, g_fontS);
 
-    RECT box = { 20, 70, 780, 292 };
+    RECT box = { kBoxL, kBoxT, kBoxR, kBoxB };
     FillC(dc, &box, C_PANEL);
     FrameC(dc, &box, C_LINE);
-    DrawBlock(dc, 30, 78, 740, 286, g_status[0] ? g_status : L"(нет данных)",
-              g_busy ? C_MUTED : C_TEXT, g_fontS);
+    int saved = SaveDC(dc);
+    IntersectClipRect(dc, kBoxL + 2, kBoxT + 2, kBoxR - 2, kBoxB - 2);
+    int end = DrawBlock(dc, 30, 78 - g_scroll, 720, 4000, g_status[0] ? g_status : L"(нет данных)",
+                        g_busy ? C_MUTED : C_TEXT, g_fontS);
+    RestoreDC(dc, saved);
+    g_textH = end - (78 - g_scroll);
+    if (g_textH > kBoxB - kBoxT - 16) {   // the bar: where the view is in the text
+        int track = kBoxB - kBoxT - 12, view = kBoxB - kBoxT - 16;
+        int th = track * view / g_textH, ty = kBoxT + 6 + (track - th) * g_scroll / (g_textH - view);
+        RECT bar = { kBoxR - 10, ty, kBoxR - 5, ty + (th < 16 ? 16 : th) };
+        FillC(dc, &bar, C_MUTED);
+    }
 
     if (g_busy) TextL(dc, 30, 268, L"идёт операция, подождите...", C_ORANGE, g_fontS);
 
@@ -2289,7 +2313,15 @@ static void Paint(HDC dc)
         if (tick >= 0) {   // a tick: its box and the label beside it
             RECT b = { r.left + 8, r.top + 6, r.left + 36, r.top + 34 };
             FillC(dc, &b, tick ? C_ORANGE : C_INK);
-            FrameC(dc, &b, pressed ? C_ORANGE : C_LINE);
+            FrameC(dc, &b, pressed ? C_ORANGE : tick ? C_ORANGE : C_LINE);
+            if (tick) {   // the check mark
+                HPEN pen = CreatePen(PS_SOLID, 4, C_INK);
+                HGDIOBJ op = SelectObject(dc, pen);
+                POINT m[3] = { { b.left + 6, b.top + 14 }, { b.left + 12, b.top + 21 }, { b.left + 23, b.top + 7 } };
+                Polyline(dc, m, 3);
+                SelectObject(dc, op);
+                DeleteObject(pen);
+            }
             TextL(dc, r.left + 48, r.top + 8, g_btns[i].label, C_TEXT, g_font);
             continue;
         }
@@ -2319,6 +2351,7 @@ static void RunAction(int id)
 {
     if (g_busy) return;
 
+    g_scroll = 0;
     if (id == B_STATUS) {
         DoStatus();
         LogMsg(g_status);
@@ -2446,11 +2479,33 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_LBUTTONDOWN: {
+        int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
+        if (x >= kBoxL && x < kBoxR && y >= kBoxT && y < kBoxB) {   // the report: scrolled by the finger
+            g_dragY = y;
+            g_dragFrom = g_scroll;
+            SetCapture(hwnd);
+            return 0;
+        }
         int i = HitTest(LOWORD(lp), HIWORD(lp));
         if (i >= 0) { g_press = i; InvalidateRect(hwnd, NULL, TRUE); }
         return 0;
     }
+    case WM_MOUSEMOVE:
+        if (g_dragY >= 0 && (wp & MK_LBUTTON)) {
+            int was = g_scroll;
+            ScrollTo(g_dragFrom - ((short)HIWORD(lp) - g_dragY));
+            if (g_scroll != was) {
+                RECT box = { kBoxL, kBoxT, kBoxR, kBoxB };
+                InvalidateRect(hwnd, &box, FALSE);
+            }
+        }
+        return 0;
     case WM_LBUTTONUP: {
+        if (g_dragY >= 0) {
+            g_dragY = -1;
+            ReleaseCapture();
+            return 0;
+        }
         int i = HitTest(LOWORD(lp), HIWORD(lp));
         int was = g_press; g_press = -1;
         if (i >= 0 && i == was) {
@@ -2489,7 +2544,13 @@ static void ShowGui(HINSTANCE hInst)
     HWND hwnd = CreateWindow(L"VestaHomeInstall_Wnd", L"VestaHome Install", WS_POPUP,
         0, 0, 800, 480, NULL, NULL, hInst, NULL);
     if (!hwnd) return;
+    // the WinCE taskbar covered the bottom row (2026-10-24): hidden while we are open, shown again after (if it was)
+    HWND bar = FindWindow(L"HHTaskBar", NULL);
+    bool barShown = bar && IsWindowVisible(bar);
+    if (barShown)
+        ShowWindow(bar, SW_HIDE);
     ShowWindow(hwnd, SW_SHOW);
+    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 800, 480, SWP_SHOWWINDOW);
     UpdateWindow(hwnd);
 
     MSG msg;
@@ -2497,6 +2558,8 @@ static void ShowGui(HINSTANCE hInst)
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
+    if (barShown)
+        ShowWindow(bar, SW_SHOW);
 }
 
 // ---------------------------------------------------------------- entry

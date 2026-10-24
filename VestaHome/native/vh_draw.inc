@@ -216,6 +216,7 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.L2(10, 38, 13.5, 34.5);
         p.L2(34.5, 13.5, 38, 10);
         break;
+    case IC_RETURN:   // (built-in: the skin's undo arrow normally; else the chevron)
     case IC_BACK: {
         double v[] = { 30, 9, 15, 24, 30, 39 };
         p.Line(v, 3);
@@ -2163,7 +2164,7 @@ static void BackButton(HDC dc)
         return;
     bool d = Zone(8, 412, 72, 68, s_frameBack);
     Disc(dc, 44, 446, 26, d ? kOrange : kPanel2);
-    Ico(dc, IC_BACK, 30, 432, 28, d ? kInk : kText);
+    Ico(dc, IC_RETURN, 30, 432, 28, d ? kInk : kText);   // a turning-back arrow (the user 2026-10-24)
 }
 
 // The bar's change of section, animated (the user 2026-10-23): the pill of the section left shrinks with its name to

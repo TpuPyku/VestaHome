@@ -778,8 +778,8 @@ static void ScrSetHome(HDC dc)
                id * 2 + 1);
         Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, IC_EYE, 15, 24, A_WGVIS, id);
     }
-    T(dc, 24, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
-                   L"VestaWidgets\\*.ini на SD или \\SDMMC", 13, kDim, 400, AL_START, 560);
+    T(dc, 96, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
+                   L"VestaWidgets\\*.ini на SD или \\SDMMC", 13, kDim, 400, AL_START, 490);   // (to the page buttons)
     if (pages > 1) {
         wchar_t pg[16];
         _snwprintf(pg, 16, L"%d / %d", s_setHomePage + 1, pages);

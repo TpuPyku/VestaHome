@@ -398,7 +398,7 @@ static void WaveDevsLog()
 static void ScrTestAv(HDC dc)
 {
     Frame(dc, L"Звук и видео");
-    Panel(dc, 16, 68, 768, 396);
+    Panel(dc, 16, 68, 768, 336);   // (above y 404: "back" at the bottom left)
     const wchar_t* dir = AvDir();
     for (int i = 0; i < 10; i++) {
         bool ok = !kAvTests[i].file || AvHas(dir, kAvTests[i].file);
@@ -409,15 +409,13 @@ static void ScrTestAv(HDC dc)
     WaveDevName(s_cfg.beepDev, s, 64);
     wchar_t b[96];
     _snwprintf(b, 96, L"УСТРОЙСТВО ПИСКА: %s", s);
-    Button(dc, 40, 356, 470, 42, b, B_N, IC_NONE, 15, 0, A_AVDEV);   // the next device and a beep on it
-    Button(dc, 520, 356, 240, 42, L"Стекло (ошибка OBD)", B_N, IC_NONE, 15, 0, A_AVTEST, 100);
+    Button(dc, 40, 352, 470, 42, b, B_N, IC_NONE, 15, 0, A_AVDEV);   // the next device and a beep on it
+    Button(dc, 520, 352, 240, 42, L"Стекло (ошибка OBD)", B_N, IC_NONE, 15, 0, A_AVTEST, 100);
     if (dir[0])
         _snwprintf(s, 160, L"Файлы: %s. Писк — через канал голоса навигации (радио тише).", dir);
     else
         wcscpy(s, L"Нет папки TestMedia (на SD-карте, USB или рядом с VestaHome) — работает только писк.");
-    T(dc, 40, 420, s, 14, kDim, 400, AL_START, 720);
-    T(dc, 40, 444, L"Лево → право: 3 с слева, 3 с справа, 3 с оба. Свип — для проверки эквалайзера.", 14, kDim,
-      400, AL_START, 720);
+    TWrap(dc, 96, 436, s, 13, kDim, 400, 688, 2, 16);   // the bottom strip, right of "back"
 }
 
 static void AvDevNext()
