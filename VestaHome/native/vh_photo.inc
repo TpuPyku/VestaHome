@@ -17,6 +17,9 @@ static PhThumb  s_th[kPhTiles];
 static wchar_t  s_pvPath[MAX_PATH];  // the viewer's request
 static int      s_pvRot, s_pvState, s_pvErr, s_pvW, s_pvH;   // state: 0 none, 1 wanted, 2 working, 3 done
 static bool     s_pvFill, s_pvAuto;
+static int      s_pvBoxH = kPhBoxH;   // the box asked for: 342 under the bars, 480 the whole screen (s_phFull)
+static bool     s_phFull;             // the viewer on the whole screen (the user 2026-10-24); a tap - back
+static bool PhotoFull() { return s_phFull; }
 static Pic      s_pv;
 static CRITICAL_SECTION s_phCs;
 static HANDLE   s_phEv, s_phThread;
@@ -27,7 +30,7 @@ static DWORD WINAPI PhotoThread(LPVOID)
         WaitForSingleObject(s_phEv, INFINITE);
         for (;;) {
             wchar_t path[MAX_PATH];
-            int slot = -1, rot = 0;
+            int slot = -1, rot = 0, boxH = kPhBoxH;
             bool view = false, fill = false, exif = false;
             EnterCriticalSection(&s_phCs);
             if (s_pvState == 1) {   // the viewed picture first
@@ -35,6 +38,7 @@ static DWORD WINAPI PhotoThread(LPVOID)
                 wcscpy(path, s_pvPath);
                 rot = s_pvRot;
                 fill = s_pvFill;
+                boxH = s_pvBoxH;
                 exif = s_pvAuto;
                 s_pvState = 2;
             } else {
@@ -51,10 +55,11 @@ static DWORD WINAPI PhotoThread(LPVOID)
                 break;
             Pic pic = { 0, 0, NULL, NULL };
             int w = 0, h = 0;
-            int res = view ? PicLoad(path, kPhBoxW, kPhBoxH, fill, rot, exif, &pic, &w, &h, true)   // full colour
+            int res = view ? PicLoad(path, kPhBoxW, boxH, fill, rot, exif, &pic, &w, &h, true)   // full colour
                            : PicThumb(path, kThW, kThH, exif, &pic);
             EnterCriticalSection(&s_phCs);
-            if (view && s_pvState == 2 && !wcscmp(path, s_pvPath) && rot == s_pvRot && fill == s_pvFill) {
+            if (view && s_pvState == 2 && !wcscmp(path, s_pvPath) && rot == s_pvRot && fill == s_pvFill &&
+                boxH == s_pvBoxH) {
                 PicFree(&s_pv);
                 s_pv = pic;
                 s_pvErr = res;
@@ -103,6 +108,22 @@ static void PhotoOpenDir(const wchar_t* dir)
     s_phCur = -1;
     s_phRead = true;
     s_phCount = s_phDir[0] ? ReadMusicDir(s_phDir, s_phs, kPhMax, true, 2) : ReadVolumes(s_phs);
+    if (s_phPickMode && s_phDir[0]) {   // the saver's pick: not the skin's icons (pictures under 16 KB left out)
+        int n = 0;
+        for (int i = 0; i < s_phCount; i++) {
+            wchar_t p[MAX_PATH];
+            _snwprintf(p, MAX_PATH, L"%s%s", s_phDir, s_phs[i]);
+            p[MAX_PATH - 1] = 0;
+            WIN32_FILE_ATTRIBUTE_DATA fa;
+            bool dir = s_phs[i][0] && s_phs[i][wcslen(s_phs[i]) - 1] == L'\\';
+            if (dir || !GetFileAttributesEx(p, GetFileExInfoStandard, &fa) || fa.nFileSizeHigh || fa.nFileSizeLow >= 16384)
+                s_phs[n++] = s_phs[i];
+            else
+                free(s_phs[i]);
+        }
+        s_phCount = n;
+        return;   // (nor the photos' own folder remembered)
+    }
     if (s_phDir[0] && wcscmp(s_cfg.photoDir, s_phDir)) {
         wcscpy(s_cfg.photoDir, s_phDir);
         CfgSoon();
@@ -183,8 +204,14 @@ static void ScrPhoto(HDC dc)
         PhotoOpenDir(s_cfg.photoDir[0] && GetFileAttributes(s_cfg.photoDir) != 0xFFFFFFFF ? s_cfg.photoDir : L"");
     if (s_phPage >= PhotoPages())
         s_phPage = PhotoPages() - 1;
-    Frame(dc, L"Медиа · Фото");
-    MediaTabs(dc, S_PHOTO, IC_NONE, A_NONE, 0);
+    bool pick = s_screen == S_SAVER_PICK;   // Settings -> Theme: the saver's picture, a tap picks it
+    if (pick) {
+        Frame(dc, L"Картинка заставки");
+        T(dc, 24, 92, L"Выберите картинку — она станет фоном заставки", 15, kMuted, 400, AL_START, 752);
+    } else {
+        Frame(dc, L"Медиа · Фото");
+        MediaTabs(dc, S_PHOTO, IC_NONE, A_NONE, 0);
+    }
     DirPath(dc, s_phDir, A_PHFILE, -1, -3, 784);
     PhotoWantThumbs();
     for (int t = 0; t < kPhTiles; t++) {   // design 0.6: 4 x 2, the picture without a frame, its name under it
@@ -246,6 +273,7 @@ static void PhotoView(int i)
     s_pvRot = s_phRot;
     s_pvFill = s_cfg.photoFill;
     s_pvAuto = s_cfg.photoAutoRot;
+    s_pvBoxH = s_phFull ? 480 : kPhBoxH;
     s_pvState = 1;
     LeaveCriticalSection(&s_phCs);
     PhotoWake();
@@ -285,6 +313,18 @@ static void ScrPhotoView(HDC dc)
             if (i == s_phCur)
                 at = n;
         }
+    if (s_phFull) {   // the whole screen, no bars: a tap goes back, a swipe the next / previous
+        Zone(0, 0, 800, 480, A_PHFULL);
+        R(dc, 0, 0, 800, 480, 0, RGB(0, 0, 0));
+        EnterCriticalSection(&s_phCs);
+        if (s_pvState == 3 && s_pvErr == PIC_OK)
+            BlitPic(s_pv, (800 - s_pv.w) / 2, (480 - s_pv.h) / 2);
+        int st = s_pvState;
+        LeaveCriticalSection(&s_phCs);
+        if (st == 1 || st == 2)
+            T(dc, 400, 246, L"Загрузка…", 20, kMuted, 600, AL_MID);
+        return;
+    }
     wchar_t s[MAX_PATH + 32];
     _snwprintf(s, MAX_PATH + 32, L"Фото · %d / %d · %s", at, n, s_phCur >= 0 ? s_phs[s_phCur] : L"");
     Frame(dc, s);
@@ -316,7 +356,7 @@ static void ScrPhotoView(HDC dc)
     Ico(dc, s_phShow ? IC_PAUSE : IC_PLAY, 378, 417, 44, d || s_phShow ? kInk : kOrange);
     IconBtn(dc, IC_ROT_R, 512, 417, 44, kText, A_PHROT, 1);
     IconBtn(dc, IC_FWD, 624, 417, 44, kText, A_PHSTEP, 1);
-    IconBtn(dc, IC_GEAR, 732, 417, 44, kText, A_SCREEN, S_SET_PHOTO);
+    IconBtn(dc, IC_FULL, 732, 417, 44, kText, A_PHFULL);   // the whole screen (the settings: Настройки -> Фото)
 }
 
 static void ScrSetPhoto(HDC dc)
@@ -351,9 +391,18 @@ static void DoAction(const Btn& b)
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;
     case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
-    case A_SAVERBG:   // Settings -> General -> Theme: the saver's background - the mosaic, or a picture (the files)
-        if (b.arg == 1) {
-            OpenFiles(F_SAVER);
+    case A_SAVERBG:   // Settings -> General -> Theme: the saver's background - the mosaic, or a picture (the photo
+        if (b.arg == 1) {   // browser picks it, with thumbnails; in the current picture's folder)
+            wchar_t cur[MAX_PATH];
+            SaverFilePath(cur);
+            wcscpy(s_phPrevDir, s_phDir);
+            s_phPrevSet = true;
+            s_phPickMode = true;
+            wchar_t* sl = wcsrchr(cur, L'\\');
+            if (sl)
+                sl[1] = 0;
+            PhotoOpenDir(sl && GetFileAttributes(cur) != 0xFFFFFFFF ? cur : L"");
+            Go(S_SAVER_PICK, true);
             break;
         }
         s_cfg.saverBg = 0;
@@ -385,7 +434,18 @@ static void DoAction(const Btn& b)
             wchar_t d[MAX_PATH];
             _snwprintf(d, MAX_PATH, L"%s%s", s_phDir, s_phs[b.arg]);
             PhotoOpenDir(d);
+        } else if (s_screen == S_SAVER_PICK) {   // the saver's picture chosen: back to the theme
+            int n = (int)wcslen(s_dir);
+            _snwprintf(s_cfg.saverFile, MAX_PATH, L"%s%s", _wcsnicmp(s_phDir, s_dir, n) ? s_phDir : s_phDir + n,
+                       s_phs[b.arg]);
+            s_cfg.saverFile[MAX_PATH - 1] = 0;
+            s_cfg.saverBg = 1;
+            ApplyAccent();
+            SaverFree();
+            SaveCfg();
+            Back();
         } else {
+            s_phFull = false;
             PhotoView(b.arg);
             Go(S_PHOTO_VIEW, true);
             PhotoShow(s_cfg.photoSlides);
@@ -405,6 +465,10 @@ static void DoAction(const Btn& b)
     case A_SCROLL:   if (s_scroll) ScrollTo(*s_scroll, s_scroll->pos + b.arg * s_scroll->step); break;
     case A_PHROT:    s_phRot = (s_phRot + b.arg + 4) % 4; PhotoView(s_phCur); break;
     case A_PHSHOW:   PhotoShow(!s_phShow); break;
+    case A_PHFULL:   // the viewer on the whole screen and back: the picture decoded again for its box
+        s_phFull = !s_phFull;
+        PhotoView(s_phCur);
+        break;
     case A_PHINT: {   // the slide show's interval: 2, 3, 5, 10, 15, 30, 60 s
         static const int iv[7] = { 2, 3, 5, 10, 15, 30, 60 };
         int k = 0;
@@ -849,8 +913,7 @@ static void DoAction(const Btn& b)
         } else if (s_screen == S_KEYS) {
             s_screen = s_keysBack;
         } else {
-            s_screen = s_filesFor == F_SAVER ? S_SET_THEME : s_filesFor == F_CAMS ? S_WSET_SPEED
-                     : s_filesFor == F_TEXT ? S_DIAG : S_EDIT;
+            s_screen = s_filesFor == F_CAMS ? S_WSET_SPEED : s_filesFor == F_TEXT ? S_DIAG : S_EDIT;
             s_status[0] = 0;
         }
         break;

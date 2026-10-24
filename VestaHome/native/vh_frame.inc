@@ -14,6 +14,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_VIDEO:       ScrVideo(dc); break;
     case S_VIDEO_PLAY:  ScrVideoPlay(dc); break;
     case S_PHOTO:       ScrPhoto(dc); break;
+    case S_SAVER_PICK:  ScrPhoto(dc); break;
     case S_PHOTO_VIEW:  ScrPhotoView(dc); break;
     case S_PHONE:       ScrPhone(dc); break;
     case S_CONTACTS:    ScrContacts(dc); break;
@@ -306,9 +307,14 @@ static void LogLoad(HWND hwnd)
 
 // The band that slides on a page turn: under the top bar, above the bottom bar and above the page dots where
 // they are (they stay in place, the new page's show when it has turned); on the radio only the presets.
+static bool PhotoFull();   // the photo viewer on the whole screen (vh_photo.inc)
+
 static int SlideTop()   // under what stays: the radio's frequency panel, the media tabs
 {
-    return s_screen == S_RADIO ? 258 : s_screen == S_PHOTO || s_screen == S_VIDEO ? 116 : 56;
+    if (s_screen == S_PHOTO_VIEW && PhotoFull())
+        return 0;
+    return s_screen == S_RADIO ? 258 : s_screen == S_PHOTO || s_screen == S_VIDEO || s_screen == S_SAVER_PICK ? 116
+           : s_screen == S_FILES ? 104 : 56;   // (the files: their path line stays)
 }
 
 static int SlideLeft()   // right of what stays: the settings' tiles
@@ -318,14 +324,14 @@ static int SlideLeft()   // right of what stays: the settings' tiles
 
 static int SlideBottom()
 {
-    if (s_screen == S_AUDIO_LIST)
+    if (s_screen == S_AUDIO_LIST || s_screen == S_SAVER_PICK)
         return 392;   // the dots stay
     if (s_screen == S_FILES)
         return 378;   // over their dots and dock
     if (s_screen == S_BT_PAIRED)
         return 382;
     if (s_screen == S_PHOTO_VIEW)
-        return 398;   // over its dock
+        return PhotoFull() ? 480 : 398;   // over its dock
     if (Section(s_screen) < 0)
         return 480;
     return s_screen == S_HOME || s_screen == S_RADIO || s_screen == S_APPS || s_screen == S_PHOTO ||
@@ -414,6 +420,7 @@ struct Pager {
 static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true }, { S_RADIO, &s_radioPage, RadioPages, true },
                                  { S_APPS, &s_page, AppsPages, false }, { S_FILES, &s_filePage, FilePages, false },
                                  { S_PHOTO, &s_phPage, PhotoPages, false },
+                                 { S_SAVER_PICK, &s_phPage, PhotoPages, false },
                                  { S_AUDIO_LIST, &s_musPage, MusPages, false },
                                  { S_VIDEO, &s_vidPage, VidPages, false },
                                  { S_BT_PAIRED, &s_pairedPage, PairedPages, true },
@@ -525,7 +532,7 @@ static void DragMove(int dx)
 // Let go: the page turns (dx past 100 px towards a neighbour) or slides back.
 static void DragEnd(int dx)
 {
-    bool turn = s_dragNb && s_dragNb == (dx < 0 ? 1 : -1) && (dx > 100 || dx < -100);
+    bool turn = s_dragNb && s_dragNb == (dx < 0 ? 1 : -1) && (dx > 60 || dx < -60);   // (was 100: HU 2026-10-24)
     int w = 800 - SlideLeft(), from = s_dragX, to = turn ? (s_dragNb > 0 ? -w : w) : 0;
     const DWORD kMs = 160;
     DWORD t0 = GetTickCount();

@@ -308,8 +308,14 @@ static void PlayerReadTags()
     }
 }
 
+// Short tracks played round (HU 2026-10-24: files of a fraction of a second could not be stopped): a pause holds
+// the end already posted (s_holdNext), and a tap just after a track ended is a pause, not a start from the beginning.
+static volatile DWORD s_endTick;   // a track ended (BASS's thread)
+static bool           s_holdNext;  // paused by the user: the next track not taken
+
 static void CALLBACK PlayerEnd(DWORD, DWORD, DWORD, void*)
 {
+    s_endTick = GetTickCount();
     PostMessage(s_wnd, WM_APP_PLAYER, 0, 0);   // from BASS's thread: the window takes the next track
 }
 
@@ -327,6 +333,7 @@ static bool PlayerPlay(int i)
     s_mediaLast = 1;
     if (!BassLoad() || i < 0 || i >= s_plCount)
         return false;
+    s_holdNext = false;
     NetStop();
     VidPauseForAudio();
     PlayerStopStream();
@@ -422,7 +429,11 @@ static void PlayerToggle()
     DWORD a = s_bass.active(s_chan);
     if (a == BASS_ACTIVE_PLAYING_F) {
         s_bass.pause(s_chan);
+        s_holdNext = true;
+    } else if (a == 0 && !s_holdNext && GetTickCount() - s_endTick < 1500) {
+        s_holdNext = true;   // it had just ended (the next one coming): the tap meant a pause
     } else {
+        s_holdNext = false;
         ResumeByUser();
         NetStop();
         VidPauseForAudio();
@@ -570,7 +581,7 @@ static void ScrAudioList(HDC dc)
         s_musPage = MusPages() - 1;
     int right = 784;
     if (s_musDir[0]) {   // this folder and everything under it, in path order
-        Button(dc, 604, 110, 180, 40, L"Играть всё", B_SEL, IC_PLAY, 15, 18, A_MALL);
+        Button(dc, 604, 116, 180, 40, L"Играть всё", B_SEL, IC_PLAY, 15, 18, A_MALL);   // (6 px off the tabs)
         right = 588;
     }
     DirPath(dc, s_musDir, A_MUP, 0, 1, right);

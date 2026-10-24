@@ -9,6 +9,7 @@ enum { TIMER_RVC = 8, kRvcMs = 250 };
 static HWND s_rvcWnd;
 static int  s_rvcAngle;   // the angle drawn, tenths of a degree
 static bool s_rvcValid;
+static int  s_rvcSignal = -1;   // the video input's signal at the show (0: none - the camera is off)
 static bool s_rvcManual;  // the camera shown by hand ("Настройки -> Автомобиль"), a tap closes it
 #ifndef UNDER_CE
 static bool s_rvcFake;    // PC test build: R toggles a "reverse"
@@ -41,6 +42,15 @@ static LRESULT CALLBACK RvcProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         FillRect(dc, &rc, key);
         DeleteObject(key);
         RvcDrawLines(dc, s_rvcAngle, s_rvcValid);
+        if (s_rvcManual && s_rvcSignal == 0) {   // shown by hand out of reverse: the camera has no power then
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, RGB(240, 240, 240));
+            HGDIOBJ of = SelectObject(dc, Font(22, 700));
+            RECT tr = { 40, 180, 760, 300 };
+            DrawText(dc, L"Нет сигнала камеры.\nОна включается только на заднем ходу.\nНажмите, чтобы закрыть.", -1,
+                     &tr, DT_CENTER | DT_WORDBREAK);
+            SelectObject(dc, of);
+        }
 #ifndef UNDER_CE
         SetBkMode(dc, TRANSPARENT);
         SetTextColor(dc, RGB(200, 200, 200));
@@ -81,7 +91,9 @@ static void RvcShow()
     s_rvcWnd = CreateWindowEx(WS_EX_TOPMOST, RVC_CLASS, L"VestaHome camera", WS_POPUP | WS_VISIBLE, r.left, r.top,
                               800, 480, s_wnd, NULL, GetModuleHandle(NULL), NULL);
 #endif
-    RvcVideo(true);
+    s_rvcSignal = RvcVideo(true);
+    if (s_rvcWnd)
+        InvalidateRect(s_rvcWnd, NULL, FALSE);
     VLog(L"камера: задний ход, своё окно %s", s_rvcWnd ? L"открыто" : L"не создано");
 }
 
@@ -134,13 +146,19 @@ static void RvcTick()
     rev = s_rvcFake ? 1 : 0;
 #endif
     RvcAfterShell(rev);
-    bool want = (s_cfg.rvcOwn && rev == 1) || s_rvcManual;
+    // ours when set so, or when the stock shell is not there to show it (VestaHome as the shell: HU 2026-10-24)
+    bool own = s_cfg.rvcOwn || !FindWindow(NULL, L"RadioCommWindow");
+    bool want = (own && rev == 1) || s_rvcManual;
     if (want && !s_rvcWnd)
         RvcShow();
     else if (!want && s_rvcWnd)
         RvcHide();
     if (!s_rvcWnd)
         return;
+    if (GetForegroundWindow() != s_rvcWnd) {   // over everything, the maps too (OSMapsCE is topmost as well)
+        SetWindowPos(s_rvcWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        SetForegroundWindow(s_rvcWnd);
+    }
     int a;
     bool v;
     RvcAngleNow(&a, &v);

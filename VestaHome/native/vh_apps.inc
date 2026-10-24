@@ -8,9 +8,8 @@
 static const wchar_t* kKeysRu[4] = { L"1234567890-_", L"йцукенгшщзхъ", L"фывапролджэё", L"ячсмитьбю.,!" };
 static const wchar_t* kKeysEn[4] = { L"1234567890-_", L"qwertyuiop()", L"asdfghjkl:;\"", L"zxcvbnm.,/\\=" };
 static const wchar_t  kKeysSym[] = L"!@#$%&*+?|~'";   // the digits' row with Shift (the configs: # @ & ? % + |)
-enum { F_NAME, F_PATH, F_PARAMS, F_ICON, F_CAMS, F_TEXT, F_SAVER };   // fields of the shortcut editor; F_CAMS: the
-                                                                      // camera file; F_TEXT: a text file for the
-                                                                      // editor; F_SAVER: the saver's own picture
+enum { F_NAME, F_PATH, F_PARAMS, F_ICON, F_CAMS, F_TEXT };   // fields of the shortcut editor; F_CAMS: the camera file;
+                                                             // F_TEXT: a text file for the editor
 
 // Programs of the "Apps" screen, from apps.txt: "Name | \path\to\program.exe | class!title | parameters | icon".
 struct App {
@@ -773,8 +772,7 @@ static void ListDir()
         int n = (int)wcslen(fd.cFileName);
         if (n >= 100 || !wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L".."))
             continue;
-        bool want = s_filesFor == F_SAVER ? PicIsName(fd.cFileName)
-                  : s_filesFor == F_TEXT ? HasExt(fd.cFileName, L".ini") || HasExt(fd.cFileName, L".txt") ||
+        bool want = s_filesFor == F_TEXT ? HasExt(fd.cFileName, L".ini") || HasExt(fd.cFileName, L".txt") ||
                                            HasExt(fd.cFileName, L".cfg")
                   : s_filesFor == F_CAMS ? HasExt(fd.cFileName, L".txt") : HasExt(fd.cFileName, L".exe") ||
                     (s_filesFor == F_ICON && (HasExt(fd.cFileName, L".png") || HasExt(fd.cFileName, L".ico") ||
@@ -831,11 +829,6 @@ static void OpenFiles(int field)
         UserWgDir(uw);
         if (!BrowseFolderOf(uw))
             BrowseFolderOf(s_dir);
-    } else if (field == F_SAVER) {   // the current picture's folder (the example, the headlights: Skin)
-        wchar_t cur[MAX_PATH];
-        SaverFilePath(cur);
-        if (!BrowseFolderOf(cur))
-            BrowseFolderOf(s_dir);
     } else if (field == F_CAMS) {
         wchar_t cur[MAX_PATH];
         if (s_cfg.camFile[0] == L'\\' || wcschr(s_cfg.camFile, L':'))
@@ -885,17 +878,6 @@ static void PickFile(int i)
             wcscpy(s_status, L"VestaHome.ini меняется в Настройках");
         else
             TeOpen(path, S_FILES, false);
-        return;
-    }
-    if (s_filesFor == F_SAVER) {   // the saver's own picture: relative inside our folder, chosen at once
-        int n = (int)wcslen(s_dir);
-        _snwprintf(s_cfg.saverFile, MAX_PATH, L"%s%s", _wcsnicmp(s_fdir, s_dir, n) ? s_fdir : s_fdir + n, f.name);
-        s_cfg.saverFile[MAX_PATH - 1] = 0;
-        s_cfg.saverBg = 1;
-        ApplyAccent();
-        SaverFree();
-        SaveCfg();
-        s_screen = S_SET_THEME;
         return;
     }
     if (s_filesFor == F_CAMS) {   // like the icon: relative inside our folder
@@ -1076,24 +1058,24 @@ static void DrawKeys(HDC dc)
 // Choosing the program: the folder's path, folders and .exe files 2 x 5 per page.
 static void DrawFiles(HDC dc)
 {
-    Frame(dc, s_filesFor == F_SAVER ? L"Картинка заставки" : s_filesFor == F_ICON ? L"Выбор иконки"
-              : s_filesFor == F_CAMS ? L"Файл камер"
+    Frame(dc, s_filesFor == F_ICON ? L"Выбор иконки" : s_filesFor == F_CAMS ? L"Файл камер"
               : s_filesFor == F_TEXT ? L"Текстовые файлы (.ini, .txt, .cfg)" : L"Выбор программы",
           A_CANCEL);
-    TTail(dc, 20, 84, s_fdir, 15, kMuted, 400, 760);
+    // the path line as the media's lists (the user 2026-10-24): "‹" one level up, then the path to here
+    if (wcslen(s_fdir) > 1)
+        IconBtn(dc, IC_BACK, 16, 68, 28, kMuted, A_UP);
+    TTail(dc, 60, 90, s_fdir, 16, kText, 700, 724);
     int first = s_filePage * kFilesPerPage;
     for (int k = 0; k < kFilesPerPage && first + k < s_fileCount; k++) {
         const FileEnt& f = s_files[first + k];   // folders stand out
-        ListRow(dc, 16 + (k / 5) * 388, 96 + (k % 5) * 56, 380, 50, f.name, NULL, L_N, f.dir ? IC_FOLDER : IC_FILE, NULL,
-                NULL, A_FILE, first + k, f.dir ? kOrange : CLR_INVALID);
+        ListRow(dc, 16 + (k / 5) * 388, 108 + (k % 5) * 54, 380, 48, f.name, NULL, L_N, f.dir ? IC_FOLDER : IC_FILE,
+                NULL, NULL, A_FILE, first + k, f.dir ? kOrange : CLR_INVALID);
     }
     if (s_fileCount == 0)
-        T(dc, 400, 240, s_filesFor == F_SAVER ? L"Здесь нет папок и картинок" : s_filesFor == F_ICON ?
-          L"Здесь нет папок и иконок" : s_filesFor == F_TEXT ?
+        T(dc, 400, 240, s_filesFor == F_ICON ? L"Здесь нет папок и иконок" : s_filesFor == F_TEXT ?
           L"Здесь нет папок и текстовых файлов" : s_filesFor == F_CAMS ?
           L"Здесь нет папок и .txt" : L"Здесь нет папок и программ", 22, kText, 700, AL_MID);
-    PageDots(dc, s_filePage, FilePages(), 400, 382);
+    PageDots(dc, s_filePage, FilePages(), 400, 386);
     Dock(dc);
-    Button(dc, 16, 410, 120, 58, NULL, B_N, IC_UP, 18, 0, A_UP);
     Button(dc, 664, 410, 120, 58, L"Отмена", B_N, IC_NONE, 18, 0, A_CANCEL);
 }

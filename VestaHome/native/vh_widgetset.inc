@@ -214,7 +214,7 @@ static void ScrTestMcu(HDC dc)
             wcscat(s, o);
         }
     } else {
-        wcscpy(s, L"Климат: ещё не приходил (0x61xx)");
+        s[0] = 0;   // no climate: no line (the user 2026-10-24)
     }
     T(dc, 32, 122, s, 15, kMuted, 600, AL_START, 736);
     Sep(dc, 32, 134, 736);

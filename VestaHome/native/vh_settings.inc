@@ -217,8 +217,18 @@ static const wchar_t* AccentName()
 
 // General -> Theme: the accent colour among Lada Vesta's paints, 2 x 4 tiles (a circle of the colour, the name, the
 // paint's code); the chosen one soft in its own colour. Applied at once (ApplyAccent) and saved.
+static void PhotoOpenDir(const wchar_t* dir);   // (vh_photo.inc)
+static wchar_t s_phPrevDir[MAX_PATH];   // the photos' folder before the saver's pick (put back after it)
+static bool    s_phPrevSet;
+static bool    s_phPickMode;            // the photo browser lists for the saver's pick (no icons)
+
 static void ScrSetTheme(HDC dc)
 {
+    if (s_phPrevSet) {   // back from the saver's pick: the photos' own folder again
+        s_phPrevSet = false;
+        s_phPickMode = false;
+        PhotoOpenDir(s_phPrevDir);
+    }
     Settings(dc, S_SET_THEME);
     T(dc, 264, 96, L"Цвет акцента", 19, kText, 700);
     for (int i = 0; i < kAccentCount; i++) {   // 4 + 3 tiles: a circle of the colour, its name
@@ -231,8 +241,9 @@ static void ScrSetTheme(HDC dc)
         T(dc, x + 61, y + 90, kAccents[i].name, 15, d ? kInk : on ? kOrange : kText, 700, AL_MID, 116);
     }
     const wchar_t* fn = wcsrchr(s_cfg.saverFile, L'\\');
-    SetRow(dc, 344, L"Фон заставки", s_cfg.saverBg ? (fn ? fn + 1 : s_cfg.saverFile) : L"мозаика, свет — цвет акцента",
-           true, A_NONE, 0, 56);
+    SetRow(dc, 344, L"Фон заставки", NULL, true, A_NONE, 0, 56);
+    if (s_cfg.saverBg)   // the picture's name, cut before the buttons
+        T(dc, 264, 386, fn ? fn + 1 : s_cfg.saverFile, 13, kMuted, 400, AL_START, 190);
     // the mosaic, or a picture of one's own (a tap: the files, the example - the headlights - in Skin)
     Button(dc, 468, 352, 116, 40, L"Мозаика", s_cfg.saverBg == 0 ? B_SEL : B_N, IC_NONE, 15, 0, A_SAVERBG, 0);
     Button(dc, 592, 352, 176, 40, L"Своя картинка", s_cfg.saverBg == 1 ? B_SEL : B_N, IC_PHOTO, 15, 20, A_SAVERBG, 1);

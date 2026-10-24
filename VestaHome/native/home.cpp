@@ -95,7 +95,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
-              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG };
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -110,7 +110,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -736,7 +736,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         RECT wr;
         if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
             if (t.wMinute != s_drawnMinute || tasks || s_screen == S_CALL || s_screen == S_TEST_CAN ||
-                s_screen == S_TEST_MCU)
+                s_screen == S_TEST_MCU || s_screen == S_SET_WIFI)   // (Wi-Fi: its state shown at once, HU 2026-10-24)
                 Redraw();
             else if (s_screen == S_AUDIO && PlayerPlaying())
                 RedrawArea(256, 130, 800, 300);   // the track's position (the knob, r 11, from x 261)
@@ -774,8 +774,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_VESTA_NIGHT:
         return s_night ? 1 : 0;
-    case WM_APP_PLAYER:   // the track ended (BASS's sync): the next one
-        PlayerStep(1, true);
+    case WM_APP_PLAYER:   // the track ended (BASS's sync): the next one - unless paused meanwhile
+        if (!s_holdNext)
+            PlayerStep(1, true);
         if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
             Redraw();
         return 0;
@@ -1028,7 +1029,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if ((wp & MK_LBUTTON) && CanSwipe() && !s_btHold &&
             !(s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY)) {
             int dx = (short)LOWORD(lp) - s_downX, dy = (short)HIWORD(lp) - s_downY;
-            if (!s_drag && (dx > 24 || dx < -24) && abs(dx) > abs(dy))
+            // a resistive screen gives few points of a light swipe (HU 2026-10-24): the drag starts early
+            if (!s_drag && (dx > 14 || dx < -14) && abs(dx) > abs(dy))
                 DragStart();
             if (s_drag) {
                 DragMove(dx);
@@ -1082,8 +1084,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
             return 0;
         }
-        if ((s_screen == S_HOME || s_screen == S_APPS || s_screen == S_FILES || s_screen == S_RADIO ||
-             s_screen == S_PHOTO_VIEW) && (dx > 120 || dx < -120)) {
+        // no drag began (the panel lost the finger between): a sideways lift still turns the page, not a tap
+        int dy = (short)HIWORD(lp) - s_downY;
+        if ((CanSwipe() || s_screen == S_PHOTO_VIEW) && (dx > 50 || dx < -50) && abs(dx) > abs(dy)) {
             Redraw();   // the old page without the pressed look: the frame the new one pushes out
             if (Swipe(dx < 0 ? 1 : -1)) {
                 BuildButtons();

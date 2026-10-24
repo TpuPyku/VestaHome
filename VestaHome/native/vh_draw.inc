@@ -998,7 +998,7 @@ static void Glow(int top, int bottom)
         return;
     COLORREF o = C(kOrange);
     int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o);
-    const int kMax = 4588;   // 7 % of 65536
+    const int kMax = 7864;   // 12 % of 65536 (HU 2026-10-24: brighter than the mockup's 7 %)
     int x0 = s_clip.left > kGlowX ? s_clip.left : kGlowX;
     for (int y = top; y < bottom && y < kGlowH; y++) {
         const unsigned char* g = s_glow + y * kGlowW - kGlowX;
@@ -2143,10 +2143,10 @@ static int NavSection(Screen s)
 }
 
 // The bar's change of section, animated (the user 2026-10-23): the pill of the section left shrinks with its name to
-// a circle, its icon goes plain; the circle slides to the new section (ease in and out; 200 ms a place - Главная to
-// Настройки about a second), its icon turns orange and the circle opens into the pill with the name. The time counts
+// a circle, its icon goes plain; the circle slides to the new section (ease in and out; 150 ms a place - Главная to
+// Настройки under a second), its icon turns orange and the circle opens into the pill with the name. The time counts
 // from the first frame of the new screen (its own drawing must not eat the start).
-enum { TIMER_NAVANIM = 21, kNavShrinkMs = 160, kNavStepMs = 200, kNavFrameMs = 25 };
+enum { TIMER_NAVANIM = 21, kNavShrinkMs = 120, kNavStepMs = 150, kNavFrameMs = 25 };   // (HU 2026-10-24: a bit faster)
 static int   s_navFrom = -1, s_navTo = -1;
 static DWORD s_navStart;   // 0: not started yet
 

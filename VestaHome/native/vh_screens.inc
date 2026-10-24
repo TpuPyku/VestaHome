@@ -599,10 +599,12 @@ static void ScrAudioBt(HDC dc)
         Button(dc, 584, 124, 200, 40, L"Включить звук", B_N, IC_BT, 14, 20, A_BTMUSIC);
     bool ctl = proxy && bt.av >= 1;   // the buttons: the SDK's AVRCP keys, through the proxy
     bool playing = bt.playing ? bt.playing == 1 : bt.av == 2;
-    Button(dc, 392, 312, 64, 56, NULL, ctl ? B_N : B_DIS, IC_PREV, 18, 40, A_BTCMD, BT_CMD_PREV);
-    Button(dc, 496, 312, 64, 56, NULL, ctl ? B_N : B_DIS, playing ? IC_PAUSE : IC_PLAY, 18, 40, A_BTCMD,
-           BT_CMD_PLAYPAUSE);
-    Button(dc, 600, 312, 64, 56, NULL, ctl ? B_N : B_DIS, IC_FWD, 18, 40, A_BTCMD, BT_CMD_NEXT);
+    // as the music's: bare arrows, the big orange play (the user 2026-10-24); without the phone dim and dead
+    IconBtn(dc, IC_PREV, 392, 312, 48, ctl ? kText : kOff, ctl ? A_BTCMD : A_NONE, BT_CMD_PREV);
+    bool down = ctl && Zone(486, 294, 84, 84, A_BTCMD, BT_CMD_PLAYPAUSE);
+    Disc(dc, 528, 336, 42, !ctl ? kPanel2 : down ? kFacet : kOrange);
+    Ico(dc, playing ? IC_PAUSE : IC_PLAY, 504, 312, 48, ctl ? kInk : kOff);
+    IconBtn(dc, IC_FWD, 616, 312, 48, ctl ? kText : kOff, ctl ? A_BTCMD : A_NONE, BT_CMD_NEXT);
     if (!proxy)
         T(dc, 272, 392, L"Установите proxy Bluetooth", 14, kDim, 400, AL_START, 512);
 }

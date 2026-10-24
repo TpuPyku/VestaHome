@@ -100,13 +100,13 @@ COLORREF RvcKey()
     return kKey;
 }
 
-void RvcVideo(bool on)
+int RvcVideo(bool on)
 {
     if (s_sdk <= 0)
-        return;
+        return -1;
+    DWORD signal = 0;
     if (on) {
         D.inDisable();
-        DWORD signal = 0;
         D.select(0, &signal);   // 0 = the camera
         D.inEnable();
         D.showPip(0xFF, kKey);
@@ -124,6 +124,7 @@ void RvcVideo(bool on)
         if (s_log)
             s_log(L"камера: видео выключено");
     }
+    return (int)signal;
 }
 
 static bool LoadRvs()

@@ -15,7 +15,9 @@
 // messages reach nobody, VestaHome's ring included - and answers the messages the shell answered. A process of its
 // own: the watchdog never loads SPIPowerMgr.dll. It falls - started again (3 times); VestaStub.nomcu on the SD card /
 // USB disk - not started (a test without it). It goes before the original shell is started.
-// The log only on removable media: \SDMemory\VestaLogs\VestaStub.log (no card, no log; \SDMMC\VestaLogs.off - none).
+// The log only on removable media: \SDMemory\VestaLogs\VestaStub.log (\SDMMC\VestaLogs.off - none). At the boot the
+// card is often not mounted yet (2026-10-24: no VestaStub.log ever): the lines go to RAM (\Temp\VestaStub.log, not the
+// flash) and are copied to the card as soon as it is there.
 // The PC build (testing) maps the HU's paths "\X\..." to "<exe folder>\hu\X\..." and takes the 3 minutes from
 // the environment variable VESTASTUB_OKMS.
 #include <windows.h>
@@ -40,23 +42,30 @@ static bool There(const wchar_t* p)
     return GetFileAttributes(p) != 0xFFFFFFFF;
 }
 
-static void Log(const wchar_t* fmt, ...)
+static bool s_logFlushed;   // the RAM log copied to the card
+
+static void Append(const wchar_t* path, const char* b, DWORD n)
 {
-    wchar_t dir[MAX_PATH], path[MAX_PATH];
-    HuPath(path, L"\\SDMMC\\VestaLogs.off");   // VestaHome's switch of all our logs ("Diagnostics -> Logs")
-    if (There(path))
-        return;
-    HuPath(dir, L"\\SDMemory\\VestaLogs");
-    HuPath(path, L"\\SDMemory\\VestaLogs\\VestaStub.log");
-    CreateDirectory(dir, NULL);   // fails without the card: no log then
     HANDLE f = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE)
+        return;
+    DWORD wr;
+    SetFilePointer(f, 0, NULL, FILE_END);
+    WriteFile(f, b, n, &wr, NULL);
+    CloseHandle(f);
+}
+
+static void Log(const wchar_t* fmt, ...)
+{
+    wchar_t dir[MAX_PATH], path[MAX_PATH], ram[MAX_PATH];
+    HuPath(path, L"\\SDMMC\\VestaLogs.off");   // VestaHome's switch of all our logs ("Diagnostics -> Logs")
+    if (There(path))
         return;
     wchar_t w[300];
     SYSTEMTIME t;
     GetLocalTime(&t);
-    int k = _snwprintf(w, 40, L"%04d-%02d-%02d %02d:%02d:%02d ", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
-                       t.wSecond);
+    int k = _snwprintf(w, 40, L"%04d-%02d-%02d %02d:%02d:%02d %6u ", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                       t.wSecond, GetTickCount() / 1000);
     va_list a;
     va_start(a, fmt);
     _vsnwprintf(w + k, 296 - k, fmt, a);
@@ -65,11 +74,28 @@ static void Log(const wchar_t* fmt, ...)
     wcscat(w, L"\r\n");
     char b[600];
     int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, b, sizeof(b), NULL, NULL);
-    DWORD wr;
-    SetFilePointer(f, 0, NULL, FILE_END);
-    if (n > 1)
-        WriteFile(f, b, n - 1, &wr, NULL);
-    CloseHandle(f);
+    if (n <= 1)
+        return;
+    HuPath(ram, L"\\Temp\\VestaStub.log");
+    HuPath(dir, L"\\SDMemory\\VestaLogs");
+    HuPath(path, L"\\SDMemory\\VestaLogs\\VestaStub.log");
+    if (!s_logFlushed) {
+        Append(ram, b, n - 1);
+        CreateDirectory(dir, NULL);   // fails without the card: the lines wait in RAM
+        if (!There(dir))
+            return;
+        HANDLE f = CreateFile(ram, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) {   // everything so far, this line included
+            static char buf[16384];
+            DWORD got = 0;
+            ReadFile(f, buf, sizeof(buf), &got, NULL);
+            CloseHandle(f);
+            Append(path, buf, got);
+        }
+        s_logFlushed = true;
+        return;
+    }
+    Append(path, b, n - 1);
 }
 
 static int ReadCount()
@@ -358,6 +384,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
     Log(L"=== VestaStub");
 
     wchar_t p[MAX_PATH];
+    {   // the boot: the volumes come up after us - wait a little for the SD card (its flag) and for VestaHome
+        wchar_t sd[MAX_PATH], vh0[MAX_PATH];
+        HuPath(sd, L"\\SDMemory");
+        DWORD t0 = GetTickCount();
+        while (!There(sd) && GetTickCount() - t0 < 6000)
+            Sleep(250);
+        while (!FindVesta(vh0) && GetTickCount() - t0 < 20000)
+            Sleep(250);
+        Log(L"тома: SD %s, VestaHome %s (через %u мс)", There(sd) ? L"есть" : L"нет", FindVesta(vh0) ? vh0 : L"не найден",
+            GetTickCount() - t0);
+    }
     HuPath(p, L"\\SDMemory\\VestaStub.off");
     if (There(p))
         return RunOriginal(args, L"флаг VestaStub.off на SD");
@@ -378,6 +415,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
         HANDLE h = Start(vh, NULL);
         if (!h) {
             Log(L"VestaHome не запустился (%u): %s", GetLastError(), vh);
+            Sleep(3000);   // (at the boot it may need a moment: not three tries in a blink)
             continue;   // counted: the third time gives the original
         }
         Log(L"VestaHome запущен (%d-я попытка): %s", fails + 1, vh);
