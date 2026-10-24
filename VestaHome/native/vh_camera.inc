@@ -11,6 +11,8 @@ static int  s_rvcAngle;   // the angle drawn, tenths of a degree
 static bool s_rvcValid;
 static int  s_rvcSignal = -1;   // the video input's signal at the show (0: none - the camera is off)
 static bool s_rvcManual;  // the camera shown by hand ("Настройки -> Автомобиль"), a tap closes it
+static DWORD s_rvcManualTick;   // when (it closes by itself after kRvcManualMs, and when a reverse ends)
+enum { kRvcManualMs = 20000 };
 #ifndef UNDER_CE
 static bool s_rvcFake;    // PC test build: R toggles a "reverse"
 #endif
@@ -28,6 +30,7 @@ static LRESULT CALLBACK RvcProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     switch (msg) {
     case WM_ERASEBKGND:
         return 1;
+    case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:   // the camera shown by hand: a tap closes it (RvcTick hides the window)
         s_rvcManual = false;
         return 0;
@@ -47,7 +50,8 @@ static LRESULT CALLBACK RvcProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SetTextColor(dc, RGB(240, 240, 240));
             HGDIOBJ of = SelectObject(dc, Font(22, 700));
             RECT tr = { 40, 180, 760, 300 };
-            DrawText(dc, L"Нет сигнала камеры.\nОна включается только на заднем ходу.\nНажмите, чтобы закрыть.", -1,
+            DrawText(dc, L"Нет сигнала камеры.\nОна включается только на заднем ходу.\nНажмите, чтобы закрыть "
+                         L"(само закроется через 20 с).", -1,
                      &tr, DT_CENTER | DT_WORDBREAK);
             SelectObject(dc, of);
         }
@@ -146,6 +150,14 @@ static void RvcTick()
     rev = s_rvcFake ? 1 : 0;
 #endif
     RvcAfterShell(rev);
+    // shown by hand (HU 2026-10-24-2: a tap did not close it, nor did the reverse - the shell's window over ours took
+    // the taps, it seems): closed by itself after 20 s, and when a reverse ends
+    static int s_revWas = -1;
+    if (s_rvcManual && ((s_revWas == 1 && rev != 1) || GetTickCount() - s_rvcManualTick > kRvcManualMs)) {
+        s_rvcManual = false;
+        VLog(L"камера: показ вручную закрыт сам (%s)", s_revWas == 1 && rev != 1 ? L"задний ход кончился" : L"20 с");
+    }
+    s_revWas = rev;
     // ours when set so, or when the stock shell is not there to show it (VestaHome as the shell: HU 2026-10-24)
     bool own = s_cfg.rvcOwn || !FindWindow(NULL, L"RadioCommWindow");
     bool want = (own && rev == 1) || s_rvcManual;

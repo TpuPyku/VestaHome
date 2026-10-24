@@ -793,6 +793,7 @@ static void DoAction(const Btn& b)
     }
     case A_RVCVIEW:   // the camera's picture now, whatever the gear (powered only in reverse? - to be seen)
         s_rvcManual = true;
+        s_rvcManualTick = GetTickCount();
         VLog(L"камера: показать вручную");
         RvcTick();
         break;

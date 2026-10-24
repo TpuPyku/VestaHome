@@ -420,7 +420,8 @@ struct Pager {
     int    (*pages)();
     bool   round;
 };
-static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true }, { S_RADIO, &s_radioPage, RadioPages, true },
+static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true },
+                                 { S_RADIO, &s_radioPage, RadioPages, false },   // (no round: СВ -> FM1 left СВ on, HU 2026-10-24-2)
                                  { S_APPS, &s_page, AppsPages, false }, { S_FILES, &s_filePage, FilePages, false },
                                  { S_PHOTO, &s_phPage, PhotoPages, false },
                                  { S_SAVER_PICK, &s_phPage, PhotoPages, false },

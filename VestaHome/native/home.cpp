@@ -988,7 +988,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
         return 0;
     case WM_LBUTTONDOWN:
-        s_lastTouch = GetTickCount();
+        s_lastTouch = GetTickCount();   // (also the press's settling: WM_MOUSEMOVE)
         s_downX = (short)LOWORD(lp);
         s_downY = (short)HIWORD(lp);
         s_pressed = HitTest((short)LOWORD(lp), (short)HIWORD(lp));
@@ -1013,11 +1013,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RedrawArea(0, 60, 800, 140);
             return 0;
         }
+        // A resistive panel's point wanders by some px while the finger settles (HU 2026-10-24-2: a tap on a preset
+        // turned the page, the pressed look came and went): for kSettleMs the press point follows it, no drag yet.
+        if ((wp & MK_LBUTTON) && !s_drag && !s_listDrag && GetTickCount() - s_lastTouch < kSettleMs) {
+            s_downX = (short)LOWORD(lp);
+            s_downY = (short)HIWORD(lp);
+            return 0;
+        }
         {   // (a block: the case labels below)
             Scroll* ls = (wp & MK_LBUTTON) ? ListUnderFinger() : NULL;
             if (ls) {
                 int dy = (short)HIWORD(lp) - s_downY;
-                if (!s_listDrag && (dy > 12 || dy < -12)) {
+                if (!s_listDrag && (dy > kDragPx || dy < -kDragPx)) {
                     s_listDrag = true;
                     s_listDrag0 = ls->pos;
                     KillTimer(hwnd, TIMER_LONG);
@@ -1033,8 +1040,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if ((wp & MK_LBUTTON) && CanSwipe() && !s_btHold &&
             !(s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY)) {
             int dx = (short)LOWORD(lp) - s_downX, dy = (short)HIWORD(lp) - s_downY;
-            // a resistive screen gives few points of a light swipe (HU 2026-10-24): the drag starts early
-            if (!s_drag && (dx > 14 || dx < -14) && abs(dx) > abs(dy))
+            // a resistive screen gives few points of a light swipe (HU 2026-10-24): the drag starts early - but past
+            // the finger's own wobble, and clearly sideways (HU 2026-10-24-2)
+            if (!s_drag && (dx > kDragPx || dx < -kDragPx) && abs(dx) > 2 * abs(dy))
                 DragStart();
             if (s_drag) {
                 DragMove(dx);
@@ -1090,7 +1098,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         // no drag began (the panel lost the finger between): a sideways lift still turns the page, not a tap
         int dy = (short)HIWORD(lp) - s_downY;
-        if ((CanSwipe() || s_screen == S_PHOTO_VIEW) && (dx > 50 || dx < -50) && abs(dx) > abs(dy)) {
+        if ((CanSwipe() || s_screen == S_PHOTO_VIEW) && (dx > 60 || dx < -60) && abs(dx) > 2 * abs(dy)) {
             Redraw();   // the old page without the pressed look: the frame the new one pushes out
             if (Swipe(dx < 0 ? 1 : -1)) {
                 BuildButtons();

@@ -93,19 +93,30 @@ static void NmeaPortSet(bool on)
         RegStr(k, L"ProcVolPrefix", L"$udevice");
         RegCloseKey(k);
     }
-    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\VestaNMEA", 0, NULL, 0, 0, NULL, &k, &disp) == ERROR_SUCCESS) {
+    // Where it runs, tried in turn (HU 2026-10-24-2: the user-mode group failed with 2 - no udevice.exe to start, it
+    // seems): its own udevice.exe group, the firmware's group 3, then in device.exe itself (no Flags).
+    static const DWORD kGroup[3] = { 0x20, 3, 0 };
+    static const wchar_t* kWhere[3] = { L"своя группа udevice", L"группа 3 прошивки", L"в device.exe" };
+    for (int i = 0; i < 3 && !h; i++) {
+        if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\VestaNMEA", 0, NULL, 0, 0, NULL, &k, &disp) != ERROR_SUCCESS)
+            break;
         RegStr(k, L"Dll", L"VestaNMEA.dll");
         RegStr(k, L"Prefix", L"COM");
         RegDw(k, L"Index", s_cfg.nmeaCom);
-        RegDw(k, L"Flags", 0x10);   // DEVFLAGS_LOAD_AS_USERPROC
-        RegDw(k, L"UserProcGroup", 0x20);
         RegStr(k, L"FriendlyName", L"VestaHome NMEA port");
+        if (kGroup[i]) {
+            RegDw(k, L"Flags", 0x10);   // DEVFLAGS_LOAD_AS_USERPROC
+            RegDw(k, L"UserProcGroup", kGroup[i]);
+        } else {
+            RegDeleteValue(k, L"Flags");
+            RegDeleteValue(k, L"UserProcGroup");
+        }
         RegCloseKey(k);
+        h = ActivateDeviceEx(L"Drivers\\VestaNMEA", NULL, 0, NULL);
+        s_nmeaErr = h ? 0 : GetLastError();
+        VLog(L"порт NMEA: COM%d %s, %s (%lu)", s_cfg.nmeaCom, h ? L"загружен" : L"не загрузился", kWhere[i], s_nmeaErr);
     }
-    h = ActivateDeviceEx(L"Drivers\\VestaNMEA", NULL, 0, NULL);
-    s_nmeaErr = h ? 0 : GetLastError();
     s_nmeaState = h ? 1 : -1;
-    VLog(L"порт NMEA: COM%d %s (%lu)", s_cfg.nmeaCom, h ? L"загружен" : L"не загрузился", s_nmeaErr);
 #else
     s_nmeaState = on ? 1 : 0;   // PC: the driver is the unit's only
     VLog(L"порт NMEA: ПК - только запомнено (%d)", on ? 1 : 0);

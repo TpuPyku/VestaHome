@@ -2379,6 +2379,14 @@ static void RunAction(int id)
         // the stub's part only when it changes something: the same stub in place - VestaHome alone, no reboot
         int stubJob = g_tickVh && (id == B_SETUP ? !(stub && SameFile(kShellPath, g_stubSrc)) : stub);
         int proxyJob = g_tickProxy;
+        if (id == B_SETUP && proxyJob) {   // both proxies current already: no part of theirs (HU 2026-10-24-2: their
+            char md5[33];                  // "already ours" refusal took the stub's update down with it)
+            if (FileMd5(g_dll, md5, NULL) && HexEq(md5, kProxyMd5) &&
+                (!FileExists(g_btProxySrc) || Md5Is(g_btDll, kBtProxyMd5))) {
+                proxyJob = 0;
+                LogMsg(L"setup: both proxies current - the job without them");
+            }
+        }
         if (id == B_REMOVE && proxyJob) {   // the factory DLL in place already: only the leftovers, no job
             char md5[33];
             if (!(FileMd5(g_dll, md5, NULL) && (HexEq(md5, kProxyMd5) || IsOldProxy(md5)))) {

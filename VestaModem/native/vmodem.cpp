@@ -65,6 +65,21 @@ static void Text(const BYTE* b, DWORD n, char* out, int cap)   // the reply, pri
     out[o] = 0;
 }
 
+// The unit's USBD hands out its arrays of USB_INTERFACE / USB_ENDPOINT bigger than the SDK's structs (HU 2026-10-24-2:
+// the second endpoint read 4 bytes off - "00:упр:1287" is the next descriptor's 07 05): each element's dwCount is
+// its size, so the steps go by it.
+static LPCUSB_INTERFACE ItfAt(LPCUSB_CONFIGURATION cfg, DWORD i)
+{
+    DWORD size = cfg->lpInterfaces[0].dwCount;
+    return (LPCUSB_INTERFACE)((const BYTE*)cfg->lpInterfaces + i * (size ? size : sizeof(USB_INTERFACE)));
+}
+
+static LPCUSB_ENDPOINT EpAt(LPCUSB_INTERFACE itf, int k)
+{
+    DWORD size = itf->lpEndpoints[0].dwCount;
+    return (LPCUSB_ENDPOINT)((const BYTE*)itf->lpEndpoints + k * (size ? size : sizeof(USB_ENDPOINT)));
+}
+
 struct Dev {
     USB_HANDLE    h;
     LPCUSB_FUNCS  f;
@@ -105,10 +120,10 @@ static bool Bulk(Dev* d, USB_PIPE p, bool in, void* buf, DWORD len, DWORD* got, 
 static LPCUSB_ENDPOINT FindEp(LPCUSB_INTERFACE itf, bool in)   // its bulk endpoint of that direction
 {
     for (int i = 0; i < itf->Descriptor.bNumEndpoints; i++) {
-        const USB_ENDPOINT_DESCRIPTOR& e = itf->lpEndpoints[i].Descriptor;
+        const USB_ENDPOINT_DESCRIPTOR& e = EpAt(itf, i)->Descriptor;
         if ((e.bmAttributes & USB_ENDPOINT_TYPE_MASK) == USB_ENDPOINT_TYPE_BULK &&
             ((e.bEndpointAddress & USB_ENDPOINT_DIRECTION_MASK) != 0) == in)
-            return &itf->lpEndpoints[i];
+            return EpAt(itf, i);
     }
     return NULL;
 }
@@ -121,7 +136,7 @@ static void SwitchHuawei(Dev* d, LPCUSB_DEVICE dev)
                                    0x11, 0x06, 0x20, 0, 0, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     LPCUSB_CONFIGURATION cfg = dev->lpActiveConfig;
     for (DWORD i = 0; cfg && i < cfg->dwNumInterfaces; i++) {
-        LPCUSB_INTERFACE itf = &cfg->lpInterfaces[i];
+        LPCUSB_INTERFACE itf = ItfAt(cfg, i);
         if (itf->Descriptor.bInterfaceClass != 8)
             continue;
         LPCUSB_ENDPOINT out = FindEp(itf, false), in = FindEp(itf, true);
@@ -161,13 +176,18 @@ static void LogDevice(LPCUSB_DEVICE dev)
     LPCUSB_CONFIGURATION cfg = dev->lpActiveConfig;
     if (!cfg)
         return;
+    Log(L"  размеры USBD: устройство %u, конфигурация %u, интерфейс %u (SDK %u), конец %u (SDK %u); интерфейсов %u",
+        dev->dwCount, cfg->dwCount, cfg->dwNumInterfaces ? cfg->lpInterfaces[0].dwCount : 0, sizeof(USB_INTERFACE),
+        cfg->dwNumInterfaces && cfg->lpInterfaces[0].Descriptor.bNumEndpoints ? cfg->lpInterfaces[0].lpEndpoints[0].dwCount : 0,
+        sizeof(USB_ENDPOINT), cfg->dwNumInterfaces);
     for (DWORD i = 0; i < cfg->dwNumInterfaces; i++) {
-        const USB_INTERFACE_DESCRIPTOR& id = cfg->lpInterfaces[i].Descriptor;
+        LPCUSB_INTERFACE itf = ItfAt(cfg, i);
+        const USB_INTERFACE_DESCRIPTOR& id = itf->Descriptor;
         char eps[160];
         int o = 0;
         eps[0] = 0;
         for (int k = 0; k < id.bNumEndpoints && o < 140; k++) {
-            const USB_ENDPOINT_DESCRIPTOR& e = cfg->lpInterfaces[i].lpEndpoints[k].Descriptor;
+            const USB_ENDPOINT_DESCRIPTOR& e = EpAt(itf, k)->Descriptor;
             static const char* kType[4] = { "упр", "изохр", "bulk", "прер" };
             o += _snprintf(eps + o, sizeof(eps) - o, " %02X:%s:%d", e.bEndpointAddress,
                            kType[e.bmAttributes & USB_ENDPOINT_TYPE_MASK], e.wMaxPacketSize);
@@ -178,13 +198,24 @@ static void LogDevice(LPCUSB_DEVICE dev)
 }
 
 // The modem mode: every vendor-class interface with a bulk pair asked "AT" and "ATI"; the replies logged.
-static DWORD WINAPI ProbeThread(LPVOID p)
+static void Probe(Dev* d);
+
+static DWORD WINAPI ProbeThread(LPVOID p)   // (a fault in it into the log, not device.exe's end)
 {
-    Dev* d = (Dev*)p;
+    __try {
+        Probe((Dev*)p);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        Log(L"проба: исключение %08X", GetExceptionCode());
+    }
+    return 0;
+}
+
+static void Probe(Dev* d)
+{
     LPCUSB_DEVICE dev = d->f->lpGetDeviceInfo(d->h);
     LPCUSB_CONFIGURATION cfg = dev ? dev->lpActiveConfig : NULL;
     for (DWORD i = 0; cfg && i < cfg->dwNumInterfaces && !d->gone; i++) {
-        LPCUSB_INTERFACE itf = &cfg->lpInterfaces[i];
+        LPCUSB_INTERFACE itf = ItfAt(cfg, i);
         if (itf->Descriptor.bInterfaceClass != 0xFF || itf->Descriptor.bAlternateSetting)
             continue;
         LPCUSB_ENDPOINT out = FindEp(itf, false), in = FindEp(itf, true);
@@ -213,7 +244,6 @@ static DWORD WINAPI ProbeThread(LPVOID p)
             d->f->lpClosePipe(pi);
     }
     Log(L"проба портов закончена");
-    return 0;
 }
 
 static BOOL WINAPI Notify(LPVOID p, DWORD code, LPDWORD*, LPDWORD*, LPDWORD*, LPDWORD*)
@@ -238,7 +268,11 @@ extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE i
     LPCUSB_DEVICE dev = f->lpGetDeviceInfo(h);
     if (!dev || itf)
         return TRUE;   // (registered for whole devices only)
-    LogDevice(dev);
+    __try {
+        LogDevice(dev);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        Log(L"разбор устройства: исключение %08X", GetExceptionCode());
+    }
     WORD vid = dev->Descriptor.idVendor, pid = dev->Descriptor.idProduct;
     Dev* d = new Dev;
     if (!d)
@@ -248,7 +282,11 @@ extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE i
     d->thread = NULL;
     d->gone = false;
     if (vid == kHuawei && pid == kHuaweiCd) {
-        SwitchHuawei(d, dev);
+        __try {
+            SwitchHuawei(d, dev);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            Log(L"переключение: исключение %08X", GetExceptionCode());
+        }
     } else if (vid == kHuawei && pid == kHuaweiModem) {
         d->thread = CreateThread(NULL, 0, ProbeThread, d, 0, NULL);
     } else {
