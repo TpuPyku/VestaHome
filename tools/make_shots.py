@@ -6,7 +6,7 @@ its book and call log: the shared memories VestaBT4 / VestaBTPB1, demo data) and
 saving what the window drew into docs/shots/<NN>_<name>.png (not in git: made again on demand). The window's
 VestaHome.ini is kept and put back. Windows only (ctypes, Pillow).
 
-Usage: python VestaHome/tools/make_shots.py [out_dir]
+Usage: python VestaHome/tools/make_shots.py [out_dir]   (VH_SHOTS=name,name... - only those)
 """
 import ctypes
 import json
@@ -50,7 +50,12 @@ SHOTS = [
     ('power', [SETTINGS, SET['info'], (728, 356)]),
     ('car_sensors', [HOME, ('swipeback',), ('sleep', 2), (130, 330)]),   # from page 3 to 2: the car widget
     ('car_widget_set', [HOME, ('sleep', 2), (240, 256)]),
+    ('speed_set', [HOME, (760, 86)]),   # (home's page 1: run alone - VH_SHOTS=speed_set,weather_set,camdl)
+    ('weather_set', [HOME, (760, 256)]), ('camdl', [HOME, (760, 86), (400, 440)]),
 ]
+
+if os.environ.get('VH_SHOTS'):   # only these (comma-separated names), from a fresh start
+    SHOTS = [st for st in SHOTS if st[0] in os.environ['VH_SHOTS'].split(',')]
 
 k32 = ctypes.windll.kernel32
 u32 = ctypes.windll.user32

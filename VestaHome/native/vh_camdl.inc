@@ -297,8 +297,8 @@ static void ScrCamDl(HDC dc)
     if (!s_dlStatus[0] && s_cfg.camUpdated)
         _snwprintf(s_dlStatus, 100, L"обновлено %02d.%02d.%04d", s_cfg.camUpdated % 100, s_cfg.camUpdated / 100 % 100,
                    s_cfg.camUpdated / 10000);
-    T(dc, 20, 446, s_dlStatus[0] ? s_dlStatus : L"файл speedcam\\speedcam.txt (iGO) в папке VestaHome", 15, kMuted, 400,
-      AL_START, 360);
+    TWrap(dc, 96, 436, s_dlStatus[0] ? s_dlStatus : L"файл speedcam\\speedcam.txt (iGO) в папке VestaHome", 13, kMuted,
+          400, 288, 2, 16);   // the bottom strip, right of "back"
     Button(dc, 392, 410, 176, 58, L"Раз в неделю", s_on[T_CAM_WEEKLY] ? B_SEL : B_N, IC_REFRESH, 13, 24, A_TOGGLE,
            T_CAM_WEEKLY);
     Button(dc, 576, 410, 208, 58, s_dlBusy ? L"Загрузка…" : L"Скачать", s_dlBusy ? B_DIS : B_PRI, IC_NONE, 18, 0,

@@ -25,7 +25,7 @@ static void ScrWSetWeather(HDC dc)
 {
     static const wchar_t* prov[W_COUNT] = { L"Open-Meteo", L"OpenWeather", L"Яндекс" };
     Frame(dc, L"Погода · Настройки");
-    Panel(dc, 16, 64, 768, 400);
+    Panel(dc, 16, 64, 768, 344);   // (above y 408: "back" at the bottom left)
     wchar_t s[120];
     int p = s_cfg.weatherProv;
     WRow(dc, 68, L"Источник", p == W_OMETEO ? L"открытый, без ключа" : p == W_OWM ? L"бесплатный ключ на openweathermap.org"
@@ -58,8 +58,8 @@ static void ScrWSetWeather(HDC dc)
     Button(dc, 576, 354, 192, 44, L"Обновить", B_PRI, IC_REFRESH, 15, 22, A_WXNOW);
     // Open-Meteo's data is CC BY 4.0: its credit wherever it is shown in detail (here; also "About the system")
     bool om = p == W_OMETEO || (w.have && w.prov == W_OMETEO);
-    T(dc, 36, 440, om ? L"Обновляется раз в 30 мин. Weather data by Open-Meteo.com (CC BY 4.0)"
-                      : L"Обновляется раз в 30 мин.", 13, kDim, 400, AL_START, 728);
+    T(dc, 96, 450, om ? L"Обновляется раз в 30 мин. Weather data by Open-Meteo.com (CC BY 4.0)"
+                      : L"Обновляется раз в 30 мин.", 13, kDim, 400, AL_START, 680);
 }
 
 static void RegionsText(wchar_t* s, int n);
@@ -68,7 +68,7 @@ static void ScrWSetSpeed(HDC dc)
 {
     static const wchar_t* dist[4] = { L"По скорости", L"200 м", L"400 м", L"600 м" };
     Frame(dc, L"Скорость и камеры");
-    Panel(dc, 16, 64, 768, 400);
+    Panel(dc, 16, 64, 768, 344);   // (above y 408: "back" at the bottom left)
     wchar_t s[160], label[48];
     WRow(dc, 68, L"Предупреждать о камерах", L"знак на виджете и в верхнем баре", A_NONE, 0, 640);
     Toggle(dc, 688, 78, T_CAM_ALERT);
@@ -92,7 +92,7 @@ static void ScrWSetSpeed(HDC dc)
     _snwprintf(label, 48, L"Порт GPS · %s · %s", port, baud);
     GpsStatusText(s, 160);
     WRow(dc, 292, label, s, A_SCREEN, S_SET_CAR, 776);   // set on "Car" for the whole shell
-    WRow(dc, 348, L"Время по GPS", L"часы по спутникам, если расходятся больше чем на 30 с", A_NONE, 0, 640);
+    WRow(dc, 348, L"Время по GPS", L"часы по спутникам, если расходятся больше чем на 30 с", A_NONE, 0, 640, true);
     Toggle(dc, 688, 358, T_GPS_TIME);
     wchar_t regs[160];
     RegionsText(regs, 160);
@@ -100,7 +100,11 @@ static void ScrWSetSpeed(HDC dc)
         _snwprintf(s, 160, L"%s · обновлено %02d.%02d", regs, s_cfg.camUpdated % 100, s_cfg.camUpdated / 100 % 100);
     else
         wcscpy(s, regs);
-    WRow(dc, 404, L"Скачать базу камер (speedcamonline.ru)", s, A_SCREEN, S_CAMDL, 776, true);
+    bool down = Zone(96, 414, 688, 56, A_SCREEN, S_CAMDL);   // the bottom strip, right of "back"
+    R(dc, 96, 414, 688, 56, 14, down ? kOrange : kPanel);
+    T(dc, 112, 437, L"Скачать базу камер (speedcamonline.ru)", 17, down ? kInk : kText, 700, AL_START, 620);
+    T(dc, 112, 458, s, 13, down ? kInk : kMuted, 400, AL_START, 620);
+    Ico(dc, IC_NEXT, 744, 428, 28, down ? kInk : kDim);
 }
 
 
