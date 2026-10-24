@@ -160,12 +160,14 @@ static void ScrSetCar(HDC dc)
     _snwprintf(tank, 16, L"%d Л", s_cfg.tank);
     SetRow(dc, 304, L"Объём бака", L"для запаса хода", false, A_NONE, 0, H);
     Stepper(dc, 560, 308, 200, tank, 40, 19, A_TANK);
-    wchar_t nm[64];   // the navigators' COM6 (vh_gps.inc)
+    wchar_t nm[64], com[8];   // the navigators' port (vh_gps.inc), its number by the arrows
     if (s_nmeaState < 0)
-        _snwprintf(nm, 64, L"COM%d не загрузился (ошибка %lu)", kNmeaCom, s_nmeaErr);
+        _snwprintf(nm, 64, L"не загрузился (ошибка %lu)", s_nmeaErr);
     else
-        _snwprintf(nm, 64, L"COM%d · только NMEA%s", kNmeaCom, s_nmeaState > 0 ? L" · работает" : L"");
+        _snwprintf(nm, 64, L"только NMEA%s", s_nmeaState > 0 ? L" · работает" : L"");
     SetRow(dc, 352, L"Порт для навигаторов", nm, true, A_NONE, 0, H);
+    _snwprintf(com, 8, L"COM%d", s_cfg.nmeaCom);
+    Stepper(dc, 508, 356, 164, com, 40, 19, A_NMEACOM);
     Toggle(dc, 688, 358, T_NMEA_PORT);
 }
 

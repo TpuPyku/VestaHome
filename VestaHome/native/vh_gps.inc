@@ -16,7 +16,8 @@ typedef GpsState Gps;
 // are new at every boot: the driver is copied into \Windows (RAM: the card's copy stays free for the installer) and
 // registered again at each start, as a user-mode driver (udevice.exe) in a process group of its own - a fault of it
 // takes no other driver along.
-enum { kNmeaCom = 6 };
+// The port's number is the user's (gps.nmeacom, 2026-10-24: Navitel kept COM7 from GpsGate and its autodetect
+// only tried that one): COM5..COM9, COM6 by default.
 static int   s_nmeaState;   // 0 off, 1 on, -1 failed (s_nmeaErr)
 static DWORD s_nmeaErr;
 
@@ -70,14 +71,15 @@ static void NmeaPortSet(bool on)
         s_nmeaState = 0;
         return;
     }
-    if (h) {   // loaded already (VestaHome started again)
+    if (h) {   // loaded already (VestaHome started again; a new number: NmeaPortSet(false) first)
         s_nmeaState = 1;
         return;
     }
     wchar_t src[MAX_PATH];
     _snwprintf(src, MAX_PATH, L"%sVestaNMEA.dll", s_dir);
     s_nmeaErr = 0;
-    if (!CopyFile(src, L"\\Windows\\VestaNMEA.dll", FALSE)) {
+    if (!CopyFile(src, L"\\Windows\\VestaNMEA.dll", FALSE) &&
+        GetFileAttributes(L"\\Windows\\VestaNMEA.dll") == 0xFFFFFFFF) {   // (still held after a reload: the copy there)
         s_nmeaErr = GetLastError();
         VLog(L"порт NMEA: нет %s (%lu)", src, s_nmeaErr);
         s_nmeaState = -1;
@@ -94,7 +96,7 @@ static void NmeaPortSet(bool on)
     if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\VestaNMEA", 0, NULL, 0, 0, NULL, &k, &disp) == ERROR_SUCCESS) {
         RegStr(k, L"Dll", L"VestaNMEA.dll");
         RegStr(k, L"Prefix", L"COM");
-        RegDw(k, L"Index", kNmeaCom);
+        RegDw(k, L"Index", s_cfg.nmeaCom);
         RegDw(k, L"Flags", 0x10);   // DEVFLAGS_LOAD_AS_USERPROC
         RegDw(k, L"UserProcGroup", 0x20);
         RegStr(k, L"FriendlyName", L"VestaHome NMEA port");
@@ -103,7 +105,7 @@ static void NmeaPortSet(bool on)
     h = ActivateDeviceEx(L"Drivers\\VestaNMEA", NULL, 0, NULL);
     s_nmeaErr = h ? 0 : GetLastError();
     s_nmeaState = h ? 1 : -1;
-    VLog(L"порт NMEA: COM%d %s (%lu)", kNmeaCom, h ? L"загружен" : L"не загрузился", s_nmeaErr);
+    VLog(L"порт NMEA: COM%d %s (%lu)", s_cfg.nmeaCom, h ? L"загружен" : L"не загрузился", s_nmeaErr);
 #else
     s_nmeaState = on ? 1 : 0;   // PC: the driver is the unit's only
     VLog(L"порт NMEA: ПК - только запомнено (%d)", on ? 1 : 0);

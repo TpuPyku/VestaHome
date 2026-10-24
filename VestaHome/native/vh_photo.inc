@@ -556,6 +556,16 @@ static void DoAction(const Btn& b)
     case A_HOMEGPS:  HomeFromGps(); break;
     case A_TZ:       TzStep(b.arg); break;
     case A_GPSPORT:  GpsPortStep(b.arg); break;
+    case A_NMEACOM: {   // the navigators' port: its number; loaded again under the new one when on
+        int n = s_cfg.nmeaCom + b.arg;
+        s_cfg.nmeaCom = n < kNmeaComMin ? kNmeaComMax : n > kNmeaComMax ? kNmeaComMin : n;
+        SaveCfg();
+        if (s_cfg.nmeaPort) {
+            NmeaPortSet(false);
+            NmeaPortSet(true);
+        }
+        break;
+    }
     case A_TANK:   // the fuel tank, L: 20..120
         s_cfg.tank = s_cfg.tank + b.arg < 20 ? 20 : s_cfg.tank + b.arg > 120 ? 120 : s_cfg.tank + b.arg;
         SaveCfg();

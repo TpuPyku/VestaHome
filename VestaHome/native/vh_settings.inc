@@ -39,6 +39,8 @@ static int    s_uwCount;
 static int WgCount() { return WG_COUNT + s_uwCount; }
 static const wchar_t* WgKey(int id) { return id < WG_COUNT ? kWgKey[id] : s_uw[id - WG_COUNT].key; }
 
+enum { kNmeaComMin = 5, kNmeaComMax = 9 };   // the navigators' port: its numbers
+
 struct Cfg {
     int     weatherProv;
     wchar_t weatherKey[W_COUNT][64];   // API key per provider (Open-Meteo needs none)
@@ -71,6 +73,7 @@ struct Cfg {
     bool    videoMoving;               // the picture also while the car moves
     bool    rvcOwn;                    // the rear view camera shown by VestaHome (rvc.cpp), not by the shell
     bool    nmeaPort;                  // COM6 for the navigators: the GPS stream's NMEA only (VestaNMEA.dll)
+    int     nmeaCom;                   // its number: kNmeaComMin..kNmeaComMax (vh_gps.inc)
     bool    wifiOn;                    // the Wi-Fi radio (wifi.cpp WifiEnable)
     int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
     int     speedVol;                  // the volume by speed: 0 off, 1..3 = +2 / +3 / +4 per 100 km/h
@@ -123,6 +126,7 @@ static void CfgDefaults()
     s_cfg.camOver = -1;
     s_cfg.beepDev = 1;   // "Audio Output" 1: heard over the radio (HU 2026-10-18-2)
     s_cfg.wifiOn = true;
+    s_cfg.nmeaCom = 6;
     s_cfg.saverMin = 5;
     s_cfg.speedVol = 2;
     s_cfg.tank = 55;
@@ -438,6 +442,10 @@ static void LoadCfg()
             s_cfg.rvcOwn = CfgBool(v);
         } else if (!wcscmp(k, L"gps.nmeaport")) {
             s_cfg.nmeaPort = CfgBool(v);
+        } else if (!wcscmp(k, L"gps.nmeacom")) {
+            int n = _wtoi(v);
+            if (n >= kNmeaComMin && n <= kNmeaComMax)
+                s_cfg.nmeaCom = n;
         } else if (!wcscmp(k, L"wifi.on")) {
             s_cfg.wifiOn = CfgBool(v);
         } else if (!wcscmp(k, L"ui.media")) {
@@ -585,7 +593,8 @@ static void SaveCfg()
         L"video.dir=%s\r\nvideo.file=%s\r\nvideo.stretch=%d\r\nvideo.moving=%d\r\nradio.station=%s\r\n"
         L"# rvc.own: the rear view camera by VestaHome (without the stock shell); rvc.invert: the trajectory mirrored\r\n"
         L"rvc.own=%d\r\nrvc.invert=%d\r\nwifi.on=%d\r\n"
-        L"# gps.nmeaport: COM6 for the navigators - only the NMEA of the GPS stream (Settings -> Car)\r\ngps.nmeaport=%d\r\n"
+        L"# gps.nmeaport: a COM port for the navigators - only the NMEA of the GPS stream (Settings -> Car);\r\n"
+        L"# gps.nmeacom: its number, 5..9\r\ngps.nmeaport=%d\r\ngps.nmeacom=%d\r\n"
         L"# screen.saver: the clock after this many minutes untouched (0 = never)\r\n"
         L"screen.saver=%d\r\n"
         L"# sound.speedvol: the volume by speed, 0 off, 1..3 = +2 / +3 / +4 per 100 km/h\r\nsound.speedvol=%d\r\n"
@@ -615,7 +624,7 @@ static void SaveCfg()
         s_cfg.camOver, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
+        s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
     if (n < 0)
