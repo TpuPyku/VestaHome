@@ -626,6 +626,7 @@ static void DoAction(const Btn& b)
     case A_RLIST:    McuSend3("SPApi_SendListItemControl", 0, b.arg, 0); break;
     case A_RLISTPAGE: s_rlistPage += b.arg; if (s_rlistPage < 0) s_rlistPage = 0; break;
     case A_RSCAN:    RadioScan(); break;
+    case A_RFILL:    RadioFill(); break;
     case A_BTMUSIC:  BtMusicOn(); break;
     case A_BTCMD:
         if (b.arg == BT_CMD_PLAYPAUSE || b.arg == BT_CMD_PLAY) {   // the phone's music: the source too, ours stop

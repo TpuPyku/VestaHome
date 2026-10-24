@@ -406,6 +406,9 @@ static void RadioKey(int arg)
 // (SPApi_SendListItemControl(0, row)); "Автопоиск" sweeps the band, then the list is asked for again.
 static int   s_rlistPage;
 static DWORD s_scanStart;   // the search started (0 = none)
+static int   s_fillI = -1;  // "В пресеты": the station being written (-1 = none), its step, when it began
+static int   s_fillStep, s_fillN, s_fillOk;
+static DWORD s_fillTick, s_fillArm;   // (s_fillArm: the first tap, the second within 4 s writes)
 
 static void ScrRadioList(HDC dc)
 {
@@ -455,6 +458,15 @@ static void ScrRadioList(HDC dc)
         Button(dc, 712, 232, 72, 48, NULL, s_rlistPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 28, A_RLISTPAGE, 1);
     }
     Button(dc, 632, 68, 152, 72, scanning ? L"Стоп" : L"Автопоиск", scanning ? B_SEL : B_N, IC_SEARCH, 15, 0, A_RSCAN);
+    wchar_t fl[24];   // the stations into the presets: the second tap writes, a tap while writing stops
+    bool armed = s_fillArm && GetTickCount() - s_fillArm < 4000;
+    if (s_fillI >= 0)
+        _snwprintf(fl, 24, L"Пишу %d из %d", s_fillI + 1, s_fillN);
+    else
+        wcscpy(fl, armed ? L"Заменить пресеты?" : L"В пресеты");
+    bool can = n > 0 && !scanning;
+    Button(dc, 632, 148, 152, 72, fl, s_fillI >= 0 || armed ? B_SEL : can ? B_N : B_DIS, IC_NONE, 13, 0,
+           can || s_fillI >= 0 ? A_RFILL : A_NONE);
     R(dc, 632, 292, 152, 98, 12, kPanel);
     wchar_t c[8];
     _snwprintf(c, 8, L"%d", n);
@@ -482,6 +494,80 @@ static void RadioScanTick()
         s_rlistPage = 0;
         McuKey(0x3C, false);
     }
+}
+
+// "В пресеты" (the user 2026-10-24): the list's stations one by one into the presets of the same numbers (FM: up to
+// 24 = FM1..FM3; УКВ: 8) - each tuned from the list (0, row, 0), then saved where it plays (1, n, 1), as a long press
+// does. A step waits for the MCU: the frequency, then the preset's new value (or a timeout - noted in the log).
+enum { TIMER_RFILL = 22 };
+static void Redraw();
+
+static void RadioFill()
+{
+    if (s_fillI >= 0) {   // a tap while writing: stop
+        KillTimer(s_wnd, TIMER_RFILL);
+        _snwprintf(s_status, 96, L"в пресеты: остановлено, записано %d", s_fillOk);
+        s_fillI = -1;
+        return;
+    }
+    if (!s_fillArm || GetTickCount() - s_fillArm >= 4000) {   // the first tap: asks
+        s_fillArm = GetTickCount();
+        return;
+    }
+    s_fillArm = 0;
+    Tuner t;
+    TunerGet(&t);
+    int max = t.presets ? t.presets : t.band == 1 ? 8 : 24;
+    s_fillN = t.listCount < max ? t.listCount : max;
+    if (s_fillN > kTunList)
+        s_fillN = kTunList;
+    if (s_fillN <= 0)
+        return;
+    s_fillI = 0;
+    s_fillStep = 0;
+    s_fillOk = 0;
+    VLog(L"радио: в пресеты %d станций", s_fillN);
+    SetTimer(s_wnd, TIMER_RFILL, 250, NULL);
+}
+
+static void RadioFillTick()
+{
+    if (s_fillI < 0) {
+        KillTimer(s_wnd, TIMER_RFILL);
+        return;
+    }
+    Tuner t;
+    TunerGet(&t);
+    DWORD now = GetTickCount(), age = now - s_fillTick;
+    int f = t.list[s_fillI];
+    if (s_fillStep == 0) {   // tune it from the list
+        McuSend3("SPApi_SendListItemControl", 0, s_fillI, 0);
+        s_fillStep = 1;
+        s_fillTick = now;
+    } else if (s_fillStep == 1) {   // playing (and settled a moment): save
+        if ((t.f10 == f && age >= 700) || age >= 3000) {
+            if (t.f10 != f)
+                VLog(L"радио: в пресеты %d - частота %d вместо %d", s_fillI + 1, t.f10, f);
+            McuSend3("SPApi_SendListItemControl", 1, s_fillI, 1);
+            s_fillStep = 2;
+            s_fillTick = now;
+        }
+    } else if (t.preset[s_fillI] == f || age >= 2500) {   // the preset changed (or not): the next
+        if (t.preset[s_fillI] == f)
+            s_fillOk++;
+        else
+            VLog(L"радио: в пресеты %d - пресет %d, ждали %d", s_fillI + 1, t.preset[s_fillI], f);
+        if (++s_fillI >= s_fillN) {
+            KillTimer(s_wnd, TIMER_RFILL);
+            VLog(L"радио: в пресеты записано %d из %d", s_fillOk, s_fillN);
+            _snwprintf(s_status, 96, L"в пресеты записано %d из %d", s_fillOk, s_fillN);
+            s_fillI = -1;
+        } else {
+            s_fillStep = 0;
+        }
+    }
+    if (s_screen == S_RADIO_LIST && IsWindowVisible(s_wnd))
+        Redraw();
 }
 
 // Radio -> PTY: the RDS programme type (its codes 0..15 in order; 0 = all) chosen, then "search" as the stock shell
