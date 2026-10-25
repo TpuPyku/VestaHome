@@ -217,8 +217,8 @@ static void RingFlush()
 
     if (skipped)
         Log(L"mcu: кольцо переполнено, пропущено %d", skipped);
-    for (int i = 0; i < to - from; i++) {
-        const InMsg* m = &buf[i];
+    for (int k = 0; k < to - from; k++) {   // not i: eVC4's cl 12.20 has no conforming for-scope (build_evc4.bat)
+        const InMsg* m = &buf[k];
         Log(L"mcu: вх. skel=%d 0x%04X len=%u p=%02X %02X %02X %02X", (int)m->skel, m->code, (unsigned)m->len,
             (unsigned)m->p[0], (unsigned)m->p[1], (unsigned)m->p[2], (unsigned)m->p[3]);
         int j;
@@ -357,8 +357,8 @@ static int McuHost()
         navStarted();
     if (sendDialog)
         sendDialog();
-    for (int i = 0; i < 4 && askTimes; i++)
-        askTimes(i);
+    for (int k = 0; k < 4 && askTimes; k++)   // not i: eVC4's cl 12.20 has no conforming for-scope
+        askTimes(k);
     Log(L"mcu: скелеты зарегистрированы (%d), запуск как у оболочки %s, маршрут звука %s",
         (int)(sizeof(kIds) / sizeof(kIds[0])), navStarted && sendDialog ? L"да" : L"НЕТ", s_svRoute ? L"есть" : L"НЕТ");
     s_cntTick = GetTickCount();
