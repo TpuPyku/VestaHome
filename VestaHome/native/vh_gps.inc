@@ -129,6 +129,21 @@ static void NmeaPortSet(bool on)
         s_nmeaState = -1;
         return;
     }
+    {   // the DLL in this process first (HU 2026-10-25: 2 in udevice.exe, 1 in device.exe - does it load at all?)
+        HMODULE m = LoadLibrary(L"\\Windows\\VestaNMEA.dll");
+        DWORD le = m ? 0 : GetLastError();
+        FARPROC init = m ? GetProcAddress(m, L"COM_Init") : NULL;
+        DWORD size = 0;
+        HANDLE f = CreateFile(L"\\Windows\\VestaNMEA.dll", GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE) {
+            size = GetFileSize(f, NULL);
+            CloseHandle(f);
+        }
+        VLog(L"порт NMEA: проба DLL здесь - %s (%lu), COM_Init %s; размер %lu Б", m ? L"загружена" : L"НЕ загружена", le,
+             init ? L"есть" : L"нет", size);
+        if (m)
+            FreeLibrary(m);
+    }
     HKEY k;
     DWORD disp;
     if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\ProcGroup_0020", 0, NULL, 0, 0, NULL, &k, &disp) ==

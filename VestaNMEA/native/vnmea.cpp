@@ -99,15 +99,59 @@ static int Waiting(Open* o)
     return n;
 }
 
+// A trace of the loading (HU 2026-10-25: ActivateDeviceEx failed - 2 in udevice.exe, 1 in device.exe - and it is
+// not known whether this DLL is loaded at all): one line per step into \SDMemory\VestaLogs\VestaNMEA.log, ASCII,
+// none when \SDMMC\VestaLogs.off is there or the card is not.
+static void Trace(const char* what, DWORD v)
+{
+#ifdef UNDER_CE
+    if (GetFileAttributes(L"\\SDMMC\\VestaLogs.off") != 0xFFFFFFFF ||
+        GetFileAttributes(L"\\SDMemory\\VestaLogs") == 0xFFFFFFFF)
+        return;
+    HANDLE f = CreateFile(L"\\SDMemory\\VestaLogs\\VestaNMEA.log", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS,
+                          0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    char line[96];
+    int n = 0;
+    DWORD t = GetTickCount(), pid = GetCurrentProcessId();
+    const char* hex = "0123456789ABCDEF";
+    for (int i = 9; i >= 0; i--, t /= 10)
+        line[n + i] = (char)('0' + t % 10);
+    n += 10;
+    line[n++] = ' ';
+    for (int i = 0; i < 8; i++)
+        line[n++] = hex[pid >> (28 - 4 * i) & 15];
+    line[n++] = ' ';
+    while (*what && n < 70)
+        line[n++] = *what++;
+    line[n++] = ' ';
+    for (int i = 0; i < 8; i++)
+        line[n++] = hex[v >> (28 - 4 * i) & 15];
+    line[n++] = '\r';
+    line[n++] = '\n';
+    DWORD w;
+    SetFilePointer(f, 0, NULL, FILE_END);
+    WriteFile(f, line, n, &w, NULL);
+    CloseHandle(f);
+#else
+    (void)what;
+    (void)v;
+#endif
+}
+
 extern "C" {
 
-BOOL WINAPI DllMain(HANDLE, DWORD, LPVOID)
+BOOL WINAPI DllMain(HANDLE, DWORD reason, LPVOID)
 {
+    if (reason == DLL_PROCESS_ATTACH)
+        Trace("DllMain attach", reason);
     return TRUE;
 }
 
-DWORD COM_Init(LPCTSTR, LPCVOID)
+DWORD COM_Init(LPCTSTR active, LPCVOID)
 {
+    Trace("COM_Init", (DWORD)active);
     Port* p = (Port*)LocalAlloc(LPTR, sizeof(Port));
     if (!p)
         return 0;
