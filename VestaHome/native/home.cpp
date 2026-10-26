@@ -95,7 +95,8 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
-              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_WIFIDEL };
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
+              A_PLUGPAGE };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -110,7 +111,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -168,6 +169,7 @@ static Pix*     s_saverBits;
 static Pix*     s_tile[2];    // one period of the background (s_tileW x s_tileH, top-down), day / night
 static int     s_tileW, s_tileH;      // the skin's tile, or the triangle mosaic's period
 static int     s_pressed = -1;
+static int     s_pressAct = -1, s_pressArg;   // what was pressed: the list may be rebuilt before the finger lifts
 static bool    s_night;
 static int     s_mcuNight = -1, s_bright = -1;   // the backlight: 0x4105 day / night, 0x4107 level
 // A partial frame (RedrawArea): everything is drawn clipped to s_clip, the buttons are not registered again
@@ -311,6 +313,7 @@ static COLORREF C(COLORREF c)
 #include "vh_textedit.inc"
 #include "vh_sound.inc"
 #include "vh_camdl.inc"
+#include "vh_plugins.inc"
 #include "vh_frame.inc"
 #include "vh_resume.inc"
 #include "vh_photo.inc"
@@ -356,6 +359,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         CfgToControls();
         s_bootTick = GetTickCount();
         UserWidgetsScan();   // (after the ini: their places in the order)
+        PluginsStart();      // the add-ons (Plugins\*): they say hello when ready
         ResumeScreen();
         WaveDevsLog();
         {
@@ -481,6 +485,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             McuKey(0x54, false);
             return 0;
         }
+        if (wp == 1)
+            PlugScreenWatch();   // an add-on's screen came or went: screen.open / screen.close
         if (wp == 1 && s_screen == S_RADIO_LIST && s_scanStart && IsWindowVisible(hwnd)) {
             RadioScanTick();
             Redraw();
@@ -1001,6 +1007,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         s_downX = (short)LOWORD(lp);
         s_downY = (short)HIWORD(lp);
         s_pressed = HitTest((short)LOWORD(lp), (short)HIWORD(lp));
+        s_pressAct = s_pressed >= 0 ? s_btns[s_pressed].action : -1;
+        s_pressArg = s_pressed >= 0 ? s_btns[s_pressed].arg : 0;
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
         if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD)   // the keyboard's cursor to the finger
@@ -1116,7 +1124,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         Redraw();
-        if (i >= 0 && i == was) {
+        // the same control as pressed - by what it does, not by its place on the list: a redraw between the press and
+        // the lift (an add-on's update, a status line) may have rebuilt the list (the first tap was lost, 2026-10-26)
+        if (i >= 0 && was >= 0 && s_btns[i].action == s_pressAct && s_btns[i].arg == s_pressArg) {
             s_slideDir = 0;
             DoAction(s_btns[i]);
             if (IsWindow(hwnd) && IsWindowVisible(hwnd)) {
@@ -1157,10 +1167,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
 #endif
+    case WM_COPYDATA: {   // an add-on's command (vh_plugins.inc, docs/plugin-api.md)
+        const COPYDATASTRUCT* c = (const COPYDATASTRUCT*)lp;
+        if (!c || c->dwData != VHAP_MAGIC || !c->lpData)
+            return FALSE;
+        static wchar_t cmd[1024];
+        int n = (int)(c->cbData / sizeof(wchar_t));
+        n = n > 1023 ? 1023 : n;
+        memcpy(cmd, c->lpData, n * sizeof(wchar_t));
+        cmd[n] = 0;
+        PlugReceive((HWND)wp, cmd);
+        return TRUE;
+    }
     case MM_WOM_DONE:   // the camera beep has been played
         VoiceDone();
         return 0;
     case WM_DESTROY:
+        PluginsQuit();
         UiRememberTick();   // the screen and the source as they are now, and what waits for the minute's save
         if (s_cfgSoon) {
             s_cfgSoon = false;

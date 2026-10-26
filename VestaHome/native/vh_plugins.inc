@@ -1,0 +1,548 @@
+﻿// vh_plugins.inc - part of home.cpp (included there, in order): add-ons (docs/plugin-api.md, API 1). An add-on is
+// a program of its own: VestaHome starts the ones in Plugins\<Name>\<Name>.exe (not switched off - the file
+// "disabled" in its folder), it says hello by WM_COPYDATA ("VHAP": one command a message, "verb\tkey=value..."
+// in UTF-16) and declares widgets and screens; VestaHome draws them in its own style and sends the taps back.
+// VestaHome stays free: whatever an add-on does lives in its own program (the user's decision, 2026-10-26).
+// Step 1: hello / bye, widgets (through the user widgets' list), described screens, notify, open; "Settings ->
+// General -> Add-ons". Not yet: own windows, the bottom bar's buttons, image widgets, the data subscriptions.
+
+#define VHAP_MAGIC 0x56484150   // 'VHAP'
+enum { kPlugMax = 4, kPlugScreens = 4, kPlugItems = 16, kPlugWidgets = 2, kPlugRows = 6, kPlugApi = 1 };
+
+struct PlugItem { wchar_t id[24], type[12], label[48], sub[64], value[48], options[64], link[24]; };
+struct PlugScreen { wchar_t id[24], title[48]; int n; PlugItem it[kPlugItems]; };
+struct PlugWidget { wchar_t id[24], title[40], icon[16], screen[24], value[24], unit[24], text[2][96]; int state;
+                    bool wide; };
+struct Plugin {
+    wchar_t    id[24], name[48], ver[16], dir[MAX_PATH];   // dir: its folder ("" - started from elsewhere)
+    HWND       hwnd;                                       // its window (0 - not connected)
+    bool       off;                                        // switched off: not started with VestaHome
+    int        ns, nw;
+    PlugScreen sc[kPlugScreens];
+    PlugWidget wg[kPlugWidgets];
+};
+static Plugin s_plug[kPlugMax];
+static int    s_plugN;
+static int    s_plugCur = -1, s_plugScr = -1, s_plugPage;   // the add-on screen shown (S_PLUGIN)
+static int    s_plugOpenP = -1, s_plugOpenS = -1;           // the one told "screen.open" (for its "screen.close")
+
+// A field of a command: "key=value" between tabs; false (out "") when it is not there.
+static bool PlugField(const wchar_t* cmd, const wchar_t* key, wchar_t* out, int cap)
+{
+    out[0] = 0;
+    int kl = (int)wcslen(key);
+    for (const wchar_t* p = wcschr(cmd, L'\t'); p; p = wcschr(p + 1, L'\t')) {
+        if (wcsncmp(p + 1, key, kl) || p[1 + kl] != L'=')
+            continue;
+        const wchar_t* v = p + 2 + kl;
+        int n = 0;
+        while (v[n] && v[n] != L'\t' && n < cap - 1) {
+            out[n] = v[n];
+            n++;
+        }
+        out[n] = 0;
+        return true;
+    }
+    return false;
+}
+
+static void PlugSend(Plugin& p, const wchar_t* fmt, ...)
+{
+    if (!p.hwnd || !IsWindow(p.hwnd)) {
+        p.hwnd = NULL;
+        return;
+    }
+    wchar_t s[512];
+    va_list a;
+    va_start(a, fmt);
+    int n = _vsnwprintf(s, 511, fmt, a);
+    va_end(a);
+    s[511] = 0;
+    if (n < 0)
+        n = (int)wcslen(s);
+    COPYDATASTRUCT c;
+    c.dwData = VHAP_MAGIC;
+    c.cbData = n * sizeof(wchar_t);
+    c.lpData = s;
+    SendMessage(p.hwnd, WM_COPYDATA, (WPARAM)s_wnd, (LPARAM)&c);
+}
+
+static Plugin* PlugById(const wchar_t* id)
+{
+    for (int i = 0; i < s_plugN; i++)
+        if (!_wcsicmp(s_plug[i].id, id))
+            return &s_plug[i];
+    return NULL;
+}
+
+static Plugin* PlugByWnd(HWND h)
+{
+    for (int i = 0; i < s_plugN; i++)
+        if (s_plug[i].hwnd == h)
+            return &s_plug[i];
+    return NULL;
+}
+
+static PlugScreen* PlugScreenOf(Plugin& p, const wchar_t* id, int* idx = NULL)
+{
+    for (int i = 0; i < p.ns; i++)
+        if (!wcscmp(p.sc[i].id, id)) {
+            if (idx)
+                *idx = i;
+            return &p.sc[i];
+        }
+    return NULL;
+}
+
+static Icon PlugIcon(const wchar_t* name)
+{
+    for (int i = 0; i < (int)(sizeof(kIconNames) / sizeof(kIconNames[0])); i++)
+        if (!_wcsicmp(name, kIconNames[i].name))
+            return kIconNames[i].ic;
+    return IC_APPS;
+}
+
+// The connected add-ons' widgets into the user widgets' list (UserWidgetsScan calls it, before their order is read):
+// key "p:<add-on>.<widget>", drawn by WUser, a tap - widget.tap to the add-on.
+static void PlugWidgetsAppend()
+{
+    for (int i = 0; i < s_plugN; i++) {
+        Plugin& p = s_plug[i];
+        for (int k = 0; p.hwnd && k < p.nw && s_uwCount < kWgUser; k++) {
+            const PlugWidget& g = p.wg[k];
+            UserWg& u = s_uw[s_uwCount++];
+            memset(&u, 0, sizeof(u));
+            _snwprintf(u.key, 40, L"p:%s.%s", p.id, g.id);
+            u.key[39] = 0;
+            wcscpy(u.title, g.title);
+            u.ic = PlugIcon(g.icon);
+            u.wide = g.wide;
+            u.have = true;
+            wcscpy(u.tap, L"plugin");
+            wcscpy(u.value, g.value);
+            wcscpy(u.unit, g.unit);
+            wcscpy(u.text[0], g.text[0]);
+            wcscpy(u.text[1], g.text[1]);
+            u.state = g.state;
+        }
+    }
+}
+
+static void PlugWidgetCopy(Plugin& p, const PlugWidget& g)   // a widget's new values into its entry on the list
+{
+    wchar_t key[40];
+    _snwprintf(key, 40, L"p:%s.%s", p.id, g.id);
+    key[39] = 0;
+    for (int i = 0; i < s_uwCount; i++)
+        if (!wcscmp(s_uw[i].key, key)) {
+            wcscpy(s_uw[i].value, g.value);
+            wcscpy(s_uw[i].unit, g.unit);
+            wcscpy(s_uw[i].text[0], g.text[0]);
+            wcscpy(s_uw[i].text[1], g.text[1]);
+            s_uw[i].state = g.state;
+        }
+    if (s_screen == S_HOME && IsWindowVisible(s_wnd))
+        Redraw();
+}
+
+static bool PlugWidgetTap(const UserWg& u)   // an add-on's widget tapped: its screen, or the event
+{
+    if (wcsncmp(u.key, L"p:", 2))
+        return false;
+    wchar_t pid[24];
+    const wchar_t* dot = wcschr(u.key + 2, L'.');
+    if (!dot)
+        return true;
+    int n = (int)(dot - u.key - 2) < 23 ? (int)(dot - u.key - 2) : 23;
+    wcsncpy(pid, u.key + 2, n);
+    pid[n] = 0;
+    Plugin* p = PlugById(pid);
+    if (!p)
+        return true;
+    for (int k = 0; k < p->nw; k++)
+        if (!wcscmp(p->wg[k].id, dot + 1)) {
+            int s;
+            if (p->wg[k].screen[0] && PlugScreenOf(*p, p->wg[k].screen, &s)) {
+                s_plugCur = (int)(p - s_plug);
+                s_plugScr = s;
+                s_plugPage = 0;
+                Go(S_PLUGIN, true);
+            }
+            PlugSend(*p, L"widget.tap\tid=%s", p->wg[k].id);
+        }
+    return true;
+}
+
+static void PlugOpen(Plugin& p, int s)
+{
+    s_plugCur = (int)(&p - s_plug);
+    s_plugScr = s;
+    s_plugPage = 0;
+    Go(S_PLUGIN, true);
+    Redraw();
+}
+
+static void PlugItemSet(PlugItem& it, const wchar_t* cmd)   // the fields a command names
+{
+    wchar_t v[96];
+    if (PlugField(cmd, L"type", v, 12)) wcscpy(it.type, v);
+    if (PlugField(cmd, L"label", v, 48)) wcscpy(it.label, v);
+    if (PlugField(cmd, L"sub", v, 64)) wcscpy(it.sub, v);
+    if (PlugField(cmd, L"value", v, 48)) wcscpy(it.value, v);
+    if (PlugField(cmd, L"options", v, 64)) wcscpy(it.options, v);
+    if (PlugField(cmd, L"link", v, 24)) wcscpy(it.link, v);
+}
+
+static void PlugWidgetSet(PlugWidget& g, const wchar_t* cmd)
+{
+    wchar_t v[96];
+    if (PlugField(cmd, L"title", v, 40)) wcscpy(g.title, v);
+    if (PlugField(cmd, L"icon", v, 16)) wcscpy(g.icon, v);
+    if (PlugField(cmd, L"screen", v, 24)) wcscpy(g.screen, v);
+    if (PlugField(cmd, L"size", v, 8)) g.wide = !wcscmp(v, L"2") || !wcscmp(v, L"2x1");
+    if (PlugField(cmd, L"value", v, 24)) wcscpy(g.value, v);
+    if (PlugField(cmd, L"unit", v, 24)) wcscpy(g.unit, v);
+    if (PlugField(cmd, L"text", v, 96)) wcscpy(g.text[0], v);
+    if (PlugField(cmd, L"text2", v, 96)) wcscpy(g.text[1], v);
+    if (PlugField(cmd, L"state", v, 8))
+        g.state = !wcscmp(v, L"ok") ? 1 : !wcscmp(v, L"warn") ? 2 : !wcscmp(v, L"alert") ? 3 : 0;
+}
+
+// A command from an add-on's window from (WM_COPYDATA). Unknown commands and fields are passed over.
+static void PlugReceive(HWND from, const wchar_t* cmd)
+{
+    wchar_t verb[24], id[24], v[96];
+    int n = 0;
+    while (cmd[n] && cmd[n] != L'\t' && n < 23) {
+        verb[n] = cmd[n];
+        n++;
+    }
+    verb[n] = 0;
+    if (!wcscmp(verb, L"hello")) {
+        PlugField(cmd, L"id", id, 24);
+        if (!id[0])
+            return;
+        Plugin* p = PlugById(id);
+        if (!p && s_plugN < kPlugMax) {   // started from elsewhere: known from now
+            p = &s_plug[s_plugN++];
+            memset(p, 0, sizeof(*p));
+            wcscpy(p->id, id);
+        }
+        if (!p)
+            return;
+        p->hwnd = PlugField(cmd, L"hwnd", v, 16) ? (HWND)wcstoul(v, NULL, 16) : from;
+        if (!p->hwnd)
+            p->hwnd = from;
+        PlugField(cmd, L"name", p->name, 48);
+        if (!p->name[0])
+            wcscpy(p->name, id);
+        PlugField(cmd, L"ver", p->ver, 16);
+        p->ns = p->nw = 0;   // (declared again after each hello)
+        VLog(L"дополнение: %s (%s %s) подключено", p->id, p->name, p->ver);
+        PlugSend(*p, L"welcome\tapi=%d\tvh=%s\tnight=%d\taccent=%06X\tlang=ru", kPlugApi, VhVersion(), s_night ? 1 : 0,
+                 (unsigned)(GetRValue(kOrange) << 16 | GetGValue(kOrange) << 8 | GetBValue(kOrange)));
+        if (s_screen == S_SET_PLUGINS && IsWindowVisible(s_wnd))
+            Redraw();
+        return;
+    }
+    Plugin* p = PlugByWnd(from);
+    if (!p && PlugField(cmd, L"from", id, 24))
+        p = PlugById(id);
+    if (!p)
+        return;   // not said hello
+    if (!wcscmp(verb, L"bye")) {
+        VLog(L"дополнение: %s отключилось", p->id);
+        p->hwnd = NULL;
+        p->ns = p->nw = 0;
+        UserWidgetsScan();
+        if (s_screen == S_PLUGIN && s_plugCur == (int)(p - s_plug))
+            Back();
+        Redraw();
+    } else if (!wcscmp(verb, L"widget") || !wcscmp(verb, L"widget.set")) {
+        PlugField(cmd, L"id", id, 24);
+        int k = 0;
+        while (k < p->nw && wcscmp(p->wg[k].id, id))
+            k++;
+        if (k == p->nw) {
+            if (wcscmp(verb, L"widget") || k == kPlugWidgets)
+                return;
+            memset(&p->wg[k], 0, sizeof(PlugWidget));
+            wcscpy(p->wg[k].id, id);
+            p->nw++;
+            PlugWidgetSet(p->wg[k], cmd);
+            UserWidgetsScan();   // a new one: on the list (and in "Widgets of home"), hidden or not as set
+            Redraw();
+            return;
+        }
+        PlugWidgetSet(p->wg[k], cmd);
+        PlugWidgetCopy(*p, p->wg[k]);
+    } else if (!wcscmp(verb, L"screen")) {
+        PlugField(cmd, L"id", id, 24);
+        PlugScreen* s = PlugScreenOf(*p, id);
+        if (!s) {
+            if (p->ns == kPlugScreens)
+                return;
+            s = &p->sc[p->ns++];
+            memset(s, 0, sizeof(*s));
+            wcscpy(s->id, id);
+        }
+        PlugField(cmd, L"title", s->title, 48);
+    } else if (!wcscmp(verb, L"screen.clear")) {
+        PlugField(cmd, L"id", id, 24);
+        PlugScreen* s = PlugScreenOf(*p, id);
+        if (s)
+            s->n = 0;
+    } else if (!wcscmp(verb, L"item") || !wcscmp(verb, L"item.set")) {
+        PlugField(cmd, L"screen", v, 24);
+        PlugScreen* s = PlugScreenOf(*p, v);
+        if (!s)
+            return;
+        PlugField(cmd, L"id", id, 24);
+        int k = 0;
+        while (k < s->n && wcscmp(s->it[k].id, id))
+            k++;
+        if (k == s->n) {
+            if (wcscmp(verb, L"item") || k == kPlugItems)
+                return;
+            memset(&s->it[k], 0, sizeof(PlugItem));
+            wcscpy(s->it[k].id, id);
+            s->n++;
+        }
+        PlugItemSet(s->it[k], cmd);
+        if (s_screen == S_PLUGIN && s_plugCur == (int)(p - s_plug) && IsWindowVisible(s_wnd))
+            Redraw();
+    } else if (!wcscmp(verb, L"notify")) {
+        PlugField(cmd, L"text", v, 96);
+        _snwprintf(s_status, 96, L"%s", v);
+        s_status[95] = 0;
+        if (IsWindowVisible(s_wnd))
+            Redraw();
+    } else if (!wcscmp(verb, L"open")) {
+        PlugField(cmd, L"screen", v, 24);
+        int s;
+        if (PlugScreenOf(*p, v, &s)) {
+            ShowWindow(s_wnd, SW_SHOW);
+            SetForegroundWindow(s_wnd);
+            PlugOpen(*p, s);
+        }
+    }
+}
+
+// Each second (and on leaving the screen): "screen.open" / "screen.close" to the add-on whose screen came / went.
+static void PlugScreenWatch()
+{
+    int p = s_screen == S_PLUGIN ? s_plugCur : -1, s = s_screen == S_PLUGIN ? s_plugScr : -1;
+    if (p == s_plugOpenP && s == s_plugOpenS)
+        return;
+    if (s_plugOpenP >= 0 && s_plugOpenP < s_plugN && s_plugOpenS < s_plug[s_plugOpenP].ns)
+        PlugSend(s_plug[s_plugOpenP], L"screen.close\tid=%s", s_plug[s_plugOpenP].sc[s_plugOpenS].id);
+    s_plugOpenP = p;
+    s_plugOpenS = s;
+    if (p >= 0 && s >= 0 && s < s_plug[p].ns)
+        PlugSend(s_plug[p], L"screen.open\tid=%s", s_plug[p].sc[s].id);
+}
+
+// The add-ons' folders: Plugins\<Name>\<Name>.exe next to VestaHome; the ones not switched off are started.
+static void PluginsStart()
+{
+    wchar_t pat[MAX_PATH];
+    _snwprintf(pat, MAX_PATH, L"%sPlugins\\*", s_dir);
+    WIN32_FIND_DATA fd;
+    HANDLE f = FindFirstFile(pat, &fd);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.' || s_plugN == kPlugMax)
+            continue;
+        Plugin& p = s_plug[s_plugN];
+        memset(&p, 0, sizeof(p));
+        wcsncpy(p.id, fd.cFileName, 23);
+        wcscpy(p.name, p.id);
+        _snwprintf(p.dir, MAX_PATH, L"%sPlugins\\%s\\", s_dir, fd.cFileName);
+        wchar_t exe[MAX_PATH], off[MAX_PATH];
+        _snwprintf(exe, MAX_PATH, L"%s%s.exe", p.dir, fd.cFileName);
+        if (GetFileAttributes(exe) == 0xFFFFFFFF)
+            continue;
+        s_plugN++;
+        _snwprintf(off, MAX_PATH, L"%sdisabled", p.dir);
+        p.off = GetFileAttributes(off) != 0xFFFFFFFF;
+        if (p.off)
+            continue;
+        PROCESS_INFORMATION pi;
+#ifdef UNDER_CE
+        bool ok = CreateProcess(exe, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi) != 0;
+#else
+        STARTUPINFO si;
+        memset(&si, 0, sizeof(si));
+        si.cb = sizeof(si);
+        bool ok = CreateProcess(exe, NULL, NULL, NULL, FALSE, 0, NULL, p.dir, &si, &pi) != 0;
+#endif
+        if (ok) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+        VLog(L"дополнение: %s %s", exe, ok ? L"запущено" : L"не запустилось");
+    } while (FindNextFile(f, &fd));
+    FindClose(f);
+}
+
+static void PluginsQuit()   // VestaHome closes: the add-ons too
+{
+    for (int i = 0; i < s_plugN; i++)
+        PlugSend(s_plug[i], L"quit");
+}
+
+static void PlugSwitch(int i)   // "Add-ons": on / off (the file "disabled" in its folder), started at once when on
+{
+    if (i < 0 || i >= s_plugN || !s_plug[i].dir[0])
+        return;
+    Plugin& p = s_plug[i];
+    wchar_t off[MAX_PATH];
+    _snwprintf(off, MAX_PATH, L"%sdisabled", p.dir);
+    if (p.off) {
+        DeleteFile(off);
+        p.off = false;
+        wchar_t exe[MAX_PATH];
+        _snwprintf(exe, MAX_PATH, L"%s%s.exe", p.dir, p.id);
+        PROCESS_INFORMATION pi;
+        if (CreateProcess(exe, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+        }
+    } else {
+        HANDLE h = CreateFile(off, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (h != INVALID_HANDLE_VALUE)
+            CloseHandle(h);
+        p.off = true;
+        PlugSend(p, L"quit");
+    }
+    VLog(L"дополнение: %s %s", p.id, p.off ? L"выключено" : L"включено");
+}
+
+// Settings -> General -> Add-ons: each one found or connected, its state; on / off, "Открыть" its first screen.
+static void ScrSetPlugins(HDC dc)
+{
+    Settings(dc, S_SET_PLUGINS);
+    if (!s_plugN) {
+        SetRow(dc, 64, L"Дополнений нет", L"программы дополнений — в папке VestaHome\\Plugins", true);
+        return;
+    }
+    for (int i = 0; i < s_plugN && i < 6; i++) {
+        Plugin& p = s_plug[i];
+        int y = 64 + i * 56;
+        wchar_t sub[96];
+        _snwprintf(sub, 96, L"%s%s%s", p.ver[0] ? p.ver : L"", p.ver[0] ? L" · " : L"",
+                   p.hwnd ? L"подключено" : p.off ? L"выключено" : L"не подключено");
+        SetRow(dc, y, p.name, sub, i == s_plugN - 1);
+        if (p.hwnd && p.ns)
+            Button(dc, 556, y + 8, 116, 40, L"Открыть", B_N, IC_NONE, 14, 0, A_PLUGOPEN, i);
+        if (p.dir[0]) {   // the switch (s_on is for the fixed ones: drawn here)
+            bool on = !p.off != Zone(678, y + 2, 92, 52, A_PLUGON, i);
+            R(dc, 688, y + 10, 72, 36, 18, on ? kOrange : kPanel2);
+            Disc(dc, on ? 742 : 706, y + 28, on ? 14 : 13, on ? kInk : kDim);
+        }
+    }
+}
+
+// An add-on's described screen: its items from the top, 56 px each, kPlugRows a page; the taps go back as events.
+// arg of A_PLUGEV: item * 64 + what (0 tap, 1 toggle, 2 step -1, 3 step +1, 8 + n the n-th option).
+static void ScrPlugin(HDC dc)
+{
+    if (s_plugCur < 0 || s_plugCur >= s_plugN || s_plugScr < 0 || s_plugScr >= s_plug[s_plugCur].ns) {
+        Frame(dc, L"Дополнение");
+        T(dc, 400, 240, L"Дополнение отключилось", 20, kMuted, 600, AL_MID);
+        return;
+    }
+    Plugin& p = s_plug[s_plugCur];
+    PlugScreen& sc = p.sc[s_plugScr];
+    Frame(dc, sc.title[0] ? sc.title : p.name);
+    Panel(dc, 16, 64, 768, 344);
+    int pages = sc.n ? (sc.n + kPlugRows - 1) / kPlugRows : 1;
+    if (s_plugPage >= pages)
+        s_plugPage = pages - 1;
+    for (int r = 0; r < kPlugRows; r++) {
+        int i = s_plugPage * kPlugRows + r, y = 68 + r * 56;
+        if (i >= sc.n)
+            break;
+        PlugItem& it = sc.it[i];
+        bool last = r == kPlugRows - 1 || i == sc.n - 1;
+        const wchar_t* sub = it.sub[0] ? it.sub : NULL;
+        if (!wcscmp(it.type, L"button")) {
+            Button(dc, 32, y + 6, 736, 44, it.label, B_N, IC_NONE, 17, 0, A_PLUGEV, i * 64);
+        } else if (!wcscmp(it.type, L"toggle")) {
+            WRow(dc, y, it.label, sub, A_NONE, 0, 640, last);
+            bool on = (it.value[0] == L'1') != Zone(678, y + 2, 92, 52, A_PLUGEV, i * 64 + 1);
+            R(dc, 688, y + 10, 72, 36, 18, on ? kOrange : kPanel2);
+            Disc(dc, on ? 742 : 706, y + 28, on ? 14 : 13, on ? kInk : kDim);
+        } else if (!wcscmp(it.type, L"seg")) {
+            WRow(dc, y, it.label, sub, A_NONE, 0, 340, last);
+            const wchar_t* opt[6];
+            wchar_t buf[64];
+            wcscpy(buf, it.options);
+            int n = 0;
+            for (wchar_t* t = buf; *t && n < 6;) {
+                opt[n++] = t;
+                wchar_t* bar = wcschr(t, L'|');
+                if (!bar)
+                    break;
+                *bar = 0;
+                t = bar + 1;
+            }
+            int cur = _wtoi(it.value), w = 416, cw = n ? (w - 4) / n : w;
+            R(dc, 352, y + 6, w, 44, 22, kPanel2);
+            for (int k = 0; k < n; k++) {
+                int cx = 354 + k * cw;
+                bool on = Zone(cx, y + 6, cw, 44, A_PLUGEV, i * 64 + 8 + k) || k == cur;
+                if (on)
+                    R(dc, cx, y + 8, cw, 40, 20, kOrange);
+                T(dc, cx + cw / 2, y + 34, opt[k], 14, on ? kInk : kMuted, 700, AL_MID, cw - 6);
+            }
+        } else if (!wcscmp(it.type, L"stepper")) {
+            WRow(dc, y, it.label, sub, A_NONE, 0, 540, last);
+            Button(dc, 556, y + 8, 48, 40, NULL, B_N, IC_BACK, 18, 28, A_PLUGEV, i * 64 + 2);
+            T(dc, 662, y + 35, it.value, 19, kText, 700, AL_MID, 100);
+            Button(dc, 720, y + 8, 48, 40, NULL, B_N, IC_NEXT, 18, 28, A_PLUGEV, i * 64 + 3);
+        } else if (!wcscmp(it.type, L"row")) {
+            WRow(dc, y, it.label, sub, A_PLUGEV, i * 64, 776, last);
+        } else {   // "value" (and anything unknown: shown as a value)
+            WRow(dc, y, it.label, sub, A_NONE, 0, 520, last);
+            T(dc, 760, y + 35, it.value, 19, kText, 700, AL_END, 240);
+        }
+    }
+    if (pages > 1) {
+        wchar_t s[16];
+        _snwprintf(s, 16, L"%d / %d", s_plugPage + 1, pages);
+        Button(dc, 600, 414, 56, 52, NULL, s_plugPage ? B_N : B_DIS, IC_BACK, 15, 26, A_PLUGPAGE, -1);
+        T(dc, 692, 446, s, 15, kMuted, 600, AL_MID);
+        Button(dc, 728, 414, 56, 52, NULL, s_plugPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 15, 26, A_PLUGPAGE, 1);
+    }
+}
+
+static void PlugEvent(int arg)   // a tap on an item of the screen shown
+{
+    if (s_plugCur < 0 || s_plugCur >= s_plugN || s_plugScr < 0 || s_plugScr >= s_plug[s_plugCur].ns)
+        return;
+    Plugin& p = s_plug[s_plugCur];
+    PlugScreen& sc = p.sc[s_plugScr];
+    int i = arg / 64, what = arg % 64;
+    if (i >= sc.n)
+        return;
+    PlugItem& it = sc.it[i];
+    if (what == 1) {   // the switch flips at once; the add-on may set it back
+        it.value[0] = it.value[0] == L'1' ? L'0' : L'1';
+        it.value[1] = 0;
+        PlugSend(p, L"event\tscreen=%s\tid=%s\tact=toggle\tvalue=%c", sc.id, it.id, it.value[0]);
+    } else if (what == 2 || what == 3) {
+        PlugSend(p, L"event\tscreen=%s\tid=%s\tact=step\tvalue=%s", sc.id, it.id, what == 2 ? L"-1" : L"+1");
+    } else if (what >= 8) {
+        _snwprintf(it.value, 48, L"%d", what - 8);
+        PlugSend(p, L"event\tscreen=%s\tid=%s\tact=seg\tvalue=%d", sc.id, it.id, what - 8);
+    } else if (it.link[0]) {
+        int s;
+        if (PlugScreenOf(p, it.link, &s))
+            PlugOpen(p, s);
+        PlugSend(p, L"event\tscreen=%s\tid=%s\tact=tap", sc.id, it.id);
+    } else {
+        PlugSend(p, L"event\tscreen=%s\tid=%s\tact=tap", sc.id, it.id);
+    }
+}

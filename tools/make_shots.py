@@ -45,6 +45,10 @@ SHOTS = [
 ] + [('settings_' + k, [SETTINGS, v]) for k, v in SET.items()] + [
     ('settings_bt_paired', [SETTINGS, SET['bt'], (400, 328)]),
     ('settings_wifi_saved', [SETTINGS, SET['wifi'], (710, 372)]),
+    ('set_plugins', [SETTINGS, SET['general'], ('sleep', 2), (400, 379)]),
+    ('plugin_screen', [SETTINGS, SET['general'], ('sleep', 2), (400, 379), (614, 92)]),
+    ('plugin_tap', [SETTINGS, SET['general'], ('sleep', 2), (400, 379), (614, 92), ('sleep', 2), (744, 208), ('sleep', 1), (744, 208), ('sleep', 1), (400, 96), ('sleep', 1)]),
+    ('home_widgets_p2', [SETTINGS, SET['general'], ('sleep', 3), (400, 295), (756, 440)]),
     ('settings_home_widgets', [SETTINGS, SET['general'], (400, 328)]),
     ('info_more', [SETTINGS, SET['info'], (355, 355)]), ('diagnostics', [SETTINGS, SET['info'], (590, 355)]),
     ('licenses', [SETTINGS, SET['info'], (355, 355), (627, 433)]),

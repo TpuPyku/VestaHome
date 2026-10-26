@@ -223,6 +223,8 @@ static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
 // The data file, when its write time changed; true: something to draw anew.
 static bool UserWgRead(UserWg& w)
 {
+    if (!wcsncmp(w.key, L"p:", 2))
+        return false;   // an add-on's: its values come from it (vh_plugins.inc), no file
     WIN32_FIND_DATA fd;
     HANDLE f = FindFirstFile(w.data, &fd);
     if (f == INVALID_HANDLE_VALUE) {
@@ -544,6 +546,8 @@ static void UserWgWake(int u)   // shown again: its script, its data, its url no
     LeaveCriticalSection(&s_uwCs);
 }
 
+static void PlugWidgetsAppend();   // (vh_plugins.inc: the add-ons' widgets join the list)
+
 static void UserWidgetsScan()
 {
     wchar_t dirs[2][MAX_PATH], pat[MAX_PATH];
@@ -570,6 +574,7 @@ static void UserWidgetsScan()
         FindClose(f);
     }
     qsort(s_uw, s_uwCount, sizeof(UserWg), CmpUserWg);
+    PlugWidgetsAppend();
     bool net = false;
     for (int i = 0; i < s_uwCount; i++)
         net = net || s_uw[i].url[0];
@@ -762,7 +767,10 @@ static void ScrSetHome(HDC dc)
         Ico(dc, WgIcon(id), x + 8, y + 12, 26, shown ? kOrange : kDim);
         const wchar_t* sub = WgBig(id) ? L"большой" : WgWide(id) ? L"двойной" : NULL;
         wchar_t usub[48];
-        if (id >= WG_COUNT) {
+        if (id >= WG_COUNT && !wcsncmp(s_uw[id - WG_COUNT].key, L"p:", 2)) {   // an add-on's: nothing to edit
+            _snwprintf(usub, 48, L"дополнение%s", WgWide(id) ? L" · двойной" : L"");
+            sub = usub;
+        } else if (id >= WG_COUNT) {
             _snwprintf(usub, 48, L"%s.ini · изменить%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");
             sub = usub;
             if (Zone(x, y, 218, 54, A_UWEDIT, id - WG_COUNT))   // its file into the editor

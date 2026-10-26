@@ -73,3 +73,6 @@ G3patch/
 docs/shots/
 # the PC build: the user widgets' answers in "RAM" (Temp\VestaWidgets beside the exe)
 VestaHome/VestaHome/Temp/
+
+# add-ons put next to the PC build for testing (VestaCore/plugins/*)
+VestaHome/VestaHome/Plugins/

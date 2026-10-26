@@ -48,6 +48,9 @@ PLAN = (
         ('VestaWidgets',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\LaunchInstall',
         ('LaunchInstall.exe',)),
+    # the sample add-on (VestaCore/plugins/sample): VestaHome starts Plugins\<Name>\<Name>.exe next to itself
+    (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'SDMMC\VestaHome\Plugins\Sample',
+        ('Sample.exe',)),
 )
 
 

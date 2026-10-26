@@ -486,7 +486,16 @@ static void DoAction(const Btn& b)
         SaveCfg();
         break;
     }
-    case A_USERWG:   // a user widget's tap
+    case A_PLUGEV:   PlugEvent(b.arg); break;
+    case A_PLUGON:   PlugSwitch(b.arg); break;
+    case A_PLUGPAGE: s_plugPage += b.arg; if (s_plugPage < 0) s_plugPage = 0; break;
+    case A_PLUGOPEN:
+        if (b.arg >= 0 && b.arg < s_plugN && s_plug[b.arg].ns)
+            PlugOpen(s_plug[b.arg], 0);
+        break;
+    case A_USERWG:   // a user widget's tap (an add-on's: to the add-on)
+        if (b.arg >= 0 && b.arg < s_uwCount && PlugWidgetTap(s_uw[b.arg]))
+            break;
         if (b.arg >= 0 && b.arg < s_uwCount && s_uw[b.arg].tap[0])
             UserWgRun(s_uw[b.arg], s_uw[b.arg].tap, L"нажатие");
         break;
