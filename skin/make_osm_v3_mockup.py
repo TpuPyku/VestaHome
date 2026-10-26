@@ -25,9 +25,27 @@ TILES = os.path.join(ROOT, 'OSMapsCE', 'VTileTest', 'tiles', '14')
 FONTS = os.path.join(ROOT, 'VestaHome', 'VestaHome', 'VestaHome', 'Fonts')
 W, H, K = 800, 480, 2          # the screen; everything is drawn K times larger and scaled down (smooth edges)
 
-# VestaHome's palette (skin.ini, make_maps_mockup.py); the accent is VestaHome's (the user picks it there)
+# VestaHome's palette (skin.ini, make_maps_mockup.py). The accent - and the car's glow - is VestaHome's theme
+# (Settings -> Screen -> Theme: a Lada Vesta paint, screen.accent of VestaHome.ini; VestaHome's kAccents), the
+# user's rule 2026-10-26: OSMapsCE takes it from there.
 INK, PANEL, PANEL2, LINE = (0x0b, 0x0c, 0x0e), (0x17, 0x19, 0x1c), (0x22, 0x25, 0x2a), (0x34, 0x38, 0x3f)
-TEXT, MUTED, DIM, ACCENT = (0xf3, 0xf1, 0xec), (0xa3, 0xa8, 0xb0), (0x5d, 0x63, 0x6c), (0xff, 0x6b, 0x1a)
+TEXT, MUTED, DIM = (0xf3, 0xf1, 0xec), (0xa3, 0xa8, 0xb0), (0x5d, 0x63, 0x6c)
+ACCENTS = {130: ('Марс', (0xff, 0x6b, 0x1a)), 195: ('Сердолик', (0xdc, 0x3c, 0x3c)), 247: ('Карфаген', (0xc3, 0xb8, 0x9c)),
+           372: ('Криптон', (0x72, 0xc0, 0x59)), 476: ('Дайвинг', (0x4f, 0x7a, 0xca)), 619: ('Булат', (0xab, 0xba, 0xd8)),
+           691: ('Платина', (0xee, 0xee, 0xee))}
+ACCENT = ACCENTS[130][1]
+
+
+def theme_accent():
+    """The accent of the PC build's VestaHome.ini (what the user has chosen), Марс without one."""
+    ini = os.path.join(ROOT, 'VestaHome', 'VestaHome', 'VestaHome', 'VestaHome.ini')
+    try:
+        for line in open(ini, encoding='utf-8', errors='replace'):
+            if line.startswith('screen.accent='):
+                return ACCENTS.get(int(line.split('=')[1]), ACCENTS[130])
+    except (OSError, ValueError):
+        pass
+    return ACCENTS[130]
 FREE, SLOW, JAM, STAND = (40, 190, 70), (255, 196, 0), (232, 40, 30), (140, 16, 16)
 ROUTE, ROUTE_EDGE = (61, 139, 255), (18, 52, 128)
 
@@ -738,6 +756,8 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     FEATS = load_tiles()
     RT = json.load(open(os.path.join(OUT, 'route.json'), encoding='utf-8'))
+    global ACCENT
+    ACCENT = ACCENTS[130][1]   # the page shows the design's own orange; make_vh_v07_mockup.py - the other paints
     shots = [screen_drive(False), screen_drive(True), screen_browse(), screen_preview(), screen_editor(),
              screen_longpress(), screen_search()]
     pal = []
