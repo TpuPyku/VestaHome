@@ -23,6 +23,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #define STBI_NO_STDIO   // (the boot picture: PNG / JPEG, as VestaHome's photos - stb_image from VestaHome/native)
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
@@ -55,12 +56,16 @@ static bool There(const wchar_t* p)
 // ---- the boot picture (the user 2026-10-26: not a black screen while VestaHome loads; the stock shell shows its
 // NEW_LOGO.PNG right after the firmware's logo). From the stub's start until VestaHome's window is in sight (or the
 // stock shell's - a fallback - or 90 s): the picture over the whole screen and three dots running under it. The
-// picture: VestaHome's Skin\boot.png (or .jpg) if there is one, else the stock shell's own NEW_LOGO.PNG on the unit.
+// picture: one's own Skin\bootmy.png (or .jpg) as it is; else VestaHome's Skin\boot.png with the soft spot of the
+// accent chosen in VestaHome (as on its saver: 16 %, the same shape and place; screen.accent of VestaHome.ini); else
+// the stock shell's own NEW_LOGO.PNG on the unit.
 static volatile bool s_splashEnd;
 static HBITMAP s_splashBmp;
 static int     s_splashDot;
 
-static bool SplashLoad(const wchar_t* path)   // the picture into an 800 x 480 DIB (centred, cut)
+static void SplashGlow(DWORD* px);
+
+static bool SplashLoad(const wchar_t* path, bool glow)   // the picture into an 800 x 480 DIB (centred, cut)
 {
     HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (f == INVALID_HANDLE_VALUE)
@@ -100,9 +105,57 @@ static bool SplashLoad(const wchar_t* path)   // the picture into an 800 x 480 D
                 dst[y * 800 + x] = (DWORD)q[0] << 16 | (DWORD)q[1] << 8 | q[2];
             }
         }
+        if (glow)
+            SplashGlow(dst);
     }
     stbi_image_free(px);
     return s_splashBmp != NULL;
+}
+
+// The accent of VestaHome's settings (a Lada Vesta paint code, VestaHome's kAccents); Марс when not found.
+static COLORREF SplashAccent()
+{
+    static const struct { int code; COLORREF c; } kAcc[] = { { 130, RGB(0xff, 0x6b, 0x1a) }, { 195, RGB(0xdc, 0x3c, 0x3c) },
+        { 247, RGB(0xc3, 0xb8, 0x9c) }, { 372, RGB(0x72, 0xc0, 0x59) }, { 476, RGB(0x4f, 0x7a, 0xca) },
+        { 619, RGB(0xab, 0xba, 0xd8) }, { 691, RGB(0xee, 0xee, 0xee) } };
+    wchar_t path[MAX_PATH];
+    HuPath(path, L"\\SDMMC\\VestaHome\\VestaHome.ini");
+    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    int code = 130;
+    if (f != INVALID_HANDLE_VALUE) {
+        static char buf[16384];
+        DWORD got = 0;
+        ReadFile(f, buf, sizeof(buf) - 1, &got, NULL);
+        CloseHandle(f);
+        buf[got] = 0;
+        const char* k = strstr(buf, "\nscreen.accent=");
+        if (k)
+            code = atoi(k + 15);
+    }
+    for (int i = 0; i < (int)(sizeof(kAcc) / sizeof(kAcc[0])); i++)
+        if (kAcc[i].code == code)
+            return kAcc[i].c;
+    return kAcc[0].c;
+}
+
+// The saver's spot (VestaHome: SaverSpot) over the picture: exp(-2.2 r^2) around (400, 192), 16 % of the accent.
+static void SplashGlow(DWORD* px)
+{
+    COLORREF c = SplashAccent();
+    int ar = GetRValue(c), ag = GetGValue(c), ab = GetBValue(c);
+    for (int y = 0; y < 480; y++)
+        for (int x = 0; x < 800; x++) {
+            double dx = (x - 400) / 330.0, dy = (y - 192) / 200.0;
+            int a = (int)(10486 * exp(-2.2 * (dx * dx + dy * dy)));   // of 65536
+            if (a <= 0)
+                continue;
+            DWORD p = px[y * 800 + x];
+            int r = p >> 16 & 255, g = p >> 8 & 255, b = p & 255;
+            r += ((ar - r) * a + 32768) >> 16;
+            g += ((ag - g) * a + 32768) >> 16;
+            b += ((ab - b) * a + 32768) >> 16;
+            px[y * 800 + x] = (DWORD)r << 16 | (DWORD)g << 8 | b;
+        }
 }
 
 static void SplashDots(HDC dc)   // three dots under the picture, the one lit runs
@@ -168,12 +221,13 @@ static LRESULT CALLBACK SplashProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 static DWORD WINAPI SplashThread(LPVOID)
 {
-    static const wchar_t* kPics[] = { L"\\SDMMC\\VestaHome\\Skin\\boot.png", L"\\SDMMC\\VestaHome\\Skin\\boot.jpg",
+    static const wchar_t* kPics[] = { L"\\SDMMC\\VestaHome\\Skin\\bootmy.png", L"\\SDMMC\\VestaHome\\Skin\\bootmy.jpg",
+                                      L"\\SDMMC\\VestaHome\\Skin\\boot.png",
                                       L"\\ResidentFlash\\navigation\\app\\res\\img\\Itelma\\MMC27\\Main\\NEW_LOGO.PNG" };
     wchar_t path[MAX_PATH];
     for (int i = 0; i < (int)(sizeof(kPics) / sizeof(kPics[0])) && !s_splashBmp; i++) {
         HuPath(path, kPics[i]);
-        SplashLoad(path);
+        SplashLoad(path, i == 2);   // the spot only on ours
     }
     WNDCLASS wc;
     memset(&wc, 0, sizeof(wc));

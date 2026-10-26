@@ -3,8 +3,8 @@
 
 Shown by VestaStub from its start until VestaHome is in sight (three dots run under it, drawn by the stub). It
 follows the firmware's own boot logo (chrome on black, MAIN/4120/startup.raw) and leads to VestaHome's design
-(the user 2026-10-26): the same black, the name in the middle with a chrome-like light from above, a thin accent
-line under it, and VestaHome's rhombus mosaic coming up from the bottom. Full 24-bit colour.
+(the user 2026-10-26): the same black, the name in the middle with a chrome-like light from above, and VestaHome's
+rhombus mosaic coming up from the bottom; the stub lays the saver's soft spot of the accent over it. 24-bit colour.
 
 Usage: python VestaHome/skin/make_boot.py
 """
@@ -18,7 +18,6 @@ FONT = os.path.join(HERE, '..', 'VestaHome', 'VestaHome', 'Fonts', 'GolosText-Bo
 W, H = 800, 480
 CW, CH = 64, 112   # the mosaic's cell, as VestaHome's background and saver
 SHADES = {'left': (0x17, 0x1a, 0x20), 'right': (0x12, 0x14, 0x19), 'top': (0x1b, 0x1e, 0x24), 'bottom': (0x0f, 0x11, 0x14)}
-ACCENT = (0xFF, 0x6B, 0x1A)   # Mars, the default accent
 
 
 def mosaic():
@@ -65,13 +64,9 @@ def main():
             cp[x, y] = (c, c, min(255, c + 6))
     base = Image.composite(chrome, base, mask)
 
-    # the accent line under it, soft at its ends
+    # (no accent line: VestaStub lays the saver's spot of the accent chosen in VestaHome over the picture)
     d = ImageDraw.Draw(base)
-    ly, lw = 196 + th // 2 + 26, 140
-    for i in range(lw):
-        k = min(1.0, min(i, lw - 1 - i) / 30.0)
-        col = tuple(int(a * k) for a in ACCENT)
-        d.line([(W // 2 - lw // 2 + i, ly), (W // 2 - lw // 2 + i, ly + 3)], fill=col)
+    ly = 196 + th // 2 + 14
     small = ImageFont.truetype(FONT.replace('Bold', 'Regular'), 20)
     sub = 'оболочка для Lada Vesta'
     sb = small.getbbox(sub)
