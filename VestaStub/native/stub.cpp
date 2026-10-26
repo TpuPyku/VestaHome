@@ -23,6 +23,16 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#define STBI_NO_STDIO   // (the boot picture: PNG / JPEG, as VestaHome's photos - stb_image from VestaHome/native)
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_NO_HDR
+#define STBI_NO_LINEAR
+#define STBI_NO_SIMD
+#define STBI_NO_THREAD_LOCALS
+#define STBI_ASSERT(x) ((void)0)
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 static const int kMaxFails = 3;
 static wchar_t s_dir[MAX_PATH];   // our folder, with the trailing '\'
@@ -40,6 +50,150 @@ static void HuPath(wchar_t* out, const wchar_t* p)   // a path on the HU
 static bool There(const wchar_t* p)
 {
     return GetFileAttributes(p) != 0xFFFFFFFF;
+}
+
+// ---- the boot picture (the user 2026-10-26: not a black screen while VestaHome loads; the stock shell shows its
+// NEW_LOGO.PNG right after the firmware's logo). From the stub's start until VestaHome's window is in sight (or the
+// stock shell's - a fallback - or 90 s): the picture over the whole screen and three dots running under it. The
+// picture: VestaHome's Skin\boot.png (or .jpg) if there is one, else the stock shell's own NEW_LOGO.PNG on the unit.
+static volatile bool s_splashEnd;
+static HBITMAP s_splashBmp;
+static int     s_splashDot;
+
+static bool SplashLoad(const wchar_t* path)   // the picture into an 800 x 480 DIB (centred, cut)
+{
+    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return false;
+    DWORD size = GetFileSize(f, NULL), got = 0;
+    unsigned char* data = size > 0 && size < 8 * 1024 * 1024 ? (unsigned char*)malloc(size) : NULL;
+    bool read = data && ReadFile(f, data, size, &got, NULL) && got == size;
+    CloseHandle(f);
+    int w = 0, h = 0, n = 0;
+    unsigned char* px = read ? stbi_load_from_memory(data, (int)size, &w, &h, &n, 3) : NULL;
+    free(data);
+    if (!px)
+        return false;
+    BITMAPINFO bi;
+    memset(&bi, 0, sizeof(bi));
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = 800;
+    bi.bmiHeader.biHeight = -480;   // top down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = NULL;
+    s_splashBmp = CreateDIBSection(NULL, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    if (s_splashBmp && bits) {
+        DWORD* dst = (DWORD*)bits;
+        memset(dst, 0, 800 * 480 * 4);
+        int ox = (w - 800) / 2, oy = (h - 480) / 2;
+        for (int y = 0; y < 480; y++) {
+            int sy = y + oy;
+            if (sy < 0 || sy >= h)
+                continue;
+            for (int x = 0; x < 800; x++) {
+                int sx = x + ox;
+                if (sx < 0 || sx >= w)
+                    continue;
+                const unsigned char* q = px + (sy * w + sx) * 3;
+                dst[y * 800 + x] = (DWORD)q[0] << 16 | (DWORD)q[1] << 8 | q[2];
+            }
+        }
+    }
+    stbi_image_free(px);
+    return s_splashBmp != NULL;
+}
+
+static void SplashDots(HDC dc)   // three dots under the picture, the one lit runs
+{
+    for (int i = 0; i < 3; i++) {
+        bool on = i == s_splashDot % 3;
+        HBRUSH b = CreateSolidBrush(on ? RGB(255, 255, 255) : RGB(90, 90, 90));
+        HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, GetStockObject(NULL_PEN));
+        int cx = 376 + i * 24, r = on ? 6 : 4;
+        Ellipse(dc, cx - r, 452 - r, cx + r + 1, 452 + r + 1);
+        SelectObject(dc, op);
+        SelectObject(dc, ob);
+        DeleteObject(b);
+    }
+}
+
+static LRESULT CALLBACK SplashProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+    switch (msg) {
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC dc = BeginPaint(hwnd, &ps);
+        HDC mem = CreateCompatibleDC(dc);
+        HBITMAP buf = CreateCompatibleBitmap(dc, 800, 480);
+        HGDIOBJ ob = SelectObject(mem, buf);
+        if (s_splashBmp) {
+            HDC pic = CreateCompatibleDC(dc);
+            HGDIOBJ op = SelectObject(pic, s_splashBmp);
+            BitBlt(mem, 0, 0, 800, 480, pic, 0, 0, SRCCOPY);
+            SelectObject(pic, op);
+            DeleteDC(pic);
+        } else {
+            RECT r = { 0, 0, 800, 480 };
+            FillRect(mem, &r, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        }
+        SplashDots(mem);
+        BitBlt(dc, 0, 0, 800, 480, mem, 0, 0, SRCCOPY);
+        SelectObject(mem, ob);
+        DeleteObject(buf);
+        DeleteDC(mem);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_TIMER: {
+        HWND vh = FindWindow(L"VestaHome_Wnd", NULL);
+        if (s_splashEnd || (vh && IsWindowVisible(vh)) || FindWindow(NULL, L"RadioCommWindow") || wp == 2) {
+            DestroyWindow(hwnd);
+            return 0;
+        }
+        s_splashDot++;
+        RECT r = { 350, 436, 450, 468 };
+        InvalidateRect(hwnd, &r, FALSE);
+        return 0;
+    }
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, msg, wp, lp);
+}
+
+static DWORD WINAPI SplashThread(LPVOID)
+{
+    static const wchar_t* kPics[] = { L"\\SDMMC\\VestaHome\\Skin\\boot.png", L"\\SDMMC\\VestaHome\\Skin\\boot.jpg",
+                                      L"\\ResidentFlash\\navigation\\app\\res\\img\\Itelma\\MMC27\\Main\\NEW_LOGO.PNG" };
+    wchar_t path[MAX_PATH];
+    for (int i = 0; i < (int)(sizeof(kPics) / sizeof(kPics[0])) && !s_splashBmp; i++) {
+        HuPath(path, kPics[i]);
+        SplashLoad(path);
+    }
+    WNDCLASS wc;
+    memset(&wc, 0, sizeof(wc));
+    wc.lpfnWndProc = SplashProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = L"VestaStub_Splash";
+    RegisterClass(&wc);
+    HWND w = CreateWindowEx(WS_EX_TOPMOST, L"VestaStub_Splash", L"VestaHome", WS_POPUP | WS_VISIBLE, 0, 0, 800, 480,
+                            NULL, NULL, wc.hInstance, NULL);
+    if (!w)
+        return 0;
+    SetTimer(w, 1, 300, NULL);
+    SetTimer(w, 2, 90000, NULL);   // at the most
+    MSG m;
+    while (GetMessage(&m, NULL, 0, 0))
+        DispatchMessage(&m);
+    if (s_splashBmp)
+        DeleteObject(s_splashBmp);
+    s_splashBmp = NULL;
+    return 0;
 }
 
 static bool s_logFlushed;   // the RAM log copied to the card
@@ -463,6 +617,7 @@ static void WatchdogStart()
 
 static int RunOriginal(const wchar_t* args, const wchar_t* why)
 {
+    s_splashEnd = true;   // (the stock shell shows its own)
     HostStop();   // the shell registers its own skeletons
     wchar_t orig[MAX_PATH];
     _snwprintf(orig, MAX_PATH - 1, L"%sG3NavHMI_orig.exe", s_dir);
@@ -508,6 +663,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
     if (args && wcsstr(args, L"/mcu"))
         return McuHost();
     Log(L"=== VestaStub");
+    {   // the boot picture until VestaHome is in sight (its own thread: the waits below go on)
+        HANDLE t = CreateThread(NULL, 0, SplashThread, NULL, 0, NULL);
+        if (t)
+            CloseHandle(t);
+    }
 
     wchar_t p[MAX_PATH];
     {   // the boot: the volumes come up after us - wait a little for the SD card (its flag) and for VestaHome
