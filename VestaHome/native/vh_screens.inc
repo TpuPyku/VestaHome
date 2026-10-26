@@ -1617,6 +1617,8 @@ static void WifiStateText(const WifiInfo& w, wchar_t* s, int n)
     s[n - 1] = 0;
 }
 
+static int WifiSavedCount();   // (vh_widgetset.inc: the saved networks' screen)
+
 static void ScrSetWifi(HDC dc)
 {
     static const wchar_t* kSec[4] = { L"открытая", L"WEP", L"WPA", L"WPA2" };
@@ -1682,6 +1684,10 @@ static void ScrSetWifi(HDC dc)
                14, 0, A_WIFIAP);
         T(dc, 466, 378, L"Фикс Xiaomi", 14, kMuted, 600);
         Toggle(dc, 572, 354, T_WIFI_AP_AUTO);
+    }
+    if (WifiSavedCount()) {   // all the remembered ones, in sight or not: to see and to forget (the user 2026-10-26)
+        _snwprintf(s, 120, L"Сохранённые (%d)", WifiSavedCount());
+        Button(dc, 652, 352, 116, 40, s, B_N, IC_NONE, 13, 0, A_SCREEN, S_WIFI_SAVED);
     }
     if (pages > 1) {
         _snwprintf(s, 16, L"%d/%d", s_wifiPage + 1, pages);

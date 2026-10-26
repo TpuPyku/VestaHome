@@ -749,6 +749,19 @@ static void DoAction(const Btn& b)
     case A_NRPICK:   NetPlay(b.arg); Back(); break;
     case A_WIFINET:  WifiTap(b.arg); break;
     case A_WIFIFORGET: WifiForgetTap(b.arg); break;
+    case A_WIFIDEL:   // saved networks: the second press forgets
+        if (s_wsAsk != b.arg) {
+            s_wsAsk = b.arg;
+        } else if (b.arg >= 0 && b.arg < s_cfg.wifiCount) {
+            wchar_t ssid[33];
+            wcscpy(ssid, s_cfg.wifiSsid[b.arg]);
+            WifiKnownSet(ssid, NULL);
+            SaveCfg();
+            s_wsAsk = -1;
+            _snwprintf(s_status, 96, L"сеть %s забыта", ssid);
+            s_status[95] = 0;
+        }
+        break;
     case A_WIFISCAN: WifiScan(); break;
     case A_OBDSCAN:   // the stack's search; its devices are read from the proxy's events from now on
         s_obdFoundN = 0;

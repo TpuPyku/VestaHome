@@ -34,6 +34,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_BT_PAIRNEW:  ScrBtPairNew(dc); break;
     case S_BT_PAIRASK:  ScrBtPairAsk(dc); break;
     case S_BT_PAIRED:   ScrBtPaired(dc); break;
+    case S_WIFI_SAVED:  ScrWifiSaved(dc); break;
     case S_SET_VIDEO:   ScrSetVideo(dc); break;
     case S_SET_PHOTO:   ScrSetPhoto(dc); break;
     case S_INFO:        ScrInfo(dc); break;
@@ -322,7 +323,7 @@ static int SlideTop()   // under what stays: the radio's frequency panel, the me
 
 static int SlideLeft()   // right of what stays: the settings' tiles
 {
-    return s_screen == S_BT_PAIRED ? 244 : 0;
+    return s_screen == S_BT_PAIRED || s_screen == S_WIFI_SAVED ? 244 : 0;
 }
 
 static int SlideBottom()
@@ -331,7 +332,7 @@ static int SlideBottom()
         return 392;   // the dots stay
     if (s_screen == S_FILES)
         return 378;   // over their dots and dock
-    if (s_screen == S_BT_PAIRED)
+    if (s_screen == S_BT_PAIRED || s_screen == S_WIFI_SAVED)
         return 382;
     if (s_screen == S_PHOTO_VIEW)
         return PhotoFull() ? 480 : 398;   // over its dock
@@ -428,6 +429,7 @@ static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true },
                                  { S_AUDIO_LIST, &s_musPage, MusPages, false },
                                  { S_VIDEO, &s_vidPage, VidPages, false },
                                  { S_BT_PAIRED, &s_pairedPage, PairedPages, true },
+                                 { S_WIFI_SAVED, &s_wsPage, WifiSavedPages, true },
                                  { S_SET_WIFI, &s_wifiPage, WifiPages, false }, { S_TASKS, &s_taskPage, TaskPages, false },
                                  { S_CAMREG, &s_regPage, RegPages, true } };
 

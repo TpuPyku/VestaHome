@@ -167,6 +167,66 @@ static void ScrSetCar(HDC dc)
     Toggle(dc, 688, 358, T_NMEA_PORT);
 }
 
+// Settings -> Wi-Fi -> saved: every network kept in VestaHome.ini (and given to WZC at the start), in sight or not;
+// "Забыть" asks once more ("Точно?"), then WifiKnownSet(ssid, NULL) - out of the ini and of WZC.
+enum { kWifiSavedRows = 6 };
+static int s_wsPage, s_wsAsk = -1;   // s_wsAsk: the row whose removal waits for the second press
+
+static int WifiSavedCount()
+{
+    return s_cfg.wifiCount;
+}
+
+static int WifiSavedPages()   // (kPagers)
+{
+    return s_cfg.wifiCount ? (s_cfg.wifiCount + kWifiSavedRows - 1) / kWifiSavedRows : 1;
+}
+
+static void ScrWifiSaved(HDC dc)
+{
+    Settings(dc, S_WIFI_SAVED);
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {
+        s_seen = s_screenTick;
+        s_wsAsk = -1;
+    }
+    WifiInfo w;
+    WifiGet(&w);
+    int n = s_cfg.wifiCount, pages = WifiSavedPages();
+    if (s_wsPage >= pages)
+        s_wsPage = 0;
+    if (!n)
+        SetRow(dc, 64, L"Сохранённых сетей нет", L"сеть запоминается при подключении с паролем", true);
+    for (int k = 0; k < kWifiSavedRows; k++) {
+        int i = s_wsPage * kWifiSavedRows + k, y = 64 + k * 44;
+        if (i >= n)
+            break;
+        bool cur = (w.state == WIFI_CONNECTED || w.state == WIFI_CONNECTING) && !wcscmp(s_cfg.wifiSsid[i], w.ssid);
+        int rssi = 0;
+        bool seen = false;
+        for (int j = 0; j < w.count && !seen; j++)
+            if (!wcscmp(w.nets[j].ssid, s_cfg.wifiSsid[i])) {
+                seen = true;
+                rssi = w.nets[j].rssi;
+            }
+        wchar_t sub[64];
+        if (s_cfg.wifiLocked[i])
+            wcscpy(sub, L"пароль от другого ГУ — не используется");
+        else if (cur)
+            wcscpy(sub, w.state == WIFI_CONNECTED ? L"подключено" : L"подключение…");
+        else if (seen)
+            _snwprintf(sub, 64, L"рядом · %d дБм", rssi);
+        else
+            wcscpy(sub, L"не видна");
+        T(dc, 264, y + 20, s_cfg.wifiSsid[i], 17, kText, 700, AL_START, 360);
+        T(dc, 264, y + 38, sub, 13, cur ? kOrange : s_cfg.wifiLocked[i] ? kStop : kMuted, 400, AL_START, 360);
+        Button(dc, 640, y + 4, 128, 36, s_wsAsk == i ? L"Точно?" : L"Забыть", s_wsAsk == i ? B_SEL : B_N, IC_NONE, 14,
+               0, A_WIFIDEL, i);
+    }
+    if (pages > 1)
+        PageDots(dc, s_wsPage, pages, 512, 360);
+}
+
 // MCU monitor ("Car -> MCU data", "Diagnostics -> keys"): the proxy's state, every message id with its count,
 // age and payload (the latest first), the climate decoded; recording into mcu.log with marks, the same МЕТКА
 // goes into can.log too when that one records.
