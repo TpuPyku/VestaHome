@@ -421,6 +421,46 @@ static bool UpdateRunning()   // VestaHomeInstall replaces VestaHome's files (it
     return held;
 }
 
+// ---- the unit's watchdog (Ghidra 2026-10-26: the ~40 s reboots without the shell). The shell's CMainDialog starts
+// \ResidentFlash\navigation\app\HzWD.exe with its own process id ("%ld"); HzWD activates Drivers\WatchDog (WDG.dll
+// pulses to the MCU) and every 6 s counts a miss: more than 7 (~48 s) without WM_RADIO_WATCHDOGEVENT (0x464, the
+// shell broadcasts it every 5 s from a QTimer) - or that process gone - and it deactivates the driver: the MCU
+// resets the unit. We do the same: HzWD with this process's id, 0x464 every 5 s from a thread of ours (VestaHome
+// hanging does not reset the unit). From then on this process must live: a fallback to the shell keeps it.
+enum { kWdMsg = 0x464, kWdEveryMs = 5000 };
+static bool s_wdOn;
+
+static DWORD WINAPI WdFeed(LPVOID)
+{
+    for (;;) {
+        PostMessage(HWND_BROADCAST, kWdMsg, 0, 0);
+        Sleep(kWdEveryMs);
+    }
+}
+
+static void WatchdogStart()
+{
+    wchar_t wd[MAX_PATH], pid[16];
+    HuPath(wd, L"\\ResidentFlash\\navigation\\app\\HzWD.exe");
+    if (!There(wd)) {
+        Log(L"сторож: нет %s", wd);
+        return;
+    }
+    _snwprintf(pid, 16, L"%lu", GetCurrentProcessId());
+    HANDLE h = Start(wd, pid);
+    if (!h) {
+        Log(L"сторож: HzWD.exe не запустился (%u)", GetLastError());
+        return;
+    }
+    CloseHandle(h);
+    HANDLE t = CreateThread(NULL, 0, WdFeed, NULL, 0, NULL);
+    if (t)
+        CloseHandle(t);
+    s_wdOn = t != NULL;
+    Log(L"сторож: HzWD.exe запущен (за процессом %s), сигнал 0x464 каждые %d с%s", pid, kWdEveryMs / 1000,
+        t ? L"" : L" - ПОТОК НЕ СОЗДАН");
+}
+
 static int RunOriginal(const wchar_t* args, const wchar_t* why)
 {
     HostStop();   // the shell registers its own skeletons
@@ -431,6 +471,9 @@ static int RunOriginal(const wchar_t* args, const wchar_t* why)
     Log(L"оригинальная оболочка (%s): %s", why, h ? L"запущена" : L"НЕ ЗАПУЩЕНА");
     if (h)
         CloseHandle(h);
+    if (s_wdOn)   // HzWD watches this process: we stay (and keep feeding it; the shell's broadcasts feed it too)
+        for (;;)
+            Sleep(60000);
     return 0;
 }
 
@@ -488,6 +531,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
     if (!FindVesta(vh))
         return RunOriginal(args, L"нет VestaHome.exe");
     GetModuleFileName(NULL, self, MAX_PATH);
+    WatchdogStart();   // (only when VestaHome goes in place of the shell: the shell starts its own)
     HostStart(self);
 
     for (;;) {
