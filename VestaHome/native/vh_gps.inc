@@ -61,6 +61,45 @@ static void RegDw(HKEY k, const wchar_t* name, DWORD v)
 }
 #endif
 
+#ifdef UNDER_CE
+// Another device of that name already (HU 2026-10-25: COM7 failed with 1 in device.exe - the unit has a COM7 of its
+// own, it seems): its registry key into owner, true when there is one and it is not ours.
+static bool ComTaken(int index, wchar_t* owner, int cap)
+{
+    wchar_t want[8];
+    _snwprintf(want, 8, L"COM%d:", index);
+    owner[0] = 0;
+    HKEY act;
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\Active", 0, 0, &act) != ERROR_SUCCESS)
+        return false;
+    wchar_t name[32];
+    for (DWORD i = 0; !owner[0]; i++) {
+        DWORD n = 32;
+        if (RegEnumKeyEx(act, i, name, &n, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        HKEY k;
+        if (RegOpenKeyEx(act, name, 0, 0, &k) != ERROR_SUCCESS)
+            continue;
+        wchar_t dev[16], key[64];
+        DWORD type, sz = sizeof(dev);
+        if (RegQueryValueEx(k, L"Name", NULL, &type, (BYTE*)dev, &sz) == ERROR_SUCCESS && !_wcsicmp(dev, want)) {
+            sz = sizeof(key);
+            if (RegQueryValueEx(k, L"Key", NULL, &type, (BYTE*)key, &sz) != ERROR_SUCCESS)
+                wcscpy(key, L"?");
+            if (_wcsicmp(key, L"Drivers\\VestaNMEA")) {
+                wcsncpy(owner, key, cap - 1);
+                owner[cap - 1] = 0;
+            }
+        }
+        RegCloseKey(k);
+    }
+    RegCloseKey(act);
+    return owner[0] != 0;
+}
+#endif
+
+static wchar_t s_nmeaOwner[64];   // the port's number taken by this driver (s_nmeaState -2)
+
 static void NmeaPortSet(bool on)
 {
 #ifdef UNDER_CE
@@ -73,6 +112,11 @@ static void NmeaPortSet(bool on)
     }
     if (h) {   // loaded already (VestaHome started again; a new number: NmeaPortSet(false) first)
         s_nmeaState = 1;
+        return;
+    }
+    if (ComTaken(s_cfg.nmeaCom, s_nmeaOwner, 64)) {
+        s_nmeaState = -2;
+        VLog(L"порт NMEA: COM%d уже занят (%s) - выберите другой номер", s_cfg.nmeaCom, s_nmeaOwner);
         return;
     }
     wchar_t src[MAX_PATH];
@@ -163,6 +207,35 @@ static void ModemUsbSet()
     s_modemState = 1;   // PC: the driver is the unit's only
     VLog(L"USB-модем: ПК - только отмечено");
 #endif
+}
+
+// The switch flips at once, the work (up to some seconds: three ways tried) in a thread of its own; a failure turns
+// the setting off again (WM_APP_NMEA). reload: off first (a new number).
+#define WM_APP_NMEA (WM_APP + 28)
+static volatile LONG s_nmeaBusy;
+static bool s_nmeaWant, s_nmeaReload;
+
+static DWORD WINAPI NmeaThread(LPVOID)
+{
+    if (s_nmeaReload)
+        NmeaPortSet(false);
+    NmeaPortSet(s_nmeaWant);
+    InterlockedExchange((LONG*)&s_nmeaBusy, 0);
+    PostMessage(s_wnd, WM_APP_NMEA, s_nmeaWant && s_nmeaState <= 0, 0);
+    return 0;
+}
+
+static void NmeaPortStart(bool on, bool reload)
+{
+    if (InterlockedExchange((LONG*)&s_nmeaBusy, 1))
+        return;   // (one at a time: the switch shows the setting, the result comes with WM_APP_NMEA)
+    s_nmeaWant = on;
+    s_nmeaReload = reload;
+    HANDLE t = CreateThread(NULL, 0, NmeaThread, NULL, 0, NULL);
+    if (t)
+        CloseHandle(t);
+    else
+        NmeaThread(NULL);
 }
 
 // The stream (G3NavHMI: rn2::CanMessageParser on COM4, a copy of COM3, 115200): '$' = NMEA, '@' = the CAN

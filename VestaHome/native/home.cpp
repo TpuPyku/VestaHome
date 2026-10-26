@@ -380,7 +380,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         WifiStart(hwnd, WM_APP_WIFI, VLog);
         ObdInit(hwnd, WM_APP_OBD, VLog);
         if (s_cfg.nmeaPort)   // the navigators' COM port (the registry is new at every boot)
-            NmeaPortSet(true);
+            NmeaPortStart(true, false);
         ObdSetSppAddrFn(ObdSppAddr);
         for (int i = 0; i < s_cfg.wifiCount; i++)
             if (!s_cfg.wifiLocked[i])
@@ -977,6 +977,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
+    case WM_APP_NMEA:   // the navigators' port is done; wp: it failed - the setting off again
+        if (wp && s_cfg.nmeaPort) {
+            s_cfg.nmeaPort = false;
+            s_on[T_NMEA_PORT] = false;
+            SaveCfg();
+        }
+        if (IsWindowVisible(hwnd) && s_screen == S_SET_CAR)
+            Redraw();
+        return 0;
     case WM_APP_WX:
         if (IsWindowVisible(hwnd))
             Redraw();

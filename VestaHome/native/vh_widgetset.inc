@@ -153,7 +153,11 @@ static void ScrSetCar(HDC dc)
     SetRow(dc, 304, L"Объём бака", L"для запаса хода", false, A_NONE, 0, H);
     Stepper(dc, 560, 308, 200, tank, 40, 19, A_TANK);
     wchar_t nm[64], com[8];   // the navigators' port (vh_gps.inc), its number by the arrows
-    if (s_nmeaState < 0)
+    if (s_nmeaBusy)
+        wcscpy(nm, L"загружается…");
+    else if (s_nmeaState == -2)
+        _snwprintf(nm, 64, L"COM%d занят системой — другой номер", s_cfg.nmeaCom);
+    else if (s_nmeaState < 0)
         _snwprintf(nm, 64, L"не загрузился (ошибка %lu)", s_nmeaErr);
     else
         _snwprintf(nm, 64, L"только NMEA%s", s_nmeaState > 0 ? L" · работает" : L"");

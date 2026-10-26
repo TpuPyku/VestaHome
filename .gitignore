@@ -41,7 +41,10 @@ SPIPower/native/g_proxy.h
 SPIPower/bt/thunks.s
 SPIPower/bt/flc.def
 SPIPower/bt/g_btproxy.h
-SPIPower/out/
+SPIPower/out/*
+# the proxies themselves are kept: the installer packs them (fingerprints.h holds their MD5) and builds elsewhere need them
+!SPIPower/out/SPIPowerMgr.dll
+!SPIPower/out/FLC_BLUETOOTH_SDK.dll
 SPIPower/ghidra/
 
 # the rescue .upg carries vendor DLL bytes (same policy as G3patch/orig/):

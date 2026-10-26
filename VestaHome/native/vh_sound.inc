@@ -463,7 +463,7 @@ static void ControlsToCfg()
     s_cfg.rvcOwn = s_on[T_RVC_OWN];
     if (s_cfg.nmeaPort != s_on[T_NMEA_PORT]) {
         s_cfg.nmeaPort = s_on[T_NMEA_PORT];
-        NmeaPortSet(s_cfg.nmeaPort);
+        NmeaPortStart(s_cfg.nmeaPort, false);
     }
     if (s_cfg.wifiOn != s_on[T_WIFI]) {
         s_cfg.wifiOn = s_on[T_WIFI];

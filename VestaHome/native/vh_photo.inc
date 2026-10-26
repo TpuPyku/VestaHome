@@ -6,7 +6,7 @@
 // two on the unit): the viewed one first, then the thumbnails of the page shown; a result posts WM_APP_PHOTO.
 #define WM_APP_PHOTO (WM_APP + 25)
 #define WM_APP_OBD (WM_APP + 27)
-enum { TIMER_PHOTO = 13, kPhMax = 1000, kPhTiles = 8, kThW = 172, kThH = 92, kPhBoxW = 800, kPhBoxH = 342 };
+enum { TIMER_PHOTO = 13, kPhMax = 1000, kPhTiles = 8, kThW = 172, kThH = 92, kThRad = 10, kPhBoxW = 800, kPhBoxH = 342 };
 static wchar_t  s_phDir[MAX_PATH];   // "" = the volumes
 static wchar_t* s_phs[kPhMax];       // folders ("\" at the end), then pictures
 static int      s_phCount, s_phCur = -1;   // s_phCur: the picture viewed (index in s_phs)
@@ -147,8 +147,9 @@ static int PhotoTileEntry(int t)   // tile t of the page: its entry, -2 none
 }
 
 // The picture into the frame at x, y (cut at the frame and at the partial redraw's area): the viewer's 32-bit, the
-// thumbnails RGB565 widened.
-static void BlitPic(const Pic& p, int x, int y)
+// thumbnails RGB565 widened. rad: its corners rounded by that radius (the thumbnails, HU 2026-10-25: the square
+// corners stuck out of the rounded outline) - what is under them stays.
+static void BlitPic(const Pic& p, int x, int y, int rad = 0)
 {
     if (!p.px && !p.px32)
         return;
@@ -159,7 +160,14 @@ static void BlitPic(const Pic& p, int x, int y)
         int fy = y + r;
         if (fy < s_clip.top || fy >= s_clip.bottom)
             continue;
-        int x0 = x < s_clip.left ? s_clip.left : x, x1 = x + p.w > s_clip.right ? s_clip.right : x + p.w;
+        int cut = 0;   // the row's corner: the pixels left out at each end
+        int e = r < rad ? rad - r : r >= p.h - rad ? r - (p.h - rad) + 1 : 0;
+        if (e > 0) {
+            double dy = e - 0.5, in = rad - sqrt((double)rad * rad - dy * dy);
+            cut = (int)(in + 0.5);
+        }
+        int x0 = x + cut < s_clip.left ? s_clip.left : x + cut;
+        int x1 = x + p.w - cut > s_clip.right ? s_clip.right : x + p.w - cut;
         Pix* dst = s_backBits + (479 - fy) * 800;
         if (p.px32) {
             if (x1 > x0)
@@ -227,16 +235,16 @@ static void ScrPhoto(HDC dc)
         wcscpy(name, vol ? vol : s_phs[k]);
         if (dir && name[0] && name[wcslen(name) - 1] == L'\\')
             name[wcslen(name) - 1] = 0;
-        if (down || cur)
-            R(dc, x - 4, y - 4, kThW + 8, kThH + 8, 16, down ? kOrange : CLR_INVALID, kOrange);
+        if (down || cur)   // (around the thumbnail's rounded corners: kThRad + the gap)
+            R(dc, x - 4, y - 4, kThW + 8, kThH + 8, kThRad + 4, down ? kOrange : CLR_INVALID, kOrange);
         if (dir) {
             R(dc, x, y, kThW, kThH, 14, down ? kOrange : kPanel);
             Ico(dc, IC_FOLDER, x + kThW / 2 - 24, y + kThH / 2 - 24, 48, down ? kInk : kOrange);
         } else {
-            R(dc, x, y, kThW, kThH, 0, kMargin);
+            R(dc, x, y, kThW, kThH, kThRad, kMargin);
             EnterCriticalSection(&s_phCs);
             if (s_th[t].state == 2)
-                BlitPic(s_th[t].pic, x, y);
+                BlitPic(s_th[t].pic, x + (kThW - s_th[t].pic.w) / 2, y + (kThH - s_th[t].pic.h) / 2, kThRad);
             else
                 Ico(dc, IC_PHOTO, x + kThW / 2 - 22, y + kThH / 2 - 22, 44, s_th[t].state == 3 ? kOff : kDim);
             LeaveCriticalSection(&s_phCs);
@@ -561,8 +569,7 @@ static void DoAction(const Btn& b)
         s_cfg.nmeaCom = n < kNmeaComMin ? kNmeaComMax : n > kNmeaComMax ? kNmeaComMin : n;
         SaveCfg();
         if (s_cfg.nmeaPort) {
-            NmeaPortSet(false);
-            NmeaPortSet(true);
+            NmeaPortStart(true, true);
         }
         break;
     }
