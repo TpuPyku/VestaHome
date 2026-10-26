@@ -358,7 +358,7 @@ static void ScrSetScreen(HDC dc)
     for (int row = 0; row < 2; row++) {   // the theme, the backlight: АВТО / ДЕНЬ / НОЧЬ
         int y = 64 + row * 56, mode = row ? s_cfg.lightMode : s_cfg.themeMode;
         Action act = row ? A_LIGHT : A_THEME;
-        SetRow(dc, y, row ? L"Подсветка" : L"Тема",
+        SetRow(dc, y, row ? L"Подсветка" : L"День и ночь",
                row ? (light < 0 ? L"нет данных от MCU" : light ? L"сейчас ночная" : L"сейчас дневная") : sub);
         Button(dc, 456, y + 6, 96, 44, L"Авто", mode == 0 ? B_SEL : B_N, IC_NONE, 15, 0, act, 0);
         Button(dc, 560, y + 6, 96, 44, L"День", mode == 1 ? B_SEL : B_N, IC_SUN, 15, 22, act, 1);
@@ -369,6 +369,11 @@ static void ScrSetScreen(HDC dc)
         if (kSaverMins[i] == s_cfg.saverMin)
             s_seg[G_SAVER] = i;
     Seg(dc, 456, 182, 312, 44, saver, 5, G_SAVER, 14);
-    SetRow(dc, 232, L"Калибровка экрана", L"системные перекрестья", true, A_CALIBRATE);
+    SetRow(dc, 232, L"Калибровка экрана", L"системные перекрестья", false, A_CALIBRATE);
     Chevron(dc, 736, 244);
+    wchar_t acc[48];   // the accent and the saver's background (moved here from "General", the user 2026-10-26)
+    _snwprintf(acc, 48, L"акцент: %s · фон заставки", AccentName());
+    SetRow(dc, 288, L"Тема", acc, true, A_SCREEN, S_SET_THEME);
+    Disc(dc, 700, 316, 9, kOrange);
+    Chevron(dc, 736, 300);
 }

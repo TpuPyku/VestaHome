@@ -1974,6 +1974,7 @@ static void Now(wchar_t* s, int n)   // the clock: 24 h, or 12 h ("General -> Ti
 static bool OutsideTemp(int* t);
 static bool VolGet(int* vol, int* mute, int* src);
 static bool CamChip(wchar_t* s, int n);
+static bool PlugCanBack();   // (vh_plugins.inc: an add-on screen under the one shown)
 static bool CamOver();
 static void SpeedSign(HDC dc, int cx, int cy, int r, int limit);
 static int  CamLimit();
@@ -2091,7 +2092,7 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         T(dc, cx + 96, 34, s, 14, kText, 700, AL_MID, 184);
         right = cx - 8;
     }
-    if (back != A_NONE && (back != A_BACK || s_histLen > 0)) {
+    if (back != A_NONE && (back != A_BACK || s_histLen > 0 || PlugCanBack())) {
         if (s_screen == S_KEYS) {   // the keyboard fills the bottom: its "back" stays up here
             bool d = Zone(0, 0, 64, 56, back);
             R(dc, 8, 8, 48, 40, 20, d ? kOrange : kPanel);
@@ -2375,7 +2376,8 @@ static void Settings(HDC dc, Screen active)
     for (int i = 0; i < 10; i++) {
         int x = 16 + (i % 2) * 110, y = 64 + (i / 2) * 68;
         bool on = items[i].to == active || (active == S_SET_BALANCE && items[i].to == S_SET_SOUND) ||
-                  ((active == S_SET_THEME || active == S_SET_PLUGINS) && items[i].to == S_SETTINGS) ||
+                  (active == S_SET_PLUGINS && items[i].to == S_SETTINGS) ||
+                  (active == S_SET_THEME && items[i].to == S_SET_SCREEN) ||
                   (active == S_WIFI_SAVED && items[i].to == S_SET_WIFI) ||
                   ((active == S_SET_OBD || active == S_BT_PAIRED || active == S_BT_PAIRNEW) &&
                    items[i].to == S_SET_BT);

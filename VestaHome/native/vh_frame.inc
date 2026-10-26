@@ -586,6 +586,7 @@ static void BuildButtons()
 static void Go(Screen s, bool push)
 {
     s_status[0] = 0;
+    s_plugStackN = 0;   // (the add-on screens' own stack: only while one opens over another)
     if (s == S_TASKS)
         TasksOpen();
     for (int k = 0; k < s_histLen; k++)
@@ -613,6 +614,8 @@ static void Go(Screen s, bool push)
 
 static void Back()
 {
+    if (PlugBack())
+        return;   // the add-on screen under this one
     s_screen = s_histLen ? s_hist[--s_histLen] : S_HOME;
 }
 

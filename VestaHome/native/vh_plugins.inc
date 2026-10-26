@@ -29,6 +29,26 @@ static int    s_plugN;
 static int    s_plugCur = -1, s_plugScr = -1, s_plugPage;   // the add-on screen shown (S_PLUGIN)
 static int    s_plugOpenP = -1, s_plugOpenS = -1;           // the one told "screen.open" (for its "screen.close")
 static int    s_plugOwnP = -1, s_plugOwnS = -1;             // an add-on's own window in front (5.2)
+// The add-on screens opened one over another (a row's link): the history keeps S_PLUGIN once, this stack which
+// one (HU 2026-10-26: "back" on the second screen gave the second again, without its button).
+static int    s_plugStack[8][2], s_plugStackN;
+
+static bool PlugCanBack()   // an add-on screen under the one shown
+{
+    return s_screen == S_PLUGIN && s_plugStackN > 0;
+}
+
+static bool PlugBack()   // "back" on an add-on screen with another under it: that one
+{
+    if (!PlugCanBack())
+        return false;
+    s_plugStackN--;
+    s_plugCur = s_plugStack[s_plugStackN][0];
+    s_plugScr = s_plugStack[s_plugStackN][1];
+    s_plugPage = 0;
+    s_screenTick = GetTickCount();
+    return true;
+}
 
 // A field of a command: "key=value" between tabs; false (out "") when it is not there.
 static bool PlugField(const wchar_t* cmd, const wchar_t* key, wchar_t* out, int cap)
@@ -207,10 +227,23 @@ static void PlugOpen(Plugin& p, int s, bool push = true)
         SetForegroundWindow(sc.win);
         return;
     }
+    if (push && s_screen == S_PLUGIN) {   // over another add-on screen: remembered here, not in the history
+        if (s_plugStackN < 8) {
+            s_plugStack[s_plugStackN][0] = s_plugCur;
+            s_plugStack[s_plugStackN][1] = s_plugScr;
+            s_plugStackN++;
+        }
+        s_plugCur = (int)(&p - s_plug);
+        s_plugScr = s;
+        s_plugPage = 0;
+        s_screenTick = GetTickCount();
+        Redraw();
+        return;
+    }
+    Go(S_PLUGIN, push);   // (Go empties the stack: a fresh start)
     s_plugCur = (int)(&p - s_plug);
     s_plugScr = s;
     s_plugPage = 0;
-    Go(S_PLUGIN, push);
     Redraw();
 }
 

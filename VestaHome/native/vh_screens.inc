@@ -1106,7 +1106,7 @@ static const wchar_t* AccentName();   // (with the settings' data)
 static void ScrSetGeneral(HDC dc)
 {
     static const wchar_t* fmt[2] = { L"12", L"24" };
-    enum { H = 42 };   // eight rows (the add-ons' one, 2026-10-26)
+    enum { H = 48 };
     SYSTEMTIME t;
     GetLocalTime(&t);
     wchar_t now[40], time[8], tz[16], hh[8], mm[8];
@@ -1121,24 +1121,19 @@ static void ScrSetGeneral(HDC dc)
     _snwprintf(mm, 8, L"%02d", t.wMinute);
     Settings(dc, S_SETTINGS);
     SetRow(dc, 64, L"Часовой пояс", now, false, A_NONE, 0, H);
-    Stepper(dc, 512, 66, 248, tz, 38, 19, A_TZ);
-    SetRow(dc, 106, L"Часы", NULL, false, A_NONE, 0, H);
-    Stepper(dc, 560, 108, 200, hh, 38, 19, A_HOUR);
-    SetRow(dc, 148, L"Минуты", NULL, false, A_NONE, 0, H);
-    Stepper(dc, 560, 150, 200, mm, 38, 19, A_MINUTE);
-    SetRow(dc, 190, L"Синхронизация по GPS", NULL, false, A_NONE, 0, H);
-    Toggle(dc, 688, 193, T_GPS_TIME);
-    SetRow(dc, 232, L"Формат времени", NULL, false, A_NONE, 0, H);
-    Seg(dc, 560, 234, 200, 38, fmt, 2, G_TIME_FMT);
-    SetRow(dc, 274, L"Виджеты главной", NULL, false, A_SCREEN, S_SET_HOME, H);
-    Chevron(dc, 728, 279);
-    wchar_t acc[48];
-    _snwprintf(acc, 48, L"акцент: %s", AccentName());
-    SetRow(dc, 316, L"Тема", acc, false, A_SCREEN, S_SET_THEME, H);
-    Disc(dc, 700, 337, 9, kOrange);
-    Chevron(dc, 728, 321);
-    SetRow(dc, 358, L"Дополнения", NULL, true, A_SCREEN, S_SET_PLUGINS, H);
-    Chevron(dc, 728, 363);
+    Stepper(dc, 512, 68, 248, tz, 40, 19, A_TZ);
+    SetRow(dc, 112, L"Часы", NULL, false, A_NONE, 0, H);
+    Stepper(dc, 560, 116, 200, hh, 40, 19, A_HOUR);
+    SetRow(dc, 160, L"Минуты", NULL, false, A_NONE, 0, H);
+    Stepper(dc, 560, 164, 200, mm, 40, 19, A_MINUTE);
+    SetRow(dc, 208, L"Синхронизация по GPS", NULL, false, A_NONE, 0, H);
+    Toggle(dc, 688, 214, T_GPS_TIME);
+    SetRow(dc, 256, L"Формат времени", NULL, false, A_NONE, 0, H);
+    Seg(dc, 560, 260, 200, 40, fmt, 2, G_TIME_FMT);
+    SetRow(dc, 304, L"Виджеты главной", NULL, false, A_SCREEN, S_SET_HOME, H);
+    Chevron(dc, 728, 312);
+    SetRow(dc, 352, L"Дополнения", NULL, true, A_SCREEN, S_SET_PLUGINS, H);   // (the theme: in "Screen", 2026-10-26)
+    Chevron(dc, 728, 360);
 }
 
 
