@@ -35,6 +35,9 @@ PLAN = (
         ('YaMapsCE.exe', 'toolhelp.dll', 'Images', 'GpsGate')),
     (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDMMC\OSMapsCE',
         ('OSMapsCE.exe', 'Images')),   # toolhelp.dll: the firmware's own (\Windows) is used
+    # the vector tiles speed test (OSMapsCE/native_vtest; its tiles from get_tiles.py), run from the SD card
+    (os.path.join(ROOT, 'OSMapsCE', 'VTileTest'), r'SDMemory\VTileTest',
+        ('VTileTest.exe', 'tiles')),
     # ExternNavi.cfg points the shell's "Navigation" at \SDMMC\VestaLaunch: without the SD card the shell would
     # lose it, so VestaLaunch stays on the built-in card
     (os.path.join(VL, 'VestaLaunch'), r'SDMMC\VestaLaunch',
