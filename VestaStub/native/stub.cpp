@@ -161,6 +161,73 @@ typedef int (*SpFn3)(int, int, int);
 static SpFn1 s_spDeMute, s_spRvc, s_svRoute;
 static SpFn3 s_spMedia;
 
+// ---- the inbound trace (2026-10-25): the MCU resets the unit ~40 s after the shell is gone (its watchdog misses the
+// shell's periodic signal). To see what the MCU expected, every message the skeleton handler receives is recorded into
+// a ring in memory here -- no file I/O on SPIPowerMgr's receive thread -- and McuHost's idle loop flushes it to the log.
+// The stream then ends right at the last message before the reset.
+struct InMsg {
+    DWORD         tick;   // GetTickCount() when it came
+    unsigned      code;   // the MCU message id
+    unsigned char skel;   // the skeleton id it arrived on
+    unsigned char len;    // the payload length
+    unsigned char p[4];   // the payload's first bytes
+};
+#define RING_SLOTS 256
+static InMsg s_ring[RING_SLOTS];
+static LONG  s_ringPos;   // messages recorded so far
+static LONG  s_flushed;   // messages handed to the log
+static CRITICAL_SECTION s_ringCs;
+
+// the minute's counts, for the summary (a periodic signal shows up as a steady high count)
+struct InCnt { unsigned code; unsigned count; };
+#define CNT_SLOTS 64
+static InCnt s_cnt[CNT_SLOTS];
+static int   s_cntN;
+static DWORD s_cntTick;
+
+static void RingRecord(int skel, int code, int len, const unsigned char* data)
+{
+    EnterCriticalSection(&s_ringCs);
+    int n = s_ringPos;
+    InMsg* m = &s_ring[n & (RING_SLOTS - 1)];
+    m->tick = GetTickCount();
+    m->code = (unsigned)code;
+    m->skel = (unsigned char)skel;
+    m->len  = (unsigned char)len;
+    for (int k = 0; k < 4; k++)
+        m->p[k] = k < len ? data[k] : 0;
+    s_ringPos = n + 1;
+    LeaveCriticalSection(&s_ringCs);
+}
+
+static void RingFlush()
+{
+    static InMsg buf[RING_SLOTS];
+    int skipped = 0;
+    EnterCriticalSection(&s_ringCs);
+    int from = s_flushed, to = s_ringPos;
+    if (to - from > RING_SLOTS) {
+        skipped = to - from - RING_SLOTS;
+        from = to - RING_SLOTS;
+    }
+    for (int i = from; i < to; i++)
+        buf[i - from] = s_ring[i & (RING_SLOTS - 1)];
+    s_flushed = to;
+    LeaveCriticalSection(&s_ringCs);
+
+    if (skipped)
+        Log(L"mcu: кольцо переполнено, пропущено %d", skipped);
+    for (int k = 0; k < to - from; k++) {   // not i: eVC4's cl 12.20 has no conforming for-scope (build_evc4.bat)
+        const InMsg* m = &buf[k];
+        Log(L"mcu: вх. skel=%d 0x%04X len=%u p=%02X %02X %02X %02X", (int)m->skel, m->code, (unsigned)m->len,
+            (unsigned)m->p[0], (unsigned)m->p[1], (unsigned)m->p[2], (unsigned)m->p[3]);
+        int j;
+        for (j = 0; j < (int)s_cntN; j++)
+            if (s_cnt[j].code == m->code) { s_cnt[j].count++; break; }
+        if (j == (int)s_cntN && s_cntN < CNT_SLOTS) { s_cnt[s_cntN].code = m->code; s_cnt[s_cntN].count = 1; s_cntN++; }
+    }
+}
+
 struct Skel {
     void** vtbl;
     int    id;
@@ -183,6 +250,7 @@ static bool DirThere(const wchar_t* hu)
 static void SkelHandle(void* self, unsigned char* p)
 {
     int code = p[0] << 8 | p[1];
+    RingRecord(((Skel*)self)->id, code, p[2], p + 3);
     switch (code) {
     case 0x3901: {   // the MCU's clock: hour, minute, second, year - 2000, month, day -> the system's (CClock)
         SYSTEMTIME t;
@@ -253,6 +321,7 @@ static int McuHost()
         Log(L"mcu: нет %s (%u)", p, GetLastError());
         return 1;
     }
+    InitializeCriticalSection(&s_ringCs);   // before the skeletons: SkelHandle records into the ring
     SpFn0 load = (SpFn0)Proc(sp, "SPApi_LoadRadioEngine");
     SpFn0 inited = (SpFn0)Proc(sp, "SPApi_IsInitialized");
     SpFn0 init = (SpFn0)Proc(sp, "SPApi_InitializeRadioEngine");
@@ -288,12 +357,26 @@ static int McuHost()
         navStarted();
     if (sendDialog)
         sendDialog();
-    for (int i = 0; i < 4 && askTimes; i++)
-        askTimes(i);
+    for (int k = 0; k < 4 && askTimes; k++)   // not i: eVC4's cl 12.20 has no conforming for-scope
+        askTimes(k);
     Log(L"mcu: скелеты зарегистрированы (%d), запуск как у оболочки %s, маршрут звука %s",
         (int)(sizeof(kIds) / sizeof(kIds[0])), navStarted && sendDialog ? L"да" : L"НЕТ", s_svRoute ? L"есть" : L"НЕТ");
-    for (;;)
-        Sleep(60000);
+    s_cntTick = GetTickCount();
+    for (;;) {
+        Sleep(1000);
+        RingFlush();
+        Log(L"mcu: хост жив, всего %d", (int)s_ringPos);
+        if (GetTickCount() - s_cntTick >= 60000) {
+            s_cntTick = GetTickCount();
+            wchar_t b[280];
+            int k = _snwprintf(b, 280, L"mcu: входящих за минуту:");
+            for (int i = 0; i < (int)s_cntN && k < 250; i++)
+                k += _snwprintf(b + k, 280 - k, L" 0x%04X=%u", s_cnt[i].code, s_cnt[i].count);
+            b[279] = 0;
+            Log(L"%s", b);
+            s_cntN = 0;
+        }
+    }
 }
 
 static HANDLE s_mcuHost;   // the MCU's host process
