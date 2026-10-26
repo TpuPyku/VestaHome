@@ -381,6 +381,11 @@ static void ScrSaver(HDC dc)
     T(dc, 400, 218, clock, 132, kText, 700, AL_MID);
     T(dc, 400, 270, date, 24, kMuted, 400, AL_MID);
     SaverWeather(dc, 400, 300);
+    if (CamOver()) {   // speeding at a camera: on the saver too (the user 2026-10-26) - the sign, the speed in red
+        SpeedSign(dc, 316, 70, 44, CamLimit());
+        _snwprintf(s, 160, L"%d км/ч", CarKmh());
+        T(dc, 376, 88, s, 44, kStop, 700);
+    }
     Icon ic = SaverNowPlaying(s, 160);   // what plays
     if (s[0]) {
         int w = TextWidth(dc, s, 18, 700);

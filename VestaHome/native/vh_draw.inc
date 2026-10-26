@@ -1974,6 +1974,10 @@ static void Now(wchar_t* s, int n)   // the clock: 24 h, or 12 h ("General -> Ti
 static bool OutsideTemp(int* t);
 static bool VolGet(int* vol, int* mute, int* src);
 static bool CamChip(wchar_t* s, int n);
+static bool CamOver();
+static void SpeedSign(HDC dc, int cx, int cy, int r, int limit);
+static int  CamLimit();
+static int  CarKmh();
 static bool HvacChip(wchar_t* s, int n);
 static DWORD s_hvacShowTick;   // a climate change came: its plate shows in the top bar for 4 s
 
@@ -2021,7 +2025,7 @@ static int StatusMarks(HDC dc, int end, int minLeft)
         { IC_BT, btOn ? kOrange : kDim, true, A_NAV, S_PHONE },
         { IC_NAV, GpsHasFix() ? kOrange : kMuted, true, A_NONE, 0 },
         { play, kOrange, play != IC_NONE, A_NAV, playTo },
-        { IC_WARN, kOrange, dtc, A_SCREEN, S_OBD_DTC } };
+        { IC_WARN, RGB(255, 204, 0), dtc, A_SCREEN, S_OBD_DTC } };   // the trouble codes: always yellow (the user)
     int x = end;
     for (int i = 0; i < 7; i++) {
         if (!m[i].shown)
@@ -2074,10 +2078,12 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         Button(dc, 418, 6, 56, 44, NULL, B_N, act2, 18, 28, a2, arg2);
         right = 410;
     }
-    if (CamChip(s, 40)) {   // a speed camera ahead, on every screen
+    if (CamChip(s, 40)) {   // a speed camera ahead, on every screen: its sign, red when speeding
         int cx = right - 156;
-        R(dc, cx, 8, 152, 40, 10, kOrange);
-        T(dc, cx + 76, 34, s, 14, kInk, 700, AL_MID, 144);
+        bool over = CamOver();
+        R(dc, cx, 8, 152, 40, 10, over ? kStop : kOrange);
+        SpeedSign(dc, cx + 22, 28, 17, CamLimit());
+        T(dc, cx + 96, 34, s, 14, over ? RGB(255, 255, 255) : kInk, 700, AL_MID, 104);
         right = cx - 8;
     } else if (s_hvacShowTick && GetTickCount() - s_hvacShowTick < 4000 && HvacChip(s, 40)) {
         int cx = right - 196;   // the climate was changed: what it is now, like the stock shell's tip window

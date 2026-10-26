@@ -559,6 +559,11 @@ static bool CamCheck(const Gps& g)
              s_cfg.camSound ? L", сигнал" : L"");
     if (s_camNear != was)
         s_camBeeped = false;   // a new camera: its own beep
+    static bool s_overShown;
+    if (CamOver() != s_overShown) {   // the red warning comes / goes: everything showing it redrawn
+        s_overShown = !s_overShown;
+        return true;
+    }
     CamSound();
     return s_camNear != was || s_camNearDist / 50 != wasDist;
 }
@@ -592,13 +597,42 @@ static bool HvacChip(wchar_t* s, int n)
     return true;
 }
 
+// Speeding at the camera ahead: its limit known and the speed above limit + the threshold (the beep's own condition
+// in the "over" mode; in the others the threshold set there too) - shown in red on every screen and on the saver.
+static bool CamOver()
+{
+    if (s_camNear < 0 || !s_cams[s_camNear].speed)
+        return false;
+    return CarKmh() > s_cams[s_camNear].speed + (s_cfg.camOver >= 0 ? s_cfg.camOver : s_cfg.camOverBy);
+}
+
+// A speed limit sign as the real one, whatever the theme: a red ring, white inside, black digits ("КАМ" without a
+// known limit).
+static void SpeedSign(HDC dc, int cx, int cy, int r, int limit)
+{
+    Disc(dc, cx, cy, r, RGB(214, 30, 30));
+    Disc(dc, cx, cy, r * 3 / 4, RGB(255, 255, 255));
+    wchar_t v[8];
+    if (limit) {
+        _snwprintf(v, 8, L"%d", limit);
+        T(dc, cx, cy + r * 28 / 100, v, r * 75 / 100, RGB(0, 0, 0), 700, AL_MID);
+    } else {
+        T(dc, cx, cy + r * 18 / 100, L"КАМ", r * 42 / 100, RGB(0, 0, 0), 700, AL_MID);
+    }
+}
+
 static bool CamChip(wchar_t* s, int n)
 {
     if (s_camNear < 0)
         return false;
-    if (s_cams[s_camNear].speed)
-        _snwprintf(s, n, L"КАМЕРА %d · %d м", s_cams[s_camNear].speed, s_camNearDist);
+    if (CamOver())   // (the limit is on the sign)
+        _snwprintf(s, n, L"%d км/ч · %d м", CarKmh(), s_camNearDist);
     else
         _snwprintf(s, n, L"КАМЕРА · %d м", s_camNearDist);
     return true;
+}
+
+static int CamLimit()
+{
+    return s_camNear >= 0 ? s_cams[s_camNear].speed : 0;
 }

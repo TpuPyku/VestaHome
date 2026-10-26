@@ -3,6 +3,7 @@
 // ---- widgets' settings (opened from a widget's caption): sub screens, rows of 56 px over the whole width
 
 static wchar_t s_coordText[48];   // the home point's coordinates while they are typed
+static wchar_t s_camOverText[8];  // the speeding threshold while it is typed
 
 // Row: label and a second line; the control is drawn by the caller to the right of `right`. With an action the
 // left part is a button of its own.
@@ -68,15 +69,19 @@ static void ScrWSetSpeed(HDC dc)
 {
     static const wchar_t* dist[4] = { L"По скорости", L"200 м", L"400 м", L"600 м" };
     Frame(dc, L"Скорость и камеры");
-    Panel(dc, 16, 64, 768, 288);   // (the GPS port and time: in "Car" and "General" only, 2026-10-24)
+    Panel(dc, 16, 64, 768, 344);   // (the GPS port and time: in "Car" and "General" only, 2026-10-24)
     wchar_t s[160];
     WRow(dc, 68, L"Предупреждать о камерах", L"знак на виджете и в верхнем баре", A_NONE, 0, 640);
     Toggle(dc, 688, 78, T_CAM_ALERT);
-    static const wchar_t* snd[5] = { L"Выкл", L"Всегда", L"> лимит", L"+10", L"+20" };
+    static const wchar_t* snd[3] = { L"Выкл", L"Всегда", L"Превышение" };
     WRow(dc, 124, L"Звуковой сигнал", L"всегда или если скорость выше лимита камеры", A_NONE, 0, 340);
-    Seg(dc, 352, 130, 416, 44, snd, 5, G_CAMSND, 14);
-    WRow(dc, 180, L"Дистанция", L"по скорости: за 10 с, 100–500 м", A_NONE, 0, 340);
-    Seg(dc, 352, 186, 416, 44, dist, 4, G_CAMDIST, 14);
+    Seg(dc, 352, 130, 416, 44, snd, 3, G_CAMSND, 14);
+    _snwprintf(s, 160, L"сигнал и знак, если скорость выше лимита камеры на +%d км/ч", s_cfg.camOverBy);
+    WRow(dc, 180, L"Порог превышения", s, A_KEYS, K_CAMOVER, 600);
+    _snwprintf(s, 16, L"+%d км/ч", s_cfg.camOverBy);
+    T(dc, 760, 215, s, 19, s_cfg.camOver >= 0 ? kOrange : kMuted, 700, AL_END);
+    WRow(dc, 236, L"Дистанция", L"по скорости: за 10 с, 100–500 м", A_NONE, 0, 340);
+    Seg(dc, 352, 242, 416, 44, dist, 4, G_CAMDIST, 14);
     wchar_t path[MAX_PATH];
     CamPath(path);
     if (GetFileAttributes(path) == 0xFFFFFFFF)
@@ -85,14 +90,14 @@ static void ScrWSetSpeed(HDC dc)
         _snwprintf(s, 160, L"%s · загрузится по GPS", s_cfg.camFile);
     else
         _snwprintf(s, 160, L"%s · рядом %d из %d", s_cfg.camFile, s_camCount, s_camTotal);
-    WRow(dc, 236, L"Файл камер (iGO / Navitel)", s, A_CAMFILE, 0, 776);
+    WRow(dc, 292, L"Файл камер (iGO / Navitel)", s, A_CAMFILE, 0, 776);
     wchar_t regs[160];
     RegionsText(regs, 160);
     if (s_cfg.camUpdated)
         _snwprintf(s, 160, L"%s · обновлено %02d.%02d", regs, s_cfg.camUpdated % 100, s_cfg.camUpdated / 100 % 100);
     else
         wcscpy(s, regs);
-    WRow(dc, 292, L"Скачать базу камер (speedcamonline.ru)", s, A_SCREEN, S_CAMDL, 776, true);
+    WRow(dc, 348, L"Скачать базу камер (speedcamonline.ru)", s, A_SCREEN, S_CAMDL, 776, true);
 }
 
 

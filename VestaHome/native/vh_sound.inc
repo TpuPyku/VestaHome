@@ -306,6 +306,10 @@ static void OpenCfgKeys(int which)
     case K_HOMENAME:
         OpenKeysFor(s_cfg.homeName, 47, L"Домашняя точка", S_WSET_WEATHER);
         break;
+    case K_CAMOVER:   // the speeding threshold, km/h over the camera's limit (the user 2026-10-26: typed, not +10/+20)
+        _snwprintf(s_camOverText, 8, L"%d", s_cfg.camOverBy);
+        OpenKeysFor(s_camOverText, 2, L"Превышение, км/ч", S_WSET_SPEED);
+        break;
     case K_HOMECOORD:
         if (s_cfg.homeLat || s_cfg.homeLon)
             _snwprintf(s_coordText, 48, L"%.5f, %.5f", s_cfg.homeLat, s_cfg.homeLon);
@@ -397,6 +401,14 @@ static void CfgKeysDone()
         }
         return;
     }
+    if (s_keysTarget == s_camOverText) {
+        int n = _wtoi(s_camOverText);
+        s_cfg.camOverBy = n < 0 ? 0 : n > 99 ? 99 : n;
+        if (s_cfg.camOver >= 0)
+            s_cfg.camOver = s_cfg.camOverBy;
+        SaveCfg();
+        return;
+    }
     if (s_keysTarget == s_coordText) {
         wchar_t* e;
         double lat = wcstod(s_coordText, &e);
@@ -420,7 +432,7 @@ static void CfgToControls()
     s_on[T_CAM_ALERT] = s_cfg.camAlert;
     s_seg[G_SPEED_VOL] = s_cfg.speedVol;
     s_seg[G_TIME_FMT] = s_cfg.time12 ? 0 : 1;
-    s_seg[G_CAMSND] = !s_cfg.camSound ? 0 : s_cfg.camOver < 0 ? 1 : s_cfg.camOver < 10 ? 2 : s_cfg.camOver < 20 ? 3 : 4;
+    s_seg[G_CAMSND] = !s_cfg.camSound ? 0 : s_cfg.camOver < 0 ? 1 : 2;   // off / always / over (cam.overby)
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
     s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
     s_on[T_RVC_OWN] = s_cfg.rvcOwn;
@@ -452,9 +464,8 @@ static void ControlsToCfg()
     s_cfg.weatherGps = s_on[T_W_GPS];
     s_cfg.camAlert = s_on[T_CAM_ALERT];
     {   // the beep: off / always / above the camera's limit by 0, 10, 20 km/h
-        static const int over[5] = { -1, -1, 0, 10, 20 };
         s_cfg.camSound = s_seg[G_CAMSND] > 0;
-        s_cfg.camOver = over[s_seg[G_CAMSND] % 5];
+        s_cfg.camOver = s_seg[G_CAMSND] == 2 ? s_cfg.camOverBy : -1;
     }
     s_cfg.camWeekly = s_on[T_CAM_WEEKLY];
     s_cfg.videoMoving = s_on[T_VIDEO_MOVING];

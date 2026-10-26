@@ -53,6 +53,7 @@ struct Cfg {
     int     tzMin;                     // local time = UTC + this (minutes): the unit's own zone resets with the registry
     bool    camAlert, camSound;
     int     camOver;          // the beep: -1 always, else only above the camera's limit + camOver km/h
+    int     camOverBy;        // the threshold typed for the "over" mode (kept while "always" is chosen)
     int     beepDev;          // the beep's waveOut device, -1 = WAVE_MAPPER (2026-10-17: which one the MCU mixes?)
     int     camDist;                   // m, 0 = by speed
     wchar_t camFile[MAX_PATH];         // the camera file (iGO / Navitel), relative = from the exe's folder
@@ -124,6 +125,7 @@ static void CfgDefaults()
     s_cfg.tzMin = 180;                            // Moscow
     s_cfg.camAlert = s_cfg.camSound = true;
     s_cfg.camOver = -1;
+    s_cfg.camOverBy = 10;
     s_cfg.beepDev = 1;   // "Audio Output" 1: heard over the radio (HU 2026-10-18-2)
     s_cfg.wifiOn = true;
     s_cfg.nmeaCom = 6;
@@ -387,6 +389,10 @@ static void LoadCfg()
             s_cfg.camSound = CfgBool(v);
         } else if (!wcscmp(k, L"cam.over")) {
             s_cfg.camOver = _wtoi(v);
+            if (s_cfg.camOver >= 0)
+                s_cfg.camOverBy = s_cfg.camOver;
+        } else if (!wcscmp(k, L"cam.overby")) {
+            s_cfg.camOverBy = _wtoi(v) < 0 ? 0 : _wtoi(v) > 99 ? 99 : _wtoi(v);
         } else if (!wcscmp(k, L"sound.beepdev")) {
             s_cfg.beepDev = _wtoi(v) < 0 ? 1 : _wtoi(v);   // AUTO was not heard over the radio
         } else if (!wcscmp(k, L"cam.distance")) {
@@ -582,7 +588,7 @@ static void SaveCfg()
         L"# cam.file: the camera file (iGO or Navitel), a relative path is from the VestaHome folder;\r\n"
         L"# downloads go to speedcam\\speedcam.txt\r\n"
         L"# cam.over: the beep only above the camera's limit + this many km/h; -1 = always\r\n"
-        L"cam.alert=%d\r\ncam.sound=%d\r\ncam.over=%d\r\nsound.beepdev=%d\r\ncam.distance=%d\r\ncam.file=%s\r\n"
+        L"cam.alert=%d\r\ncam.sound=%d\r\ncam.over=%d\r\ncam.overby=%d\r\nsound.beepdev=%d\r\ncam.distance=%d\r\ncam.file=%s\r\n"
         L"# cam.regions, cam.kinds: what to download from speedcamonline.ru (region codes, -1 = Russia; kinds)\r\n"
         L"cam.regions=%s\r\ncam.kinds=%s\r\ncam.weekly=%d\r\ncam.updated=%d\r\n"
         L"# audio: equalizer low,mid,high -6..6; balance/fader -8..8 (sent to the MCU when changed)\r\n"
@@ -621,7 +627,7 @@ static void SaveCfg()
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
         s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
-        s_cfg.camOver, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
+        s_cfg.camOver, s_cfg.camOverBy, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
         s_cfg.radioStation, s_cfg.rvcOwn, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,

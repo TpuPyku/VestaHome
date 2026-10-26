@@ -508,17 +508,9 @@ static void WSpeed(HDC dc, int x, int y)
         wcscpy(v, L"—");
     int end = T(dc, x + 16, y + 112, v, 72, fix || car ? kText : kDim, 700);
     if (s_camNear >= 0) {
-        const Cam& cm = s_cams[s_camNear];
-        Disc(dc, x + 204, y + 80, 28, kStop);
-        Disc(dc, x + 204, y + 80, 21, kText);
-        if (cm.speed) {
-            _snwprintf(v, 8, L"%d", cm.speed);
-            T(dc, x + 204, y + 88, v, 20, kInk, 700, AL_MID);
-        } else {
-            T(dc, x + 204, y + 85, L"КАМ", 12, kInk, 700, AL_MID);
-        }
+        SpeedSign(dc, x + 204, y + 80, 30, s_cams[s_camNear].speed);   // (the real sign's colours, the user 2026-10-26)
         _snwprintf(v, 16, L"%d м", s_camNearDist);
-        T(dc, x + 204, y + 128, v, 14, kOrange, 700, AL_MID);
+        T(dc, x + 204, y + 130, v, 14, CamOver() ? kStop : kOrange, 700, AL_MID);
     } else {
         T(dc, end + 8, y + 112, L"км/ч", 18, kMuted, 600);
     }
