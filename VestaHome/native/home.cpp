@@ -96,7 +96,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
-              A_PLUGPAGE };
+              A_PLUGPAGE, A_CAMOVERSTEP };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -133,7 +133,7 @@ enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_
        G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 2, 0, 1, 2, 2, 1, 0, 0, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
-enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_CAMOVER };   // settings typed on the keyboard (A_KEYS)
+enum { K_WKEY, K_HOMENAME, K_HOMECOORD };   // settings typed on the keyboard (A_KEYS)
 static wchar_t s_dial[20];          // the number typed on the phone's keypad
 static wchar_t s_callOut[20];       // the number dialled from VestaHome (the stack does not tell it back)
 static wchar_t s_pass[24] = L"vesta2026";

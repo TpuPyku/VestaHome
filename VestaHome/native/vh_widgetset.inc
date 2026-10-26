@@ -3,7 +3,6 @@
 // ---- widgets' settings (opened from a widget's caption): sub screens, rows of 56 px over the whole width
 
 static wchar_t s_coordText[48];   // the home point's coordinates while they are typed
-static wchar_t s_camOverText[8];  // the speeding threshold while it is typed
 
 // Row: label and a second line; the control is drawn by the caller to the right of `right`. With an action the
 // left part is a button of its own.
@@ -77,9 +76,9 @@ static void ScrWSetSpeed(HDC dc)
     WRow(dc, 124, L"Звуковой сигнал", L"всегда или если скорость выше лимита камеры", A_NONE, 0, 340);
     Seg(dc, 352, 130, 416, 44, snd, 3, G_CAMSND, 14);
     _snwprintf(s, 160, L"сигнал и знак, если скорость выше лимита камеры на +%d км/ч", s_cfg.camOverBy);
-    WRow(dc, 180, L"Порог превышения", s, A_KEYS, K_CAMOVER, 600);
+    WRow(dc, 180, L"Порог превышения", s, A_NONE, 0, 552);   // (the user 2026-10-26: by - and +, 1 km/h a step)
     _snwprintf(s, 16, L"+%d км/ч", s_cfg.camOverBy);
-    T(dc, 760, 215, s, 19, s_cfg.camOver >= 0 ? kOrange : kMuted, 700, AL_END);
+    Stepper(dc, 560, 186, 200, s, 44, 18, A_CAMOVERSTEP);
     WRow(dc, 236, L"Дистанция", L"по скорости: за 10 с, 100–500 м", A_NONE, 0, 340);
     Seg(dc, 352, 242, 416, 44, dist, 4, G_CAMDIST, 14);
     wchar_t path[MAX_PATH];

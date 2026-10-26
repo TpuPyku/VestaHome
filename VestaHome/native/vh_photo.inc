@@ -487,6 +487,14 @@ static void DoAction(const Btn& b)
         break;
     }
     case A_PLUGEV:   PlugEvent(b.arg); break;
+    case A_CAMOVERSTEP: {   // the speeding threshold: 0..99 km/h over the camera's limit
+        int n = s_cfg.camOverBy + b.arg;
+        s_cfg.camOverBy = n < 0 ? 0 : n > 99 ? 99 : n;
+        if (s_cfg.camOver >= 0)
+            s_cfg.camOver = s_cfg.camOverBy;
+        SaveCfg();
+        break;
+    }
     case A_PLUGON:   PlugSwitch(b.arg); break;
     case A_PLUGPAGE: s_plugPage += b.arg; if (s_plugPage < 0) s_plugPage = 0; break;
     case A_PLUGOPEN:

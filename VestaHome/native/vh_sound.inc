@@ -306,10 +306,6 @@ static void OpenCfgKeys(int which)
     case K_HOMENAME:
         OpenKeysFor(s_cfg.homeName, 47, L"Домашняя точка", S_WSET_WEATHER);
         break;
-    case K_CAMOVER:   // the speeding threshold, km/h over the camera's limit (the user 2026-10-26: typed, not +10/+20)
-        _snwprintf(s_camOverText, 8, L"%d", s_cfg.camOverBy);
-        OpenKeysFor(s_camOverText, 2, L"Превышение, км/ч", S_WSET_SPEED);
-        break;
     case K_HOMECOORD:
         if (s_cfg.homeLat || s_cfg.homeLon)
             _snwprintf(s_coordText, 48, L"%.5f, %.5f", s_cfg.homeLat, s_cfg.homeLon);
@@ -399,14 +395,6 @@ static void CfgKeysDone()
             WifiKnownSet(s_wifiTarget, s_wifiPass);
             WifiConnect(s_wifiTarget, s_wifiPass);
         }
-        return;
-    }
-    if (s_keysTarget == s_camOverText) {
-        int n = _wtoi(s_camOverText);
-        s_cfg.camOverBy = n < 0 ? 0 : n > 99 ? 99 : n;
-        if (s_cfg.camOver >= 0)
-            s_cfg.camOver = s_cfg.camOverBy;
-        SaveCfg();
         return;
     }
     if (s_keysTarget == s_coordText) {
