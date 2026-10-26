@@ -28,8 +28,9 @@ W, H, K = 800, 480, 2          # the screen; everything is drawn K times larger 
 # VestaHome's palette (skin.ini, make_maps_mockup.py). The accent - and the car's glow - is VestaHome's theme
 # (Settings -> Screen -> Theme: a Lada Vesta paint, screen.accent of VestaHome.ini; VestaHome's kAccents), the
 # user's rule 2026-10-26: OSMapsCE takes it from there.
-INK, PANEL, PANEL2, LINE = (0x0b, 0x0c, 0x0e), (0x17, 0x19, 0x1c), (0x22, 0x25, 0x2a), (0x34, 0x38, 0x3f)
-TEXT, MUTED, DIM = (0xf3, 0xf1, 0xec), (0xa3, 0xa8, 0xb0), (0x5d, 0x63, 0x6c)
+INK, PANEL, PANEL2, LINE = (0x0e, 0x10, 0x13), (0x23, 0x27, 0x2e), (0x2c, 0x31, 0x39), (0x2a, 0x2f, 0x37)
+TEXT, MUTED, DIM = (0xf5, 0xf3, 0xee), (0xaa, 0xb0, 0xb8), (0x6c, 0x72, 0x7c)
+# (the user 2026-10-26: the cards in VestaHome's tile colour 23272E, solid; the controls on them a step lighter)
 ACCENTS = {130: ('Марс', (0xff, 0x6b, 0x1a)), 195: ('Сердолик', (0xdc, 0x3c, 0x3c)), 247: ('Карфаген', (0xc3, 0xb8, 0x9c)),
            372: ('Криптон', (0x72, 0xc0, 0x59)), 476: ('Дайвинг', (0x4f, 0x7a, 0xca)), 619: ('Булат', (0xab, 0xba, 0xd8)),
            691: ('Платина', (0xee, 0xee, 0xee))}
@@ -385,7 +386,7 @@ def car(im, x, y, ang=0.0):
 HAIR = False   # the night map: a floating card gets its 1 px edge (the shadow does not show on the dark map)
 
 
-def card(im, box, fill=PANEL, alpha=236, radius=22, border=None, shadow=True):
+def card(im, box, fill=PANEL, alpha=255, radius=22, border=None, shadow=True):
     """A card (the rule 2026-10-26, the user: as modern designs - no borders on buttons and cards; a chosen thing
     gets the accent's 2 px (border=ACCENT); a card floating over the night map - a hairline edge)."""
     x0, y0, x1, y1 = [v * K for v in box]
@@ -514,22 +515,27 @@ def screen_drive(night):
     view = View(lon, lat, 16.3, crs, W / 2 + 40, H * 0.70)   # the car low and a little right: the card is left
     im = draw_map(view, pal, traffic=False)
     draw_route(im, view, 0, traffic=True, start=ci)
-    labels(im, view, pal, avoid=[(16, 56, 330, 238), (16, 392, 784, 470), (700, 150, 790, 400)])
+    labels(im, view, pal, avoid=[(16, 56, 266 if not night else 182, 222 if not night else 112), (16, 392, 784, 470),
+                                 (700, 150, 790, 400)])
     x, y = view.ll(*coords[-1])
     marker(im, x, y, ROUTE_EDGE)
     car(im, W / 2 + 40, H * 0.70)
     status(im, night, True)
-    # the next turn: one big number
-    card(im, (16, 56, 330, 238))
-    ImageDraw.Draw(im).rounded_rectangle([28 * K, 70 * K, 112 * K, 154 * K], 18 * K, fill=ACCENT)
-    turn_arrow(im, 70, 106, 'right', 1.1, INK)
-    text(im, (128, 82), '350', 46, TEXT, True)
-    text(im, (128 + ImageDraw.Draw(im).textlength('350', font=font(46, True)) / K + 6, 102), 'м', 22, MUTED, True)
-    text(im, (128, 136), 'направо', 15, MUTED)
-    text(im, (30, 170), 'ул. Льва Толстого', 21, TEXT, True)
-    ImageDraw.Draw(im).line([(30 * K, 204 * K), (316 * K, 204 * K)], fill=LINE, width=K)
-    turn_arrow(im, 42, 214, 'left', 0.38, MUTED)
-    text(im, (60, 213), 'затем налево · Ленинская', 13, MUTED)
+    if not night:   # before the turn (300 m / 20 s): the big card, 250 px wide
+        card(im, (16, 56, 266, 222))
+        ImageDraw.Draw(im).rounded_rectangle([28 * K, 68 * K, 96 * K, 136 * K], 16 * K, fill=ACCENT)
+        turn_arrow(im, 62, 98, 'right', 0.9, INK)
+        text(im, (108, 72), '250', 40, TEXT, True)
+        text(im, (108 + ImageDraw.Draw(im).textlength('250', font=font(40, True)) / K + 5, 90), 'м', 20, MUTED, True)
+        text(im, (108, 118), 'направо', 14, MUTED)
+        text(im, (28, 150), 'ул. Льва Толстого', 19, TEXT, True)
+        ImageDraw.Draw(im).line([(28 * K, 188 * K), (254 * K, 188 * K)], fill=LINE, width=K)
+        text(im, (28, 196), 'затем — налево: Ленинская', 12, MUTED)
+    else:   # far from it: the compact one, a quarter of the big
+        card(im, (16, 56, 182, 112), radius=18)
+        ImageDraw.Draw(im).rounded_rectangle([22 * K, 62 * K, 66 * K, 106 * K], 12 * K, fill=ACCENT)
+        turn_arrow(im, 44, 82, 'right', 0.55, INK)
+        text(im, (78, 84), '1,2 км', 21, TEXT, True, 'lm')
     # the trip: arrival, minutes, km - and the end
     card(im, (196, 400, 604, 466), radius=33)
     for i, (big, small) in enumerate((('14:41', 'прибытие'), ('9 мин', 'с пробками 9–12'), ('4,1 км', 'осталось'))):
@@ -735,7 +741,10 @@ figcaption {{ font-size: 12.5px; color: #a3a8b0; margin-top: 6px; line-height: 1
 <h2>Что меняется по сравнению с нынешней OSMapsCE</h2>
 <ul>
 <li>Верхняя полоса статуса → мягкая тень сверху: часы и «чипы» (GPS, источник пробок); карта видна до края.</li>
-<li>Плашка манёвра → большая карточка: стрелка в квадрате акцента, расстояние крупно (46 px), улица, «затем…».</li>
+<li>Подсказка поворота: большая карточка (стрелка в квадрате акцента, расстояние крупно, улица, «затем…»,
+250 px) — только перед поворотом (300 м или 20 с); в остальное время — компактная, ~¼ большой: знак и расстояние.</li>
+<li>Цвета — как у VestaHome: карточки и круглые кнопки цвета его плиток (23272E), сплошные; нижняя панель —
+сплошная, как у VestaHome; значки — Lucide, как у VestaHome; «назад» — круг слева внизу.</li>
 <li>Поездка — «таблетка» внизу: прибытие, минуты (с вилкой по пробкам), километры, «✕» — закончить.</li>
 <li>Скорость и знак лимита — круг слева внизу; «+ / −», компас, звук — круглые кнопки справа.</li>
 <li>Поиск, варианты, редактор — <b>левая панель</b> 320 px поверх карты: карта справа видна и показывает выбор (номера
@@ -752,8 +761,8 @@ figcaption {{ font-size: 12.5px; color: #a3a8b0; margin-top: 6px; line-height: 1
 </body></html>"""
 
 CAPTIONS = {
-    'drive_day': '<b>Ведение, день.</b> Карта по курсу, машина внизу справа от центра (слева карточка). Маршрут окрашен по пробкам. Подписи улиц ровные при повороте.',
-    'drive_night': '<b>Ведение, ночь.</b> Своя ночная палитра (не инверсия дня): тёмные кварталы, приглушённые дороги, тёплые магистрали.',
+    'drive_day': '<b>Ведение, день, перед поворотом</b> (300 м или 20 с): большая карточка, 250 px. Карта по курсу, маршрут окрашен по пробкам, подписи улиц ровные при повороте.',
+    'drive_night': '<b>Ведение, ночь, до поворота далеко:</b> компактная подсказка (знак и расстояние, ~¼ большой). Своя ночная палитра (не инверсия дня).',
     'browse_day': '<b>Просмотр.</b> «Куда едем?» и быстрые места; пробки тонкими линиями вдоль улиц; нижняя панель VH по касанию — «Поиск» и «Маршрут» на средних местах.',
     'preview_day': '<b>Варианты.</b> Слева — А/Б, варианты с временем, вилкой по пробкам и пометкой, «ПОЕХАЛИ»; на карте другой вариант серым с «+1 мин».',
     'editor_night': '<b>Редактор маршрута.</b> Точки лесенкой А — «Заехать» — Б, «+ Заехать», «ПОЕХАЛИ» со временем.',
