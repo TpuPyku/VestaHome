@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверки на ГУ</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  body { font: 10.5pt/1.3 "Segoe UI", Arial, sans-serif; color: #000; background: #fff; margin: 0 auto; max-width: 190mm; }
+  h1 { font-size: 15pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 5mm 0 1.5mm; border-bottom: 1.5pt solid #000; padding-bottom: 0.5mm; page-break-after: avoid; }
+  p, li { margin: 0.8mm 0; }
+  .note { font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1mm; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 0.6pt solid #555; padding: 1mm 1.5mm; vertical-align: top; text-align: left; }
+  th { background: #e6e6e6; font-size: 9.5pt; }
+  td.n { width: 8mm; text-align: center; font-weight: 600; }
+  td.ok { width: 7mm; }
+  td.ok::before { content: ""; display: inline-block; width: 3.2mm; height: 3.2mm; border: 0.8pt solid #000; }
+  td.memo { width: 38mm; }
+</style>
+</head>
+<body>
+
+<h1>Проверки на ГУ — четырнадцатый лист</h1>
+<p class="note">Составлено 2026-10-26. Главное — VestaHome вместо штатной оболочки без перезагрузок (заглушка теперь сама запускает и кормит сторож HzWD.exe). Листы 9–13 закрыты: их открытые пункты — в PLAN.md, раздел 5. ☐ — «сделано», «Заметки» — что увидели. Журналы включены, SD-карта вставлена.</p>
+<h2>1. Установка и загрузка без оболочки (Tests\SDMemory\VestaHomeInstall)</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">1</td><td>Установщик: VestaHome (и proxy, как было) → «Установить», перезагрузка с SD.</td><td>Задание с загрузчиком; после двух перезагрузок — VestaHome.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">2</td><td>Работать 10 минут: радио, музыка, переходы по экранам.</td><td>ГУ НЕ перезагружается (раньше — на ~40-й секунде). В VestaStub.log: «сторож: HzWD.exe запущен…»; в Диспетчере задач есть HzWD.exe, нет G3NavHMI_orig.exe.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">3</td><td>Выключить зажигание, дождаться сна, включить; затем перезагрузка удержанием крутилки.</td><td>Оба раза — VestaHome, без сброса через минуту.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">4</td><td>Закрыть VestaHome (если есть выход) или дождаться перехода на штатную оболочку.</td><td>Штатная оболочка поднимается, ГУ не перезагружается.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>2. Без штатной оболочки — то, чему она мешала</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">5</td><td>Задний ход: с VestaHome на экране и с открытым OSMapsCE.</td><td>Своя камера с разметкой поверх всего; после — экран, где были.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">6</td><td>«Автомобиль → Камера — Показать», нажать на экран.</td><td>Закрывается касанием (без оболочки касание доходит).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">7</td><td>Музыка / радио, задний ход, выключить.</td><td>Звук вернулся, эквалайзер и громкость на месте.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">8</td><td>Кнопки руля (громкость, следующий, телефон) и крутилка; долгое нажатие крутилки.</td><td>Работают; долгое — окно перезагрузки с «Отмена».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">9</td><td>Выключить/включить зажигание при громкости 20.</td><td>Громкость при включении — как задано (Звук → «Макс. при включении»).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">10</td><td>Включить фары / дождаться заката.</td><td>Тема и подсветка переходят в ночь.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">11</td><td>Wi-Fi: подключиться к знакомой точке (старый Redmi) только через VestaHome.</td><td>Пароль спрашивается один раз (не в менеджере оболочки), адрес получен.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">12</td><td>Телефон по Bluetooth: звонок входящий и исходящий, музыка с телефона.</td><td>Окно звонка, звук звонка, радио приглушено; музыка играет.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">13</td><td>Выключить ГУ на музыке с SD, включить.</td><td>Запуск «как в прошлый раз»: тот же источник и экран.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>3. Порт для навигаторов (диагностика)</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">14</td><td>«Настройки → Автомобиль → Порт для навигаторов»: COM6, включить.</td><td>Переключатель сразу «вкл.», подпись «загружается…», затем «работает» или выключится сам. Записать подпись.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">15</td><td>Прислать журналы.</td><td>В VestaHome.log строка «порт NMEA: проба DLL здесь …»; есть ли файл VestaLogs\VestaNMEA.log.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>4. Остатки прошлого листа</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">16</td><td>Фото: открыть снимок, вернуться к миниатюрам.</td><td>Углы миниатюр скруглены, оранжевая рамка вокруг последнего — ровная, фото не вылезает.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">17</td><td>Радио → Список → «Автопоиск», затем «В пресеты» два раза.</td><td>«Пишу N из M», в конце «записано N из M»; пресеты FM1–FM3 — найденные станции.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>5. Что прислать</h2>
+<ul>
+  <li><b>\SDMemory\VestaLogs\</b>: VestaStub.log, VestaHome.log, VestaNMEA.log (если появится), SPIPower.log, BTProxy.log, VestaHomeInstall.log.</li>
+  <li>Этот лист с заметками.</li>
+</ul>
+</body>
+</html>
