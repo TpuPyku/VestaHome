@@ -2129,6 +2129,17 @@ static const NavItem kNav[6] = { { IC_HOME, L"Главная", S_HOME }, { IC_RA
                                  { IC_APPS, L"Приложения", S_APPS }, { IC_GEAR, L"Настройки", S_SETTINGS } };
 static Screen s_media = S_AUDIO;
 
+// Add-ons' buttons (vh_plugins.inc, up to two): sections 6 and 7, placed before "Settings"; the places share the bar.
+static int PlugNavCount();
+static Icon PlugNavIcon(int k);
+static const wchar_t* PlugNavLabel(int k);
+static int PlugNavSection();
+
+static int NavItems() { return 6 + PlugNavCount(); }   // the sections (the day / night key not counted)
+static int NavPos(int i) { int a = PlugNavCount(); return i < 5 ? i : i == 5 ? 5 + a : 5 + (i - 6); }
+static Icon NavIc(int i) { return i < 6 ? kNav[i].ic : PlugNavIcon(i - 6); }
+static const wchar_t* NavLabel(int i) { return i < 6 ? kNav[i].label : PlugNavLabel(i - 6); }
+
 // Section of a main screen (index in kNav); -1: not a main screen, it has no bottom bar (its own dock instead).
 static int Section(Screen s)
 {
@@ -2143,6 +2154,8 @@ static int Section(Screen s)
         return 3;
     case S_APPS:
         return 4;
+    case S_PLUGIN:
+        return PlugNavSection();   // an add-on's screen with its own button: its section, else none
     case S_SETTINGS: case S_SET_SOUND: case S_SET_BALANCE: case S_SET_SCREEN: case S_SET_RADIO: case S_SET_BT:
     case S_SET_WIFI: case S_SET_VIDEO: case S_SET_PHOTO: case S_INFO: case S_SET_CAR: case S_SET_VOLUME:
     case S_SET_OBD: case S_BT_PAIRED: case S_BT_PAIRNEW: case S_SET_THEME: case S_WIFI_SAVED: case S_SET_PLUGINS:
@@ -2184,14 +2197,20 @@ enum { TIMER_NAVANIM = 21, kNavShrinkMs = 120, kNavStepMs = 150, kNavFrameMs = 2
 static int   s_navFrom = -1, s_navTo = -1;
 static DWORD s_navStart;   // 0: not started yet
 
-static int NavCx(int i)
+static int NavCxPos(int pos)   // the centre of a place: the sections, then day / night
 {
-    return 56 + i * 688 / 6;
+    return 56 + pos * 688 / NavItems();
 }
 
-static int NavPillW(HDC dc, int i)
+static int NavCx(int i)
 {
-    return 18 + 24 + 8 + TextWidth(dc, kNav[i].label, 15, 700) + 18;
+    return NavCxPos(NavPos(i));
+}
+
+static int NavPillW(HDC dc, int i)   // with add-ons' buttons the places are narrow: the pill without its name
+{
+    int w = 18 + 24 + 8 + TextWidth(dc, NavLabel(i), 15, 700) + 18;
+    return NavItems() > 6 ? 64 : w;   // (a name would run into the neighbours' icons)
 }
 
 static int NavPillX(int cx, int w)
@@ -2202,7 +2221,7 @@ static int NavPillX(int cx, int w)
 
 static int NavAnimMs()
 {
-    return 2 * kNavShrinkMs + kNavStepMs * abs(s_navTo - s_navFrom);
+    return 2 * kNavShrinkMs + kNavStepMs * abs(NavPos(s_navTo) - NavPos(s_navFrom));
 }
 
 static void NavAnimStart(int from, int to)
@@ -2227,11 +2246,11 @@ static void NavPill(HDC dc, int i, int w)
     int cx = NavCx(i), full = NavPillW(dc, i), x = NavPillX(cx, w), fx = NavPillX(cx, full);
     RSoft(x, 426, w, 44, 22);
     int ix = (cx - 12) + (fx + 18 - (cx - 12)) * (w - 44) / (full - 44 > 0 ? full - 44 : 1);   // centred -> its place
-    Ico(dc, kNav[i].ic, ix, 436, 24, kOrange);
-    if (w > 44 + 8) {   // the name, cut at the pill's right edge
+    Ico(dc, NavIc(i), ix, 436, 24, kOrange);
+    if (w > 64) {   // the name, cut at the pill's right edge
         int saved = SaveDC(dc);
         IntersectClipRect(dc, x, 426, x + w - 12, 470);
-        T(dc, ix + 32, 454, kNav[i].label, 15, kOrange, 700);
+        T(dc, ix + 32, 454, NavLabel(i), 15, kOrange, 700);
         RestoreDC(dc, saved);
     }
 }
@@ -2266,22 +2285,25 @@ static void NavBar(HDC dc, int active)
         s_navFrom = -1;
     }
     bool anim = s_navFrom >= 0;
-    for (int i = 0; i < 7; i++) {
-        int cx = NavCx(i);
-        Icon ic = i < 6 ? kNav[i].ic : s_night ? IC_SUN : IC_MOON;
-        Screen to = i == 2 ? s_media : i < 6 ? kNav[i].to : S_NONE;
+    int items = NavItems(), sp = 688 / items;
+    for (int i = 0; i <= items; i++) {   // the sections, then day / night (i == items)
+        bool night = i == items;
+        int cx = night ? NavCxPos(items) : NavCx(i);
+        Icon ic = !night ? NavIc(i) : s_night ? IC_SUN : IC_MOON;
+        Screen to = i == 2 ? s_media : i < 6 ? kNav[i].to : night ? S_NONE : S_PLUGIN;
         bool on = i == active && !anim;
-        bool d = Zone(cx - 57, 416, 114, 64, i == 6 ? A_NIGHT : i == active && s_histLen == 0 && s_screen == to ? A_NONE
-                      : A_NAV, to);
+        Action a = night ? A_NIGHT : i >= 6 ? (i == active ? A_NONE : A_PLUGNAV)
+                   : i == active && s_histLen == 0 && s_screen == to ? A_NONE : A_NAV;
+        bool d = Zone(cx - sp / 2, 416, sp, 64, a, i >= 6 && !night ? i - 6 : to);
         if (i == animIc && !d)
             continue;
         int w = on ? NavPillW(dc, i) : 64, x = NavPillX(cx, w);
         if (on || d)
             RSel(dc, x, 426, w, 44, 22, on, d, CLR_INVALID);
         COLORREF fg = d ? kInk : on ? kOrange : kMuted;
-        if (on) {
+        if (on && w > 64) {
             Ico(dc, ic, x + 18, 436, 24, fg);
-            T(dc, x + 50, 454, kNav[i].label, 15, fg, 700);
+            T(dc, x + 50, 454, NavLabel(i), 15, fg, 700);
         } else {
             Ico(dc, ic, cx - 13, 435, 26, fg);
         }

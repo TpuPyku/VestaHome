@@ -3,14 +3,15 @@
 // "disabled" in its folder), it says hello by WM_COPYDATA ("VHAP": one command a message, "verb\tkey=value..."
 // in UTF-16) and declares widgets and screens; VestaHome draws them in its own style and sends the taps back.
 // VestaHome stays free: whatever an add-on does lives in its own program (the user's decision, 2026-10-26).
-// Step 1: hello / bye, widgets (through the user widgets' list), described screens, notify, open; "Settings ->
-// General -> Add-ons". Not yet: own windows, the bottom bar's buttons, image widgets, the data subscriptions.
+// Done: hello / bye, widgets (through the user widgets' list; pictures in shared memory), described screens and
+// screens of the add-on's own window, up to two buttons in the bottom bar, the data subscriptions (gps, car, media,
+// night), notify, open, media; "Settings -> General -> Add-ons". Not yet: volume (no way to it but the knob).
 
 #define VHAP_MAGIC 0x56484150   // 'VHAP'
 enum { kPlugMax = 4, kPlugScreens = 4, kPlugItems = 16, kPlugWidgets = 2, kPlugRows = 6, kPlugApi = 1 };
 
 struct PlugItem { wchar_t id[24], type[12], label[48], sub[64], value[48], options[64], link[24]; };
-struct PlugScreen { wchar_t id[24], title[48]; int n; PlugItem it[kPlugItems]; };
+struct PlugScreen { wchar_t id[24], title[48], icon[16]; bool nav, own; HWND win; int n; PlugItem it[kPlugItems]; };
 struct PlugWidget { wchar_t id[24], title[40], icon[16], screen[24], value[24], unit[24], text[2][96]; int state;
                     bool wide, big, image, shown;
                     HANDLE map; BYTE* view; int iw, ih; };   // the picture (4.1): its shared memory and size
@@ -18,6 +19,7 @@ struct Plugin {
     wchar_t    id[24], name[48], ver[16], dir[MAX_PATH];   // dir: its folder ("" - started from elsewhere)
     HWND       hwnd;                                       // its window (0 - not connected)
     bool       off;                                        // switched off: not started with VestaHome
+    int        sub;                                        // subscribed: 1 gps, 2 car, 4 media, 8 night
     int        ns, nw;
     PlugScreen sc[kPlugScreens];
     PlugWidget wg[kPlugWidgets];
@@ -26,6 +28,7 @@ static Plugin s_plug[kPlugMax];
 static int    s_plugN;
 static int    s_plugCur = -1, s_plugScr = -1, s_plugPage;   // the add-on screen shown (S_PLUGIN)
 static int    s_plugOpenP = -1, s_plugOpenS = -1;           // the one told "screen.open" (for its "screen.close")
+static int    s_plugOwnP = -1, s_plugOwnS = -1;             // an add-on's own window in front (5.2)
 
 // A field of a command: "key=value" between tabs; false (out "") when it is not there.
 static bool PlugField(const wchar_t* cmd, const wchar_t* key, wchar_t* out, int cap)
@@ -48,6 +51,8 @@ static bool PlugField(const wchar_t* cmd, const wchar_t* key, wchar_t* out, int 
 }
 
 static void BlitPic(const Pic& p, int x, int y, int rad);   // (vh_photo.inc)
+static void MediaStep(int dir);
+static void MediaToggle();
 
 static void PlugSend(Plugin& p, const wchar_t* fmt, ...)
 {
@@ -177,13 +182,128 @@ static bool PlugWidgetTap(const UserWg& u)   // an add-on's widget tapped: its s
     return true;
 }
 
-static void PlugOpen(Plugin& p, int s)
+static void PlugOwnClose()   // the add-on's own window goes, VestaHome comes back
 {
+    if (s_plugOwnP >= 0 && s_plugOwnP < s_plugN && s_plugOwnS < s_plug[s_plugOwnP].ns) {
+        Plugin& p = s_plug[s_plugOwnP];
+        PlugSend(p, L"screen.close\tid=%s", p.sc[s_plugOwnS].id);
+    }
+    s_plugOwnP = s_plugOwnS = -1;
+    ShowWindow(s_wnd, SW_SHOW);
+    SetForegroundWindow(s_wnd);
+    Redraw();
+}
+
+static void PlugOpen(Plugin& p, int s, bool push = true)
+{
+    PlugScreen& sc = p.sc[s];
+    if (sc.own) {   // its own window over the whole screen (5.2)
+        if (!sc.win || !IsWindow(sc.win))
+            return;
+        s_plugOwnP = (int)(&p - s_plug);
+        s_plugOwnS = s;
+        PlugSend(p, L"screen.open\tid=%s", sc.id);
+        SetWindowPos(sc.win, HWND_TOPMOST, 0, 0, 800, 480, SWP_SHOWWINDOW);
+        SetForegroundWindow(sc.win);
+        return;
+    }
     s_plugCur = (int)(&p - s_plug);
     s_plugScr = s;
     s_plugPage = 0;
-    Go(S_PLUGIN, true);
+    Go(S_PLUGIN, push);
     Redraw();
+}
+
+// The bottom bar's add-on buttons: the screens with nav=1 of the connected add-ons, the first two.
+static bool PlugNavAt(int k, int* pi, int* si)
+{
+    for (int i = 0; i < s_plugN; i++)
+        for (int s = 0; s_plug[i].hwnd && !s_plug[i].off && s < s_plug[i].ns; s++)
+            if (s_plug[i].sc[s].nav && k-- == 0) {
+                *pi = i;
+                *si = s;
+                return true;
+            }
+    return false;
+}
+
+static int PlugNavCount()
+{
+    int n = 0, p, s;
+    while (n < 2 && PlugNavAt(n, &p, &s))
+        n++;
+    return n;
+}
+
+static Icon PlugNavIcon(int k)
+{
+    int p, s;
+    return PlugNavAt(k, &p, &s) ? PlugIcon(s_plug[p].sc[s].icon) : IC_APPS;
+}
+
+static const wchar_t* PlugNavLabel(int k)
+{
+    int p, s;
+    return PlugNavAt(k, &p, &s) ? (s_plug[p].sc[s].title[0] ? s_plug[p].sc[s].title : s_plug[p].name) : L"";
+}
+
+static int PlugNavSection()   // the add-on screen shown: its button's section (6 / 7), or -1
+{
+    int p, s;
+    for (int k = 0; k < PlugNavCount(); k++)
+        if (PlugNavAt(k, &p, &s) && p == s_plugCur && s == s_plugScr)
+            return 6 + k;
+    return -1;
+}
+
+static void PlugNavTap(int k)
+{
+    int p, s;
+    if (PlugNavAt(k, &p, &s))
+        PlugOpen(s_plug[p], s, false);   // (a main screen: no history, as the other sections)
+}
+
+// The data an add-on subscribed to (7): each second; gps while a fix is fresh, car - the sensors with data (their
+// number as the key, VestaHome/docs/plugin-api.md), media and night when they change.
+static void PlugData()
+{
+    static int s_night0 = -1;
+    static wchar_t s_media0[160];
+    wchar_t media[160];
+    Icon ic = SaverNowPlaying(media, 160);
+    (void)ic;
+    bool mediaNew = wcscmp(media, s_media0) != 0, nightNew = s_night0 != (s_night ? 1 : 0);
+    for (int i = 0; i < s_plugN; i++) {
+        Plugin& p = s_plug[i];
+        if (!p.hwnd || !(p.sub & 0xFF))
+            continue;
+        bool first = (p.sub & 0x100) != 0;
+        p.sub &= 0xFF;
+        if (p.sub & 1) {
+            Gps g;
+            GpsGet(&g);
+            if (GpsFresh(g, 5000))
+                PlugSend(p, L"gps\tfix=1\tlat=%.6f\tlon=%.6f\tspeed=%d\tcourse=%d", g.lat, g.lon, CarKmh(),
+                         (int)g.course);
+            else if (first)
+                PlugSend(p, L"gps\tfix=0");
+        }
+        if (p.sub & 2) {
+            wchar_t s[480], v[32];
+            int n = _snwprintf(s, 480, L"car");
+            for (int id = 0; id < kCarSensors && n < 440; id++)
+                if (CarSensor(id, v, 32))
+                    n += _snwprintf(s + n, 480 - n, L"\t%d=%s", id, v);
+            s[479] = 0;
+            PlugSend(p, L"%s", s);
+        }
+        if ((p.sub & 4) && (mediaNew || first))
+            PlugSend(p, L"media\ttitle=%s\tplaying=%d", media, media[0] ? 1 : 0);
+        if ((p.sub & 8) && (nightNew || first))
+            PlugSend(p, L"night\tvalue=%d", s_night ? 1 : 0);
+    }
+    wcscpy(s_media0, media);
+    s_night0 = s_night ? 1 : 0;
 }
 
 static void PlugItemSet(PlugItem& it, const wchar_t* cmd)   // the fields a command names
@@ -392,6 +512,31 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             wcscpy(s->id, id);
         }
         PlugField(cmd, L"title", s->title, 48);
+        PlugField(cmd, L"icon", s->icon, 16);
+        if (PlugField(cmd, L"nav", v, 8))
+            s->nav = v[0] == L'1';
+        if (PlugField(cmd, L"own", v, 8))
+            s->own = v[0] == L'1';
+        if (s->nav)
+            Redraw();   // a new button in the bottom bar
+    } else if (!wcscmp(verb, L"window")) {   // the own window of a screen (own=1)
+        PlugField(cmd, L"screen", v, 24);
+        PlugScreen* s = PlugScreenOf(*p, v);
+        if (s && PlugField(cmd, L"hwnd", v, 16))
+            s->win = (HWND)wcstoul(v, NULL, 16);
+    } else if (!wcscmp(verb, L"back")) {   // its own window closed: VestaHome in front again
+        PlugOwnClose();
+    } else if (!wcscmp(verb, L"subscribe")) {
+        PlugField(cmd, L"what", v, 96);
+        p->sub = (wcsstr(v, L"gps") ? 1 : 0) | (wcsstr(v, L"car") ? 2 : 0) | (wcsstr(v, L"media") ? 4 : 0) |
+                 (wcsstr(v, L"night") ? 8 : 0);
+        p->sub |= 0x100;   // (the first round sends everything)
+    } else if (!wcscmp(verb, L"media")) {   // the source playing: toggle / next / prev
+        PlugField(cmd, L"cmd", v, 16);
+        if (!wcscmp(v, L"next") || !wcscmp(v, L"prev"))
+            MediaStep(!wcscmp(v, L"next") ? 1 : -1);
+        else if (!wcscmp(v, L"toggle") || !wcscmp(v, L"play") || !wcscmp(v, L"pause"))
+            MediaToggle();
     } else if (!wcscmp(verb, L"screen.clear")) {
         PlugField(cmd, L"id", id, 24);
         PlugScreen* s = PlugScreenOf(*p, id);
@@ -437,6 +582,9 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
 // "widget.show" to the picture widgets that came into sight or left it (no frames drawn for nothing).
 static void PlugScreenWatch()
 {
+    PlugData();
+    if (s_plugOwnP >= 0 && GetForegroundWindow() == s_wnd && IsWindowVisible(s_wnd))
+        s_plugOwnP = s_plugOwnS = -1;   // VestaHome in front again without "back" (a key, the camera): just forgotten
     for (int i = 0; i < s_uwCount; i++) {
         Plugin* pp = NULL;
         PlugWidget* g = PlugWidgetOf(s_uw[i], &pp);

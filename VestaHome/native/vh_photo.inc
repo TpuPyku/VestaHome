@@ -487,6 +487,7 @@ static void DoAction(const Btn& b)
         break;
     }
     case A_PLUGEV:   PlugEvent(b.arg); break;
+    case A_PLUGNAV:  PlugNavTap(b.arg); break;
     case A_CAMOVERSTEP: {   // the speeding threshold: 0..99 km/h over the camera's limit
         int n = s_cfg.camOverBy + b.arg;
         s_cfg.camOverBy = n < 0 ? 0 : n > 99 ? 99 : n;
@@ -1049,6 +1050,19 @@ static void Backlight(bool on)   // the stock shell's SV_BacklightOn / Off(0) (d
     if (f)
         f(0);
 #endif
+}
+
+// Play / pause of the source playing (an add-on's "media cmd=toggle"): our player, the internet radio, the phone.
+static void MediaToggle()
+{
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    if (PlayerPlaying() || (s_chan && s_screen == S_AUDIO))
+        PlayerToggle();
+    else if (s_netState != NR_OFF && s_netState != NR_ERROR)
+        NetToggle();
+    else if (src == 9)
+        BtCmd(BT_CMD_PLAYPAUSE);
 }
 
 static void MediaStep(int dir)   // the source playing: the next / previous track, station
