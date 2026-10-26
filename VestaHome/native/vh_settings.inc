@@ -21,7 +21,7 @@ struct UserWg {
     wchar_t  key[40], title[40], dir[MAX_PATH], data[MAX_PATH], tap[MAX_PATH], start[MAX_PATH];
     wchar_t  file[MAX_PATH];        // its .ini's name (the text editor opens it)
     Icon     ic;
-    bool     wide, have;
+    bool     wide, have, big;        // big: 2 x 2 (an add-on's picture widget)
     int      refresh, state;        // refresh: seconds between reads; state: 0 none, 1 ok, 2 warn, 3 alert
     DWORD    readTick;
     FILETIME dataTime;              // the data file's write time last read

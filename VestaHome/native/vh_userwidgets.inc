@@ -591,11 +591,15 @@ static void UserWidgetsScan()
         }
 }
 
+static bool PlugWidgetDraw(HDC dc, const UserWg& w, int x, int y, int ww, int hh);   // (vh_plugins.inc)
+
 static void WUser(HDC dc, int x, int y, int u)
 {
     const UserWg& w = s_uw[u];
-    int ww = w.wide ? kWgW2 : kWgW;
-    bool d = Widget(dc, x, y, ww, kWgH, w.title, w.ic, w.tap[0] ? A_USERWG : A_NONE, u);
+    int ww = w.wide ? kWgW2 : kWgW, hh = w.big ? kWgH2 : kWgH;
+    bool d = Widget(dc, x, y, ww, hh, w.title, w.ic, w.tap[0] ? A_USERWG : A_NONE, u);
+    if (PlugWidgetDraw(dc, w, x, y, ww, hh))
+        return;   // an add-on's picture
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     if (w.state) {
         static const COLORREF dot[4] = { 0, kOk, kOrange, kStop };
@@ -634,7 +638,7 @@ static const WidgetDef kWidgets[WG_COUNT] = {
 // A widget by its id (built-in or the user's): the only way to it for the layout, the settings and the screen.
 static const wchar_t* WgName(int id) { return id < WG_COUNT ? kWidgets[id].name : s_uw[id - WG_COUNT].title; }
 static bool WgWide(int id) { return id < WG_COUNT ? kWidgets[id].cells >= 2 : s_uw[id - WG_COUNT].wide; }
-static bool WgBig(int id) { return id < WG_COUNT && kWidgets[id].cells == 4; }
+static bool WgBig(int id) { return id < WG_COUNT ? kWidgets[id].cells == 4 : s_uw[id - WG_COUNT].big; }
 static Icon WgIcon(int id) { return id < WG_COUNT ? kWidgets[id].ic : s_uw[id - WG_COUNT].ic; }
 static void WgDraw(int id, HDC dc, int x, int y)
 {

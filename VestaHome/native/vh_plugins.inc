@@ -12,7 +12,8 @@ enum { kPlugMax = 4, kPlugScreens = 4, kPlugItems = 16, kPlugWidgets = 2, kPlugR
 struct PlugItem { wchar_t id[24], type[12], label[48], sub[64], value[48], options[64], link[24]; };
 struct PlugScreen { wchar_t id[24], title[48]; int n; PlugItem it[kPlugItems]; };
 struct PlugWidget { wchar_t id[24], title[40], icon[16], screen[24], value[24], unit[24], text[2][96]; int state;
-                    bool wide; };
+                    bool wide, big, image, shown;
+                    HANDLE map; BYTE* view; int iw, ih; };   // the picture (4.1): its shared memory and size
 struct Plugin {
     wchar_t    id[24], name[48], ver[16], dir[MAX_PATH];   // dir: its folder ("" - started from elsewhere)
     HWND       hwnd;                                       // its window (0 - not connected)
@@ -45,6 +46,8 @@ static bool PlugField(const wchar_t* cmd, const wchar_t* key, wchar_t* out, int 
     }
     return false;
 }
+
+static void BlitPic(const Pic& p, int x, int y, int rad);   // (vh_photo.inc)
 
 static void PlugSend(Plugin& p, const wchar_t* fmt, ...)
 {
@@ -116,7 +119,8 @@ static void PlugWidgetsAppend()
             u.key[39] = 0;
             wcscpy(u.title, g.title);
             u.ic = PlugIcon(g.icon);
-            u.wide = g.wide;
+            u.wide = g.wide || g.big;
+            u.big = g.big;
             u.have = true;
             wcscpy(u.tap, L"plugin");
             wcscpy(u.value, g.value);
@@ -199,13 +203,97 @@ static void PlugWidgetSet(PlugWidget& g, const wchar_t* cmd)
     if (PlugField(cmd, L"title", v, 40)) wcscpy(g.title, v);
     if (PlugField(cmd, L"icon", v, 16)) wcscpy(g.icon, v);
     if (PlugField(cmd, L"screen", v, 24)) wcscpy(g.screen, v);
-    if (PlugField(cmd, L"size", v, 8)) g.wide = !wcscmp(v, L"2") || !wcscmp(v, L"2x1");
+    if (PlugField(cmd, L"size", v, 8)) {
+        g.wide = !wcscmp(v, L"2") || !wcscmp(v, L"2x1");
+        g.big = !wcscmp(v, L"big") || !wcscmp(v, L"2x2");
+    }
+    if (PlugField(cmd, L"image", v, 8)) g.image = v[0] == L'1';
     if (PlugField(cmd, L"value", v, 24)) wcscpy(g.value, v);
     if (PlugField(cmd, L"unit", v, 24)) wcscpy(g.unit, v);
     if (PlugField(cmd, L"text", v, 96)) wcscpy(g.text[0], v);
     if (PlugField(cmd, L"text2", v, 96)) wcscpy(g.text[1], v);
     if (PlugField(cmd, L"state", v, 8))
         g.state = !wcscmp(v, L"ok") ? 1 : !wcscmp(v, L"warn") ? 2 : !wcscmp(v, L"alert") ? 3 : 0;
+}
+
+// The picture widget (4.1): VestaHome makes the shared memory - 16 bytes ('VHIM', width, height, frame number), then
+// RGB565 rows top down - and tells the add-on its name and size; the field under the caption.
+struct PlugImHead { DWORD magic, w, h, seq; };
+
+static void PlugWidgetFree(PlugWidget& g)
+{
+    if (g.view)
+        UnmapViewOfFile(g.view);
+    if (g.map)
+        CloseHandle(g.map);
+    g.view = NULL;
+    g.map = NULL;
+}
+
+static void PlugWidgetImage(Plugin& p, PlugWidget& g)
+{
+    PlugWidgetFree(g);
+    g.iw = kWgW2 - 16;
+    g.ih = (g.big ? kWgH2 : kWgH) - 52;
+    wchar_t name[64];
+    _snwprintf(name, 64, L"VHAP_%s_%s", p.id, g.id);
+    name[63] = 0;
+    DWORD size = sizeof(PlugImHead) + g.iw * g.ih * 2;
+    g.map = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, name);
+    g.view = g.map ? (BYTE*)MapViewOfFile(g.map, FILE_MAP_ALL_ACCESS, 0, 0, size) : NULL;
+    if (!g.view) {
+        VLog(L"дополнение: %s.%s - нет общей памяти для картинки (%u)", p.id, g.id, GetLastError());
+        PlugWidgetFree(g);
+        return;
+    }
+    PlugImHead* h = (PlugImHead*)g.view;
+    h->magic = 0x4D494856;   // 'VHIM'
+    h->w = g.iw;
+    h->h = g.ih;
+    h->seq = 0;
+    g.shown = false;
+    PlugSend(p, L"widget.size	id=%s	w=%d	h=%d	shm=%s", g.id, g.iw, g.ih, name);
+}
+
+static PlugWidget* PlugWidgetOf(const UserWg& u, Plugin** pp = NULL)   // an add-on widget's entry by its key
+{
+    if (wcsncmp(u.key, L"p:", 2))
+        return NULL;
+    const wchar_t* dot = wcschr(u.key + 2, L'.');
+    if (!dot)
+        return NULL;
+    for (int i = 0; i < s_plugN; i++) {
+        Plugin& p = s_plug[i];
+        int n = (int)wcslen(p.id);
+        if (n != dot - u.key - 2 || wcsncmp(p.id, u.key + 2, n))
+            continue;
+        for (int k = 0; k < p.nw; k++)
+            if (!wcscmp(p.wg[k].id, dot + 1)) {
+                if (pp)
+                    *pp = &p;
+                return &p.wg[k];
+            }
+    }
+    return NULL;
+}
+
+static bool PlugWidgetDraw(HDC dc, const UserWg& w, int x, int y, int ww, int hh)
+{
+    PlugWidget* g = PlugWidgetOf(w);
+    if (!g || !g->image)
+        return false;
+    const PlugImHead* h = g->view ? (const PlugImHead*)g->view : NULL;
+    if (!h || !h->seq) {
+        T(dc, x + ww / 2, y + hh / 2 + 8, L"ждём картинку…", 16, kMuted, 600, AL_MID);
+        return true;
+    }
+    Pic pic;
+    pic.w = g->iw;
+    pic.h = g->ih;
+    pic.px = (unsigned short*)(g->view + sizeof(PlugImHead));
+    pic.px32 = NULL;
+    BlitPic(pic, x + 8, y + 44, 10);
+    return true;
 }
 
 // A command from an add-on's window from (WM_COPYDATA). Unknown commands and fields are passed over.
@@ -237,6 +325,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         if (!p->name[0])
             wcscpy(p->name, id);
         PlugField(cmd, L"ver", p->ver, 16);
+        for (int k = 0; k < p->nw; k++)
+            PlugWidgetFree(p->wg[k]);
         p->ns = p->nw = 0;   // (declared again after each hello)
         VLog(L"дополнение: %s (%s %s) подключено", p->id, p->name, p->ver);
         PlugSend(*p, L"welcome\tapi=%d\tvh=%s\tnight=%d\taccent=%06X\tlang=ru", kPlugApi, VhVersion(), s_night ? 1 : 0,
@@ -252,6 +342,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         return;   // not said hello
     if (!wcscmp(verb, L"bye")) {
         VLog(L"дополнение: %s отключилось", p->id);
+        for (int k = 0; k < p->nw; k++)
+            PlugWidgetFree(p->wg[k]);
         p->hwnd = NULL;
         p->ns = p->nw = 0;
         UserWidgetsScan();
@@ -270,12 +362,25 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             wcscpy(p->wg[k].id, id);
             p->nw++;
             PlugWidgetSet(p->wg[k], cmd);
+            if (p->wg[k].image)
+                PlugWidgetImage(*p, p->wg[k]);
             UserWidgetsScan();   // a new one: on the list (and in "Widgets of home"), hidden or not as set
             Redraw();
             return;
         }
         PlugWidgetSet(p->wg[k], cmd);
         PlugWidgetCopy(*p, p->wg[k]);
+    } else if (!wcscmp(verb, L"widget.frame")) {   // a new picture: only this widget redrawn, when it is in sight
+        PlugField(cmd, L"id", id, 24);
+        wchar_t key[40];
+        _snwprintf(key, 40, L"p:%s.%s", p->id, id);
+        key[39] = 0;
+        for (int i = 0; i < s_uwCount; i++) {
+            RECT r;
+            if (!wcscmp(s_uw[i].key, key) && s_screen == S_HOME && IsWindowVisible(s_wnd) &&
+                HomeRect(WG_COUNT + i, &r))
+                RedrawArea(r.left, r.top, r.right, r.bottom);
+        }
     } else if (!wcscmp(verb, L"screen")) {
         PlugField(cmd, L"id", id, 24);
         PlugScreen* s = PlugScreenOf(*p, id);
@@ -328,9 +433,23 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
     }
 }
 
-// Each second (and on leaving the screen): "screen.open" / "screen.close" to the add-on whose screen came / went.
+// Each second (and on leaving the screen): "screen.open" / "screen.close" to the add-on whose screen came / went;
+// "widget.show" to the picture widgets that came into sight or left it (no frames drawn for nothing).
 static void PlugScreenWatch()
 {
+    for (int i = 0; i < s_uwCount; i++) {
+        Plugin* pp = NULL;
+        PlugWidget* g = PlugWidgetOf(s_uw[i], &pp);
+        if (!g || !g->image || !g->view)
+            continue;
+        RECT r;
+        bool shown = s_screen == S_HOME && IsWindowVisible(s_wnd) && GetForegroundWindow() == s_wnd &&
+                     WgShown(WG_COUNT + i) && HomeRect(WG_COUNT + i, &r);
+        if (shown != g->shown) {
+            g->shown = shown;
+            PlugSend(*pp, L"widget.show	id=%s	value=%d", g->id, shown ? 1 : 0);
+        }
+    }
     int p = s_screen == S_PLUGIN ? s_plugCur : -1, s = s_screen == S_PLUGIN ? s_plugScr : -1;
     if (p == s_plugOpenP && s == s_plugOpenS)
         return;
