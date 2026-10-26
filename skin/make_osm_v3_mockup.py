@@ -218,6 +218,8 @@ WIDTH = {'minor': 6, 'secondary': 9, 'primary': 11, 'major': 13}
 
 
 def draw_map(view, pal, traffic=False):
+    global HAIR
+    HAIR = pal is NIGHT
     im = Image.new('RGB', (W * K, H * K), pal['bg'])
     d = ImageDraw.Draw(im)
     areas = [('landuse', ('residential', 'suburb', 'neighbourhood'), 'resid'),
@@ -380,7 +382,12 @@ def car(im, x, y, ang=0.0):
 
 
 # ---------------------------------------------------------------- cards (Škoda Flow: floating, rounded, air)
-def card(im, box, fill=PANEL, alpha=236, radius=22, border=LINE, shadow=True):
+HAIR = False   # the night map: a floating card gets its 1 px edge (the shadow does not show on the dark map)
+
+
+def card(im, box, fill=PANEL, alpha=236, radius=22, border=None, shadow=True):
+    """A card (the rule 2026-10-26, the user: as modern designs - no borders on buttons and cards; a chosen thing
+    gets the accent's 2 px (border=ACCENT); a card floating over the night map - a hairline edge)."""
     x0, y0, x1, y1 = [v * K for v in box]
     if shadow:
         sh = Image.new('L', im.size, 0)
@@ -391,7 +398,9 @@ def card(im, box, fill=PANEL, alpha=236, radius=22, border=LINE, shadow=True):
     ImageDraw.Draw(m).rounded_rectangle([x0, y0, x1, y1], radius * K, fill=alpha)
     im.paste(Image.new('RGB', im.size, fill), (0, 0), m)
     if border:
-        ImageDraw.Draw(im).rounded_rectangle([x0, y0, x1, y1], radius * K, outline=border, width=K)
+        ImageDraw.Draw(im).rounded_rectangle([x0, y0, x1, y1], radius * K, outline=border, width=2 * K)
+    elif HAIR and shadow:
+        ImageDraw.Draw(im).rounded_rectangle([x0, y0, x1, y1], radius * K, outline=(64, 68, 77), width=K)
 
 
 def text(im, xy, t, size, color=TEXT, bold=False, anchor='la'):
@@ -735,6 +744,10 @@ figcaption {{ font-size: 12.5px; color: #a3a8b0; margin-top: 6px; line-height: 1
 <li>Векторная карта даёт: подписи не переворачиваются, ночная палитра своя, линии ровные на любом масштабе, нет
 плиток OSM по сети (файл региона на SD). Растровая версия этого дизайна тоже возможна — меняется только карта.</li>
 <li>Шрифт — Golos Text (как VestaHome; в OSMapsCE сейчас Tahoma).</li>
+<li><b>Обводки</b> (правило 2026-10-26, как в современных системах — Material 3, iOS, Škoda Flow): у кнопок и карточек
+обводок нет, они отделяются заливкой и тенью; выбранное (вариант, поле ввода, точка «Заехать») — рамка цвета
+акцента 2 px; карточки поверх <b>ночной</b> карты — едва заметная светлая кромка 1 px (тень на тёмном не видна).</li>
+<li>Акцент и подсветка машины — из темы VestaHome.</li>
 </ul>
 </body></html>"""
 

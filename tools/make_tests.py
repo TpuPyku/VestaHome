@@ -34,7 +34,7 @@ PLAN = (
     (os.path.join(ROOT, 'YaMaps', 'YaMapsCE'), r'SDMMC\YaMapsCE',
         ('YaMapsCE.exe', 'toolhelp.dll', 'Images', 'GpsGate')),
     (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDMMC\OSMapsCE',
-        ('OSMapsCE.exe', 'Images')),   # toolhelp.dll: the firmware's own (\Windows) is used
+        ('OSMapsCE.exe', 'Images', 'Fonts')),   # toolhelp.dll: the firmware's own (\Windows) is used; Fonts: Golos (OFL)
     # the vector tiles speed test (OSMapsCE/native_vtest; its tiles from get_tiles.py), run from the SD card
     (os.path.join(ROOT, 'OSMapsCE', 'VTileTest'), r'SDMemory\VTileTest',
         ('VTileTest.exe', 'tiles')),

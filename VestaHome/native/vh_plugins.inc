@@ -19,7 +19,7 @@ struct Plugin {
     wchar_t    id[24], name[48], ver[16], dir[MAX_PATH];   // dir: its folder ("" - started from elsewhere)
     HWND       hwnd;                                       // its window (0 - not connected)
     bool       off;                                        // switched off: not started with VestaHome
-    int        sub;                                        // subscribed: 1 gps, 2 car, 4 media, 8 night
+    int        sub;                                        // subscribed: 1 gps, 2 car, 4 media, 8 night, 16 keys
     int        ns, nw;
     PlugScreen sc[kPlugScreens];
     PlugWidget wg[kPlugWidgets];
@@ -93,6 +93,30 @@ static void PlugSend(Plugin& p, const wchar_t* fmt, ...)
     c.cbData = n * sizeof(wchar_t);
     c.lpData = s;
     SendMessage(p.hwnd, WM_COPYDATA, (WPARAM)s_wnd, (LPARAM)&c);
+}
+
+// A panel / wheel button to the add-on whose window is in front, if it subscribed to "keys" (7): its answer 2 -
+// it took the button, VestaHome does nothing with it; otherwise VestaHome's own action (the user 2026-10-26: the
+// map's buttons must not take the media's and the phone's).
+static bool PlugKey(int key, int st, int kind)
+{
+    HWND fg = GetForegroundWindow();
+    for (int i = 0; i < s_plugN; i++) {
+        Plugin& p = s_plug[i];
+        if (!(p.sub & 16) || !p.hwnd || !IsWindow(p.hwnd) || fg != p.hwnd)
+            continue;
+        wchar_t s[64];
+        int n = _snwprintf(s, 64, L"key\tcode=%d\tst=%d\tkind=%d", key, st, kind);
+        COPYDATASTRUCT c;
+        c.dwData = VHAP_MAGIC;
+        c.cbData = n * sizeof(wchar_t);
+        c.lpData = s;
+        if (SendMessage(p.hwnd, WM_COPYDATA, (WPARAM)s_wnd, (LPARAM)&c) == 2) {
+            VLog(L"кнопка 0x%02X — дополнению %s", key, p.id);
+            return true;
+        }
+    }
+    return false;
 }
 
 static Plugin* PlugById(const wchar_t* id)
@@ -306,8 +330,16 @@ static void PlugData()
     Icon ic = SaverNowPlaying(media, 160);
     (void)ic;
     bool mediaNew = wcscmp(media, s_media0) != 0, nightNew = s_night0 != (s_night ? 1 : 0);
+    // the theme's accent: to every add-on when it changes (welcome has it at first; the user's rule 2026-10-26 -
+    // the add-ons' accents and highlights are VestaHome's)
+    static COLORREF s_accent0 = (COLORREF)-1;
+    bool accentNew = s_accent0 != (COLORREF)-1 && s_accent0 != kOrange;
+    s_accent0 = kOrange;
     for (int i = 0; i < s_plugN; i++) {
         Plugin& p = s_plug[i];
+        if (accentNew && p.hwnd)
+            PlugSend(p, L"theme\taccent=%06X", (unsigned)(GetRValue(kOrange) << 16 | GetGValue(kOrange) << 8 |
+                                                           GetBValue(kOrange)));
         if (!p.hwnd || !(p.sub & 0xFF))
             continue;
         bool first = (p.sub & 0x100) != 0;
@@ -562,7 +594,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
     } else if (!wcscmp(verb, L"subscribe")) {
         PlugField(cmd, L"what", v, 96);
         p->sub = (wcsstr(v, L"gps") ? 1 : 0) | (wcsstr(v, L"car") ? 2 : 0) | (wcsstr(v, L"media") ? 4 : 0) |
-                 (wcsstr(v, L"night") ? 8 : 0);
+                 (wcsstr(v, L"night") ? 8 : 0) | (wcsstr(v, L"keys") ? 16 : 0);
         p->sub |= 0x100;   // (the first round sends everything)
     } else if (!wcscmp(verb, L"media")) {   // the source playing: toggle / next / prev
         PlugField(cmd, L"cmd", v, 16);

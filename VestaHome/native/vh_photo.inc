@@ -1086,6 +1086,8 @@ static void HwKey(int key, int st, int kind)
     if (!McuHostOn())
         return;
     VLog(L"кнопка 0x%02X %s %s", key, st ? L"отпущена" : L"нажата", kind == 2 ? L"долго" : kind == 3 ? L"повтор" : L"");
+    if (PlugKey(key, st, kind))   // the add-on in front took it (OSMapsCE: the zoom on a long up / down)
+        return;
     static bool s_dark;
     if (key == 7 && st == 0 && kind == 2) {   // the screen
         s_dark = !s_dark;

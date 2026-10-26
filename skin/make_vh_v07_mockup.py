@@ -36,8 +36,11 @@ def clear_middle(im, src, y0=60, y1=404):
 
 
 def vh_card(im, box, title=None, icon_col=None):
-    """A VestaHome widget tile: PANEL, radius 16, the title row at the top left; with the soft shadow of v3."""
+    """A VestaHome widget tile: PANEL, radius 16, the title row at the top left; with the soft shadow of v3 and no
+    edge (VestaHome's background is not a map)."""
+    hair, m.HAIR = m.HAIR, False
     m.card(im, box, fill=(0x22, 0x25, 0x2a), alpha=255, radius=16, border=None, shadow=True)
+    m.HAIR = hair
     if title:
         x0, y0 = box[0], box[1]
         d = ImageDraw.Draw(im)
@@ -124,7 +127,8 @@ def screen_power():
     im = shot('31_settings_info.png')
     im = ImageEnhance.Brightness(im).enhance(0.45)
     box = (16, 196, 784, 404)
-    m.card(im, box, fill=(0x1c, 0x1f, 0x24), alpha=255, radius=24, border=m.LINE)
+    m.HAIR = False
+    m.card(im, box, fill=(0x1c, 0x1f, 0x24), alpha=255, radius=24)
     d = ImageDraw.Draw(im)
     d.arc([40 * K, 216 * K, 72 * K, 248 * K], -60, 240, fill=m.TEXT, width=3 * K)
     d.line([(56 * K, 212 * K), (56 * K, 232 * K)], fill=m.TEXT, width=3 * K)
@@ -167,6 +171,12 @@ img {{ width: 100%; border-radius: 10px; border: 1px solid #34383f; }}
 <p>Слева — экран сейчас (ПК-сборка), справа — с идеей. Акцент — из темы VestaHome (у пользователя «{accname}»):
 им же в OSMapsCE окрашены машина и её подсветка, квадрат манёвра, активные кнопки и главная кнопка окна.</p>
 {body}
+<h2>Правило обводок (обе программы)</h2>
+<p>Как в современных системах (Material 3, iOS, Škoda Flow): у кнопок и плиток <b>обводок нет</b> — их отделяют
+заливка и тень; главное действие — заливка акцентом. Рамка цвета акцента 2 px — только у выбранного, но не
+главного (выбранный вариант, поле ввода, текущая точка). Карточки, которые лежат поверх <b>ночной карты</b>, получают
+едва заметную кромку 1 px (тень на тёмной карте не видна); у VestaHome фон не карта — кромки нет. VestaHome уже
+так нарисован; OSMapsCE — с этой версии.</p>
 <h2>Правило темы для OSMapsCE</h2>
 <p>OSMapsCE берёт акцент из темы VestaHome: при подключении к VestaHome — из его сообщения (API дополнений: тема и
 её смена), без VestaHome — из <b>screen.accent</b> файла <b>\\SDMMC\\VestaHome\\VestaHome.ini</b> (как заглушка для
