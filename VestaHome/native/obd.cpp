@@ -297,6 +297,56 @@ static void DtcDo(HANDLE h)
     LeaveCriticalSection(&s_cs);
 }
 
+// How far the stack got (Ghidra 2026-10-26, BTCELegacy.dll): it posts thread messages to the thread id in
+// HKLM\Software\Microsoft\Bluetooth\hci "ThreadinId" - 200 when the RFCOMM channel opens (and writes "SPPBtAddress"
+// there), 201 on any close. A failure in under ~4.9 s comes after the link is up (the adapter's SPP service not found by
+// the stack's 3-UUID search, or RFCOMM refused); 5 s - the adapter did not answer at all (no power, the phone holds it).
+static const wchar_t* kHciKey = L"Software\\Microsoft\\Bluetooth\\hci";
+
+static bool HciThreadSet(DWORD id, DWORD* was, bool* had)   // ours in, the previous one kept (restore: had / was)
+{
+    HKEY k;
+    DWORD disp;
+    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, kHciKey, 0, NULL, 0, kRegAll, NULL, &k, &disp) != ERROR_SUCCESS)
+        return false;
+    if (had) {
+        DWORD sz = sizeof(*was), type;
+        *had = RegQueryValueEx(k, L"ThreadinId", NULL, &type, (BYTE*)was, &sz) == ERROR_SUCCESS;
+    }
+    LONG r = RegSetValueEx(k, L"ThreadinId", 0, REG_DWORD, (const BYTE*)&id, sizeof(id));
+    RegCloseKey(k);
+    return r == ERROR_SUCCESS;
+}
+
+static void HciThreadRestore(DWORD was, bool had)
+{
+    HKEY k;
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, kHciKey, 0, 0, &k) != ERROR_SUCCESS)
+        return;
+    if (had)
+        RegSetValueEx(k, L"ThreadinId", 0, REG_DWORD, (const BYTE*)&was, sizeof(was));
+    else
+        RegDeleteValue(k, L"ThreadinId");
+    RegCloseKey(k);
+}
+
+static void HciEvents(DWORD t0, DWORD wait)   // the stack's 200 / 201 that came, with their times
+{
+    DWORD until = GetTickCount() + wait;
+    for (;;) {
+        MSG m;
+        while (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
+            if (m.message == 200)
+                Say(L"  стек: канал RFCOMM открыт (+%lu мс)", GetTickCount() - t0);
+            else if (m.message == 201)
+                Say(L"  стек: связь закрыта (+%lu мс)", GetTickCount() - t0);
+        }
+        if ((LONG)(GetTickCount() - until) >= 0)
+            break;
+        Sleep(50);
+    }
+}
+
 static DWORD WINAPI ObdThread(LPVOID)
 {
     SetState(OBD_CONNECTING);
@@ -324,17 +374,38 @@ static DWORD WINAPI ObdThread(LPVOID)
     BOOL tok = SetCommTimeouts(h, &to);
     Say(L"порт %s открыт, состояние %ld%s", port, (long)PortState(h), tok ? L"" : L", без таймаутов");
     // The stack: up to 5 s for its device chooser, then the address of XCBTSER1, then the link (an adapter holds
-    // one link: a phone still connected to it refuses ours). Three tries, each with its error into the log.
+    // one link: a phone still connected to it refuses ours). Three tries, each with its time class and the stack's
+    // own events into the log ("error 0" is normal: its COM_IOControl does not set the last error).
+    MSG qm;
+    PeekMessage(&qm, NULL, 0, 0, PM_NOREMOVE);   // (this thread's queue: the stack posts to it)
+    DWORD hciWas = 0;
+    bool hciHad = false, hciOurs = HciThreadSet(GetCurrentThreadId(), &hciWas, &hciHad);
     DWORD got = 0;
     BOOL ok = FALSE;
     for (int t = 1; t <= 3 && !ok && !s_stop; t++) {
         DWORD t0 = GetTickCount();
         ok = DeviceIoControl(h, IOCTL_BT_CONNECT, NULL, 0, NULL, 0, &got, NULL);
-        DWORD err = ok ? 0 : GetLastError();
-        Say(L"подключение %d: %s за %lu мс, ошибка %lu, состояние %ld", t, ok ? L"есть" : L"нет", GetTickCount() - t0,
+        DWORD err = ok ? 0 : GetLastError(), ms = GetTickCount() - t0;
+        Say(L"подключение %d: %s за %lu мс (%s), ошибка %lu, состояние %ld", t, ok ? L"есть" : L"нет", ms,
+            ok ? L"связь" : ms >= 4990 ? L"адаптер не ответил: питание, зажигание, занят телефоном"
+                          : L"отказ после связи: служба SPP адаптера или канал RFCOMM",
             err, (long)PortState(h));
+        if (hciOurs)
+            HciEvents(t0, ok ? 0 : 1000);
         if (!ok && t < 3)
             Sleep(2000);
+    }
+    if (hciOurs) {
+        wchar_t a[40] = L"";
+        HKEY k;
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, kHciKey, 0, 0, &k) == ERROR_SUCCESS) {
+            DWORD sz = sizeof(a), type;
+            RegQueryValueEx(k, L"SPPBtAddress", NULL, &type, (BYTE*)a, &sz);
+            RegCloseKey(k);
+        }
+        a[39] = 0;
+        Say(L"  стек: SPPBtAddress «%s»; ThreadinId был %s%lu", a, hciHad ? L"" : L"не задан, ", hciWas);
+        HciThreadRestore(hciWas, hciHad);
     }
     if (!ok || s_stop) {
         CloseHandle(h);
