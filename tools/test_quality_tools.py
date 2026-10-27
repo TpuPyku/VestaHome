@@ -174,6 +174,12 @@ class Tools(unittest.TestCase):
                                        '--cobertura', cov, code_py])
         self.assertIn('1 mutants possible, killed 1, survived 0, not built 0', out)   # line 2 only: covered
         self.assertEqual(code, 0)
+        code, out = run(mutator.main, ['--build', exe + ' -c "pass"', '--test', '%s "%s"' % (exe, test_py),
+                                       '--lines', '1-1,6', code_py])          # the change's lines only: unused()'s
+        self.assertIn('3 mutants possible, killed 0, survived 3', out)        # + -> -, 2 -> 3, 1 -> 2
+        code, out = run(mutator.main, ['--build', exe + ' -c "pass"', '--test', '%s "%s"' % (exe, test_py),
+                                       '--cobertura', cov, '--lines', '2-6', code_py])   # and covered
+        self.assertIn('1 mutants possible', out)
 
     def test_write_mutant_replaces_one_line_and_moves_the_time_on(self):
         path = self.write('f.py', 'a = 1\nb = 2\nc = 3\n')

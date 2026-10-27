@@ -1,10 +1,12 @@
 """mutator - mutation testing (ub-mode, SKILL.md: cover the uncovered, kill the survivors, delete dead code).
 
-    python mutator.py --build "cmd" --test "cmd" [--cobertura cov.xml] [--max 200] [--timeout 60] files...
+    python mutator.py --build "cmd" --test "cmd" [--cobertura cov.xml] [--lines 10-40,52] [--max 200] [--timeout 60]
+                      files...
 
 One mutation at a time (== / !=, < / <=, > / >=, && / ||, + / -, true / false, n / n+1, !x / x) on the lines the
-tests cover (--cobertura; without it every line), then the build and the tests: the tests failing (or hanging past
---timeout) kill it, a passing run - a survivor, a failed build - not counted. Crash-safe and repeatable: the file's
+tests cover (--cobertura; without it every line) - of --lines only, when given (a change's lines), then the build
+and the tests: the tests failing (or hanging past --timeout) kill it, a passing run - a survivor, a failed build -
+not counted. Crash-safe and repeatable: the file's
 original waits beside it as <file>.mutator-orig until restored, and a later run restores a left one first.
 Prints the survivors; exit code: how many.
 """
@@ -119,11 +121,29 @@ def mutate_file(path, wanted, a, budget):
     return stats, survivors, len(all_m)
 
 
+def line_set(spec):
+    """'10-40,52' -> {10, ..., 40, 52}"""
+    out = set()
+    for part in spec.split(','):
+        lo, _, hi = part.partition('-')
+        out |= set(range(int(lo), int(hi or lo) + 1))
+    return out
+
+
+def wanted_lines(hits, f, lines):
+    """The lines to mutate: the covered ones (all without coverage), of --lines when given; None = every line."""
+    wanted = None if hits is None else {n for n, h in hits.get(norm(f), {}).items() if h > 0}
+    if lines is None:
+        return wanted
+    return lines if wanted is None else wanted & lines
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument('--build', required=True)
     ap.add_argument('--test', required=True)
     ap.add_argument('--cobertura', action='append', default=[])
+    ap.add_argument('--lines', type=line_set, help="only these lines (of each file): '10-40,52'")
     ap.add_argument('--max', type=int, default=200, help='mutants per file (evenly spread), 0 = all')
     ap.add_argument('--timeout', type=int, default=60)
     ap.add_argument('files', nargs='+')
@@ -136,8 +156,7 @@ def main(argv=None):
     hits = cobertura_hits(a.cobertura) if a.cobertura else None
     total = []
     for f in a.files:
-        wanted = None if hits is None else {n for n, h in hits.get(norm(f), {}).items() if h > 0}
-        stats, surv, n = mutate_file(f, wanted, a, a.max)
+        stats, surv, n = mutate_file(f, wanted_lines(hits, f, a.lines), a, a.max)
         total += surv
         print('mutator: %s: %d mutants possible, killed %d, survived %d, not built %d' % (
             show(f), n, stats['killed'], stats['survived'], stats['invalid']), flush=True)
