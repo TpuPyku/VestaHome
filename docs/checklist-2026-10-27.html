@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверки на ГУ</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 10mm; }
+  body { font: 10.5pt/1.3 "Segoe UI", Arial, sans-serif; color: #000; background: #fff; margin: 0 auto; max-width: 190mm; }
+  h1 { font-size: 15pt; margin: 0 0 2mm; }
+  h2 { font-size: 12pt; margin: 5mm 0 1.5mm; border-bottom: 1.5pt solid #000; padding-bottom: 0.5mm; page-break-after: avoid; }
+  p, li { margin: 0.8mm 0; }
+  .note { font-size: 9.5pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1mm; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 0.6pt solid #555; padding: 1mm 1.5mm; vertical-align: top; text-align: left; }
+  th { background: #e6e6e6; font-size: 9.5pt; }
+  td.n { width: 8mm; text-align: center; font-weight: 600; }
+  td.ok { width: 7mm; }
+  td.ok::before { content: ""; display: inline-block; width: 3.2mm; height: 3.2mm; border: 0.8pt solid #000; }
+  td.memo { width: 38mm; }
+</style>
+</head>
+<body>
+
+<h1>Проверки на ГУ — пятнадцатый лист</h1>
+<p class="note">Составлено 2026-10-27 по журналам листа 14. Главное: VestaHome переехал в \ResidentFlash\VestaHome (стартует без ожидания карт), без штатной оболочки сам включает Wi-Fi и Bluetooth, GPS читает с COM4 (COM5 — CityGuide). Лист 14 закрыт: его открытые пункты перенесены сюда (разделы 4–5). ☐ — «сделано», «Заметки» — что увидели. <b>Перед проверкой удалите старые журналы из \SDMemory\VestaLogs</b> (журнал заглушки копит дни, а часы при старте ещё не выставлены). Журналы включены, SD-карта вставлена.</p>
+
+<h2>1. Установка и загрузка (Tests\SDMemory\VestaHomeInstall)</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">1</td><td>Установщик → VestaHome «Установить».</td><td>Отчёт: «VestaHome установлен в \ResidentFlash\VestaHome … Перенесён с \SDMMC\VestaHome вместе с настройками, старая папка удалена».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">2</td><td>Перезагрузка; посмотреть настройки.</td><td>Всё как было: тема (Криптон), пароли Wi-Fi, ярлыки приложений, виджеты главной, база камер, свои станции интернет-радио.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">3</td><td>Включить ГУ, смотреть на экран после логотипа LADA; засечь время до VestaHome.</td><td>Сразу наша картинка «VestaHome» с засветом цвета темы и бегущими точками (не «Концепт»). VestaHome появляется быстрее, чем раньше. Записать секунды.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">4</td><td>Пустой файл VestaStub.off в корень SD-карты, перезагрузка. Потом файл удалить.</td><td>Загружается штатная оболочка (VestaHome может мелькнуть и закрыться).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">5</td><td>Работать 10 минут: радио, музыка, экраны.</td><td>Без перезагрузок.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>2. Связь без штатной оболочки</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">6</td><td>«Настройки → Wi-Fi».</td><td>Сети видны; подключение к знакомой точке; интернет: погода и пробки загружаются.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">7</td><td>Телефон с включённым Bluetooth рядом; «Настройки → Bluetooth».</td><td>Телефон подключается сам (за минуту после загрузки); сопряжённые в списке; нет надписи «прокси BT не установлен».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">8</td><td>Звонок входящий и исходящий.</td><td>Окно звонка, звук в машине, микрофон. Приглушается ли радио — записать.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">9</td><td>«Медиа → Bluetooth»: музыка с телефона.</td><td>Играет; название трека; ⏮ ⏯ ⏭ работают.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">10</td><td>OBD-адаптер (телефон от него отключён): «Настройки → Bluetooth → OBD» — подключить.</td><td>Подключается, или в журнале строки «подключение N: … (адаптер не ответил / отказ после связи)».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">11</td><td>Окно питания → «Штатная».</td><td>Штатная оболочка, у неё телефон подключается (наш Bluetooth закрылся сам).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>3. GPS</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">12</td><td>Сразу после загрузки: «Настройки → Автомобиль».</td><td>«Порт GPS» — «COM4 · машина», под ним «открыт · … спутн. · фикс» без «Найти GPS»; скорость 115200.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">13</td><td>Запустить CityGuide (порт COM5) при работающем VestaHome.</td><td>Координаты и у CityGuide, и у VestaHome одновременно.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">14</td><td>OSMapsCE.</td><td>Машина на карте (GPS берёт у VestaHome).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>4. Ещё не работает — повторить для журнала (дальше разбор в Ghidra)</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">15</td><td>«Звук → Эквалайзер», затем «Баланс»: заметно поменять.</td><td>Записать: меняется ли звук.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">16</td><td>«Медиа → Музыка» с SD-карты; кнопка MODE на ГУ.</td><td>Записать: играет ли музыка, переключает ли MODE источник.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">17</td><td><b>Играет музыка с SD</b> (не радио): кнопки руля вверх, вниз, mode, mute — коротко и подержать; то же с открытой OSMapsCE.</td><td>Записать, что делает каждая. По журналу VestaHome («кнопка 0x..») узнаём, присылает ли MCU коды кнопок, когда источник — не радио.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">18</td><td>«Автомобиль → Порт для навигаторов»: COM6, включить.</td><td>Записать подпись («работает» / выключился).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>5. OSMapsCE (из листа 14; нужен интернет)</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">19</td><td>Касание карты → «Поиск», адрес, «Найти», выбрать место.</td><td>Список мест с расстоянием; маршрут от машины, синяя линия.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">20</td><td>Ехать по маршруту, один раз свернуть не туда.</td><td>Вдали от поворота — компактная подсказка (знак и расстояние); за ~300 м — большая карточка (стрелка, расстояние, улица). Свернули — «Вне маршрута, перестраиваю…», новый маршрут.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">21</td><td>Долгое нажатие на карту (без маршрута); «+ ЗАЕХАТЬ» → «Точка на карте»; «Поехали». Потом долгое нажатие при маршруте → «Заехать сюда».</td><td>Редактор «Маршрут»: «Куда» с адресом, строка «Заехать», маршрут через точку (оранжевый «1»). «Назад» — круг слева внизу.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">22</td><td>Маршрут по городу от 8 км, пробки включены.</td><td>Линия маршрута разноцветная по пробкам; внизу 2–3 карточки вариантов с вилкой «с пробками … мин».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">23</td><td>Посмотреть вид; сменить тему в VestaHome и вернуться в карту.</td><td>Панели и кнопки цвета плиток VestaHome, без обводок; значки как в VestaHome; настройки: заголовок слева, «назад» слева внизу. Цвет темы — у машины (с подсветкой), квадрата поворота, кнопок; после смены темы — новый.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+
+<h2>6. Что прислать</h2>
+<ul>
+  <li><b>\SDMemory\VestaLogs\</b> целиком: VestaStub.log, VestaHome.log, BTProxy.log, SPIPower.log, mcu.log, OSMapsCE.log, VestaHomeInstall.log, VestaNMEA.log.</li>
+  <li>Этот лист с заметками.</li>
+</ul>
+</body>
+</html>
