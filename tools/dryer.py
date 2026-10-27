@@ -43,8 +43,13 @@ def functions(path, min_tokens):
         body = '\n'.join(src[fn.start_line - 1:fn.end_line])
         toks = tokens(body)
         if len(toks) >= min_tokens:
-            out.append((path, fn.start_line, fn.name, toks))
+            out.append((path, fn.start_line, fn.name, toks, fn.end_line))
     return out
+
+
+def nested(f, g):
+    """One function inside the other (a closure and its owner): not a copy."""
+    return f[0] == g[0] and (f[1] - g[1]) * (f[4] - g[4]) < 0   # starts and ends ordered oppositely
 
 
 def pairs(funcs, rank):
@@ -52,8 +57,8 @@ def pairs(funcs, rank):
     for i in range(len(funcs)):
         for j in range(i + 1, len(funcs)):
             a, b = funcs[i][3], funcs[j][3]
-            if min(len(a), len(b)) / max(len(a), len(b)) < rank:
-                continue   # lengths alone rule it out
+            if min(len(a), len(b)) / max(len(a), len(b)) < rank or nested(funcs[i], funcs[j]):
+                continue   # lengths alone rule it out, or one holds the other
             m = difflib.SequenceMatcher(None, a, b, autojunk=False)
             if m.real_quick_ratio() >= rank and m.quick_ratio() >= rank:
                 r = m.ratio()

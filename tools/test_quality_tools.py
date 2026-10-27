@@ -117,6 +117,16 @@ class Tools(unittest.TestCase):
         code, out = run(dryer.main, ['--min-tokens', str(n + 1), src])
         self.assertEqual(code, 0)                    # all shorter than the bound: none compared
 
+    def test_dryer_leaves_a_nested_function_and_its_owner(self):
+        body = ''.join('        x%d = a + b * %d - url[%d] + c(a, b, %d)\n' % (i, i, i, i) for i in range(8))
+        src = self.write('n.py', 'def outer(url):\n    def inner(a, b):\n' + body + '        return x0\n'
+                                  '    return inner\n')
+        code, out = run(dryer.main, ['--min-tokens', '5', src])
+        self.assertEqual(code, 0, out)
+        one = self.write('o.cpp', 'int f(int a) { return a * 2 + 3 - a; } int g(int b) { return b * 2 + 3 - b; }\n')
+        code, out = run(dryer.main, ['--min-tokens', '5', one])
+        self.assertEqual(code, 1, out)               # copies on one line: neither holds the other
+
     def test_dryer_names_with_underscores_are_names(self):
         a = 'int f(int _alpha)\n{\n    if (_alpha > 1) return _alpha * 2 + 3;\n    return _alpha - 7;\n}\n'
         b = a.replace('_alpha', '_beta').replace('int f', 'int g')
