@@ -73,7 +73,15 @@
 <tr><td class="n">23</td><td>Посмотреть вид; сменить тему в VestaHome и вернуться в карту.</td><td>Панели и кнопки цвета плиток VestaHome, без обводок; значки как в VestaHome; настройки: заголовок слева, «назад» слева внизу. Цвет темы — у машины (с подсветкой), квадрата поворота, кнопок; после смены темы — новый.</td><td class="ok"></td><td class="memo"></td></tr>
 </table>
 
-<h2>6. Что прислать</h2>
+<h2>6. Дополнено 27.10 (после листа): источники, звук, имя, COM6</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">24</td><td>Без штатной оболочки: «Медиа → Музыка» с SD-карты, потом кнопка MODE на ГУ несколько раз.</td><td>Музыка звучит. MODE переключает радио → музыка → Bluetooth. В VestaStub.log строки «mcu: носитель SD есть (музыка)», «bt: стек запущен».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">25</td><td>«Звук → Эквалайзер»: низкие на максимум; «Баланс»: точку влево до упора.</td><td>Звук меняется сразу (раньше без штатной оболочки — нет).</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">26</td><td>Телефон: список устройств Bluetooth. Потом «Настройки → Bluetooth → Имя ГУ» — своё имя, перезагрузка.</td><td>ГУ видно как «VESTA»; после перезагрузки — под своим именем.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">27</td><td>«Автомобиль → Порт для навигаторов»: COM6, включить; навигатор (CityGuide или Навител) — на COM6.</td><td>Подпись «работает»; навигатор видит координаты на COM6. В VestaNMEA.log есть строка COM_Init.</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>7. Что прислать</h2>
 <ul>
   <li><b>\SDMemory\VestaLogs\</b> целиком: VestaStub.log, VestaHome.log, BTProxy.log, SPIPower.log, mcu.log, OSMapsCE.log, VestaHomeInstall.log, VestaNMEA.log.</li>
   <li>Этот лист с заметками.</li>
