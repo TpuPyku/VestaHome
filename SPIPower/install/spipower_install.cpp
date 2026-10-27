@@ -1116,7 +1116,9 @@ static int DoInstall(int logging, int force)
 // ---------------------------------------------------------------- VestaHome (install / update)
 // The VestaHome build packed in by make_vh_payload.py (resource 101, the format of LaunchInstall's payload:
 // [u32 count][count x (u16 nameLen, UTF-8 name with '/', u32 dataLen, data)][u32 CRC-32 of all before]) goes
-// to \SDMMC\VestaHome (the built-in card: it starts without the SD card, like VestaLaunch). File by file:
+// to \ResidentFlash\VestaHome (the user 2026-10-27: the built-in partition is there at once - VestaHome starts with
+// no wait for the cards; the stock shell lives there too). An older install in \SDMMC\VestaHome is moved there first
+// (its settings, Wi-Fi passwords, apps.txt, cameras, add-ons) and removed once VestaHome is in place. File by file:
 //   1. every file is written as <name>.new and read back (nothing is replaced yet);
 //   2. each old file becomes <name>.bak and <name>.new takes its place; any failure puts the .bak files back;
 //   3. the .bak files are deleted.
@@ -1124,7 +1126,8 @@ static int DoInstall(int logging, int force)
 // speedcam\. radio.txt is the user's list once it is there: written only when missing.
 // A running VestaHome is asked to close (WM_CLOSE), killed after 5 s.
 #define IDR_VH_PAYLOAD 101
-static const wchar_t* kVhDir   = L"\\SDMMC\\VestaHome";
+static const wchar_t* kVhDir   = L"\\ResidentFlash\\VestaHome";
+static const wchar_t* kVhOld   = L"\\SDMMC\\VestaHome";   // where it was until 2026-10-27
 static const wchar_t* kVhExe   = L"VestaHome.exe";
 static const wchar_t* kVhClass = L"VestaHome_Wnd";
 static const char*    kVhKeep  = "radio.txt";   // the user's once it exists
@@ -1274,6 +1277,33 @@ static void VhClose()
     }
 }
 
+static int DelTree(const wchar_t* dir);
+
+// A folder with all it holds (the old install's settings and data to the new place); 1 = everything copied.
+static int CopyTree(const wchar_t* from, const wchar_t* to)
+{
+    wchar_t mask[MAX_PATH], s[MAX_PATH], d[MAX_PATH];
+    WIN32_FIND_DATA fd;
+    int ok = 1;
+    CreateDirectory(to, NULL);
+    Join(mask, from, L"*");
+    HANDLE f = FindFirstFile(mask, &fd);
+    if (f != INVALID_HANDLE_VALUE) {
+        do {
+            if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L".."))
+                continue;
+            Join(s, from, fd.cFileName);
+            Join(d, to, fd.cFileName);
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                ok &= CopyTree(s, d);
+            else if (!CopyFile(s, d, FALSE))
+                ok = 0;
+        } while (FindNextFile(f, &fd));
+        FindClose(f);
+    }
+    return ok;
+}
+
 // Install or update; the outcome goes to g_status. 1 = done.
 static int DoVhInstall()
 {
@@ -1287,15 +1317,35 @@ static int DoVhInstall()
     const unsigned char* data;
     DWORD len;
     wchar_t p[MAX_PATH], pn[MAX_PATH], pb[MAX_PATH];
-    LogMsg(L"vh: install/update -> \\SDMMC\\VestaHome");
-    if (!FileExists(L"\\SDMMC")) {
-        wcscpy(g_status, L"VestaHome: нет тома \\SDMMC.");
+    LogMsg(L"vh: install/update -> \\ResidentFlash\\VestaHome");
+    if (!FileExists(L"\\ResidentFlash")) {
+        wcscpy(g_status, L"VestaHome: нет тома \\ResidentFlash.");
         return 0;
+    }
+    {   // room for it (with the settings it brings along)
+        ULARGE_INTEGER freeB, total, totalFree;
+        if (GetDiskFreeSpaceEx(L"\\ResidentFlash", &freeB, &total, &totalFree) &&
+            freeB.QuadPart < (ULONGLONG)pl.size + 4 * 1024 * 1024) {
+            _snwprintf(g_status, 4096, L"VestaHome: на \\ResidentFlash свободно %u КБ, нужно около %u КБ.",
+                       (unsigned)(freeB.QuadPart / 1024), (unsigned)(pl.size / 1024 + 4096));
+            return 0;
+        }
     }
     VhClose();
     if (ProcExists(kVhExe) == 1) {
         wcscpy(g_status, L"VestaHome не закрылся — закройте его («О системе» → питание → «Выход») и повторите.");
         return 0;
+    }
+    bool moved = false;   // the old place's settings and data come along (only into a new install)
+    if (FileExists(kVhOld) && !FileExists(kVhDir)) {
+        if (!CopyTree(kVhOld, kVhDir)) {
+            DelTree(kVhDir);
+            wcscpy(g_status, L"VestaHome: не удалось перенести \\SDMMC\\VestaHome на \\ResidentFlash — ничего не изменено.");
+            LogMsg(g_status);
+            return 0;
+        }
+        moved = true;
+        LogMsg(L"vh: \\SDMMC\\VestaHome copied to \\ResidentFlash\\VestaHome");
     }
     EnsureDir(kVhDir);
 
@@ -1398,9 +1448,16 @@ static int DoVhInstall()
         _snwprintf(m, 200, L"vh: sd examples: %d new, %d kept, %d in the payload", sdNew, sdKept, sdAll);
         LogMsg(m);
     }
-    _snwprintf(g_status, 4096, L"VestaHome установлен в %s: %u файлов.\n%s%s"
+    bool oldGone = false;
+    if (FileExists(kVhOld)) {   // the old place: away, once the new one has everything (else two copies to confuse)
+        oldGone = DelTree(kVhOld) != 0;
+        LogMsg(oldGone ? L"vh: the old \\SDMMC\\VestaHome removed" : L"vh: the old \\SDMMC\\VestaHome NOT fully removed");
+    }
+    _snwprintf(g_status, 4096, L"VestaHome установлен в %s: %u файлов.\n%s%s%s"
                L"Настройки (VestaHome.ini, пароли Wi-Fi), apps.txt и база камер не тронуты.",
-               kVhDir, (unsigned)(n - sdAll - (keep ? 1 : 0)), keep ? L"Свой radio.txt оставлен.\n" : L"", sdLine);
+               kVhDir, (unsigned)(n - sdAll - (keep ? 1 : 0)), keep ? L"Свой radio.txt оставлен.\n" : L"", sdLine,
+               moved ? (oldGone ? L"Перенесён с \\SDMMC\\VestaHome вместе с настройками, старая папка удалена.\n"
+                                : L"Перенесён с \\SDMMC\\VestaHome; старую папку удалить не удалось.\n") : L"");
     LogMsg(g_status);
     return 1;
 }
@@ -1463,8 +1520,8 @@ static void ExtractProxy()
         DeleteFile(p);
 }
 
-// Remove VestaHome completely: \SDMMC\VestaHome with its settings (VestaHome.ini, Wi-Fi passwords), apps.txt,
-// the camera base. The logs on the SD card (VestaLogs) stay.
+// Remove VestaHome completely: \ResidentFlash\VestaHome (and an older \SDMMC\VestaHome) with its settings
+// (VestaHome.ini, Wi-Fi passwords), apps.txt, the camera base. The logs on the SD card (VestaLogs) stay.
 static int DelTree(const wchar_t* dir)
 {
     wchar_t mask[MAX_PATH], p[MAX_PATH];
@@ -1490,9 +1547,9 @@ static int DelTree(const wchar_t* dir)
 
 static int DoVhUninstall()
 {
-    LogMsg(L"vh: uninstall \\SDMMC\\VestaHome");
-    if (!FileExists(kVhDir)) {
-        wcscpy(g_status, L"VestaHome: в \\SDMMC\\VestaHome его нет — удалять нечего.");
+    LogMsg(L"vh: uninstall \\ResidentFlash\\VestaHome");
+    if (!FileExists(kVhDir) && !FileExists(kVhOld)) {
+        wcscpy(g_status, L"VestaHome: в \\ResidentFlash\\VestaHome его нет — удалять нечего.");
         return 1;
     }
     VhClose();
@@ -1500,8 +1557,8 @@ static int DoVhUninstall()
         wcscpy(g_status, L"VestaHome не закрылся — закройте его («О системе» → питание → «Выход») и повторите.");
         return 0;
     }
-    int ok = DelTree(kVhDir);
-    wcscpy(g_status, ok ? L"VestaHome удалён: папка \\SDMMC\\VestaHome со всеми настройками.\n"
+    int ok = (!FileExists(kVhDir) || DelTree(kVhDir)) & (!FileExists(kVhOld) || DelTree(kVhOld));
+    wcscpy(g_status, ok ? L"VestaHome удалён: папка \\ResidentFlash\\VestaHome со всеми настройками.\n"
                           L"Журналы на SD-карте (\\SDMemory\\VestaLogs) оставлены."
                         : L"VestaHome удалён не полностью — часть файлов занята (журнал VestaHomeInstall.log в VestaLogs на SD-карте).");
     LogMsg(g_status);
@@ -1913,7 +1970,7 @@ static void DoBootArm(const char* verb, int force)
         wchar_t vh[MAX_PATH];
         Join(vh, kVhDir, kVhExe);
         if (stubOn && !FileExists(vh)) {
-            wcscpy(g_status, L"Отказ: VestaHome не установлен (\\SDMMC\\VestaHome) — сначала кнопка 1.");
+            wcscpy(g_status, L"Отказ: VestaHome не установлен (\\ResidentFlash\\VestaHome) — сначала кнопка 1.");
             return;
         }
         if (stubOn && !FileExists(g_stubSrc)) {
@@ -2406,7 +2463,7 @@ static void RunAction(int id)
                        stubJob || proxyJob ? L"Потом перезагрузите ГУ, НЕ вынимая SD-карту." : L"");
         else
             _snwprintf(msg, 1024, L"Удалить отмеченное?\n%s%s%s%s",
-                       g_tickVh ? L"• VestaHome полностью (\\SDMMC\\VestaHome: и настройки, пароли Wi-Fi, ярлыки, "
+                       g_tickVh ? L"• VestaHome полностью (\\ResidentFlash\\VestaHome: и настройки, пароли Wi-Fi, ярлыки, "
                                   L"база камер) — сейчас.\n" : L"",
                        stubJob ? L"• Загрузчик VestaHome: штатная оболочка вернётся на место при следующей загрузке.\n" : L"",
                        proxyJob ? L"• Proxy MCU и Bluetooth: заводские DLL вернутся при следующей загрузке "

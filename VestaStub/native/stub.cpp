@@ -71,15 +71,19 @@ static void Log(const wchar_t* fmt, ...);
 // The pictures in their order: ours (one's own, then VestaHome's), then the stock shell's. The built-in card \SDMMC
 // comes up seconds after the stub starts (HU 2026-10-27: 4.5 s - the stock picture was shown though ours was
 // there): the stock one is shown meanwhile, and ours replaces it as soon as the card is there (the timer, 300 ms).
-static const wchar_t* const kSplashPics[4] = {
+// (VestaHome on \ResidentFlash since 2026-10-27: there at once; \SDMMC - an older install)
+static const wchar_t* const kSplashPics[7] = {
+    L"\\ResidentFlash\\VestaHome\\Skin\\bootmy.png", L"\\ResidentFlash\\VestaHome\\Skin\\bootmy.jpg",
+    L"\\ResidentFlash\\VestaHome\\Skin\\boot.png",
     L"\\SDMMC\\VestaHome\\Skin\\bootmy.png", L"\\SDMMC\\VestaHome\\Skin\\bootmy.jpg", L"\\SDMMC\\VestaHome\\Skin\\boot.png",
     L"\\ResidentFlash\\navigation\\app\\res\\img\\Itelma\\MMC27\\Main\\NEW_LOGO.PNG" };
+static const int kSplashStock = 6;
 static int s_splashPick = -1;   // the one shown
 
 // The first picture that is there, if it comes before the one shown; true = a new one.
 static bool SplashPick()
 {
-    int upto = s_splashPick < 0 ? 4 : s_splashPick;
+    int upto = s_splashPick < 0 ? kSplashStock + 1 : s_splashPick;
     for (int i = 0; i < upto; i++) {
         wchar_t path[MAX_PATH];
         HuPath(path, kSplashPics[i]);
@@ -87,7 +91,7 @@ static bool SplashPick()
             continue;
         HBITMAP old = s_splashBmp;
         s_splashBmp = NULL;
-        if (SplashLoad(path, i == 2)) {   // the spot only on ours
+        if (SplashLoad(path, i == 2 || i == 5)) {   // the spot only on VestaHome's boot.png
             if (old)
                 DeleteObject(old);
             s_splashPick = i;
@@ -153,7 +157,9 @@ static COLORREF SplashAccent()
         { 247, RGB(0xc3, 0xb8, 0x9c) }, { 372, RGB(0x72, 0xc0, 0x59) }, { 476, RGB(0x4f, 0x7a, 0xca) },
         { 619, RGB(0xab, 0xba, 0xd8) }, { 691, RGB(0xee, 0xee, 0xee) } };
     wchar_t path[MAX_PATH];
-    HuPath(path, L"\\SDMMC\\VestaHome\\VestaHome.ini");
+    HuPath(path, L"\\ResidentFlash\\VestaHome\\VestaHome.ini");
+    if (!There(path))
+        HuPath(path, L"\\SDMMC\\VestaHome\\VestaHome.ini");   // (an older install)
     HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     int code = 130;
     if (f != INVALID_HANDLE_VALUE) {
@@ -242,7 +248,7 @@ static LRESULT CALLBACK SplashProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         s_splashDot++;
-        if (s_splashPick != 2 && s_splashPick != 0 && s_splashPick != 1 && SplashPick()) {   // the card came: ours
+        if ((s_splashPick < 0 || s_splashPick == kSplashStock) && SplashPick()) {   // the card came: ours
             InvalidateRect(hwnd, NULL, FALSE);
             return 0;
         }
@@ -797,8 +803,8 @@ static int RunOriginal(const wchar_t* args, const wchar_t* why)
 
 static bool FindVesta(wchar_t* exe)
 {
-    static const wchar_t* kCand[] = { L"\\SDMMC\\VestaHome\\VestaHome.exe", L"\\SDMemory\\VestaHome\\VestaHome.exe",
-                                      L"\\ResidentFlash\\VestaHome\\VestaHome.exe" };
+    static const wchar_t* kCand[] = { L"\\ResidentFlash\\VestaHome\\VestaHome.exe", L"\\SDMMC\\VestaHome\\VestaHome.exe",
+                                      L"\\SDMemory\\VestaHome\\VestaHome.exe" };
     for (int i = 0; i < (int)(sizeof(kCand) / sizeof(kCand[0])); i++) {
         HuPath(exe, kCand[i]);
         if (There(exe))
@@ -833,11 +839,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
     }
 
     wchar_t p[MAX_PATH];
+    bool early = false;   // VestaHome on \ResidentFlash: started at once, the SD card's flag looked at after (below)
     {   // the boot: the volumes come up after us - wait a little for the SD card (its flag) and for VestaHome
         wchar_t sd[MAX_PATH], vh0[MAX_PATH];
         HuPath(sd, L"\\SDMemory");
+        HuPath(vh0, L"\\ResidentFlash\\VestaHome\\VestaHome.exe");
+        early = There(vh0) && !There(sd);
         DWORD t0 = GetTickCount();
-        while (!There(sd) && GetTickCount() - t0 < 6000)
+        while (!early && !There(sd) && GetTickCount() - t0 < 6000)
             Sleep(250);
         while (!FindVesta(vh0) && GetTickCount() - t0 < 20000)
             Sleep(250);
@@ -869,6 +878,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
             continue;   // counted: the third time gives the original
         }
         Log(L"VestaHome запущен (%d-я попытка): %s", fails + 1, vh);
+        if (early) {   // the cards come a few seconds later: their stop flag still works (VestaHome closed, the shell)
+            early = false;
+            DWORD tw = GetTickCount();
+            while (GetTickCount() - tw < 12000 && WaitForSingleObject(h, 250) == WAIT_TIMEOUT) {
+                wchar_t f1[MAX_PATH], f2[MAX_PATH];
+                HuPath(f1, L"\\SDMemory\\VestaStub.off");
+                HuPath(f2, L"\\USBDevice\\VestaStub.off");
+                if (There(f1) || There(f2)) {
+                    TerminateProcess(h, 0);
+                    CloseHandle(h);
+                    HostStop();
+                    WriteCount(0);
+                    return RunOriginal(args, L"флаг VestaStub.off (VestaHome уже был запущен с \\ResidentFlash)");
+                }
+            }
+        }
         bool lived = false;
         DWORD t0 = GetTickCount();
         for (;;) {   // VestaHome and the MCU's host: the host falls - again

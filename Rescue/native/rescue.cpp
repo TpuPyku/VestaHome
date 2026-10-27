@@ -360,6 +360,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     Log(boot ? L"запуск при загрузке: отключаю наши программы" : L"запуск вручную: только отчёт");
     if (boot) {
         Processes(true);
+        Disable(L"\\ResidentFlash\\VestaHome\\VestaHome.exe");
         Disable(L"\\SDMMC\\VestaHome\\VestaHome.exe");
         Disable(L"\\SDMMC\\VestaLaunch\\VestaLaunch.exe");
         Disable(L"\\SDMMC\\navit\\navit.exe");

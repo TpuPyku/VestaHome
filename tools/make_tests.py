@@ -52,7 +52,7 @@ PLAN = (
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\LaunchInstall',
         ('LaunchInstall.exe',)),
     # the sample add-on (VestaCore/plugins/sample): VestaHome starts Plugins\<Name>\<Name>.exe next to itself
-    (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'SDMMC\VestaHome\Plugins\Sample',
+    (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'ResidentFlash\VestaHome\Plugins\Sample',
         ('Sample.exe',)),
 )
 
@@ -67,7 +67,16 @@ def copy(src, dst):
     return os.path.getsize(dst)
 
 
+# places of Tests no longer made (a program moved): removed, so the folder has no stale copies
+RETIRED = (r'SDMMC\VestaHome',)   # VestaHome moved to \ResidentFlash (2026-10-27)
+
+
 def main():
+    for sub in RETIRED:
+        old = os.path.join(TESTS, sub)
+        if os.path.isdir(old):
+            shutil.rmtree(old)
+            print('removed (retired): %s' % sub)
     if not os.path.isdir(os.path.join(V, 'VestaHome', 'VestaHome', 'TestMedia')):   # generated once (needs ffmpeg)
         subprocess.call([sys.executable, os.path.join(V, 'tools', 'make_testmedia.py')])
     for src_dir, sub, entries in PLAN:
