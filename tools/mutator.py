@@ -11,10 +11,11 @@ Prints the survivors; exit code: how many.
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 
-from crapper import cobertura_hits, norm
+from crapper import cobertura_hits, norm, show
 
 # (pattern, replacement) on a line with its strings and comments masked; one match replaced per mutant
 OPS = [
@@ -27,20 +28,35 @@ OPS = [
     (r'(?<![\w.])(\d+)(?![\w.])', None),          # n -> n + 1
     (r'!(?=[\w(])', ''),                          # !x -> x
 ]
-SKIP = re.compile(r'^\s*(#|//|/\*|\*)')
+SKIP = re.compile(r'^\s*(#|//|/\*|\*)|\bLog\(|\bprintf\(')   # comments, the preprocessor, the logs (not behaviour)
 
 
 def masked(line):
-    """The line with string / char literals and a trailing // comment blanked (same length)."""
+    """The line with its string / char literals blanked (same length) and a trailing // or # comment cut off."""
     out = re.sub(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', lambda m: ' ' * len(m.group()), line)
-    c = out.find('//')
-    return out if c < 0 else out[:c] + ' ' * (len(out) - c)
+    return re.split(r'//|#', out)[0]
+
+
+def in_text(lines):
+    """The lines that are (or touch) a Python triple-quoted string: text, not code."""
+    inside, out = None, set()
+    for i, line in enumerate(lines):
+        for q in re.findall('"{3}|\'{3}', line):   # (written so: this line itself holds no triple quote)
+            if inside is None:
+                inside = q
+            elif q == inside:
+                inside = None
+            out.add(i)
+        if inside:
+            out.add(i)
+    return out
 
 
 def mutants(lines, wanted):
     """(line index, new line, what) for each mutation of the wanted lines (1-based numbers)."""
+    text = in_text(lines)
     for i, line in enumerate(lines):
-        if (wanted is not None and i + 1 not in wanted) or SKIP.match(line):
+        if (wanted is not None and i + 1 not in wanted) or SKIP.match(line) or i in text:
             continue
         m_line = masked(line)
         for pat, rep in OPS:
@@ -62,31 +78,42 @@ def restore(path):
         os.replace(orig, path)
 
 
+def write_mutant(path, lines, bom, k, i, new):
+    """The file with line i replaced; its time moved on by k + 1 s: a same-size change in the same second would
+    otherwise look unchanged (Python's .pyc cache trusts size and time)."""
+    changed = lines[:i] + [new] + lines[i + 1:]
+    with open(path, 'wb') as f:
+        f.write((b'\xef\xbb\xbf' if bom else b'') + '\n'.join(changed).encode('utf-8'))
+    stamp = os.path.getmtime(path + '.mutator-orig') + k + 1
+    os.utime(path, (stamp, stamp))
+
+
+def judge(a):
+    """'invalid' (no build), 'survived' (the tests pass), 'killed'."""
+    if run(a.build, a.timeout * 4) != 0:
+        return 'invalid'
+    return 'survived' if run(a.test, a.timeout) == 0 else 'killed'
+
+
 def mutate_file(path, wanted, a, budget):
     restore(path)
-    raw = open(path, 'rb').read()
+    with open(path, 'rb') as f:
+        raw = f.read()
     bom = raw.startswith(b'\xef\xbb\xbf')
-    text = raw.decode('utf-8-sig')
-    lines = text.split('\n')
+    lines = raw.decode('utf-8-sig').split('\n')
     all_m = list(mutants(lines, wanted))
-    step = max(1, len(all_m) // budget) if budget else 1
+    chosen = all_m[::max(1, len(all_m) // budget)][:budget] if budget else all_m
     stats = {'killed': 0, 'survived': 0, 'invalid': 0}
     survivors = []
-    open(path + '.mutator-orig', 'wb').write(raw)
+    shutil.copy2(path, path + '.mutator-orig')   # (its time too: the original comes back as it was)
     try:
-        for i, new, what in all_m[::step][:budget]:
-            changed = lines[:i] + [new] + lines[i + 1:]
-            open(path, 'wb').write((b'\xef\xbb\xbf' if bom else b'') + '\n'.join(changed).encode('utf-8'))
-            if run(a.build, a.timeout * 4) != 0:
-                stats['invalid'] += 1
-                continue
-            r = run(a.test, a.timeout)
-            if r == 0:
-                stats['survived'] += 1
-                survivors.append('%s:%d  %s   | %s' % (os.path.relpath(path), i + 1, what, lines[i].strip()))
+        for k, (i, new, what) in enumerate(chosen):
+            write_mutant(path, lines, bom, k, i, new)
+            verdict = judge(a)
+            stats[verdict] += 1
+            if verdict == 'survived':
+                survivors.append('%s:%d  %s   | %s' % (show(path), i + 1, what, lines[i].strip()))
                 print('SURVIVED ' + survivors[-1], flush=True)
-            else:
-                stats['killed'] += 1
     finally:
         restore(path)
     return stats, survivors, len(all_m)
@@ -101,6 +128,11 @@ def main(argv=None):
     ap.add_argument('--timeout', type=int, default=60)
     ap.add_argument('files', nargs='+')
     a = ap.parse_args(argv)
+    for f in a.files:
+        restore(f)   # (a crash's leftover first: the baseline runs on the originals)
+    if judge(a) != 'survived':   # the tests must pass on the originals, or every mutant would look killed
+        print('mutator: the build or the tests fail before any mutation - nothing to measure')
+        return 255
     hits = cobertura_hits(a.cobertura) if a.cobertura else None
     total = []
     for f in a.files:
@@ -108,7 +140,7 @@ def main(argv=None):
         stats, surv, n = mutate_file(f, wanted, a, a.max)
         total += surv
         print('mutator: %s: %d mutants possible, killed %d, survived %d, not built %d' % (
-            os.path.relpath(f), n, stats['killed'], stats['survived'], stats['invalid']), flush=True)
+            show(f), n, stats['killed'], stats['survived'], stats['invalid']), flush=True)
     run(a.build, a.timeout * 4)   # the build of the originals back in place
     return len(total)
 

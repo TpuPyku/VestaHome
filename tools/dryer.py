@@ -14,6 +14,8 @@ import sys
 
 import lizard
 
+from crapper import show
+
 TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[A-Za-z_]\w*|\d[\w.]*|\S')
 KEYWORDS = set('''if else for while do switch case default break continue return goto static const struct class
     enum sizeof new delete true false NULL void int char short long unsigned signed double float bool def lambda
@@ -69,7 +71,7 @@ def main(argv=None):
     funcs = [f for p in a.files for f in functions(p, a.min_tokens)]
     found = pairs(funcs, a.rank)
     for r, x, y in found:
-        print('%.2f  %s:%d %s  ~  %s:%d %s' % (r, os.path.relpath(x[0]), x[1], x[2], os.path.relpath(y[0]), y[1], y[2]))
+        print('%.2f  %s:%d %s  ~  %s:%d %s' % (r, show(x[0]), x[1], x[2], show(y[0]), y[1], y[2]))
     print('dryer: %d functions, %d pairs at rank >= %g' % (len(funcs), len(found), a.rank))
     return len(found)
 
