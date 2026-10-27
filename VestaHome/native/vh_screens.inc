@@ -140,6 +140,7 @@ static void RadioDock(HDC dc, bool listOn)
 // as the shell's screen does).
 static void OursQuiet();
 static void BtQuiet();
+static bool McuHostOn();   // (vh_photo.inc) our MCU host runs: the stock shell does not
 static void MediaSource();
 
 // The tuner's state comes only on a change or when asked (key 0x30). Right after the unit starts the MCU may not
@@ -159,6 +160,7 @@ static DWORD s_radioAsk;          // the radio wanted (RadioOn, its screen), 0 =
 static DWORD s_srcByUs;      // we switched the source: the watcher (MODE, the shell) leaves our players alone
 static DWORD s_radioSrcAsk;  // RadioOn's keys sent (checked 1.5 s later)
 static DWORD s_btPathTick;   // the Bluetooth path taken for our player: the phone paused once it is up
+static DWORD s_mediaAsk;     // MediaSource's SendMediaSourceSelect sent (checked 2 s later: else Bluetooth's path)
 
 // СВ (MW, 2026-10-20): the shell's AM key 0x3A, band 2 in 0x0901 with the frequency in kHz (522, 531, ... a 9 kHz
 // step), 8 presets; 0x3B from it goes back to FM1. The band takes the "СВ" radio setting (0x092E) to be on.
@@ -376,7 +378,9 @@ static void McuKey(int code, bool ext)
 
 
 // The radio as the MCU's source: the stock shell's main menu "Radio" is key 0x7F. The shell sends 0x30 before
-// every source change (SPIPower.log 2026-10-18); without it our 0x7F was ignored at first - so the same.
+// every source change (SPIPower.log 2026-10-18); without it our 0x7F was ignored at first - so the same while the
+// shell runs. Under our MCU host the main menu's 0x7F alone (G3NavHMI FUN_005f7cdc, Ghidra 2026-10-27), and the
+// radio stayed silent after media until a preset was pressed (HU 2026-10-27-2) - the check below picks it.
 // One source at a time: our players and the phone's music stop.
 static void RadioOn()
 {
@@ -389,7 +393,8 @@ static void RadioOn()
     VolGet(&vol, &mute, &src);
     if (src == 0)
         return;   // already the radio
-    McuKey(0x30, false);
+    if (!McuHostOn())
+        McuKey(0x30, false);
     McuKey(0x7F, false);
     s_srcByUs = s_radioSrcAsk = GetTickCount();
 }

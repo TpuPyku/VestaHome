@@ -410,6 +410,10 @@ static SpFn3  s_spCard;       // SPApi_SendMediaCardStatus(dev, in, state)
 static SpFnII s_spCardNew;    // SPApi_SendMediaCardIsNewStatus(new, dev)
 static SpFn1  s_spBtOpen;     // SPApi_SendBTOpenStatus(on)
 static SpFn1  s_spBtChan;     // SPApi_SendRadioBTAudioChannelChoiceStatus(1)
+static SpFnII s_spPhone;      // SPApi_SendBTPhoneStatus(type, state)
+static SpFn1  s_spMatch;      // SPApi_SendBTMatchStatus(connected)
+static SpFn0  s_spBtRoute;    // SPApi_SendRadioBTRouteChange()
+static SpFn1  s_spPrivacy;    // SPApi_SendRadioBTPrivacyStatus(on the phone)
 static bool   s_btUp;         // our Bluetooth stack runs (BtHostStart)
 
 // ---- the inbound trace (2026-10-25): the MCU resets the unit ~40 s after the shell is gone (its watchdog misses the
@@ -617,9 +621,57 @@ typedef void (*BtCbFn)(int* ev);
 typedef int (*BtInitFn)(BtCbFn cb);
 static BtFn0 s_btDeinit;
 
+// The calls (HU 2026-10-27-2: without the shell the radio played on through a call, and the call was not heard): the
+// shell tells the MCU the phone's state (Ghidra 2026-10-27: NCL_BT's handler FUN_10005c6c keeps (type, state) and
+// raises EVT_ID_CHANGE_BT_PHONE_STATUS, on which G3NavHMI FUN_0041a4a4 sends SPApi_SendBTPhoneStatus(type, state)).
+// The SDK's events (code = NCL_BT's case + 1): 0x10 the call's setup on line ev[2] (1 - the first; ev[1] 0 idle -> (0, 0),
+// 1 incoming -> (0, 1), 2 dialing / 3 alerting -> (2, 1), 4 active -> (4, 1) for an outgoing call, (5, 1) for an
+// incoming one); 0x11 the hands-free link (ev[1] 2 up -> SendBTMatchStatus(1) + SendBTPhoneStatus(1, 1); 0 down ->
+// (0, 0) + MatchStatus(0)); 0x12 the call's sound (ev[1] 1 in the car -> SendRadioBTRouteChange(); in a call also
+// SendRadioBTPrivacyStatus: 0 in the car, 1 on the phone). The MCU then mutes the radio and gives the channel (0x8906).
+static int s_callType = -1;   // the last type sent in a call (4 / 5 active), -1 none
+static bool s_callOut;        // the call being set up is ours (dialing / alerting)
+
 static void BtCb(int* ev)   // the shell's handler's place: the proxy has published the event already
 {
-    (void)ev;
+    if (!ev)
+        return;
+    int type = -1, state = 0;
+    switch (ev[0]) {
+    case 0x10:
+        if (ev[2] != 1)
+            break;
+        switch (ev[1]) {
+        case 0: type = 0; state = 0; s_callOut = false; break;
+        case 1: type = 0; state = 1; s_callOut = false; break;
+        case 2:
+        case 3: type = 2; state = 1; s_callOut = true; break;
+        case 4: type = s_callOut ? 4 : 5; state = 1; break;
+        }
+        break;
+    case 0x11:
+        if (ev[1] == 2 || ev[1] == 0) {
+            int up = ev[1] == 2;
+            if (s_spMatch)
+                s_spMatch(up);
+            type = up;
+            state = up;
+        }
+        break;
+    case 0x12:
+        if (ev[1] == 1 && s_spBtRoute)
+            s_spBtRoute();
+        if ((ev[1] == 0 || ev[1] == 1) && (s_callType == 4 || s_callType == 5) && s_spPrivacy)
+            s_spPrivacy(ev[1] ? 0 : 1);
+        Log(L"bt: звук звонка %s", ev[1] == 1 ? L"в машине" : L"нет");
+        break;
+    }
+    if (type < 0)
+        return;
+    if (s_spPhone)
+        s_spPhone(type, state);
+    s_callType = state && type >= 4 ? type : -1;
+    Log(L"bt: телефон -> MCU (%d, %d)", type, state);
 }
 
 // The unit's name seen by phones: the stack reads HKLM\Drivers\BT\XCBTStack "DeviceName" when it starts (NCL_BT's
@@ -731,6 +783,10 @@ static int McuHost()
     s_spCardNew = (SpFnII)Proc(sp, "SPApi_SendMediaCardIsNewStatus");
     s_spBtOpen = (SpFn1)Proc(sp, "SPApi_SendBTOpenStatus");
     s_spBtChan = (SpFn1)Proc(sp, "SPApi_SendRadioBTAudioChannelChoiceStatus");
+    s_spPhone = (SpFnII)Proc(sp, "SPApi_SendBTPhoneStatus");
+    s_spMatch = (SpFn1)Proc(sp, "SPApi_SendBTMatchStatus");
+    s_spBtRoute = (SpFn0)Proc(sp, "SPApi_SendRadioBTRouteChange");
+    s_spPrivacy = (SpFn1)Proc(sp, "SPApi_SendRadioBTPrivacyStatus");
     HMODULE sv = LoadLibrary(L"desay_sdk_api.dll");
     s_svRoute = sv ? (SpFn1)Proc(sv, "SV_AudioSetRoute") : NULL;
     if (!load || !inited || !init || !skel) {

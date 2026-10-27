@@ -775,7 +775,7 @@ static const wchar_t* s_face = L"Tahoma";
 
 static int FontsLoad()   // the fonts taken (2 = both: the face is ours)
 {
-    static const wchar_t* files[2] = { L"GolosText-Regular.ttf", L"GolosText-Bold.ttf" };
+    static const wchar_t* files[3] = { L"GolosText-Regular.ttf", L"GolosText-Bold.ttf", L"OFL.txt" };
     int ok = 0;
     for (int i = 0; i < 2; i++) {
         wchar_t p[MAX_PATH];
@@ -785,6 +785,19 @@ static int FontsLoad()   // the fonts taken (2 = both: the face is ours)
     }
     if (ok == 2)
         s_face = L"Golos Text";
+#ifdef UNDER_CE
+    // the install before \ResidentFlash left them in the old \SDMMC\VestaHome (taken by the running VestaHome, the
+    // installer could not delete them; HU 2026-10-27-2): away now, and the folder if nothing else is in it
+    if (!_wcsnicmp(s_dir, L"\\ResidentFlash\\", 15)) {
+        for (int i = 0; i < 3; i++) {
+            wchar_t p[MAX_PATH];
+            _snwprintf(p, MAX_PATH, L"\\SDMMC\\VestaHome\\Fonts\\%s", files[i]);
+            DeleteFile(p);
+        }
+        RemoveDirectory(L"\\SDMMC\\VestaHome\\Fonts");
+        RemoveDirectory(L"\\SDMMC\\VestaHome");
+    }
+#endif
     return ok;
 }
 

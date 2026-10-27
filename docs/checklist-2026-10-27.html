@@ -81,7 +81,17 @@
 <tr><td class="n">26</td><td>Телефон: список устройств Bluetooth. Потом «Настройки → Bluetooth → Имя ГУ» — своё имя, перезагрузка.</td><td>ГУ видно как «VESTA»; после перезагрузки — под своим именем.</td><td class="ok"></td><td class="memo"></td></tr>
 <tr><td class="n">27</td><td>«Автомобиль → Порт для навигаторов»: COM6, включить; навигатор (CityGuide или Навител) — на COM6.</td><td>Подпись «работает»; навигатор видит координаты на COM6. В VestaNMEA.log есть строка COM_Init.</td><td class="ok"></td><td class="memo"></td></tr>
 </table>
-<h2>7. Что прислать</h2>
+<h2>7. Дополнено 27.10-2: источники, звонок, ярлыки</h2>
+<table>
+<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>
+<tr><td class="n">28</td><td>Играет радио. В VestaHome «Медиа → Музыка», файл с SD; потом «Интернет-радио».</td><td>Радио замолкает, звучит наше. В журнале VestaHome «источник: медиа для нашего звука», без «медиа не включилось».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">29</td><td>Играет музыка VestaHome. Нижний бар → «Радио»; потом ещё раз музыка и кнопка MODE на ГУ.</td><td>Радио звучит сразу (без нажатия пресета), в обоих случаях.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">30</td><td>Играет радио. Звонок на телефон, ответить; поговорить; положить трубку. Потом исходящий.</td><td>Радио глушится, разговор слышно в машине, собеседник слышит; после — радио снова. В VestaStub.log «bt: телефон -&gt; MCU (…)», «bt: звук звонка в машине», «mcu: канал Bluetooth».</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">31</td><td>«Медиа → Bluetooth» ▶.</td><td>Записать: звучит ли музыка телефона.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">32</td><td>Сразу после загрузки открыть «Приложения» (ярлыки программ с SD-карты).</td><td>Через несколько секунд ярлыки становятся активными, запускаются без перезапуска VestaHome.</td><td class="ok"></td><td class="memo"></td></tr>
+<tr><td class="n">33</td><td>Проводником посмотреть \SDMMC\VestaHome.</td><td>Папки нет (старые шрифты удалены).</td><td class="ok"></td><td class="memo"></td></tr>
+</table>
+<h2>8. Что прислать</h2>
 <ul>
   <li><b>\SDMemory\VestaLogs\</b> целиком: VestaStub.log, VestaHome.log, BTProxy.log, SPIPower.log, mcu.log, OSMapsCE.log, VestaHomeInstall.log, VestaNMEA.log.</li>
   <li>Этот лист с заметками.</li>

@@ -487,6 +487,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (wp == 1)
             PlugScreenWatch();   // an add-on's screen came or went: screen.open / screen.close
+        if (wp == 1) {
+            static int s_appTicks;
+            if (++s_appTicks % 2 == 0 && AppsRecheck() && s_screen == S_APPS && IsWindowVisible(hwnd))
+                Redraw();
+        }
         if (wp == 1 && s_screen == S_RADIO_LIST && s_scanStart && IsWindowVisible(hwnd)) {
             RadioScanTick();
             Redraw();
@@ -619,13 +624,22 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             DWORD now = GetTickCount();
             if (s_radioSrcAsk && now - s_radioSrcAsk > 1500) {
                 s_radioSrcAsk = 0;
-                if (src != 0) {   // the keys did not do it: a preset does (the one playing, else the first)
-                    Tuner t;
+                if (src != 0 || McuHostOn()) {   // the keys did not do it (or silent, under our host): a preset does
+                    Tuner t;                       // (the one playing, else the first)
                     TunerGet(&t);
                     int n = t.cur >= 0 && t.cur < 24 ? t.cur : 0;
-                    VLog(L"радио: клавиши не переключили источник (%d) - пресет %d", src, n + 1);
+                    VLog(L"радио: источник %d после клавиш - пресет %d", src, n + 1);
                     McuSend3("SPApi_SendListItemControl", 1, n, 0);
                     s_srcByUs = now;
+                }
+            }
+            if (s_mediaAsk && now - s_mediaAsk > 2000) {
+                s_mediaAsk = 0;
+                if (src != 6 && src != 7 && src != 9) {
+                    VLog(L"источник: медиа не включилось (%d) - путь Bluetooth", src);
+                    McuKey(0x84, false);
+                    SetTimer(hwnd, TIMER_BTSRC, 800, NULL);
+                    s_srcByUs = s_btPathTick = now;
                 }
             }
             if (s_btPathTick && now - s_btPathTick > 3000) {   // the BT key may start the phone: it is paused
@@ -637,6 +651,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
                     OursQuiet();
                 }
+                if (src == 0 && s_srcSeen > 0 && !s_radioSrcAsk && McuHostOn())
+                    s_radioSrcAsk = now - 1000;  // back to the radio under our host: silent until a preset (next tick)
                 s_srcSeen = src;
             }
         }

@@ -26,6 +26,12 @@ static void MediaSource()   // one of our players starts
     VolGet(&vol, &mute, &src);
     if (src == 6 || src == 7 || src == 9)
         return;   // media, or Bluetooth's path: ours sound
+    if (McuHostOn()) {   // no shell: its main menu's "Media" (FUN_005f7cdc, Ghidra 2026-10-27) - the MCU knows the
+        VLog(L"источник: медиа для нашего звука (было %d)", src);   // cards from our host now, MODE turns it 07
+        McuSend2("SPApi_SendMediaSourceSelect", 5, 3);
+        s_srcByUs = s_mediaAsk = GetTickCount();
+        return;
+    }
     // Straight to Bluetooth's path: SendMediaSourceSelect never made it "media" by itself, and it woke the shell's
     // media player - with it our video stayed black, sound only (HU 2026-10-20-3; the picture was there on the
     // 18th, before the call): the hardware overlay is one.

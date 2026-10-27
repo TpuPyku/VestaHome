@@ -274,6 +274,24 @@ static void LoadApps()
     free(buf);
 }
 
+// Programs on a card that was not up yet at the start (VestaHome starts before the cards, HU 2026-10-27-2):
+// looked for again, every 2 s; true = one came (or went).
+static bool AppsRecheck()
+{
+    bool changed = false;
+    for (int i = 0; i < s_appCount; i++) {
+        App& a = s_apps[i];
+        bool e = Exists(a.path);
+        if (e != a.exists) {
+            a.exists = e;
+            FreeAppIcon(a);
+            LoadAppIcon(a);
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 // Writes s_apps back to apps.txt, through a temporary file so a power cut can't leave half a list.
 static bool SaveApps()
 {
