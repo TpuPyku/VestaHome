@@ -550,6 +550,65 @@ static FARPROC Proc(HMODULE m, const char* name)   // CE's GetProcAddress takes 
 #endif
 }
 
+// ---- Bluetooth without the stock shell (HU 2026-10-27: "прокси BT не установлен" - nobody started the stack; the
+// phone connected only once the stock shell ran). The shell's NCL_BT.DLL does it (Ghidra 2026-10-27, FUN_10004f5c /
+// FUN_10005018): Flc_Bluetooth_PowerOn(), Flc_Bluetooth_Init(its handler), Flc_Bluetooth_Conn_EnablePairIndForApp(1)
+// (the pairing requests to the application: VestaHome answers them through the proxy); its shutdown -
+// Flc_Bluetooth_Deinit(). Done here, in the MCU's host: FLC_BLUETOOTH_SDK.dll beside us is our proxy, which publishes
+// the stack's events and does VestaHome's commands (btshm.h) - as in the shell. One SDK at a time: the host is told
+// to close (VestaMcuHostQuit) before the stock shell starts, and deinits. \SDMemory\VestaStub.nobt - not started.
+typedef int (*BtFn0)(void);
+typedef int (*BtFn1)(int);
+typedef void (*BtCbFn)(int* ev);
+typedef int (*BtInitFn)(BtCbFn cb);
+static BtFn0 s_btDeinit;
+static bool  s_btUp;
+
+static void BtCb(int* ev)   // the shell's handler's place: the proxy has published the event already
+{
+    (void)ev;
+}
+
+static void BtHostStart()
+{
+    wchar_t p[MAX_PATH];
+    HuPath(p, L"\\SDMemory\\VestaStub.nobt");
+    if (There(p)) {
+        Log(L"bt: флаг VestaStub.nobt — стек не запускается");
+        return;
+    }
+    _snwprintf(p, MAX_PATH - 1, L"%sFLC_BLUETOOTH_SDK.dll", s_dir);
+    p[MAX_PATH - 1] = 0;
+    HMODULE m = LoadLibrary(p);
+    if (!m) {
+        Log(L"bt: нет %s (%u)", p, GetLastError());
+        return;
+    }
+    BtFn0 powerOn = (BtFn0)Proc(m, "Flc_Bluetooth_PowerOn");
+    BtInitFn init = (BtInitFn)Proc(m, "Flc_Bluetooth_Init");
+    BtFn1 pairInd = (BtFn1)Proc(m, "Flc_Bluetooth_Conn_EnablePairIndForApp");
+    s_btDeinit = (BtFn0)Proc(m, "Flc_Bluetooth_Deinit");
+    if (!powerOn || !init) {
+        Log(L"bt: в FLC_BLUETOOTH_SDK.dll нет PowerOn / Init");
+        return;
+    }
+    int on = powerOn() & 0xFF;   // (the shell keeps it as a byte: non-zero = loaded)
+    int r = on ? init(BtCb) : -1;
+    if (r == 0 && pairInd)
+        pairInd(1);
+    s_btUp = r == 0;
+    Log(L"bt: стек %s (PowerOn %d, Init %d)", s_btUp ? L"запущен" : L"НЕ запущен", on, r);
+}
+
+static void BtHostStop()
+{
+    if (s_btUp && s_btDeinit) {
+        s_btDeinit();
+        Log(L"bt: стек остановлен");
+    }
+    s_btUp = false;
+}
+
 static int McuHost()
 {
     wchar_t p[MAX_PATH];
@@ -600,9 +659,16 @@ static int McuHost()
         askTimes(k);
     Log(L"mcu: скелеты зарегистрированы (%d), запуск как у оболочки %s, маршрут звука %s",
         (int)(sizeof(kIds) / sizeof(kIds[0])), navStarted && sendDialog ? L"да" : L"НЕТ", s_svRoute ? L"есть" : L"НЕТ");
+    BtHostStart();
     s_cntTick = GetTickCount();
+    HANDLE quit = CreateEvent(NULL, TRUE, FALSE, L"VestaMcuHostQuit");
     for (;;) {
-        Sleep(1000);
+        if (quit && WaitForSingleObject(quit, 1000) == WAIT_OBJECT_0) {   // the stock shell comes: its Bluetooth
+            BtHostStop();
+            RingFlush();
+            Log(L"mcu: хост закрыт (запускается штатная оболочка)");
+            return 0;
+        }
         RingFlush();
         Log(L"mcu: хост жив, всего %d", (int)s_ringPos);
         if (GetTickCount() - s_cntTick >= 60000) {
@@ -645,6 +711,18 @@ static void HostStop()
 {
     if (!s_mcuHost)
         return;
+    HANDLE quit = CreateEvent(NULL, TRUE, FALSE, L"VestaMcuHostQuit");   // asked first: it stops Bluetooth itself
+    if (quit) {
+        SetEvent(quit);
+        bool gone = WaitForSingleObject(s_mcuHost, 3000) == WAIT_OBJECT_0;
+        ResetEvent(quit);
+        CloseHandle(quit);
+        if (gone) {
+            CloseHandle(s_mcuHost);
+            s_mcuHost = 0;
+            return;
+        }
+    }
     TerminateProcess(s_mcuHost, 0);
     WaitForSingleObject(s_mcuHost, 2000);
     CloseHandle(s_mcuHost);
