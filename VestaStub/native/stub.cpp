@@ -405,6 +405,12 @@ typedef int (*SpFn2)(int, void*);
 typedef int (*SpFn3)(int, int, int);
 static SpFn1 s_spDeMute, s_spRvc, s_svRoute;
 static SpFn3 s_spMedia;
+typedef int (*SpFnII)(int, int);
+static SpFn3  s_spCard;       // SPApi_SendMediaCardStatus(dev, in, state)
+static SpFnII s_spCardNew;    // SPApi_SendMediaCardIsNewStatus(new, dev)
+static SpFn1  s_spBtOpen;     // SPApi_SendBTOpenStatus(on)
+static SpFn1  s_spBtChan;     // SPApi_SendRadioBTAudioChannelChoiceStatus(1)
+static bool   s_btUp;         // our Bluetooth stack runs (BtHostStart)
 
 // ---- the inbound trace (2026-10-25): the MCU resets the unit ~40 s after the shell is gone (its watchdog misses the
 // shell's periodic signal). To see what the MCU expected, every message the skeleton handler receives is recorded into
@@ -536,10 +542,52 @@ static void SkelHandle(void* self, unsigned char* p)
             break;
         int has = DirThere(dev ? L"\\USBDevice" : L"\\SDMemory") ? 1 : 0;
         if (s_spMedia)
-            s_spMedia(dev, has, 0);
+            s_spMedia(dev, has, 3);   // (3: the music - as the shell's card managers send it; 0 is no type)
         Log(L"mcu: медиа %s -> %d", dev ? L"USB" : L"SD", has);
         break;
     }
+    case 0x8A01:   // is Bluetooth on? (the shell: BTApi_GetOpenStatus() == 1)
+        if (s_spBtOpen)
+            s_spBtOpen(s_btUp ? 1 : 0);
+        Log(L"mcu: Bluetooth включён? -> %d", s_btUp ? 1 : 0);
+        break;
+    case 0x8906:   // "the BT channel may be taken": the shell routes the sound to Bluetooth's and says so
+        if (s_svRoute)
+            s_svRoute(2);
+        if (s_spBtChan)
+            s_spBtChan(1);
+        Log(L"mcu: канал Bluetooth -> маршрут 2");
+        break;
+    }
+}
+
+// The cards as the shell's card managers tell the MCU (Ghidra 2026-10-27, CSDCardManager / CUSBCardManager: attach
+// FUN_00476584 / FUN_004761ac, search done FUN_00473040 / FUN_00472dc8, removed FUN_00473938): a card in -
+// SendMediaCardStatus(dev, 1, 0), SendMediaCardIsNewStatus(0, dev), then SendMediaAvailability(dev, 1, type) for each
+// kind of file found (3 - the music; 4 video, 1 / 2 others); out - SendMediaCardStatus(dev, 0, 2). Without it the MCU
+// knew no source but the radio: MODE and VestaHome's switches did nothing (HU 2026-10-27). dev 0 = \SDMemory,
+// 1 = \USBDevice. Looked at each second by the host; sent at the start and on each change.
+static int s_cardWas[2] = { -1, -1 };
+
+static void CardsTell()
+{
+    static const wchar_t* kVol[2] = { L"\\SDMemory", L"\\USBDevice" };
+    for (int dev = 0; dev < 2; dev++) {
+        int has = DirThere(kVol[dev]) ? 1 : 0;
+        if (has == s_cardWas[dev])
+            continue;
+        s_cardWas[dev] = has;
+        if (has) {
+            if (s_spCard)
+                s_spCard(dev, 1, 0);
+            if (s_spCardNew)
+                s_spCardNew(0, dev);
+            if (s_spMedia)
+                s_spMedia(dev, 1, 3);
+        } else if (s_spCard) {
+            s_spCard(dev, 0, 2);
+        }
+        Log(L"mcu: носитель %s %s", dev ? L"USB" : L"SD", has ? L"есть (музыка)" : L"вынут");
     }
 }
 
@@ -568,11 +616,56 @@ typedef int (*BtFn1)(int);
 typedef void (*BtCbFn)(int* ev);
 typedef int (*BtInitFn)(BtCbFn cb);
 static BtFn0 s_btDeinit;
-static bool  s_btUp;
 
 static void BtCb(int* ev)   // the shell's handler's place: the proxy has published the event already
 {
     (void)ev;
+}
+
+// The unit's name seen by phones: the stack reads HKLM\Drivers\BT\XCBTStack "DeviceName" when it starts (NCL_BT's
+// BTApi_ChangeName writes there, Ghidra 2026-10-27). The registry comes from the firmware at each boot ("FLC WINCE");
+// with the stock shell it was "VESTA" (MAIN/Backup/WindowsCE.reg) - something of the shell's set it. Now: VestaHome's
+// bt.name (its VestaHome.ini), "VESTA" without one.
+static void BtName()
+{
+    wchar_t name[40] = L"VESTA", path[MAX_PATH];
+    static const wchar_t* kIni[2] = { L"\\ResidentFlash\\VestaHome\\VestaHome.ini", L"\\SDMMC\\VestaHome\\VestaHome.ini" };
+    for (int f = 0; f < 2; f++) {
+        HuPath(path, kIni[f]);
+        HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        if (h == INVALID_HANDLE_VALUE)
+            continue;
+        static char buf[16384];
+        DWORD got = 0;
+        ReadFile(h, buf, sizeof(buf) - 1, &got, NULL);
+        CloseHandle(h);
+        buf[got] = 0;
+        const char* k = strstr(buf, "\nbt.name=");
+        if (k) {
+            k += 9;
+            char v[64];
+            int n = 0;
+            while (k[n] && k[n] != '\r' && k[n] != '\n' && n < 63) {
+                v[n] = k[n];
+                n++;
+            }
+            v[n] = 0;
+            if (n)
+                MultiByteToWideChar(CP_UTF8, 0, v, -1, name, 40);   // (VestaHome's ini is UTF-8)
+        }
+        break;
+    }
+    name[39] = 0;
+#ifdef UNDER_CE
+    HKEY key;
+    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\BT\\XCBTStack", 0, NULL, 0, 0, NULL, &key, NULL) == ERROR_SUCCESS) {
+        RegSetValueEx(key, L"DeviceName", 0, REG_SZ, (const BYTE*)name, (DWORD)(wcslen(name) + 1) * sizeof(wchar_t));
+        RegCloseKey(key);
+        Log(L"bt: имя ГУ «%s»", name);
+    }
+#else
+    Log(L"bt: имя ГУ «%s» (ПК: не записывается)", name);
+#endif
 }
 
 static void BtHostStart()
@@ -590,6 +683,7 @@ static void BtHostStart()
         Log(L"bt: нет %s (%u)", p, GetLastError());
         return;
     }
+    BtName();   // the unit's name, before the stack reads it
     BtFn0 powerOn = (BtFn0)Proc(m, "Flc_Bluetooth_PowerOn");
     BtInitFn init = (BtInitFn)Proc(m, "Flc_Bluetooth_Init");
     BtFn1 pairInd = (BtFn1)Proc(m, "Flc_Bluetooth_Conn_EnablePairIndForApp");
@@ -633,6 +727,10 @@ static int McuHost()
     s_spDeMute = (SpFn1)Proc(sp, "SPApi_SendRadioDeMuteCurrentSource");
     s_spRvc = (SpFn1)Proc(sp, "SPApi_SendRadioReceivedRVCStatus");
     s_spMedia = (SpFn3)Proc(sp, "SPApi_SendMediaAvailability");
+    s_spCard = (SpFn3)Proc(sp, "SPApi_SendMediaCardStatus");
+    s_spCardNew = (SpFnII)Proc(sp, "SPApi_SendMediaCardIsNewStatus");
+    s_spBtOpen = (SpFn1)Proc(sp, "SPApi_SendBTOpenStatus");
+    s_spBtChan = (SpFn1)Proc(sp, "SPApi_SendRadioBTAudioChannelChoiceStatus");
     HMODULE sv = LoadLibrary(L"desay_sdk_api.dll");
     s_svRoute = sv ? (SpFn1)Proc(sv, "SV_AudioSetRoute") : NULL;
     if (!load || !inited || !init || !skel) {
@@ -666,6 +764,9 @@ static int McuHost()
     Log(L"mcu: скелеты зарегистрированы (%d), запуск как у оболочки %s, маршрут звука %s",
         (int)(sizeof(kIds) / sizeof(kIds[0])), navStarted && sendDialog ? L"да" : L"НЕТ", s_svRoute ? L"есть" : L"НЕТ");
     BtHostStart();
+    if (s_spBtOpen)   // the MCU learns that Bluetooth is there (its sources: BT music, the phone)
+        s_spBtOpen(s_btUp ? 1 : 0);
+    CardsTell();
     s_cntTick = GetTickCount();
     HANDLE quit = CreateEvent(NULL, TRUE, FALSE, L"VestaMcuHostQuit");
     for (;;) {
@@ -676,6 +777,7 @@ static int McuHost()
             return 0;
         }
         RingFlush();
+        CardsTell();   // a card put in / taken out: the MCU is told (its sources)
         Log(L"mcu: хост жив, всего %d", (int)s_ringPos);
         if (GetTickCount() - s_cntTick >= 60000) {
             s_cntTick = GetTickCount();

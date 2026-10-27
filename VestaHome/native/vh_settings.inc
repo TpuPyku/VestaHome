@@ -46,6 +46,7 @@ struct Cfg {
     wchar_t weatherKey[W_COUNT][64];   // API key per provider (Open-Meteo needs none)
     bool    weatherGps;                // the place where the car is; without a fix the home point
     wchar_t homeName[48];
+    wchar_t btName[32];                // the unit's Bluetooth name (VestaStub writes it before the stack starts)
     double  homeLat, homeLon;          // both 0 = not set
     wchar_t gpsPort[16];               // the shell's NMEA port, only read
     DWORD   gpsBaud;                   // 0 = leave the speed the shell set
@@ -367,6 +368,9 @@ static void LoadCfg()
             }
         } else if (!wcscmp(k, L"weather.gps")) {
             s_cfg.weatherGps = CfgBool(v);
+        } else if (!wcscmp(k, L"bt.name")) {
+            wcsncpy(s_cfg.btName, v, 31);
+            s_cfg.btName[31] = 0;
         } else if (!wcscmp(k, L"home.name")) {
             wcsncpy(s_cfg.homeName, v, 47);
             s_cfg.homeName[47] = 0;
@@ -582,6 +586,8 @@ static void SaveCfg()
         L"weather.provider=%S\r\nweather.key.owm=%s\r\nweather.key.yandex=%s\r\n"
         L"# Yandex requests made that day (its free tariff: 30 a day)\r\nweather.yandex.day=%d\r\nweather.yandex.count=%d\r\n"
         L"weather.gps=%d\r\nhome.name=%s\r\nhome.lat=%.5f\r\nhome.lon=%.5f\r\n"
+        L"# bt.name: the unit's name seen by phones (VestaStub sets it at the boot, before Bluetooth starts)\r\n"
+        L"bt.name=%s\r\n"
         L"# gps.baud: 0 = leave the port's speed as the shell set it\r\n"
         L"gps.port=%s\r\ngps.baud=%u\r\ngps.time=%d\r\n"
         L"# time.tz: local time = UTC + minutes (180 = Moscow)\r\ntime.tz=%d\r\n"
@@ -625,7 +631,7 @@ static void SaveCfg()
         L"# wifi.ap.*: the unit's own access point for a phone with its hotspot on 5 GHz (auto: when no known network)\r\n"
         L"wifi.ap.ssid=%s\r\nwifi.ap.pass=%s\r\nwifi.ap.auto=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
-        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon,
+        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
         s_cfg.camOver, s_cfg.camOverBy, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
@@ -766,4 +772,9 @@ static void ScrFavs(HDC dc)
     for (int i = 0; i < n && i < 10; i++)   // two columns of five
         ListRow(dc, 200 + i / 5 * 292, 76 + i % 5 * 62, 284, 56, names[i][0] ? names[i] : nums[i],
                 NULL, L_N, IC_STAR_F, names[i][0] ? nums[i] : NULL, NULL, A_FAVDIAL, i, kOrange);
+}
+
+static const wchar_t* BtUnitName()
+{
+    return s_cfg.btName[0] ? s_cfg.btName : L"VESTA";
 }

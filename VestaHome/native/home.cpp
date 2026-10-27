@@ -133,7 +133,7 @@ enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_
        G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 2, 0, 1, 2, 2, 1, 0, 0, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
-enum { K_WKEY, K_HOMENAME, K_HOMECOORD };   // settings typed on the keyboard (A_KEYS)
+enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME };   // settings typed on the keyboard (A_KEYS)
 static wchar_t s_dial[20];          // the number typed on the phone's keypad
 static wchar_t s_callOut[20];       // the number dialled from VestaHome (the stack does not tell it back)
 static wchar_t s_pass[24] = L"vesta2026";

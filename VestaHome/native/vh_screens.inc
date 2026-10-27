@@ -1191,10 +1191,12 @@ static void ScrSetRadio(HDC dc)
 // Pairing and the options (auto-connect, auto-answer) - the next step, through the same proxy.
 static bool McuBtAddr(wchar_t* s, int n);
 
+static const wchar_t* BtUnitName();   // (vh_settings.inc: bt.name, "VESTA" without one)
+
 static void ScrSetBt(HDC dc)
 {
     Settings(dc, S_SET_BT);
-    enum { H = 48 };
+    enum { H = 42 };   // 8 rows (the unit's name added 2026-10-27)
     wchar_t a[24];
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
@@ -1228,14 +1230,16 @@ static void ScrSetBt(HDC dc)
         if (bt.signal >= 0)
             _snwprintf(ss, 40, L" · сеть %d", bt.signal);
         _snwprintf(s, 200, L"музыка: %s · звонки: %s%s%s · ГУ %s", av, hf, bs, ss, McuBtAddr(a, 24) ? a : L"—");
-        SetRow(dc, 112, L"Связь", s, false, A_NONE, 0, H);
-        SetRow(dc, 160, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник", false, A_NONE, 0, H);
+        SetRow(dc, 106, L"Связь", s, false, A_NONE, 0, H);
+        _snwprintf(s, 200, L"%s · видно телефонам, меняется после перезагрузки", BtUnitName());
+        SetRow(dc, 148, L"Имя ГУ", s, true, A_KEYS, K_BTNAME, H);
+        SetRow(dc, 190, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник", false, A_NONE, 0, H);
         if (src != 9)
-            Button(dc, 560, 164, 200, 40, L"Включить", B_N, IC_BT, 15, 22, A_BTMUSIC);
-        SetRow(dc, 208, L"Автосоединение", L"последний телефон — при включении ГУ", false, A_NONE, 0, H);
-        Toggle(dc, 688, 214, T_AUTOCONNECT);
-        SetRow(dc, 256, L"Автоответ", L"входящий звонок принимается через 5 с", false, A_NONE, 0, H);
-        Toggle(dc, 688, 262, T_AUTOANSWER);
+            Button(dc, 560, 191, 200, 38, L"Включить", B_N, IC_BT, 15, 22, A_BTMUSIC);
+        SetRow(dc, 232, L"Автосоединение", L"последний телефон — при включении ГУ", false, A_NONE, 0, H);
+        Toggle(dc, 688, 235, T_AUTOCONNECT);
+        SetRow(dc, 274, L"Автоответ", L"входящий звонок принимается через 5 с", false, A_NONE, 0, H);
+        Toggle(dc, 688, 277, T_AUTOANSWER);
         s[0] = 0;   // the paired ones (0x08), by name
         for (int i = 0; i < bt.paired && i < BT_PAIRED && wcslen(s) < 150; i++) {
             wchar_t nm[48];
@@ -1244,8 +1248,8 @@ static void ScrSetBt(HDC dc)
                 wcscat(s, L", ");
             wcsncat(s, nm, 40);
         }
-        SetRow(dc, 304, L"Сопряжённые", s[0] ? s : L"—", false, A_SCREEN, S_BT_PAIRED, H);
-        SetRow(dc, 352, L"OBD-адаптер (проверка)", L"поиск, сопряжение и опрос ELM327", true, A_SCREEN, S_SET_OBD, H);
+        SetRow(dc, 316, L"Сопряжённые", s[0] ? s : L"—", false, A_SCREEN, S_BT_PAIRED, H);
+        SetRow(dc, 358, L"OBD-адаптер (проверка)", L"поиск, сопряжение и опрос ELM327", true, A_SCREEN, S_SET_OBD, H);
     } else {
         SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен proxy MCU)");
         SetRow(dc, 120, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");

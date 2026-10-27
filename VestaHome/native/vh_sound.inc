@@ -11,9 +11,25 @@ static const int kEqBand[3] = { 2, 1, 0 };   // low, mid, high -> the MCU's band
 
 static DWORD s_sndSentTick;   // our last EQ / balance: the MCU's echoes of older values are not taken back meanwhile
 
+// The shell first takes the MCU into its sound page by a key (Ghidra 2026-10-27, G3NavHMI: CAudioEffectDlg /
+// CAudioFieldDlg SlotEffectBtn / SlotFieldBtn - 0xE6 effects and equalizer, 0xE4 balance and fader); a balance
+// slider is pressed (0x97) before its position and let go (0x97, OnTimerSlot) after (SlotSliderPress,
+// SlotChangedPos). Without the shell (HU 2026-10-27) our values alone reached the MCU and were ignored. The page key:
+// once in a while, not with every step.
+static void SoundPage(int key)
+{
+    static DWORD s_t[2];
+    DWORD& t = s_t[key == 0xE6 ? 0 : 1];
+    if (t && GetTickCount() - t < 20000)
+        return;
+    t = GetTickCount();
+    McuKey(key, false);
+}
+
 static void EqSend(int i)
 {
     s_sndSentTick = GetTickCount();
+    SoundPage(0xE6);
     if (McuSend2("SPApi_SendRadioAudioHMLData", kEqBand[i], s_cfg.eq[i] + 6))
         wcscpy(s_status, L"эквалайзер → MCU");
 }
@@ -42,8 +58,11 @@ static void BalanceSend()
 {
     s_sndSentTick = GetTickCount();
     // the MCU's fader runs the other way from our screen's (HU 2026-10-20: front and rear were swapped)
+    SoundPage(0xE4);
+    McuKey(0x97, false);   // the slider pressed
     if (McuSend2("SPApi_SendRadioAudioBalanceFaderData", s_cfg.balance + 8, 8 - s_cfg.fader))
         wcscpy(s_status, L"баланс → MCU");
+    McuKey(0x97, false);   // ... and let go
 }
 
 static void BalanceStep(bool fader, int dir)   // dir 0 = both to the centre
@@ -305,6 +324,9 @@ static void OpenCfgKeys(int which)
         break;
     case K_HOMENAME:
         OpenKeysFor(s_cfg.homeName, 47, L"Домашняя точка", S_WSET_WEATHER);
+        break;
+    case K_BTNAME:   // the unit's name in Bluetooth: VestaStub writes it before the stack starts (next boot)
+        OpenKeysFor(s_cfg.btName, 31, L"Имя ГУ в Bluetooth", S_SET_BT);
         break;
     case K_HOMECOORD:
         if (s_cfg.homeLat || s_cfg.homeLon)
