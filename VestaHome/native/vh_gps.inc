@@ -452,6 +452,18 @@ static void GpsLogLine(const char* line)
     VLog(L"%S", line);
 }
 
+// The port's speed. "0" = as the stock shell set it - but without the shell (VestaStub in its place) nobody sets
+// it: COM4 / COM5 are copies of COM3 (VirtualSerial) whose speed is COM3's, left at its default, and no NMEA came
+// (HU 2026-10-27: COM5 silent, data only after the search picked COM3 at 115200). Then the CAN module's 115200.
+static DWORD GpsBaud()
+{
+    if (s_cfg.gpsBaud)
+        return s_cfg.gpsBaud;
+    bool can = !wcsncmp(s_cfg.gpsPort, L"COM3", 4) || !wcsncmp(s_cfg.gpsPort, L"COM4", 4) ||
+               !wcsncmp(s_cfg.gpsPort, L"COM5", 4);
+    return can && !FindWindow(NULL, L"RadioCommWindow") ? 115200 : 0;
+}
+
 static void GpsStartCore()
 {
     InitializeCriticalSection(&s_gpsCs);
@@ -460,7 +472,7 @@ static void GpsStartCore()
     c.notify = s_wnd;
     c.msg = WM_APP_GPS;
     c.port = s_cfg.gpsPort;
-    c.baud = s_cfg.gpsBaud;
+    c.baud = GpsBaud();
     c.app = L"VestaHome";
     c.log = GpsLogLine;
     c.exeDir = s_dir;
@@ -471,7 +483,7 @@ static void GpsStartCore()
 
 static void GpsReopen()
 {
-    GpsConfigure(s_cfg.gpsPort, s_cfg.gpsBaud);
+    GpsConfigure(s_cfg.gpsPort, GpsBaud());
 }
 
 static void GpsStopThread()

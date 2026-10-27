@@ -64,6 +64,40 @@ static HBITMAP s_splashBmp;
 static int     s_splashDot;
 
 static void SplashGlow(DWORD* px);
+static bool SplashLoad(const wchar_t* path, bool glow);
+static void HuPath(wchar_t* out, const wchar_t* path);
+static void Log(const wchar_t* fmt, ...);
+
+// The pictures in their order: ours (one's own, then VestaHome's), then the stock shell's. The built-in card \SDMMC
+// comes up seconds after the stub starts (HU 2026-10-27: 4.5 s - the stock picture was shown though ours was
+// there): the stock one is shown meanwhile, and ours replaces it as soon as the card is there (the timer, 300 ms).
+static const wchar_t* const kSplashPics[4] = {
+    L"\\SDMMC\\VestaHome\\Skin\\bootmy.png", L"\\SDMMC\\VestaHome\\Skin\\bootmy.jpg", L"\\SDMMC\\VestaHome\\Skin\\boot.png",
+    L"\\ResidentFlash\\navigation\\app\\res\\img\\Itelma\\MMC27\\Main\\NEW_LOGO.PNG" };
+static int s_splashPick = -1;   // the one shown
+
+// The first picture that is there, if it comes before the one shown; true = a new one.
+static bool SplashPick()
+{
+    int upto = s_splashPick < 0 ? 4 : s_splashPick;
+    for (int i = 0; i < upto; i++) {
+        wchar_t path[MAX_PATH];
+        HuPath(path, kSplashPics[i]);
+        if (GetFileAttributes(path) == 0xFFFFFFFF)
+            continue;
+        HBITMAP old = s_splashBmp;
+        s_splashBmp = NULL;
+        if (SplashLoad(path, i == 2)) {   // the spot only on ours
+            if (old)
+                DeleteObject(old);
+            s_splashPick = i;
+            Log(L"загрузка: картинка %s", kSplashPics[i]);
+            return true;
+        }
+        s_splashBmp = old;
+    }
+    return false;
+}
 
 static bool SplashLoad(const wchar_t* path, bool glow)   // the picture into an 800 x 480 DIB (centred, cut)
 {
@@ -208,6 +242,10 @@ static LRESULT CALLBACK SplashProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         s_splashDot++;
+        if (s_splashPick != 2 && s_splashPick != 0 && s_splashPick != 1 && SplashPick()) {   // the card came: ours
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
         RECT r = { 350, 436, 450, 468 };
         InvalidateRect(hwnd, &r, FALSE);
         return 0;
@@ -221,14 +259,7 @@ static LRESULT CALLBACK SplashProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 static DWORD WINAPI SplashThread(LPVOID)
 {
-    static const wchar_t* kPics[] = { L"\\SDMMC\\VestaHome\\Skin\\bootmy.png", L"\\SDMMC\\VestaHome\\Skin\\bootmy.jpg",
-                                      L"\\SDMMC\\VestaHome\\Skin\\boot.png",
-                                      L"\\ResidentFlash\\navigation\\app\\res\\img\\Itelma\\MMC27\\Main\\NEW_LOGO.PNG" };
-    wchar_t path[MAX_PATH];
-    for (int i = 0; i < (int)(sizeof(kPics) / sizeof(kPics[0])) && !s_splashBmp; i++) {
-        HuPath(path, kPics[i]);
-        SplashLoad(path, i == 2);   // the spot only on ours
-    }
+    SplashPick();   // whatever is there now: at the very start the built-in card often is not yet
     WNDCLASS wc;
     memset(&wc, 0, sizeof(wc));
     wc.lpfnWndProc = SplashProc;

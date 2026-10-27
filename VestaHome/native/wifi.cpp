@@ -444,6 +444,8 @@ static bool IsKnown(const wchar_t* ssid, wchar_t* pass)
     return k;
 }
 
+static int s_dkBootMode = -1;   // the mode found at the start (0: both adapters off - nobody switched the client on)
+
 static bool LoadDk()
 {
     HMODULE m = LoadLibrary(L"WifiDKCore.dll");
@@ -467,6 +469,7 @@ static bool LoadDk()
     Log(L"wifi: WifiDKCore, InitApi 0x%08X, режим %d", (unsigned)hr, mode);
     if (hr < 0)
         s_dkSetMode = NULL;
+    s_dkBootMode = mode;
     return s_dkSetMode != NULL;
 }
 
@@ -566,7 +569,10 @@ static DWORD WINAPI WifiThread(LPVOID)
         Publish(w);
         return 0;
     }
-    LoadDk();
+    // Without the stock shell (HU 2026-10-27: "режим 0", no Wi-Fi at all, not even the system's manager) the
+    // adapters stay off: the shell switched the client on at its start. Then VestaHome does it.
+    if (LoadDk() && s_dkBootMode == DK_OFF && s_wantOn)
+        DkMode(DK_STA);
     DWORD linkTick = 0;    // the link up without an address yet: since when (the log of a slow phone's hotspot)
     bool hadIp = false;
     DWORD lastAuto = 0, connectTick = 0;
