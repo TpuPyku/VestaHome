@@ -38,6 +38,10 @@ PLAN = (
     # the vector tiles speed test (OSMapsCE/native_vtest; its tiles from get_tiles.py), run from the SD card
     (os.path.join(ROOT, 'OSMapsCE', 'VTileTest'), r'SDMemory\VTileTest',
         ('VTileTest.exe', 'tiles')),
+    # OSMapsCE's offline data (OSMapsCE/offline/make_region.py -> OSMapsData\<region>): routes and search without
+    # the internet; read from \SDMemory\OSMapsData
+    (os.path.join(ROOT, 'OSMapsCE'), r'SDMemory',
+        ('OSMapsData',)),
     # ExternNavi.cfg points the shell's "Navigation" at \SDMMC\VestaLaunch: without the SD card the shell would
     # lose it, so VestaLaunch stays on the built-in card
     (os.path.join(VL, 'VestaLaunch'), r'SDMMC\VestaLaunch',
