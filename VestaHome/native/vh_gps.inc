@@ -455,27 +455,33 @@ static void GpsLogLine(const char* line)
 // The port's speed. "0" = as the stock shell set it - but without the shell (VestaStub in its place) nobody sets
 // it: COM4 / COM5 are copies of COM3 (VirtualSerial) whose speed is COM3's, left at its default, and no NMEA came
 // (HU 2026-10-27: COM5 silent, data only after the search picked COM3 at 115200). Then the CAN module's 115200.
-// The port read. COM5 (the default) is the port of the stock shell's time: it reads COM4 itself (rn2::CanMessageParser).
-// Without the shell (VestaStub in its place) COM4 is free, and COM5 is CityGuide's own default (its default.ini:
-// subset_COM_port=5) - VestaHome takes COM4 then (the user 2026-10-27: the navigators must keep working). Not COM3:
-// the copies open the real COM3 alone, VestaHome there would leave every navigator on COM4 / COM5 without data.
+// The port read (the user 2026-10-27: VestaHome on COM4, CityGuide keeps its default COM5 - its default.ini:
+// subset_COM_port=5 - from which GpsGate used to copy the NMEA to COM6). COM3, COM4, COM5 all mean "the car's GPS":
+// without the stock shell COM4; with it COM5, as the shell reads COM4 itself (rn2::CanMessageParser). Never COM3: the
+// copies (VirtualSerial) open the real COM3 alone - VestaHome there would leave the navigators on COM4 / COM5 without
+// data (and "Найти GPS" saved COM3 on the unit). Other ports - as chosen.
 static bool NoShell()
 {
     return !FindWindow(NULL, L"RadioCommWindow");
 }
 
+static bool GpsCanPort(const wchar_t* p)
+{
+    return !wcsncmp(p, L"COM3", 4) || !wcsncmp(p, L"COM4", 4) || !wcsncmp(p, L"COM5", 4);
+}
+
 static const wchar_t* GpsPortNow()
 {
-    return !wcsncmp(s_cfg.gpsPort, L"COM5", 4) && NoShell() ? L"COM4:" : s_cfg.gpsPort;
+    if (!GpsCanPort(s_cfg.gpsPort))
+        return s_cfg.gpsPort;
+    return NoShell() ? L"COM4:" : L"COM5:";
 }
 
 static DWORD GpsBaud()
 {
     if (s_cfg.gpsBaud)
         return s_cfg.gpsBaud;
-    bool can = !wcsncmp(s_cfg.gpsPort, L"COM3", 4) || !wcsncmp(s_cfg.gpsPort, L"COM4", 4) ||
-               !wcsncmp(s_cfg.gpsPort, L"COM5", 4);
-    return can && NoShell() ? 115200 : 0;
+    return GpsCanPort(s_cfg.gpsPort) && NoShell() ? 115200 : 0;
 }
 
 static void GpsStartCore()
@@ -516,7 +522,7 @@ static void GpsStatusText(wchar_t* s, int n, bool brief)
     if (g.status == GPS_BUSY)
         _snwprintf(s, n, brief ? L"занят" : L"%s занят", g.port);
     else if (g.status != GPS_OPEN)
-        _snwprintf(s, n, brief ? L"не открывается" : L"%s не открывается", g.port[0] ? g.port : s_cfg.gpsPort);
+        _snwprintf(s, n, brief ? L"не открывается" : L"%s не открывается", g.port[0] ? g.port : GpsPortNow());
     else if (!g.lines || GetTickCount() - g.dataTick > 10000)
         wcsncpy(s, brief ? L"нет NMEA" : L"нет NMEA: выдачу включает навигация", n);
     else if (!GpsFresh(g, 5000))
@@ -548,8 +554,8 @@ static int GpsPortNum()
 static void GpsPortText(wchar_t* s, int n)
 {
     int k = GpsPortNum();
-    if (k == 5 && GpsPortNow()[3] == L'4')
-        _snwprintf(s, n, L"COM4 (без оболочки)");   // COM5 is CityGuide's then
+    if (GpsCanPort(s_cfg.gpsPort))   // the car's GPS: the port actually read
+        _snwprintf(s, n, L"%.4s · машина", GpsPortNow());
     else if (k)
         _snwprintf(s, n, L"COM%d", k);
     else
@@ -569,8 +575,14 @@ static void GpsBaudText(wchar_t* s, int n)
 static void GpsPortStep(int dir)
 {
     int k = GpsPortNum();
-    k = k ? k + dir : dir > 0 ? 1 : 9;
-    k = k < 1 ? 9 : k > 9 ? 1 : k;
+    if (k >= 3 && k <= 5)   // COM3..COM5 are one stop: "the car's GPS" (saved as COM4)
+        k = dir > 0 ? 6 : 2;
+    else {
+        k = k ? k + dir : dir > 0 ? 1 : 9;
+        k = k < 1 ? 9 : k > 9 ? 1 : k;
+        if (k >= 3 && k <= 5)
+            k = 4;
+    }
     _snwprintf(s_cfg.gpsPort, 16, L"COM%d:", k);
     SaveCfg();
     GpsReopen();

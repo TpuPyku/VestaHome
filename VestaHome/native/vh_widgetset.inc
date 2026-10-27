@@ -108,7 +108,7 @@ static void CanStatusText(wchar_t* s, int n)
     DWORD now = GetTickCount();
     bool spd = g.carTick && now - g.carTick < 5000, ang = g.angTick && now - g.angTick < 5000;
     if (g.status != GPS_OPEN)
-        _snwprintf(s, n, L"порт %s не открыт", g.port[0] ? g.port : s_cfg.gpsPort);
+        _snwprintf(s, n, L"порт %s не открыт", g.port[0] ? g.port : GpsPortNow());
     else if (spd && ang)
         _snwprintf(s, n, L"v%S · %d км/ч · руль %c%d,%d°", g.canVer, g.carSpeed, g.angle10 < 0 ? L'-' : L'+',
                    abs(g.angle10) / 10, abs(g.angle10) % 10);

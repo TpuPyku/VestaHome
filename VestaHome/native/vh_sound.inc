@@ -256,7 +256,7 @@ static void ScrTestCan(HDC dc)
     LeaveCriticalSection(&s_gpsCs);
 
     wchar_t s[160], gps[160], can[64];
-    _snwprintf(s, 160, L"Поток данных · %s", s_cfg.gpsPort);
+    _snwprintf(s, 160, L"Поток данных · %s", GpsPortNow());
     Frame(dc, s);
     Panel(dc, 16, 68, 768, 336);   // (its buttons in the bottom strip)
     GpsStatusText(gps, 160);

@@ -120,7 +120,7 @@ static void CfgDefaults()
     memset(&s_cfg, 0, sizeof(s_cfg));
     s_cfg.weatherProv = W_OMETEO;
     s_cfg.weatherGps = true;
-    wcscpy(s_cfg.gpsPort, L"COM5:");
+    wcscpy(s_cfg.gpsPort, L"COM4:");   // the car's GPS (vh_gps.inc GpsPortNow: COM4 without the stock shell, COM5 with it)
     s_cfg.gpsTime = true;
     s_cfg.tzMin = 180;                            // Moscow
     s_cfg.camAlert = s_cfg.camSound = true;
