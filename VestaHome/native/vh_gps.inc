@@ -455,13 +455,27 @@ static void GpsLogLine(const char* line)
 // The port's speed. "0" = as the stock shell set it - but without the shell (VestaStub in its place) nobody sets
 // it: COM4 / COM5 are copies of COM3 (VirtualSerial) whose speed is COM3's, left at its default, and no NMEA came
 // (HU 2026-10-27: COM5 silent, data only after the search picked COM3 at 115200). Then the CAN module's 115200.
+// The port read. COM5 (the default) is the port of the stock shell's time: it reads COM4 itself (rn2::CanMessageParser).
+// Without the shell (VestaStub in its place) COM4 is free, and COM5 is CityGuide's own default (its default.ini:
+// subset_COM_port=5) - VestaHome takes COM4 then (the user 2026-10-27: the navigators must keep working). Not COM3:
+// the copies open the real COM3 alone, VestaHome there would leave every navigator on COM4 / COM5 without data.
+static bool NoShell()
+{
+    return !FindWindow(NULL, L"RadioCommWindow");
+}
+
+static const wchar_t* GpsPortNow()
+{
+    return !wcsncmp(s_cfg.gpsPort, L"COM5", 4) && NoShell() ? L"COM4:" : s_cfg.gpsPort;
+}
+
 static DWORD GpsBaud()
 {
     if (s_cfg.gpsBaud)
         return s_cfg.gpsBaud;
     bool can = !wcsncmp(s_cfg.gpsPort, L"COM3", 4) || !wcsncmp(s_cfg.gpsPort, L"COM4", 4) ||
                !wcsncmp(s_cfg.gpsPort, L"COM5", 4);
-    return can && !FindWindow(NULL, L"RadioCommWindow") ? 115200 : 0;
+    return can && NoShell() ? 115200 : 0;
 }
 
 static void GpsStartCore()
@@ -471,7 +485,7 @@ static void GpsStartCore()
     memset(&c, 0, sizeof(c));
     c.notify = s_wnd;
     c.msg = WM_APP_GPS;
-    c.port = s_cfg.gpsPort;
+    c.port = GpsPortNow();
     c.baud = GpsBaud();
     c.app = L"VestaHome";
     c.log = GpsLogLine;
@@ -483,7 +497,7 @@ static void GpsStartCore()
 
 static void GpsReopen()
 {
-    GpsConfigure(s_cfg.gpsPort, GpsBaud());
+    GpsConfigure(GpsPortNow(), GpsBaud());
 }
 
 static void GpsStopThread()
@@ -534,7 +548,9 @@ static int GpsPortNum()
 static void GpsPortText(wchar_t* s, int n)
 {
     int k = GpsPortNum();
-    if (k)
+    if (k == 5 && GpsPortNow()[3] == L'4')
+        _snwprintf(s, n, L"COM4 (без оболочки)");   // COM5 is CityGuide's then
+    else if (k)
         _snwprintf(s, n, L"COM%d", k);
     else
         wcsncpy(s, s_cfg.gpsPort, n);
