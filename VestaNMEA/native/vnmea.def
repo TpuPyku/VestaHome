@@ -2,6 +2,7 @@ LIBRARY VestaNMEA
 EXPORTS
     COM_Init
     COM_Deinit
+    COM_PreDeinit
     COM_Open
     COM_PreClose
     COM_Close

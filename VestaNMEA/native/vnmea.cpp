@@ -192,6 +192,16 @@ DWORD COM_Open(DWORD dev, DWORD, DWORD)
     return (DWORD)o;
 }
 
+// (CE 6) The device is going: nothing to stop before COM_Deinit. Exported because COM_PreClose is: the device manager
+// takes a driver with one of the two pre-calls and not the other as broken - the reason this port never came up
+// (HU 2026-10-24..27: the DLL loaded in udevice.exe / device.exe, COM_Init never called, ActivateDeviceEx 2 / 1;
+// GpsGate's bizVSerialCE.dll, which worked on the unit, exports neither; found 2026-10-27).
+BOOL COM_PreDeinit(DWORD dev)
+{
+    Trace("COM_PreDeinit", dev);
+    return TRUE;
+}
+
 BOOL COM_PreClose(DWORD h)   // (CE 6) the handle is going: its waits end
 {
     Open* o = (Open*)h;
