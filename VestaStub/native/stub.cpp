@@ -415,6 +415,9 @@ static SpFn1  s_spMatch;      // SPApi_SendBTMatchStatus(connected)
 static SpFn0  s_spBtRoute;    // SPApi_SendRadioBTRouteChange()
 static SpFn1  s_spPrivacy;    // SPApi_SendRadioBTPrivacyStatus(on the phone)
 static bool   s_btUp;         // our Bluetooth stack runs (BtHostStart)
+static SpFn1  s_spSelDev;     // SPApi_SendSelectedDevice(dev): the media player opened on the SD card (0) / USB (1)
+static SpFn0  s_btPlay, s_btPause;   // the phone's music (Flc_Bluetooth_Av_Play / _Av_Pause, our BT proxy)
+static bool   InCall();       // (a call going on: BtCb's, below)
 
 // ---- the inbound trace (2026-10-25): the MCU resets the unit ~40 s after the shell is gone (its watchdog misses the
 // shell's periodic signal). To see what the MCU expected, every message the skeleton handler receives is recorded into
@@ -555,6 +558,24 @@ static void SkelHandle(void* self, unsigned char* p)
             s_spBtOpen(s_btUp ? 1 : 0);
         Log(L"mcu: Bluetooth включён? -> %d", s_btUp ? 1 : 0);
         break;
+    case 0x9101: {   // the MCU asks for a media player (after SendMediaSourceSelect(5, 3): 00 05 06 = the music; after
+                     // MODE to the card: 00 00 02). The shell (Ghidra 2026-10-29, FUN_0067139c -> FUN_005e5a58) opens
+                     // its player on a device with content and says which: SendSelectedDevice(0 SD / 1 USB) - unanswered,
+                     // the MCU stayed "media pending" and took no other source (HU 2026-10-28: radio from media no more)
+        int dev = DirThere(L"\\SDMemory") ? 0 : DirThere(L"\\USBDevice") ? 1 : -1;
+        if (dev >= 0 && s_spSelDev)
+            s_spSelDev(dev);
+        Log(L"mcu: плеер медиа (%02X %02X) -> устройство %d", p[4], p[5], dev);
+        break;
+    }
+    case 0x8903:   // the source is Bluetooth's music (01) or no more (00): the shell starts / stops the phone's music
+                   // (Ghidra 2026-10-29, FUN_00666ac8: BTApi_PlayMusic / BTApi_StopMusic, not in a call)
+        if (p[4] && s_btPlay)
+            s_btPlay();
+        else if (!p[4] && s_btPause && !InCall())
+            s_btPause();
+        Log(L"mcu: источник Bluetooth-музыка %d", p[4]);
+        break;
     case 0x8906:   // "the BT channel may be taken": the shell routes the sound to Bluetooth's and says so
         if (s_svRoute)
             s_svRoute(2);
@@ -630,6 +651,11 @@ static BtFn0 s_btDeinit;
 // (0, 0) + MatchStatus(0)); 0x12 the call's sound (ev[1] 1 in the car -> SendRadioBTRouteChange(); in a call also
 // SendRadioBTPrivacyStatus: 0 in the car, 1 on the phone). The MCU then mutes the radio and gives the channel (0x8906).
 static int s_callType = -1;   // the last type sent in a call (4 / 5 active), -1 none
+
+static bool InCall()
+{
+    return s_callType >= 0;
+}
 static bool s_callOut;        // the call being set up is ours (dialing / alerting)
 
 static void BtCb(int* ev)   // the shell's handler's place: the proxy has published the event already
@@ -740,6 +766,8 @@ static void BtHostStart()
     BtInitFn init = (BtInitFn)Proc(m, "Flc_Bluetooth_Init");
     BtFn1 pairInd = (BtFn1)Proc(m, "Flc_Bluetooth_Conn_EnablePairIndForApp");
     s_btDeinit = (BtFn0)Proc(m, "Flc_Bluetooth_Deinit");
+    s_btPlay = (BtFn0)Proc(m, "Flc_Bluetooth_Av_Play");
+    s_btPause = (BtFn0)Proc(m, "Flc_Bluetooth_Av_Pause");
     if (!powerOn || !init) {
         Log(L"bt: в FLC_BLUETOOTH_SDK.dll нет PowerOn / Init");
         return;
@@ -787,6 +815,7 @@ static int McuHost()
     s_spMatch = (SpFn1)Proc(sp, "SPApi_SendBTMatchStatus");
     s_spBtRoute = (SpFn0)Proc(sp, "SPApi_SendRadioBTRouteChange");
     s_spPrivacy = (SpFn1)Proc(sp, "SPApi_SendRadioBTPrivacyStatus");
+    s_spSelDev = (SpFn1)Proc(sp, "SPApi_SendSelectedDevice");
     HMODULE sv = LoadLibrary(L"desay_sdk_api.dll");
     s_svRoute = sv ? (SpFn1)Proc(sv, "SV_AudioSetRoute") : NULL;
     if (!load || !inited || !init || !skel) {

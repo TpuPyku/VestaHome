@@ -651,6 +651,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
                     OursQuiet();
                 }
+                // MODE to the media (not our asking): our music on - as the shell opens its player there (Ghidra
+                // 2026-10-29: the MCU asks for a player, 0x9101; VestaStub names the card) - unless ours plays
+                if (s_srcSeen != -2 && (src == 6 || src == 7) && now - s_srcByUs > 6000 && !PlayerPlaying() &&
+                    !s_netOn && s_vidState != VID_PLAYING && McuHostOn()) {
+                    VLog(L"источник: медиа (MODE) - наша музыка");
+                    PlayerToggle();
+                }
                 if (src == 0 && s_srcSeen > 0 && !s_radioSrcAsk && McuHostOn())
                     s_radioSrcAsk = now - 1000;  // back to the radio under our host: silent until a preset (next tick)
                 s_srcSeen = src;
