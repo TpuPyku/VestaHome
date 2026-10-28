@@ -68,9 +68,18 @@ def mutants(lines, wanted):
 
 
 def run(cmd, timeout):
+    """The command's exit code, or 'timeout': then its whole tree stopped (the shell's children too - killing only
+    the shell left a looping test running, its pipes open, for hours; 2026-10-28). Its output is not wanted."""
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=os.name != 'nt')
     try:
-        return subprocess.run(cmd, shell=True, capture_output=True, timeout=timeout).returncode
+        return p.wait(timeout)
     except subprocess.TimeoutExpired:
+        if os.name == 'nt':
+            subprocess.run(['taskkill', '/T', '/F', '/PID', str(p.pid)], capture_output=True)
+        else:
+            os.killpg(p.pid, 9)
+        p.wait()
         return 'timeout'
 
 

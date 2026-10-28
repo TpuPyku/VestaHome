@@ -199,6 +199,15 @@ class Tools(unittest.TestCase):
         self.assertEqual(code, 255)
         self.assertIn('fail before any mutation', out)
 
+    def test_a_hanging_test_is_stopped_with_its_children(self):
+        """A mutant looping for ever (2026-10-28: a test hung 3 h past --timeout - only the shell was killed, the
+        python under it kept the pipes open): the whole tree stopped, 'timeout' soon after the time."""
+        import time
+        t = time.time()
+        self.assertEqual(mutator.run('"%s" -c "import time; time.sleep(60)"' % sys.executable, 2), 'timeout')
+        self.assertLess(time.time() - t, 15)
+        self.assertEqual(mutator.run('"%s" -c "pass"' % sys.executable, 10), 0)
+
     def test_mutator_restores_a_left_original_first(self):
         path = self.write('f.py', 'broken by a crash\n')
         with open(path + '.mutator-orig', 'w', encoding='utf-8', newline='\n') as f:
