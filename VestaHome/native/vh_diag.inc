@@ -13,7 +13,8 @@ struct Test { const wchar_t* label; Action a; int arg; };
 static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L"Касания", A_SCREEN, S_TEST_TOUCH },
                                 { L"Калибровка", A_CALIBRATE, 0 }, { L"Память и диски", A_SCREEN, S_TEST_MEM },
                                 { L"Кнопки · MCU", A_SCREEN, S_TEST_MCU }, { L"Звук и видео", A_SCREEN, S_TEST_AV },
-                                { L"CAN / UART · Поток", A_SCREEN, S_TEST_CAN }, { L"GPS", A_SCREEN, S_TEST_CAN },
+                                { L"GPS · CAN · Поток", A_SCREEN, S_TEST_CAN },
+                                { L"Камера заднего хода", A_RVCVIEW, 0 },   // (the user 2026-10-29: here, not in "Car")
                                 { L"Текстовые файлы", A_TEXTFILES, 0 }, { NULL, A_NONE, 0 } };
 
 static int   s_modemState;   // the USB modem's probe (vh_gps.inc ModemUsbSet): 0 not yet, 1 registered, -1 failed

@@ -1,6 +1,6 @@
 ﻿// vh_camera.inc - part of home.cpp (included there, in order): the rear view camera.
 
-// ---- the rear view camera (rvc.cpp) when "own" is on (Settings -> Car): the reverse gear polled every 250 ms;
+// ---- the rear view camera (rvc.cpp), always VestaHome's; by hand from Diagnostics: the reverse polled every 250 ms;
 // in reverse a topmost window over everything paints the colour key (the camera's video shows there) and the
 // guide lines with the CAN module's steering angle, drawn again when the angle moves by half a degree.
 // The window is painted by GDI straight in the screen's format: the key must stay exactly RGB(1, 1, 0).
@@ -112,44 +112,12 @@ static void RvcHide()
         Redraw();
 }
 
-// The shell's own camera (ours off): after the reverse its window stays in front - VestaHome, if it was in front
-// before the reverse, comes back 1.5 s after it (HU 2026-10-20).
-static void RvcAfterShell(int rev)
-{
-    static int s_seen = -1;
-    static DWORD s_front, s_off;
-    static bool s_wasFront;
-    DWORD now = GetTickCount();
-    if (GetForegroundWindow() == s_wnd && IsWindowVisible(s_wnd))
-        s_front = now;
-    if (rev != s_seen) {
-        if (rev == 1)
-            s_wasFront = s_front && now - s_front < 3000;
-        else if (s_seen == 1 && !s_cfg.rvcOwn && s_wasFront)
-            s_off = now;
-        s_seen = rev;
-    }
-    if (s_off && now - s_off > 1500) {
-        s_off = 0;
-        if (GetForegroundWindow() != s_wnd) {
-            VLog(L"камера: задний ход кончился - VestaHome снова впереди");
-            ShowWindow(s_wnd, SW_SHOW);
-#ifdef UNDER_CE
-            SetWindowPos(s_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-#endif
-            SetForegroundWindow(s_wnd);
-            Redraw();
-        }
-    }
-}
-
 static void RvcTick()
 {
     int rev = RvcReverse();
 #ifndef UNDER_CE
     rev = s_rvcFake ? 1 : 0;
 #endif
-    RvcAfterShell(rev);
     // shown by hand (HU 2026-10-24-2: a tap did not close it, nor did the reverse - the shell's window over ours took
     // the taps, it seems): closed by itself after 20 s, and when a reverse ends
     static int s_revWas = -1;
@@ -158,9 +126,8 @@ static void RvcTick()
         VLog(L"камера: показ вручную закрыт сам (%s)", s_revWas == 1 && rev != 1 ? L"задний ход кончился" : L"20 с");
     }
     s_revWas = rev;
-    // ours when set so, or when the stock shell is not there to show it (VestaHome as the shell: HU 2026-10-24)
-    bool own = s_cfg.rvcOwn || !FindWindow(NULL, L"RadioCommWindow");
-    bool want = (own && rev == 1) || s_rvcManual;
+    // always ours (the user 2026-10-29: the switch gone - with it off the reverse showed OSMapsCE's picture)
+    bool want = rev == 1 || s_rvcManual;
     if (want && !s_rvcWnd)
         RvcShow();
     else if (!want && s_rvcWnd)

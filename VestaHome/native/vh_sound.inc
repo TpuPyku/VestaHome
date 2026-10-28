@@ -445,7 +445,6 @@ static void CfgToControls()
     s_seg[G_CAMSND] = !s_cfg.camSound ? 0 : s_cfg.camOver < 0 ? 1 : 2;   // off / always / over (cam.overby)
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
     s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
-    s_on[T_RVC_OWN] = s_cfg.rvcOwn;
     s_on[T_NMEA_PORT] = s_cfg.nmeaPort;
     s_on[T_WIFI] = s_cfg.wifiOn;
     s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
@@ -463,7 +462,7 @@ static void CfgToControls()
 static bool IsCfgToggle(int id)
 {
     return id == T_GPS_TIME || id == T_W_GPS || id == T_CAM_ALERT ||
-           id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_RVC_OWN || id == T_WIFI ||
+           id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_WIFI ||
            id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE || id == T_NMEA_PORT;
 }
 
@@ -481,7 +480,6 @@ static void ControlsToCfg()
     s_cfg.videoMoving = s_on[T_VIDEO_MOVING];
     s_cfg.photoSlides = s_on[T_SLIDES_OPEN];
     s_cfg.photoAutoRot = s_on[T_AUTOROTATE];
-    s_cfg.rvcOwn = s_on[T_RVC_OWN];
     if (s_cfg.nmeaPort != s_on[T_NMEA_PORT]) {
         s_cfg.nmeaPort = s_on[T_NMEA_PORT];
         NmeaPortStart(s_cfg.nmeaPort, false);
