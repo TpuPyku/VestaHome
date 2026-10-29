@@ -11,27 +11,104 @@ static const int kEqBand[3] = { 2, 1, 0 };   // low, mid, high -> the MCU's band
 
 static DWORD s_sndSentTick;   // our last EQ / balance: the MCU's echoes of older values are not taken back meanwhile
 
-// The shell first takes the MCU into its sound page by a key (Ghidra 2026-10-27, G3NavHMI: CAudioEffectDlg /
-// CAudioFieldDlg SlotEffectBtn / SlotFieldBtn - 0xE6 effects and equalizer, 0xE4 balance and fader); a balance
-// slider is pressed (0x97) before its position and let go (0x97, OnTimerSlot) after (SlotSliderPress,
-// SlotChangedPos). Without the shell (HU 2026-10-27) our values alone reached the MCU and were ignored. The page key:
-// once in a while, not with every step.
-static void SoundPage(int key)
+// The MCU takes the values only on its own sound page (Ghidra + the shell's logs, 2026-10-29; sheet 17 item 10:
+// sent from the radio / BT, all ignored): the shell goes "back" to the main menu (0x30, MainMenuKey), "settings"
+// 0x13 (-> 0x3903), then the page - 0xE6 equalizer (-> 0x4102 00 10), 0xE4 balance (-> 0x4102 00 0C; from the
+// other sound page directly). The values wait until the page is confirmed, then the last ones go (a slider's steps
+// thinned as the shell's 0.5 s timer); a balance slider pressed (0x97) before its position and let go after.
+// No page in 1.5 s: the way again, 3 times at most.
+enum { TIMER_SOUND = 25 };
+static int   s_sndWant;     // the page wanted (0: idle)
+static int   s_sndPhase;    // 1 to the settings (MainMenuKey 0x13), 2 the page's key sent, 3 on the page
+static int   s_sndTries;
+static DWORD s_sndT;        // the phase's start
+static int   s_sndDirty;    // bits 0..2 the bands, 4 the balance
+
+static void SoundFlush()   // on the page: what changed
 {
-    static DWORD s_t[2];
-    DWORD& t = s_t[key == 0xE6 ? 0 : 1];
-    if (t && GetTickCount() - t < 20000)
+    for (int i = 0; i < 3; i++)
+        if ((s_sndDirty & (1 << i)) && s_sndWant == 0xE6) {
+            s_sndDirty &= ~(1 << i);
+            if (McuSend2("SPApi_SendRadioAudioHMLData", kEqBand[i], s_cfg.eq[i] + 6))
+                wcscpy(s_status, L"эквалайзер → MCU");
+        }
+    if ((s_sndDirty & 16) && s_sndWant == 0xE4) {
+        s_sndDirty &= ~16;
+        McuKey(0x97, false);   // the slider pressed
+        // the MCU's fader runs the other way from our screen's (HU 2026-10-20: front and rear were swapped)
+        if (McuSend2("SPApi_SendRadioAudioBalanceFaderData", s_cfg.balance + 8, 8 - s_cfg.fader))
+            wcscpy(s_status, L"баланс → MCU");
+        McuKey(0x97, false);   // ... and let go
+    }
+}
+
+static void SoundPageKey()
+{
+    McuKey(s_sndWant, false);
+    s_sndPhase = 2;
+    s_sndT = GetTickCount();
+}
+
+static void SoundStep()   // TIMER_SOUND, every 100 ms
+{
+    DWORD now = GetTickCount();
+    if (!s_sndWant) {
+        int next = s_sndDirty & 7 ? 0xE6 : s_sndDirty & 16 ? 0xE4 : 0;   // the other page's values left
+        if (!next) {
+            KillTimer(s_wnd, TIMER_SOUND);
+            return;
+        }
+        s_sndWant = next;
+        s_sndPhase = s_sndTries = 0;
+    }
+    if (s_sndPageNow == s_sndWant) {   // there: the values, thinned
+        if (s_sndPhase != 3 || now - s_sndT >= 500) {
+            s_sndPhase = 3;
+            s_sndT = now;
+            SoundFlush();
+            if (!(s_sndDirty & (s_sndWant == 0xE6 ? 7 : 16)))
+                s_sndWant = 0;
+        }
         return;
-    t = GetTickCount();
-    McuKey(key, false);
+    }
+    if (s_sndPhase == 1 && (s_mkKey || (LONG)(s_settingsTick - s_sndT) < 0) && now - s_sndT < 4000)
+        return;   // "back"s and "settings" going, its 0x3903 awaited
+    if (s_sndPhase == 1 && (LONG)(s_settingsTick - s_sndT) >= 0) {
+        SoundPageKey();
+        return;
+    }
+    if (s_sndPhase == 2 && now - s_sndT < 1500)
+        return;   // the page's answer awaited
+    if (s_sndPhase && ++s_sndTries >= 3) {
+        VLog(L"звук: MCU не открыл страницу 0x%02X - значения не применены", s_sndWant);
+        wcscpy(s_status, L"MCU не открыл страницу звука");
+        s_sndDirty &= s_sndWant == 0xE6 ? ~7 : ~16;
+        s_sndWant = 0;
+        return;
+    }
+    if (s_sndPageNow) {   // on the other sound page: straight there
+        SoundPageKey();
+        return;
+    }
+    s_sndPhase = 1;
+    s_sndT = now;
+    MainMenuKey(0x13);
+}
+
+static void SoundGo(int page, int dirty)
+{
+    s_sndDirty |= dirty;
+    s_sndSentTick = GetTickCount();
+    if (!s_sndWant) {
+        s_sndWant = page;
+        s_sndPhase = s_sndTries = 0;
+    }
+    SetTimer(s_wnd, TIMER_SOUND, 100, NULL);
 }
 
 static void EqSend(int i)
 {
-    s_sndSentTick = GetTickCount();
-    SoundPage(0xE6);
-    if (McuSend2("SPApi_SendRadioAudioHMLData", kEqBand[i], s_cfg.eq[i] + 6))
-        wcscpy(s_status, L"эквалайзер → MCU");
+    SoundGo(0xE6, 1 << i);
 }
 
 static void EqSet(int arg)   // band * 16 + value + 6
@@ -56,13 +133,7 @@ static void EqPresetSet(int p)
 
 static void BalanceSend()
 {
-    s_sndSentTick = GetTickCount();
-    // the MCU's fader runs the other way from our screen's (HU 2026-10-20: front and rear were swapped)
-    SoundPage(0xE4);
-    McuKey(0x97, false);   // the slider pressed
-    if (McuSend2("SPApi_SendRadioAudioBalanceFaderData", s_cfg.balance + 8, 8 - s_cfg.fader))
-        wcscpy(s_status, L"баланс → MCU");
-    McuKey(0x97, false);   // ... and let go
+    SoundGo(0xE4, 16);
 }
 
 static void BalanceStep(bool fader, int dir)   // dir 0 = both to the centre

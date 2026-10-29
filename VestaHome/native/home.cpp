@@ -487,6 +487,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             MenuKeyStep();
             return 0;
         }
+        if (wp == TIMER_SOUND) {   // the equalizer / balance: the MCU's sound page first
+            SoundStep();
+            return 0;
+        }
         if (wp == TIMER_BTSRC) {   // BtMusicOn's second key
             KillTimer(hwnd, TIMER_BTSRC);
             McuKey(0x54, false);

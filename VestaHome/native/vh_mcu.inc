@@ -324,6 +324,10 @@ static void McuLogLine(const char* s)   // under s_mcuCs
 // below, left by "back" 0x30 one level a press (vh_screens.inc MainMenuKey)
 static volatile bool  s_menuMain;
 static volatile DWORD s_menuTick;   // the last of these messages (0: none yet)
+// Its settings (Ghidra + the shell's logs, 2026-10-29): key 0x13 from the main menu -> 0x3903 00 00; then the sound
+// pages, key 0xE6 -> 0x4102 00 10 (equalizer) and 0xE4 -> 0x4102 00 0C (balance) - only there it takes the values
+static volatile DWORD s_settingsTick;   // 0x3903 came
+static volatile int   s_sndPageNow;     // 0xE6 / 0xE4 - the MCU on that sound page; 0 elsewhere
 
 static void McuTake(const McuMsg& m)
 {
@@ -483,9 +487,13 @@ static void McuTake(const McuMsg& m)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_DAYNIGHT, 0);
     if (m.id == 0x4C01)   // a panel / wheel button: key, pressed 0 / released 1, short 1 / long 2 / repeat 3 (HwKey)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_HWKEY, p[1] | p[2] << 8 | p[3] << 16);
-    if ((m.id == 0x1102 && p[1] == 0x16) || m.id == 0x9101 || m.id == 0x8902 || m.id == 0x8905) {
+    if ((m.id == 0x1102 && p[1] == 0x16) || m.id == 0x9101 || m.id == 0x8902 || m.id == 0x8905 || m.id == 0x3903 ||
+        m.id == 0x4102) {
         s_menuMain = m.id == 0x1102;
         s_menuTick = m.tick | 1;
+        s_sndPageNow = m.id == 0x4102 && p[1] == 0x10 ? 0xE6 : m.id == 0x4102 && p[1] == 0x0C ? 0xE4 : 0;
+        if (m.id == 0x3903)
+            s_settingsTick = m.tick | 1;
     }
     if (m.id == 0x1102 && p[1] == 0x18)   // the knob held 5 s: the MCU reboots the unit in 5 s more (2026-10-18)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_REBOOT, 0);
