@@ -121,6 +121,12 @@ static void RvcTick()
     // shown by hand (HU 2026-10-24-2: a tap did not close it, nor did the reverse - the shell's window over ours took
     // the taps, it seems): closed by itself after 20 s, and when a reverse ends
     static int s_revWas = -1;
+    // a tap seen here too: the window's own taps never came on the unit (HU 2026-10-29: "по клику не закрывается",
+    // it closed after 20 s); the first 0.7 s skipped - the tap that opened it
+    if (s_rvcManual && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) && GetTickCount() - s_rvcManualTick > 700) {
+        s_rvcManual = false;
+        VLog(L"камера: показ вручную закрыт касанием");
+    }
     if (s_rvcManual && ((s_revWas == 1 && rev != 1) || GetTickCount() - s_rvcManualTick > kRvcManualMs)) {
         s_rvcManual = false;
         VLog(L"камера: показ вручную закрыт сам (%s)", s_revWas == 1 && rev != 1 ? L"задний ход кончился" : L"20 с");

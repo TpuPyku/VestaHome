@@ -58,6 +58,9 @@ static void PhonePlayTakes(int src, DWORD now)
     BtState bt;
     if (!BtGet(&bt, NULL))
         return;
+    if (bt.av != s_avWas)   // (HU 2026-10-29: it worked twice, then not - whether the phone's state came at all)
+        VLog(L"телефон: музыка %d -> %d (источник %d, наше переключение %lu с назад)", s_avWas, bt.av, src,
+             (now - s_srcByUs) / 1000);
     if (bt.av == 2 && s_avWas >= 0 && s_avWas != 2 && src != 9 && now - s_srcByUs > 5000 && McuHostOn()) {
         VLog(L"телефон: играет - источник Bluetooth");
         McuKey(0x84, false);
