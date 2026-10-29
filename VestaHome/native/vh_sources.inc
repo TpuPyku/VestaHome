@@ -4,6 +4,69 @@
 // radio and Bluetooth music are the MCU's own sources; ours (music, internet radio, video) sound through waveOut
 // only while the MCU's source is "media" (0x4904 06/07) - turned on as the shell's "USB music" does it:
 // SendMediaSourceSelect(5, 3) after its 0x30.
+// ---- the MCU's main menu keys (0x7F radio, 0x84 BT): taken only in its main menu (0x1102 00 16) - the shell goes
+// there by "back" 0x30, a level a press (2 from the SD player or Bluetooth's music; Ghidra + the shell's logs
+// 2026-10-29: our 0x7F from the player was ignored - the radio silent, its presets dead). After each "back" up to
+// 0.5 s for the MCU's answer: the main menu - the key; a level below (0x9101 / 0x8902 / 0x8905) - back again; no
+// answer - it is there already (it answers none in the main menu). At most 4 backs.
+enum { TIMER_MENUKEY = 24, kMenuBacks = 4 };
+static int   s_mkKey;     // the key waiting (0: none)
+static int   s_mkBacks;
+static DWORD s_mkSent;    // the last back (0: none yet)
+
+static void MenuKeyNow()
+{
+    KillTimer(s_wnd, TIMER_MENUKEY);
+    int key = s_mkKey;
+    s_mkKey = 0;
+    DWORD now = GetTickCount();
+    VLog(L"mcu: клавиша 0x%02X после «назад» x%d (%s)", key, s_mkBacks,
+         s_menuMain ? L"главное меню" : s_mkBacks >= kMenuBacks ? L"меню не подтверждено" : L"без ответа - уже там");
+    McuKey(key, false);
+    if (key == 0x7F)
+        s_srcByUs = s_radioSrcAsk = now;   // (the preset 1.5 s after the key itself)
+    else if (key == 0x84)
+        SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);   // then Bluetooth's music key 0x54
+}
+
+static void MenuKeyStep()   // TIMER_MENUKEY, every 100 ms
+{
+    if (!s_mkKey)
+        return;
+    DWORD now = GetTickCount();
+    bool answered = s_mkSent && (LONG)(s_menuTick - s_mkSent) >= 0;
+    if ((!s_mkSent && s_menuMain) || (answered && (s_menuMain || s_mkBacks >= kMenuBacks)) ||
+        (s_mkSent && !answered && now - s_mkSent >= 500)) {
+        MenuKeyNow();
+        return;
+    }
+    if (s_mkSent && !answered)
+        return;   // waiting for the answer
+    McuKey(0x30, false);
+    s_mkSent = GetTickCount() | 1;
+    s_mkBacks++;
+}
+
+static void MainMenuKey(int key)
+{
+    s_mkKey = key;
+    s_mkBacks = 0;
+    s_mkSent = 0;
+    SetTimer(s_wnd, TIMER_MENUKEY, 100, NULL);
+    MenuKeyStep();
+}
+
+// Our "media" asked (SendMediaSourceSelect(5, 3)): VestaStub answers the MCU's player request (0x9101) with the card
+// only then - its answer to every 0x9101 put the MCU back into the player after each "back" (2026-10-29)
+static void MediaAskSignal(bool on)
+{
+    static HANDLE s_ev;
+    if (!s_ev)
+        s_ev = CreateEvent(NULL, TRUE, FALSE, L"VestaMediaAsk");
+    if (s_ev)
+        on ? SetEvent(s_ev) : ResetEvent(s_ev);
+}
+
 static void OursQuiet()   // the radio or Bluetooth takes over: our players stop (pause)
 {
     NetStop();
@@ -63,7 +126,7 @@ static void PhonePlayTakes(int src, DWORD now)
              (now - s_srcByUs) / 1000);
     if (bt.av == 2 && s_avWas >= 0 && s_avWas != 2 && src != 9 && now - s_srcByUs > 5000 && McuHostOn()) {
         VLog(L"телефон: играет - источник Bluetooth");
-        McuKey(0x84, false);
+        MainMenuKey(0x84);
         s_srcByUs = now;
     }
     s_avWas = bt.av;
@@ -78,6 +141,7 @@ static void MediaSource()   // one of our players starts
         return;   // media, or Bluetooth's path: ours sound
     if (McuHostOn()) {   // no shell: its main menu's "Media" (FUN_005f7cdc, Ghidra 2026-10-27) - the MCU knows the
         VLog(L"источник: медиа для нашего звука (было %d)", src);   // cards from our host now, MODE turns it 07
+        MediaAskSignal(true);
         McuSend2("SPApi_SendMediaSourceSelect", 5, 3);
         s_srcByUs = s_mediaAsk = GetTickCount();
         return;
@@ -86,8 +150,7 @@ static void MediaSource()   // one of our players starts
     // media player - with it our video stayed black, sound only (HU 2026-10-20-3; the picture was there on the
     // 18th, before the call): the hardware overlay is one.
     VLog(L"источник: путь Bluetooth для нашего звука (было %d)", src);
-    McuKey(0x84, false);
-    SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);
+    MainMenuKey(0x84);
     s_srcByUs = s_btPathTick = GetTickCount();
 }
 

@@ -319,6 +319,12 @@ static void McuLogLine(const char* s)   // under s_mcuCs
 }
 
 // One message: the per-id table, the climate, the record ("<uptime s> <id> s<skeleton> <len> : hex |text|").
+// The MCU's menu (Ghidra + the shell's logs, 2026-10-29): 0x1102 00 16 - its main menu, the only place it takes the
+// main menu's keys (0x7F radio, 0x84 BT); a player's request (0x9101), Bluetooth's screens (0x8902, 0x8905) - a level
+// below, left by "back" 0x30 one level a press (vh_screens.inc MainMenuKey)
+static volatile bool  s_menuMain;
+static volatile DWORD s_menuTick;   // the last of these messages (0: none yet)
+
 static void McuTake(const McuMsg& m)
 {
     const unsigned char* p = m.data;
@@ -477,6 +483,10 @@ static void McuTake(const McuMsg& m)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_DAYNIGHT, 0);
     if (m.id == 0x4C01)   // a panel / wheel button: key, pressed 0 / released 1, short 1 / long 2 / repeat 3 (HwKey)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_HWKEY, p[1] | p[2] << 8 | p[3] << 16);
+    if ((m.id == 0x1102 && p[1] == 0x16) || m.id == 0x9101 || m.id == 0x8902 || m.id == 0x8905) {
+        s_menuMain = m.id == 0x1102;
+        s_menuTick = m.tick | 1;
+    }
     if (m.id == 0x1102 && p[1] == 0x18)   // the knob held 5 s: the MCU reboots the unit in 5 s more (2026-10-18)
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_REBOOT, 0);
     if (tuner && !InterlockedExchange((LONG*)&s_tunPosted, 1) && !PostMessage(s_wnd, WM_APP_MCU, WP_MCU_TUNER, 0))

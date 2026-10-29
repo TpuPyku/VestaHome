@@ -483,6 +483,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RadioFillTick();
             return 0;
         }
+        if (wp == TIMER_MENUKEY) {   // a main menu key: "back" to it first
+            MenuKeyStep();
+            return 0;
+        }
         if (wp == TIMER_BTSRC) {   // BtMusicOn's second key
             KillTimer(hwnd, TIMER_BTSRC);
             McuKey(0x54, false);
@@ -638,10 +642,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             if (s_mediaAsk && now - s_mediaAsk > 2000) {
                 s_mediaAsk = 0;
+                MediaAskSignal(false);
                 if (src != 6 && src != 7 && src != 9) {
                     VLog(L"источник: медиа не включилось (%d) - путь Bluetooth", src);
-                    McuKey(0x84, false);
-                    SetTimer(hwnd, TIMER_BTSRC, 800, NULL);
+                    MainMenuKey(0x84);
                     s_srcByUs = s_btPathTick = now;
                 }
             }

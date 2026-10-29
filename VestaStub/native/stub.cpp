@@ -558,14 +558,24 @@ static void SkelHandle(void* self, unsigned char* p)
             s_spBtOpen(s_btUp ? 1 : 0);
         Log(L"mcu: Bluetooth включён? -> %d", s_btUp ? 1 : 0);
         break;
-    case 0x9101: {   // the MCU asks for a media player (after SendMediaSourceSelect(5, 3): 00 05 06 = the music; after
-                     // MODE to the card: 00 00 02). The shell (Ghidra 2026-10-29, FUN_0067139c -> FUN_005e5a58) opens
-                     // its player on a device with content and says which: SendSelectedDevice(0 SD / 1 USB) - unanswered,
-                     // the MCU stayed "media pending" and took no other source (HU 2026-10-28: radio from media no more)
+    case 0x9101: {   // the MCU's player screens (00 05 06 - the SD's folders, after SendMediaSourceSelect(5, 3) or a
+                     // "back" from the player; 00 00 02 - the SD's player, after MODE). SendSelectedDevice(0 SD / 1 USB)
+                     // opens the player from the folders.
+        // Only to VestaHome's own "media" (its event VestaMediaAsk, up 2 s): the shell sends SendSelectedDevice only
+        // from its folders' screen (Ghidra 2026-10-29: "back to the player") - answering every 0x9101 put the MCU
+        // back into the player after each "back" 0x30, so the radio's key never reached its main menu.
+        HANDLE ask = OpenEvent(EVENT_ALL_ACCESS, FALSE, L"VestaMediaAsk");
+        bool ours = ask && WaitForSingleObject(ask, 0) == WAIT_OBJECT_0;
+        if (ask) {
+            if (ours)
+                ResetEvent(ask);
+            CloseHandle(ask);
+        }
         int dev = DirThere(L"\\SDMemory") ? 0 : DirThere(L"\\USBDevice") ? 1 : -1;
-        if (dev >= 0 && s_spSelDev)
+        if (ours && dev >= 0 && s_spSelDev)
             s_spSelDev(dev);
-        Log(L"mcu: плеер медиа (%02X %02X) -> устройство %d", p[4], p[5], dev);
+        Log(L"mcu: плеер медиа (%02X %02X) -> %s %d", p[4], p[5], ours ? L"устройство" : L"не наш запрос, без ответа",
+            dev);
         break;
     }
     case 0x8903:   // the source is Bluetooth's music (01) or no more (00): the shell starts / stops the phone's music

@@ -100,6 +100,7 @@ struct Tuner {
 static void TunerGet(Tuner* t);
 static const wchar_t* RadioName(const Tuner& t, int f10);   // a station's name, "" when not known
 static void McuKey(int code, bool ext);
+static void MainMenuKey(int key);   // (vh_sources.inc: "back" to the MCU's main menu first)
 static void RadioPreset(int i);
 static bool McuSend3(const char* name, int a, int b, int c);
 static bool VolGet(int* vol, int* mute, int* src);
@@ -403,10 +404,8 @@ static void RadioOn()
     VolGet(&vol, &mute, &src);
     if (src == 0)
         return;   // already the radio
-    if (!McuHostOn())
-        McuKey(0x30, false);
-    McuKey(0x7F, false);
-    s_srcByUs = s_radioSrcAsk = GetTickCount();
+    s_srcByUs = GetTickCount();
+    MainMenuKey(0x7F);   // (the preset asked 1.5 s after the key: MenuKeyNow)
 }
 
 // The radio screen's keys as the shell's (SPIPower.log 2026-10-18): seek down / up = extended 0x3B / 0x3C,
@@ -629,8 +628,7 @@ static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x890
     ResumeByUser();                         // (HU 2026-10-18-2: 0x54 alone did nothing; after 0x84 the source turned 09)
     OursQuiet();
     s_srcByUs = GetTickCount();
-    McuKey(0x84, false);
-    SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);
+    MainMenuKey(0x84);   // (then 0x54: TIMER_BTSRC)
 }
 
 static void ScrAudioBt(HDC dc)
