@@ -21,20 +21,30 @@ static void BtQuiet()   // the phone's music paused (inaudible under another sou
 
 // The screen after a source changed not by us - MODE, the phone (the user 2026-10-29): with VestaHome in front on the
 // radio, the music or the Bluetooth music only (the home screen's widget shows it; another program in front, the
-// settings, the phone - untouched): the media -> "Music", Bluetooth -> its tab, the radio -> the radio (its preset's page)
+// settings, the phone - untouched): the media -> "Music", Bluetooth -> its tab, the radio -> the radio (its preset's page).
+// The same change opens the volume window first (a screen over the one left: HU 2026-10-29 - the screen stayed), so
+// then the screen under it follows, the window closing onto the new one.
 static void BuildButtons();
 static void Redraw();
 
 static void FollowSource(int src)
 {
-    if (!IsWindowVisible(s_wnd) || GetForegroundWindow() != s_wnd ||
-        (s_screen != S_RADIO && s_screen != S_AUDIO && s_screen != S_AUDIO_BT))
+    if (!IsWindowVisible(s_wnd) || GetForegroundWindow() != s_wnd)
         return;
-    Screen to = src == 6 || src == 7 ? S_AUDIO : src == 9 ? S_AUDIO_BT : src == 0 ? S_RADIO : s_screen;
-    if (to == s_screen)
+    bool over = s_screen == S_VOLUME && s_histLen > 0;
+    Screen* at = over ? &s_hist[s_histLen - 1] : &s_screen;
+    if (*at != S_RADIO && *at != S_AUDIO && *at != S_AUDIO_BT)
         return;
-    VLog(L"источник %d: экран следом", src);
-    Go(to, false);
+    Screen to = src == 6 || src == 7 ? S_AUDIO : src == 9 ? S_AUDIO_BT : src == 0 ? S_RADIO : *at;
+    if (to == *at)
+        return;
+    VLog(L"источник %d: экран следом%s", src, over ? L" (под окном громкости)" : L"");
+    if (over) {
+        *at = to;
+        s_media = to;   // (as Go does for the media screens)
+    } else {
+        Go(to, false);
+    }
     BuildButtons();
     Redraw();
 }
