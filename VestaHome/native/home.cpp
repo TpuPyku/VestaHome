@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <shellapi.h>
 #include <tlhelp32.h>   // our threads' load (OwnThreadsLoad); toolhelp.dll itself is loaded at run time
+#ifdef UNDER_CE
+#include <ras.h>        // the USB modem's dial-up (vh_gps.inc ModemNet)
+#endif
 #include "https.h"
 #include "video.h"
 #include "wifi.h"
@@ -1009,6 +1012,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
+    case WM_APP_MODEM:   // the modem's dial is done (vh_gps.inc ModemDial)
+        if (IsWindowVisible(hwnd) && s_screen == S_DIAG)
+            Redraw();
+        return 0;
     case WM_APP_NMEA:   // the navigators' port is done; wp: it failed - the setting off again
         if (wp && s_cfg.nmeaPort) {
             s_cfg.nmeaPort = false;

@@ -182,17 +182,20 @@ static void NmeaPortSet(bool on)
 #endif
 }
 
-// ---- The USB modem's probe (2026-10-24, VestaModem/native): its client driver copied into \Windows and its keys
-// written - USBD reads them when a device comes, so the modem goes in after this. Only Huawei's stick for now: its
-// CD-ROM mode (12D1:155B) and the modem (12D1:1506), whole devices (Default\Default); the registry is new at every
-// boot, so it lasts until the unit restarts. The driver logs into VestaLogs\VestaModem.log.
-// (its state: s_modemState, s_modemErr - in vh_diag.inc, which shows it)
+// ---- The USB modem (2026-10-24, VestaModem/native): its client driver copied into \Windows and its keys written -
+// USBD reads them when a device comes, so the modem goes in after this. Only Huawei's stick for now: its CD-ROM mode
+// (12D1:155B) and the modem (12D1:1506), whole devices (Default\Default); the registry is new at every boot, so it
+// lasts until the unit restarts. With the modem in, the driver brings up its COM port from the third key (step 2,
+// 2026-10-29): a TAPI modem for Unimodem (an external one: AT, ATE0V1&C1&D2, then ATDT*99#). The driver logs into
+// VestaLogs\VestaModem.log. (its state: s_modemState, s_modemErr - in vh_diag.inc, which shows it)
+static const wchar_t kModemLine[] = L"VestaModem USB";   // Unimodem's line: the RAS entry's device
 
 static void ModemUsbSet()
 {
 #ifdef UNDER_CE
-    static const wchar_t* kKeys[2] = { L"Drivers\\USB\\LoadClients\\4817_5467\\Default\\Default\\VestaModem",
-                                       L"Drivers\\USB\\LoadClients\\4817_5382\\Default\\Default\\VestaModem" };
+    static const wchar_t* kKeys[3] = { L"Drivers\\USB\\LoadClients\\4817_5467\\Default\\Default\\VestaModem",
+                                       L"Drivers\\USB\\LoadClients\\4817_5382\\Default\\Default\\VestaModem",
+                                       L"Drivers\\VestaModemCom" };
     wchar_t src[MAX_PATH];
     _snwprintf(src, MAX_PATH, L"%sVestaModem.dll", s_dir);
     s_modemErr = 0;
@@ -203,7 +206,7 @@ static void ModemUsbSet()
         VLog(L"USB-модем: нет %s (%lu)", src, s_modemErr);
         return;
     }
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         HKEY k;
         DWORD disp;
         LONG r = RegCreateKeyEx(HKEY_LOCAL_MACHINE, kKeys[i], 0, NULL, 0, 0, NULL, &k, &disp);
@@ -214,6 +217,12 @@ static void ModemUsbSet()
             return;
         }
         RegStr(k, L"DLL", L"VestaModem.dll");
+        if (i == 2) {   // the COM port (no Index: the first free number)
+            RegStr(k, L"Prefix", L"COM");
+            RegStr(k, L"Tsp", L"Unimodem.dll");
+            RegDw(k, L"DeviceType", 1);
+            RegStr(k, L"FriendlyName", kModemLine);
+        }
         RegCloseKey(k);
     }
     s_modemState = 1;
@@ -221,6 +230,119 @@ static void ModemUsbSet()
 #else
     s_modemState = 1;   // PC: the driver is the unit's only
     VLog(L"USB-модем: ПК - только отмечено");
+#endif
+}
+
+// Internet through it: RAS over the driver's COM port (the APN is the driver's: by the SIM's operator); the status -
+// the driver's HKLM\Software\Vesta\Modem (Port, Rssi, Mode, Sim)
+#define WM_APP_MODEM (WM_APP + 29)
+#ifdef UNDER_CE
+static HRASCONN      s_ras;
+
+static int ModemDw(HKEY k, const wchar_t* name)
+{
+    DWORD v, type, size = sizeof(v);
+    return RegQueryValueEx(k, name, NULL, &type, (BYTE*)&v, &size) == ERROR_SUCCESS && type == REG_DWORD ? (int)v : -1;
+}
+#endif
+
+static void ModemGet(ModemInfo* m)
+{
+    memset(m, 0, sizeof(*m));
+    m->rssi = m->mode = m->sim = -1;
+#ifdef UNDER_CE
+    HKEY k;
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"Software\\Vesta\\Modem", 0, 0, &k) == ERROR_SUCCESS) {
+        DWORD type, size = sizeof(m->port) - sizeof(wchar_t);
+        if (RegQueryValueEx(k, L"Port", NULL, &type, (BYTE*)m->port, &size) != ERROR_SUCCESS || type != REG_SZ)
+            m->port[0] = 0;
+        m->rssi = ModemDw(k, L"Rssi");
+        m->mode = ModemDw(k, L"Mode");
+        m->sim = ModemDw(k, L"Sim");
+        RegCloseKey(k);
+    }
+    if (!s_ras)
+        return;
+    RASCONNSTATUS st;
+    memset(&st, 0, sizeof(st));
+    st.dwSize = sizeof(st);
+    m->online = !RasGetConnectStatus(s_ras, &st) && st.rasconnstate == RASCS_Connected;
+    if (!m->online) {   // the link went (the modem out, the network)
+        VLog(L"модем: связь пропала (состояние %d)", (int)st.rasconnstate);
+        RasHangUp(s_ras);
+        s_ras = NULL;
+    }
+#endif
+}
+
+#ifdef UNDER_CE
+static DWORD WINAPI ModemDial(LPVOID)
+{
+    RASENTRY e;
+    memset(&e, 0, sizeof(e));
+    e.dwSize = sizeof(e);
+    e.dwfOptions = RASEO_RemoteDefaultGateway;   // the internet through it (Wi-Fi's route stays for its own net)
+    e.dwfNetProtocols = RASNP_Ip;
+    e.dwFramingProtocol = RASFP_Ppp;
+    wcscpy(e.szLocalPhoneNumber, L"*99#");
+    wcscpy(e.szDeviceType, RASDT_Modem);
+    wcscpy(e.szDeviceName, kModemLine);
+    DWORD r = RasSetEntryProperties(NULL, L"VestaModem", &e, sizeof(e), NULL, 0);
+    HRASCONN c = NULL;
+    if (!r) {
+        RASDIALPARAMS p;
+        memset(&p, 0, sizeof(p));
+        p.dwSize = sizeof(p);
+        wcscpy(p.szEntryName, L"VestaModem");
+        r = RasDial(NULL, NULL, &p, 0, NULL, &c);   // (no notifier: it waits for the end)
+    }
+    if (r && c) {
+        RasHangUp(c);
+        c = NULL;
+    }
+    s_ras = c;
+    s_rasErr = r;
+    if (r)
+        VLog(L"модем: дозвон *99# - ошибка RAS %lu", r);
+    else
+        VLog(L"модем: в сети");
+    InterlockedExchange((LONG*)&s_rasBusy, 0);
+    PostMessage(s_wnd, WM_APP_MODEM, 0, 0);
+    return 0;
+}
+#endif
+
+static void ModemNet()   // the diagnostics' button: the driver registered, then dial / hang up
+{
+    if (s_modemState <= 0) {
+        ModemUsbSet();
+        return;
+    }
+    if (s_rasBusy)
+        return;
+    ModemInfo m;
+    ModemGet(&m);
+#ifdef UNDER_CE
+    if (s_ras) {
+        RasHangUp(s_ras);
+        s_ras = NULL;
+        VLog(L"модем: отключено");
+        return;
+    }
+    if (!m.port[0]) {
+        VLog(L"модем: нет COM-порта модема (вставлен? см. VestaModem.log)");
+        return;
+    }
+    VLog(L"модем: дозвон через %s (сигнал %d, сеть %d, SIM %d)", m.port, m.rssi, m.mode, m.sim);
+    s_rasErr = 0;
+    s_rasBusy = 1;
+    HANDLE t = CreateThread(NULL, 0, ModemDial, NULL, 0, NULL);
+    if (t)
+        CloseHandle(t);
+    else
+        s_rasBusy = 0;
+#else
+    VLog(L"модем: ПК - дозвона нет");
 #endif
 }
 

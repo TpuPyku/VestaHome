@@ -17,8 +17,45 @@ static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L
                                 { L"Камера заднего хода", A_RVCVIEW, 0 },   // (the user 2026-10-29: here, not in "Car")
                                 { L"Текстовые файлы", A_TEXTFILES, 0 }, { NULL, A_NONE, 0 } };
 
-static int   s_modemState;   // the USB modem's probe (vh_gps.inc ModemUsbSet): 0 not yet, 1 registered, -1 failed
+static int   s_modemState;   // the USB modem's driver (vh_gps.inc ModemUsbSet): 0 not yet, 1 registered, -1 failed
 static DWORD s_modemErr;
+struct ModemInfo {           // (vh_gps.inc ModemGet)
+    wchar_t port[16];        // "" - no modem (or no COM port)
+    int     rssi, mode, sim;
+    bool    online;
+};
+static volatile LONG s_rasBusy;   // dialing (vh_gps.inc ModemNet)
+static DWORD         s_rasErr;    // the last dial's error
+static void ModemGet(ModemInfo* m);
+
+static const wchar_t* ModemNetName(int mode)   // Huawei's sys_mode
+{
+    return mode == 3 ? L"2G" : mode == 5 || mode == 7 ? L"3G" : L"нет сети";
+}
+
+// The modem's button: what it does next, with the signal (0..31) and the network
+static void ModemLabel(wchar_t* s, int n)
+{
+    ModemInfo m;
+    ModemGet(&m);
+    if (s_modemState < 0)
+        _snwprintf(s, n, L"USB-модем: ошибка %lu", s_modemErr);
+    else if (!s_modemState)
+        _snwprintf(s, n, L"USB-модем: включить");
+    else if (s_rasBusy)
+        _snwprintf(s, n, L"Модем: подключение…");
+    else if (m.online)
+        _snwprintf(s, n, L"Модем в сети · отключить");
+    else if (!m.port[0])
+        _snwprintf(s, n, L"USB-модем: вставьте модем");
+    else if (m.sim == 255)
+        _snwprintf(s, n, L"Модем: нет SIM-карты");
+    else if (s_rasErr)
+        _snwprintf(s, n, L"Модем: ошибка %lu · ещё раз", s_rasErr);
+    else
+        _snwprintf(s, n, L"Модем %s · %d/31 · подключить", ModemNetName(m.mode), m.rssi < 0 || m.rssi > 31 ? 0 : m.rssi);
+    s[n - 1] = 0;
+}
 
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
 static void ScrDiag(HDC dc)
@@ -28,11 +65,8 @@ static void ScrDiag(HDC dc)
     for (int i = 0; i < 10 && kTests[i].label; i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
                kTests[i].a == A_SOON ? B_DIS : B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
-    wchar_t m[48];   // the USB modem's probe (vh_gps.inc ModemUsbSet): the last place
-    if (s_modemState < 0)
-        _snwprintf(m, 48, L"USB-модем: ошибка %lu", s_modemErr);
-    else
-        wcscpy(m, s_modemState ? L"USB-модем: вставьте модем" : L"USB-модем (проба)");
+    wchar_t m[48];   // the USB modem (vh_gps.inc ModemNet): the last place
+    ModemLabel(m, 48);
     Button(dc, 408, 288, 352, 44, m, s_modemState > 0 ? B_SEL : B_N, IC_NONE, 16, 0, A_MODEMTEST);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
