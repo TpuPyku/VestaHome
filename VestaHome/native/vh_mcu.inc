@@ -371,7 +371,8 @@ static void McuTake(const McuMsg& m)
         mark = s_mute == 0 && p[1] != 0;   // MUTE pressed: a mark in the records (the hardware key - an on-screen
                                            // MARK would change the screen being tested; 2026-10-17)
         s_mute = p[1] != 0;
-    } else if (m.id == 0x4904) {
+    } else if (m.id == 0x4904) {   // the source: the volume window with its name too (the user 2026-10-29: MODE
+        volume = s_src >= 0 && s_src != p[1];   // media -> BT showed nothing - their levels are the same)
         s_src = p[1];
     }
     bool dayNight = false;

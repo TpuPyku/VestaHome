@@ -214,6 +214,16 @@ static void RadioPageTo(int page)
     s_radioPage = page;
 }
 
+// The wheel's up / down on the radio (the user 2026-10-29): the next / previous preset of the page playing, round
+static void RadioPresetStep(int dir)
+{
+    Tuner t;
+    TunerGet(&t);
+    int cur = t.cur >= 0 && t.cur < 24 ? t.cur : 0, n = cur / 8 * 8 + (cur % 8 + dir + 8) % 8;
+    VLog(L"радио: пресет %d -> %d (кнопка руля)", cur + 1, n + 1);
+    McuSend3("SPApi_SendListItemControl", 1, n, 0);
+}
+
 static void ScrRadio(HDC dc)
 {
     Tuner t;

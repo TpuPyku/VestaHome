@@ -1078,7 +1078,7 @@ static void MediaStep(int dir)   // the source playing: the next / previous trac
     else if (src == 9)
         BtCmd(dir > 0 ? BT_CMD_NEXT : BT_CMD_PREV);
     else if (src == 0)
-        RadioKey(dir > 0 ? 0x13C : 0x13B);   // the seek up / down
+        RadioPresetStep(dir);
 }
 
 static void HwKey(int key, int st, int kind)

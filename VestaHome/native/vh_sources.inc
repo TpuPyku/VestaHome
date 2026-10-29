@@ -19,6 +19,43 @@ static void BtQuiet()   // the phone's music paused (inaudible under another sou
         BtCmd(BT_CMD_PAUSE);
 }
 
+// The screen after a source changed not by us - MODE, the phone (the user 2026-10-29): with VestaHome in front on the
+// radio, the music or the Bluetooth music only (the home screen's widget shows it; another program in front, the
+// settings, the phone - untouched): the media -> "Music", Bluetooth -> its tab, the radio -> the radio (its preset's page)
+static void BuildButtons();
+static void Redraw();
+
+static void FollowSource(int src)
+{
+    if (!IsWindowVisible(s_wnd) || GetForegroundWindow() != s_wnd ||
+        (s_screen != S_RADIO && s_screen != S_AUDIO && s_screen != S_AUDIO_BT))
+        return;
+    Screen to = src == 6 || src == 7 ? S_AUDIO : src == 9 ? S_AUDIO_BT : src == 0 ? S_RADIO : s_screen;
+    if (to == s_screen)
+        return;
+    VLog(L"источник %d: экран следом", src);
+    Go(to, false);
+    BuildButtons();
+    Redraw();
+}
+
+// The phone's play while another source sounds (the user 2026-10-29: the radio on, play on the phone - the phone's
+// music): the source to Bluetooth (its key, as "Media -> Bluetooth"), once on its start (the playing state's edge),
+// not right after our own switching (a pause sent then may come late)
+static void PhonePlayTakes(int src, DWORD now)
+{
+    static int s_avWas = -1;
+    BtState bt;
+    if (!BtGet(&bt, NULL))
+        return;
+    if (bt.av == 2 && s_avWas >= 0 && s_avWas != 2 && src != 9 && now - s_srcByUs > 5000 && McuHostOn()) {
+        VLog(L"телефон: играет - источник Bluetooth");
+        McuKey(0x84, false);
+        s_srcByUs = now;
+    }
+    s_avWas = bt.av;
+}
+
 static void MediaSource()   // one of our players starts
 {
     BtQuiet();

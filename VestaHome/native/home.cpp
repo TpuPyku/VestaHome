@@ -642,6 +642,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     s_srcByUs = s_btPathTick = now;
                 }
             }
+            PhonePlayTakes(src, now);
             if (s_btPathTick && now - s_btPathTick > 3000) {   // the BT key may start the phone: it is paused
                 s_btPathTick = 0;
                 BtQuiet();
@@ -658,6 +659,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     VLog(L"источник: медиа (MODE) - наша музыка");
                     PlayerToggle();
                 }
+                if (s_srcSeen != -2 && now - s_srcByUs > 6000)
+                    FollowSource(src);
                 if (src == 0 && s_srcSeen > 0 && !s_radioSrcAsk && McuHostOn())
                     s_radioSrcAsk = now - 1000;  // back to the radio under our host: silent until a preset (next tick)
                 s_srcSeen = src;
