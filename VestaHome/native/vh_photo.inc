@@ -855,6 +855,7 @@ static void DoAction(const Btn& b)
         t[39] = 0;
         VLog(L"obd: сопряжение %s", t);
         BtCmdText(BT_CMD_PAIR, t);
+        s_obdPairTick = GetTickCount();
         break;
     }
     case A_OBDCONN: {

@@ -37,15 +37,16 @@ static void Changed()
 // A step: into the screen's lines and the log
 static void Say(const wchar_t* fmt, ...)
 {
-    wchar_t s[96];
+    wchar_t s[256];   // whole in the log (HU 2026-10-29: cut at 96, the state after the IOCTL lost), the screen's 96
     va_list a;
     va_start(a, fmt);
-    _vsnwprintf(s, 96, fmt, a);
+    _vsnwprintf(s, 256, fmt, a);
     va_end(a);
-    s[95] = 0;
+    s[255] = 0;
     EnterCriticalSection(&s_cs);
     memmove(s_info.lines[0], s_info.lines[1], sizeof(s_info.lines[0]) * (kObdLines - 1));
-    wcscpy(s_info.lines[kObdLines - 1], s);
+    wcsncpy(s_info.lines[kObdLines - 1], s, 95);
+    s_info.lines[kObdLines - 1][95] = 0;
     LeaveCriticalSection(&s_cs);
     if (s_log)
         s_log(L"obd: %s", s);

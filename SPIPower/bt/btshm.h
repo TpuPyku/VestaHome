@@ -56,7 +56,10 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
        BT_CMD_VISIBLE /* cmdText "1" / "0": the unit seen by phones (Conn_Enter_Pairing: the stack's scan mode 3) or
                          only connectable (Conn_Exit_Pairing: 2) - Ghidra 2026-10-23 */,
        BT_CMD_PAIRCONFIRM /* cmdText "1" / "0": a phone's pairing request (BtPair) accepted / refused
-                             (Conn_Pair_Confirm) */ };
+                             (Conn_Pair_Confirm) */,
+       BT_CMD_SDP /* cmdText: the address - Conn_Search_SC_IAP(addr): the SDP search of SPP (0x1101) alone; the
+                     answer: event 0x0B (the services found), 0x4F (one SPP) - OBD 2026-10-29: the stack's own
+                     search of three UUIDs at once is where the clone's link failed */ };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
 struct BtEvent {

@@ -1339,6 +1339,8 @@ static int    s_obdFoundN, s_obdPin;   // s_obdPin: kObdPins
 static wchar_t s_obdAddr[18];        // the adapter chosen (ini obd.addr), "" none
 static LONG   s_obdEvSeen = -1;        // the proxy's events read so far; -1: no search asked
 static DWORD  s_obdSearchTick;
+static DWORD  s_obdPairTick;   // our pairing asked, not ended yet (0: none) - no connecting meanwhile (HU 2026-10-29:
+                               // "Подключить" 3 s after "Сопрячь", the PIN's request came in its middle)
 static const char* const kObdPins[2] = { "1234", "0000" };
 
 // obd.cpp's thread: the adapter's address given as the shell's SDK gives it (Spp_SetAddr in the shell's process,
@@ -1440,8 +1442,9 @@ static void ScrSetObd(HDC dc)
     bool busy = o.state == OBD_CONNECTING || o.state == OBD_ON;
     Button(dc, 488, 270, 136, 40, L"Сопрячь", can && proxy ? B_N : B_DIS, IC_NONE, 15, 0,
            can && proxy ? A_OBDPAIR : A_NONE);
-    Button(dc, 632, 270, 136, 40, busy ? L"Отключить" : L"Подключить", can || busy ? (busy ? B_SEL : B_N) : B_DIS,
-           IC_NONE, 15, 0, can || busy ? A_OBDCONN : A_NONE);
+    bool pairing = s_obdPairTick && GetTickCount() - s_obdPairTick < 30000;
+    Button(dc, 632, 270, 136, 40, busy ? L"Отключить" : pairing ? L"Сопряжение…" : L"Подключить",
+           busy ? B_SEL : can && !pairing ? B_N : B_DIS, IC_NONE, 15, 0, busy || (can && !pairing) ? A_OBDCONN : A_NONE);
     int y = 336, first = 1;   // four lines fit, or the values and three
     if (o.state == OBD_ON) {
         wchar_t v[3][16];
@@ -1530,6 +1533,11 @@ static void PairTick()   // once a second: the visibility's end, a phone's reque
         s_status[95] = 0;
         VLog(L"bt: сопряжение закончено, результат %d", p->result);
         BtCmd(BT_CMD_LISTPAIRED);
+        if (s_obdPairTick && p->result) {   // the OBD adapter's: its SPP record asked alone (the proxy logs the
+            VLog(L"obd: поиск службы SPP (SDP) у %s", s_obdAddr);   // answer, 0x0B / 0x4F) - the stack's own
+            BtCmdText(BT_CMD_SDP, s_obdAddr);                    // 3-UUID search is where the link failed
+        }
+        s_obdPairTick = 0;
         if (IsWindowVisible(s_wnd))
             Redraw();
     }

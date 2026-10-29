@@ -157,11 +157,12 @@ static void LogEvent(int* ev)
 {
     if (!LogOn())
         return;
-    wchar_t b[200];
+    wchar_t b[260];
     __try {
         int k = wsprintfW(b, L"EV 0x%02X:", (unsigned)ev[0]);
         const unsigned char* p = (const unsigned char*)(ev + 1);
-        for (int i = 0; i < 24 && k < 180; i++)
+        int all = ev[0] == 0x0B || ev[0] == 0x4F ? BT_EV_DATA : 24;   // an SDP answer: whole (OBD 2026-10-29)
+        for (int i = 0; i < all && k < 240; i++)
             k += wsprintfW(b + k, L" %02X", (unsigned)p[i]);
         const char* t = ev[0] == 0x2E && ev[1] > 0 ? (const char*)(ev + 4)   // the first text of a track's info
                       : ev[0] == 0x0A || (((char*)ev)[6] == ':' && ((char*)ev)[9] == ':')
@@ -174,7 +175,7 @@ static void LogEvent(int* ev)
             a[i] = 0;
             wcscpy(b + k, L" | ");
             k += 3;
-            if (!MultiByteToWideChar(CP_UTF8, 0, a, -1, b + k, 200 - k))
+            if (!MultiByteToWideChar(CP_UTF8, 0, a, -1, b + k, 260 - k))
                 b[k] = 0;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -507,6 +508,10 @@ static DWORD WINAPI CmdThread(LPVOID)
             char a[40];
             CopyText(a, s_shm->cmdText, 18);
             r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Spp_SetAddr])(a);
+        } else if (cmd == BT_CMD_SDP) {
+            char a[40];
+            CopyText(a, s_shm->cmdText, 18);
+            r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Conn_Search_SC_IAP])(a);
         } else if (cmd == BT_CMD_SETOPT) {   // as the shell's CSetUpBTMenuDlg: on / off, the answer after 5 s
             char t[8];
             CopyText(t, s_shm->cmdText, 8);
