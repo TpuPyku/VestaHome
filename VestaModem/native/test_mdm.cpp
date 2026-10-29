@@ -48,6 +48,7 @@ int main()
     Check(MdmLine(&st, "^MODE:5,4") && st.mode == 5, "^MODE");
     Check(MdmLine(&st, "^SIMST:255") && st.sim == 255, "^SIMST");
     Check(MdmLine(&st, "^SYSINFO:2,3,0,3,1,,1") && st.mode == 3 && st.sim == 1, "^SYSINFO: mode and SIM");
+    Check(!MdmLine(&st, "X50011234567890") && !st.imsi[0], "IMSI: not a digit first - not one");
     Check(MdmLine(&st, "250011234567890") && !strcmp(st.imsi, "250011234567890"), "IMSI: 15 digits");
     Check(!MdmLine(&st, "OK") && !MdmLine(&st, "12345") && !MdmLine(&st, "^BOOT:1,0,0,0,61"),
           "other lines: no change");
@@ -69,7 +70,8 @@ int main()
     BYTE store[8], out[8];
     Fifo f = { store, sizeof(store), 0, 0 };
     Check(FifoPut(&f, (const BYTE*)"abcdef", 6) == 6 && FifoFree(&f) == 2, "queue: put");
-    Check(FifoGet(&f, out, 4) == 4 && !memcmp(out, "abcd", 4), "queue: get");
+    out[4] = '#';
+    Check(FifoGet(&f, out, 4) == 4 && !memcmp(out, "abcd", 4) && out[4] == '#', "queue: get - not a byte more");
     Check(FifoPut(&f, (const BYTE*)"ghijkl", 6) == 6 && f.count == 8, "queue: put round the end");
     Check(FifoPut(&f, (const BYTE*)"z", 1) == 0, "queue: full - nothing taken");
     Check(FifoGet(&f, out, 8) == 8 && !memcmp(out, "efghijkl", 8) && f.count == 0, "queue: get round the end");

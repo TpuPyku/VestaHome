@@ -44,7 +44,7 @@ struct FPipe {
     int   itf;
     char  in[4096];   // what the device has to send
     int   inLen;
-    char  out[4096];  // what it was sent
+    char  out[16384]; // what it was sent
     int   outLen;
     FTr*  pending;    // an IN transfer waiting for data
     bool  open;
@@ -67,6 +67,14 @@ static LPDEVICE_NOTIFY_ROUTINE s_notify;
 static LPVOID s_notifyParam;
 static wchar_t s_activated[64];
 static int s_deactivated;
+static volatile LONG s_live;     // transfers not closed
+static int  s_badClose;          // a pipe closed twice
+static bool s_failIn;            // IN transfers fail at once (a stalled pipe)
+static bool s_failOut;           // OUT transfers fail at once, nothing taken
+static volatile LONG s_inIssued;
+static bool s_vendorFail;        // the modem refuses SET_CONTROL_LINE_STATE
+static bool s_noActive;          // the device manager writes no Drivers\Active key
+static bool s_onlyModem;         // a stick with the modem's port only
 
 static FPipe* PipeOf(int itf, bool in)
 {
@@ -88,12 +96,12 @@ static void Complete(FTr* t)   // (under s_usbCs) the pending IN transfer from w
     p->pending = NULL;
 }
 
-static void Feed(int itf, const char* s)   // the device sends s on the interface's IN endpoint
+static void FeedB(int itf, const char* s, int n)   // the device sends n bytes on the interface's IN endpoint
 {
     EnterCriticalSection(&s_usbCs);
     FPipe* p = PipeOf(itf, true);
-    memcpy(p->in + p->inLen, s, strlen(s));
-    p->inLen += (int)strlen(s);
+    memcpy(p->in + p->inLen, s, n);
+    p->inLen += n;
     FTr* t = p->pending;
     if (t)
         Complete(t);
@@ -102,11 +110,25 @@ static void Feed(int itf, const char* s)   // the device sends s on the interfac
         t->cb(t->param);
 }
 
+static void Feed(int itf, const char* s)
+{
+    FeedB(itf, s, (int)strlen(s));
+}
+
+static DWORD WINAPI LateImsi(LPVOID)   // (the SIM answers after a while)
+{
+    Sleep(300);
+    Feed(4, "\r\n250011234567890\r\n\r\nOK\r\n");
+    return 0;
+}
+
 static void Answer(int itf, const char* cmd)   // the modem's replies
 {
     if (itf == 4 && strstr(cmd, "AT+CIMI"))
-        Feed(4, "\r\n250011234567890\r\n\r\nOK\r\n");
-    else if (itf == 4 || (itf == 0 && s_modemAnswers && !strcmp(cmd, "AT\r")))
+        CloseHandle(CreateThread(NULL, 0, LateImsi, NULL, 0, NULL));
+    else if (itf == 0 && s_modemAnswers && !strcmp(cmd, "AT\r"))   // longer than a packet: "OK" in the second
+        Feed(0, "AT\r\r\n+ZZZZ: 0123456789012345678901234567890123456789012345678901234567890123456789\r\nOK\r\n");
+    else if (itf == 4)
         Feed(itf, "\r\nOK\r\n");
 }
 
@@ -116,15 +138,23 @@ static USB_TRANSFER FBulk(USB_PIPE pipe, LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID pa
     FPipe* p = (FPipe*)pipe;
     FTr* t = new FTr;
     memset(t, 0, sizeof(*t));
+    InterlockedIncrement(&s_live);
     t->p = p;
     t->cb = cb;
     t->param = param;
     t->buf = (BYTE*)buf;
     t->len = len;
+    if (!(flags & USB_IN_TRANSFER) && s_failOut) {
+        t->done = true;
+        t->err = USB_STALL_ERROR;
+        cb(param);
+        return t;
+    }
     if (!(flags & USB_IN_TRANSFER)) {
-        char cmd[4097];
-        memcpy(cmd, buf, len);
-        cmd[len] = 0;
+        char cmd[128];
+        int c = len < sizeof(cmd) - 1 ? (int)len : (int)sizeof(cmd) - 1;
+        memcpy(cmd, buf, c);
+        cmd[c] = 0;
         EnterCriticalSection(&s_usbCs);
         memcpy(p->out + p->outLen, buf, len);
         p->outLen += len;
@@ -133,6 +163,13 @@ static USB_TRANSFER FBulk(USB_PIPE pipe, LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID pa
         LeaveCriticalSection(&s_usbCs);
         cb(param);
         Answer(p->itf, cmd);
+        return t;
+    }
+    InterlockedIncrement(&s_inIssued);
+    if (s_failIn) {
+        t->done = true;
+        t->err = USB_STALL_ERROR;
+        cb(param);
         return t;
     }
     EnterCriticalSection(&s_usbCs);
@@ -170,6 +207,7 @@ static BOOL FStatus(USB_TRANSFER tr, LPDWORD n, LPDWORD err)
 
 static BOOL FCloseTr(USB_TRANSFER tr)
 {
+    InterlockedDecrement(&s_live);
     delete (FTr*)tr;
     return TRUE;
 }
@@ -179,7 +217,9 @@ static USB_TRANSFER FVendor(USB_HANDLE, LPTRANSFER_NOTIFY_ROUTINE, LPVOID, DWORD
 {
     FTr* t = new FTr;
     memset(t, 0, sizeof(*t));
+    InterlockedIncrement(&s_live);
     t->done = true;
+    t->err = s_vendorFail ? USB_STALL_ERROR : USB_NO_ERROR;
     EnterCriticalSection(&s_usbCs);
     if (r->bRequest == 0x22 && s_ctlCount < 16) {
         s_ctlItf[s_ctlCount] = r->wIndex;
@@ -201,6 +241,8 @@ static USB_PIPE FOpenPipe(USB_HANDLE, LPCUSB_ENDPOINT_DESCRIPTOR e)
 
 static BOOL FClosePipe(USB_PIPE p)
 {
+    if (!((FPipe*)p)->open)
+        s_badClose++;
     ((FPipe*)p)->open = false;
     return TRUE;
 }
@@ -268,6 +310,8 @@ static void MakeDevice(WORD pid)
         return;
     }
     AddItf(0, 0xFF, 0x61, 0x81, 0x01);
+    if (s_onlyModem)
+        return;
     AddItf(1, 0xFF, 0x69, 0x82, 0);
     AddItf(4, 0xFF, 0x62, 0x85, 0x05);
 }
@@ -282,6 +326,8 @@ static USB_FUNCS s_funcs;
 static HANDLE ActivateDeviceEx(LPCWSTR key, LPCVOID, DWORD, LPVOID)   // as the device manager: the port's Init
 {
     wcscpy(s_activated, key);
+    if (s_noActive)
+        return COM_Init(L"Drivers\\Active\\99", NULL) ? (HANDLE)1 : NULL;
     HKEY k;   // its active key, a stranger's before it
     DWORD disp;
     RegCreateKeyExW(HKEY_CURRENT_USER, L"Drivers\\Active\\98", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &k, &disp);
@@ -390,9 +436,19 @@ static BOOL Attach(WORD pid, WORD vid = kHuawei)
     s_devd.d.idVendor = vid;
     s_activated[0] = 0;
     s_notify = NULL;
+    if (pid == kHuaweiCd)   // the stick's status (CSW) to the switch command, waiting to be read
+        FeedB(0, "USBS\x12\x34\x56\x78\0\0\0\0\0", 13);
     BOOL accept = TRUE;
     USBDeviceAttach((USB_HANDLE)1, &s_funcs, NULL, L"x", &accept, NULL, 0);
     return accept;
+}
+
+static DWORD WINAPI LatePurge(LPVOID)
+{
+    Sleep(200);
+    DWORD how = PURGE_RXABORT;
+    Ctl(s_waitCom, IOCTL_SER_PURGE, &how, sizeof(how), NULL, 0);
+    return 0;
 }
 
 static void Detach()
@@ -421,10 +477,14 @@ int main()
     RegDeleteKey(HKEY_CURRENT_USER, L"Software\\Vesta\\Modem");
 
     Check(Attach(0x1506, 0x1234) == FALSE, "another device: not taken");
+    BOOL acc = TRUE;
+    USBDeviceAttach((USB_HANDLE)1, &s_funcs, (LPCUSB_INTERFACE)s_itfs, L"x", &acc, NULL, 0);
+    Check(!acc, "an interface of a device (not the whole one): not taken");
     BOOL cd = Attach(kHuaweiCd);
     FPipe* cbw = PipeOf(0, false);
     Check(cd && cbw->outLen == 31 && !memcmp(cbw->out, "USBC", 4) && cbw->out[15] == 0x11 && cbw->out[16] == 0x06,
           "CD-ROM mode: Huawei's switch command sent");
+    Check(PipeOf(0, true)->inLen == 0, "CD-ROM mode: its status read");
     Detach();
 
     // ---- the modem, its port answering
@@ -445,12 +505,23 @@ int main()
     DWORD q = COM_Open(dev, 0, 0);
     Check(q != 0 && s_dev->opens == 0, "COM: a query handle - not an open");
     COM_Close(q);
+    int before = s_ctlCount;
     DWORD h = COM_Open(dev, GENERIC_READ | GENERIC_WRITE, 0);
-    Check(h && LastCtl(0, 3), "COM: open - DTR + RTS up");
+    Check(h && s_ctlCount == before + 1 && LastCtl(0, 3) && s_dev->lines == 3, "COM: open - DTR + RTS up");
     mdOut->outLen = 0;
     Check(COM_Write(h, "ATDT*99#\r", 9) == 9 && mdOut->outLen == 9 && !memcmp(mdOut->out, "ATDT*99#\r", 9),
           "COM: a write goes to the modem's port");
+    static char big[5000];
+    for (int i = 0; i < 5000; i++)
+        big[i] = (char)(i % 251);
+    mdOut->outLen = 0;
+    Check(COM_Write(h, big, 5000) == 5000 && mdOut->outLen == 5000 && !memcmp(mdOut->out, big, 5000),
+          "COM: a long write - in pieces, in order");
+    s_failOut = true;
+    Check(COM_Write(h, "AT\r", 3) == (DWORD)-1 && COM_Write(h, "", 0) == 0, "COM: a write the modem refuses - -1 (none: 0)");
+    s_failOut = false;
     char buf[64];
+    Check(COM_Read(h, NULL, 5) == (DWORD)-1, "COM: a read into no buffer - refused");
     SetTimeouts(h, MAXDWORD, 0);
     Check(COM_Read(h, buf, sizeof(buf)) == 0, "COM: nothing there - an immediate read gives 0");
     Feed(0, "\r\nCONNECT\r\n");
@@ -491,22 +562,53 @@ int main()
     Check(RegIs(L"Port", L"COM7:"), "COM: its name (Drivers\\Active) in the status");
     DCB dcb;
     Ctl(h, IOCTL_SER_GET_DCB, NULL, 0, &dcb, sizeof(dcb));
+    Check(dcb.BaudRate == 115200 && dcb.ByteSize == 8, "COM: GetCommState - 115200 8N1 till set");
     dcb.fDtrControl = DTR_CONTROL_DISABLE;
     Ctl(h, IOCTL_SER_SET_DCB, &dcb, sizeof(dcb), NULL, 0);
     Check(LastCtl(0, 2), "COM: SetCommState without DTR - DTR down");
     Ctl(h, IOCTL_SER_SET_DTR, NULL, 0, NULL, 0);
     Check(LastCtl(0, 3), "COM: EscapeCommFunction SETDTR");
+    s_vendorFail = true;
+    Ctl(h, IOCTL_SER_CLR_RTS, NULL, 0, NULL, 0);
+    s_vendorFail = false;
+    Check(s_dev->lines == 3, "COM: the modem refuses the lines - kept as they were");
+    Ctl(h, IOCTL_SER_CLR_RTS, NULL, 0, NULL, 0);
+    Check(s_dev->lines == 1 && LastCtl(0, 1), "COM: and taken when it accepts");
     Feed(4, "\r\n^MODE:5,4\r\n");
     Check(Until(Mode5, 2000), "status: the PC UI read while the COM port is open");
+    SetTimeouts(h, 0, 0);   // a read till something comes - ended by PURGE_RXABORT
+    ev = 0;
+    CloseHandle(CreateThread(NULL, 0, LatePurge, NULL, 0, NULL));
+    t0 = GetTickCount();
+    Check(COM_Read(h, buf, sizeof(buf)) == 0 && GetTickCount() - t0 < 1500, "COM: PURGE_RXABORT ends a waiting read");
+    s_failIn = true;   // a stalled pipe: errors, not round and round, nothing to the port
+    s_inIssued = 0;
+    Feed(0, "x");
+    Sleep(400);
+    LONG issued = s_inIssued;
+    s_failIn = false;
+    Check(issued >= 1 && issued < 10, "a failing read: retried slowly");
+    Sleep(300);
+    Feed(0, "yz");
+    for (int i = 0; i < 50 && Queued(h) < 3; i++)
+        Sleep(20);
+    Check(Queued(h) == 3, "after the errors: the reader goes on");
+    t0 = GetTickCount();
     COM_Close(h);
-    Check(LastCtl(0, 0) && s_dev->opens == 0, "COM: the last close - DTR down (the modem hangs up)");
+    Check(LastCtl(0, 0) && s_dev->opens == 0 && GetTickCount() - t0 < 500,
+          "COM: the last close - DTR down (the modem hangs up), at once");
+    s_dev->gone = true;
+    Check(!COM_Open(dev, GENERIC_READ, 0), "COM: no open once the modem is going");
     Detach();
     Check(s_deactivated == 1 && !s_dev && RegIs(L"Port", L""), "out: the COM port gone, the status cleared");
 
     // ---- the modem's port silent: the PC UI carries the data
     s_modemAnswers = false;
+    ActiveGone();
+    s_noActive = true;
     Attach(kHuaweiModem);
     Check(Until(Activated, 6000) && RegInt(L"Data") == 4, "silent modem port: the data through the PC UI");
+    Check(RegIs(L"Port", L""), "no Drivers\\Active key: no name");
     h = COM_Open((DWORD)s_dev, GENERIC_READ | GENERIC_WRITE, 0);
     uiOut = PipeOf(4, false);
     uiOut->outLen = 0;
@@ -525,6 +627,15 @@ int main()
     Check(Until(Mode3, 2000), "silent modem port: closed - the PC UI is the status again");
     Detach();
     Check(s_deactivated == 2, "silent modem port: out");
+
+    // ---- a stick with the modem's port only: it is the PC UI and the data port at once
+    s_onlyModem = true;
+    s_modemAnswers = true;
+    Attach(kHuaweiModem);
+    Check(Until(Activated, 6000) && RegInt(L"Data") == 0 && s_ctlCount == 1 && s_dev->shared,
+          "modem port only: one port for both, raised once");
+    Detach();
+    Check(s_live == 0 && s_badClose == 0, "every transfer closed, no pipe closed twice");
 
     RegDeleteKey(HKEY_CURRENT_USER, L"Software\\Vesta\\Modem");
     ActiveGone();

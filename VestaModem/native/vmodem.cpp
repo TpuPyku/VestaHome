@@ -142,7 +142,7 @@ static bool Finish(Dev* d, USB_TRANSFER t, bool done, DWORD* got)   // not done 
 {
     if (!done)
         d->f->lpAbortTransfer(t, 0);
-    DWORD err = 0;
+    DWORD err;
     bool ok = d->f->lpGetTransferStatus(t, got, &err) && err == USB_NO_ERROR && done;
     d->f->lpCloseTransfer(t);
     return ok;
@@ -266,7 +266,7 @@ static bool LineState(Dev* d, const Port& p, WORD bits)   // DTR 1, RTS 2: CDC's
                                                  NULL, 0);   // (no callback: it blocks)
     if (!t)
         return false;
-    DWORD n = 0, err = 0;
+    DWORD n, err;
     bool ok = d->f->lpGetTransferStatus(t, &n, &err) && err == USB_NO_ERROR;
     d->f->lpCloseTransfer(t);
     return ok;
@@ -358,8 +358,7 @@ static void OnUiLine(void* ctx, const char* line)
     }
     if (!strcmp(line, st.imsi))
         Log(L"  IMSI оператора %.5S…", line);
-    else if (strncmp(line, "^RSSI:", 6) && strncmp(line, "^DSFLOWRPT:", 11))
-        Log(L"  модем: %S", line);
+    else if (strncmp(line, "^RSSI:", 6) && strncmp(line, "^DSFLOWRPT:", 11)) Log(L"  модем: %S", line);
 }
 
 static void Deliver(Dev* d, const BYTE* b, int n)   // to the COM port's queue; full - waits for its reader
@@ -425,12 +424,12 @@ static bool Answers(Dev* d, const Port& p)
     return strstr(all, "OK") != NULL;
 }
 
-static void Apn(Dev* d, char* apn, int cap)   // the SIM operator's
+static const char* Apn(Dev* d)   // the SIM operator's
 {
     EnterCriticalSection(&d->cs);
-    strncpy(apn, MdmApn(d->st.imsi), cap - 1);
+    const char* apn = MdmApn(d->st.imsi);
     LeaveCriticalSection(&d->cs);
-    apn[cap - 1] = 0;
+    return apn;
 }
 
 static bool OurPort(HKEY act, const wchar_t* sub, wchar_t* name, int cap)   // Drivers\Active\<sub> is ours: its Name
@@ -469,14 +468,14 @@ static void UiSetup(Dev* d)   // the PC UI: no echo, the SIM's operator and its 
     Send(d, d->ui, "AT+CIMI\r");
     for (int i = 0; i < 20 && !d->st.imsi[0] && !d->gone; i++)
         Sleep(100);
-    char apn[64], cmd[96];
-    Apn(d, apn, sizeof(apn));
+    const char* apn = Apn(d);
+    char cmd[96];
     _snprintf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"\r", apn);
     Send(d, d->ui, cmd);
     Send(d, d->ui, "AT^SYSINFO\r");
     Send(d, d->ui, "AT+CSQ\r");
     wchar_t wapn[64];
-    MultiByteToWideChar(CP_ACP, 0, apn, -1, wapn, 64);
+    _snwprintf(wapn, sizeof(wapn) / sizeof(*wapn), L"%S", apn);
     StatusStr(L"Apn", wapn);
 }
 
@@ -503,7 +502,7 @@ static void ComUp(Dev* d)
     d->com = ActivateDeviceEx(L"Drivers\\VestaModemCom", NULL, 0, d);
     wchar_t name[16] = L"";
     if (d->com)
-        PortName(name, 16);
+        PortName(name, sizeof(name) / sizeof(*name));
     StatusStr(L"Port", name);
     if (d->com)
         Log(L"COM-порт модема: %s (данные - интерфейс %d)", name[0] ? name : L"без имени",
@@ -695,8 +694,9 @@ static void Lines(Dev* d, WORD bits)   // the modem lines, logged on a change
 {
     if (bits == d->lines)
         return;
-    d->lines = bits;
     bool ok = LineState(d, d->data, bits);
+    if (ok)   // (refused: the next call tries again)
+        d->lines = bits;
     Log(L"COM: DTR %d RTS %d%s", bits & 1, (bits >> 1) & 1, ok ? L"" : L" - не принято");
 }
 
