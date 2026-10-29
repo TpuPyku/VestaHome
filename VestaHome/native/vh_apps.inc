@@ -5,9 +5,6 @@
 // right there (own on-screen keyboard and file browser: the unit has neither). The same code as VestaLaunch
 // (native/launch.cpp), without its part for the stock shell: no Nav_* events, VestaHome doesn't hide.
 
-static const wchar_t* kKeysRu[4] = { L"1234567890-_", L"йцукенгшщзхъ", L"фывапролджэё", L"ячсмитьбю.,!" };
-static const wchar_t* kKeysEn[4] = { L"1234567890-_", L"qwertyuiop()", L"asdfghjkl:;\"", L"zxcvbnm.,/\\=" };
-static const wchar_t  kKeysSym[] = L"!@#$%&*+?|~'";   // the digits' row with Shift (the configs: # @ & ? % + |)
 enum { F_NAME, F_PATH, F_PARAMS, F_ICON, F_CAMS, F_TEXT };   // fields of the shortcut editor; F_CAMS: the camera file;
                                                              // F_TEXT: a text file for the editor
 
@@ -57,17 +54,13 @@ static App   s_edit;
 static bool  s_delArmed;          // "Delete" was pressed once; the second press deletes
 
 static wchar_t*       s_keysTarget;   // the text being typed: a shortcut's field or a setting
-static int            s_keysCap;
 static const wchar_t* s_keysTitle;
 static Screen         s_keysBack;     // where "Done" and "Cancel" return to
-static wchar_t s_keysText[400];
-// The cursor (2026-10-22, the user: long lines are edited in the middle): typing and backspace work at it; the finger
-// puts and drags it anywhere on the field (WndProc: KeysCursorAt), its handle shows below the line. The field shows
-// the text from s_keysView, as far as the cursor needs.
+// The text and its cursor (2026-10-22, the user: long lines are edited in the middle) - VestaCore vkeys (moved there
+// 2026-10-29, OSMapsCE's search too): typing and backspace work at the cursor; the finger puts and drags it anywhere
+// on the field (WndProc: VKeysCursorAt), its handle shows below the line.
 enum { kKeyFieldX = 32, kKeyFieldW = 560 };
-static int s_keysCur, s_keysView, s_keysVisN;   // the cursor, the first character shown, how many are shown
-static int s_keysDx[400];                      // the shown characters' right edges from kKeyFieldX (the finger's map)   // (the text editor's lines: up to 399)
-static bool    s_keysEn, s_keysShift;
+static VKeys s_keys;
 static bool    s_clipMenu;     // "Copy" / "Paste" shown in place of the text field
 
 // File browser for the program path: folders and .exe files of s_fdir.
@@ -602,15 +595,12 @@ static void DeleteEdit()
 static void OpenKeysFor(wchar_t* target, int cap, const wchar_t* title, Screen back)
 {
     s_keysTarget = target;
-    s_keysCap = cap;
     s_keysTitle = title;
     s_keysBack = back;
-    wcsncpy(s_keysText, target, 399);
-    s_keysText[399] = 0;
-    s_keysShift = false;
+    bool en = s_keys.en;   // (the language as left)
+    VKeysOpen(&s_keys, target, cap);
+    s_keys.en = en;
     s_clipMenu = false;
-    s_keysCur = (int)wcslen(s_keysText);
-    s_keysView = 0;
     s_screen = S_KEYS;
 }
 
@@ -622,97 +612,24 @@ static void OpenKeys(int field)
         OpenKeysFor(s_edit.params, 199, L"Параметры запуска", S_EDIT);
 }
 
-static void KeyType(wchar_t ch)
-{
-    int n = (int)wcslen(s_keysText);
-    if (n >= s_keysCap)
-        return;
-    if (s_keysShift) {   // one-shot, like a phone keyboard
-        CharUpperBuff(&ch, 1);
-        s_keysShift = false;
-    }
-    int c = s_keysCur < 0 ? 0 : s_keysCur > n ? n : s_keysCur;
-    memmove(s_keysText + c + 1, s_keysText + c, (n - c + 1) * sizeof(wchar_t));
-    s_keysText[c] = ch;
-    s_keysCur = c + 1;
-}
-
-static void KeyBack()   // the character before the cursor
-{
-    int n = (int)wcslen(s_keysText);
-    int c = s_keysCur < 0 ? 0 : s_keysCur > n ? n : s_keysCur;
-    if (c > 0) {
-        memmove(s_keysText + c - 1, s_keysText + c, (n - c + 1) * sizeof(wchar_t));
-        s_keysCur = c - 1;
-    }
-}
-
-// The finger at x on the field: the cursor to the nearest gap between the shown characters; at the field's ends one
-// further (the view follows it: the field's drawing keeps the cursor in sight).
-static void KeysCursorAt(int x)
-{
-    int n = (int)wcslen(s_keysText), rel = x - kKeyFieldX;
-    if (rel < 8 && s_keysView > 0) {
-        s_keysCur = s_keysView - 1;
-        return;
-    }
-    if (rel > kKeyFieldW - 8 && s_keysView + s_keysVisN < n) {
-        s_keysCur = s_keysView + s_keysVisN + 1;
-        return;
-    }
-    int best = 0, bd = rel < 0 ? -rel : rel;
-    for (int k = 1; k <= s_keysVisN; k++) {
-        int d = rel - s_keysDx[k - 1];
-        d = d < 0 ? -d : d;
-        if (d < bd) {
-            bd = d;
-            best = k;
-        }
-    }
-    s_keysCur = s_keysView + best;
-}
-
-// The field's text from s_keysView with the cursor in sight: s_keysVisN, s_keysDx; returns the cursor's x.
-static int KeysLayout(HDC dc)
-{
-    int n = (int)wcslen(s_keysText);
-    s_keysCur = s_keysCur < 0 ? 0 : s_keysCur > n ? n : s_keysCur;
-    if (s_keysView > s_keysCur)
-        s_keysView = s_keysCur;
-    HGDIOBJ of = SelectObject(dc, Font(26, 700));
-    for (;;) {
-        SIZE sz;
-        int fit = 0;
-        if (!GetTextExtentExPoint(dc, s_keysText + s_keysView, n - s_keysView, kKeyFieldW, &fit, s_keysDx, &sz))
-            fit = 0;
-        s_keysVisN = fit < 0 ? 0 : fit;
-        if (s_keysCur - s_keysView <= s_keysVisN || s_keysView >= s_keysCur)
-            break;
-        s_keysView++;   // the cursor beyond the field: one character on
-    }
-    SelectObject(dc, of);
-    int k = s_keysCur - s_keysView;
-    return kKeyFieldX + (k > 0 ? s_keysDx[k - 1] : 0);
-}
-
 // ---- the clipboard on the keyboard screen: a long press on the text field (TIMER_LONG) shows "Copy",
 // "Paste" and "Clear" in its place. The text is copied whole; pasting goes in at the cursor, without line breaks and
 // tabs, up to the field's length.
 
 static void ClipCopy()
 {
-    int n = (int)wcslen(s_keysText) + 1;
+    int n = (int)wcslen(s_keys.text) + 1;
     bool ok = false;
     if (OpenClipboard(s_wnd)) {
         EmptyClipboard();
 #ifdef UNDER_CE
         HANDLE h = LocalAlloc(LMEM_FIXED, n * sizeof(wchar_t));   // CE: the clipboard takes local memory as is
         if (h)
-            memcpy(h, s_keysText, n * sizeof(wchar_t));
+            memcpy(h, s_keys.text, n * sizeof(wchar_t));
 #else
         HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, n * sizeof(wchar_t));
         if (h) {
-            memcpy(GlobalLock(h), s_keysText, n * sizeof(wchar_t));
+            memcpy(GlobalLock(h), s_keys.text, n * sizeof(wchar_t));
             GlobalUnlock(h);
         }
 #endif
@@ -724,7 +641,7 @@ static void ClipCopy()
 
 static void ClipPaste()
 {
-    int n = (int)wcslen(s_keysText), cap = s_keysCap;
+    int n = (int)wcslen(s_keys.text), cap = s_keys.cap;
     bool got = false;
     if (OpenClipboard(s_wnd)) {
         HANDLE h = GetClipboardData(CF_UNICODETEXT);
@@ -735,7 +652,7 @@ static void ClipPaste()
 #endif
         for (; p && *p && n < cap; p++)
             if (*p >= L' ') {
-                KeyType(*p);   // at the cursor
+                VKeysType(&s_keys, *p);   // at the cursor
                 n++;
                 got = true;
             }
@@ -752,7 +669,7 @@ static void CfgKeysDone();
 
 static void KeysDone()
 {
-    wcscpy(s_keysTarget, s_keysText);
+    wcscpy(s_keysTarget, s_keys.text);
     Trim(s_keysTarget);
     s_screen = s_keysBack;
     if (s_keysBack != S_EDIT)
@@ -1031,41 +948,40 @@ static void DrawKeys(HDC dc)
 {
     Frame(dc, s_keysTitle, A_CANCEL);
     if (s_clipMenu) {   // after a long press on the field, in its place; any other tap closes it
-        Button(dc, 16, 68, 194, 60, L"Копировать", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
-               s_keysText[0] ? A_CLIPCOPY : A_NONE);
+        Button(dc, 16, 68, 194, 60, L"Копировать", s_keys.text[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
+               s_keys.text[0] ? A_CLIPCOPY : A_NONE);
         Button(dc, 219, 68, 194, 60, L"Вставить", B_FILL, IC_NONE, 17, 0, A_CLIPPASTE);
-        Button(dc, 422, 68, 194, 60, L"Очистить", s_keysText[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
-               s_keysText[0] ? A_CLIPCLEAR : A_NONE);
+        Button(dc, 422, 68, 194, 60, L"Очистить", s_keys.text[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
+               s_keys.text[0] ? A_CLIPCLEAR : A_NONE);
     } else {
         Zone(16, 68, 600, 70, A_KEYFIELD);   // the finger: the cursor (WndProc); held still: copy / paste
         R(dc, 16, 68, 600, 60, 16, kPanel);
-        int cx = KeysLayout(dc);
-        wchar_t shown[400];
-        wcsncpy(shown, s_keysText + s_keysView, s_keysVisN);
-        shown[s_keysVisN] = 0;
+        HGDIOBJ of = SelectObject(dc, Font(26, 700));
+        int cx = kKeyFieldX + VKeysLayout(&s_keys, dc, kKeyFieldW);
+        SelectObject(dc, of);
+        wchar_t shown[VKEYS_MAX];
+        wcsncpy(shown, s_keys.text + s_keys.view, s_keys.visN);
+        shown[s_keys.visN] = 0;
         T(dc, kKeyFieldX, 104, shown, 26, kText, 700);
-        if (s_keysView > 0)   // more on the left / the right
+        if (s_keys.view > 0)   // more on the left / the right
             T(dc, 20, 104, L"‹", 22, kOrange, 700);
-        if (s_keysView + s_keysVisN < (int)wcslen(s_keysText))
+        if (s_keys.view + s_keys.visN < (int)wcslen(s_keys.text))
             T(dc, 604, 104, L"›", 22, kOrange, 700);
         R(dc, cx - 1, 76, 3, 34, 0, kOrange);   // the cursor and its handle under the line, for the finger
         Disc(dc, cx, 124, 13, kOrange);
         R(dc, cx - 1, 108, 3, 6, 0, kOrange);
     }
     Button(dc, 628, 68, 156, 60, L"Готово", B_PRI, IC_NONE, 18, 0, A_OK);
-    const wchar_t** rows = s_keysEn ? kKeysEn : kKeysRu;
-    for (int r = 0; r < 4; r++)
-        for (int c = 0; rows[r][c]; c++) {
+    for (int r = 0; r < VKEYS_ROWS; r++)
+        for (int c = 0; c < VKeysRowLen(&s_keys, r); c++) {
             int x = 13 + c * 65, y = 140 + r * 66;
-            wchar_t ch[2] = { r == 0 && s_keysShift ? kKeysSym[c] : rows[r][c], 0 };
-            if (s_keysShift)
-                CharUpperBuff(ch, 1);
+            wchar_t ch[2] = { VKeysChar(&s_keys, r, c), 0 };
             bool d = Zone(x, y, 60, 60, A_CHAR, ch[0]);
             R(dc, x, y, 60, 60, 14, d ? kOrange : kPanel);
             T(dc, x + 30, y + 40, ch, 24, d ? kInk : kText, 700, AL_MID);
         }
-    Button(dc, 13, 404, 125, 60, NULL, s_keysShift ? B_SEL : B_FILL, IC_SHIFT, 18, 32, A_SHIFT);
-    Button(dc, 143, 404, 125, 60, s_keysEn ? L"ENG" : L"Рус", B_FILL, IC_NONE, 20, 0, A_LANG);
+    Button(dc, 13, 404, 125, 60, NULL, s_keys.shift ? B_SEL : B_FILL, IC_SHIFT, 18, 32, A_SHIFT);
+    Button(dc, 143, 404, 125, 60, s_keys.en ? L"ENG" : L"Рус", B_FILL, IC_NONE, 20, 0, A_LANG);
     bool d = Zone(273, 404, 385, 60, A_CHAR, L' ');
     R(dc, 273, 404, 385, 60, 14, d ? kOrange : kPanel);
     R(dc, 397, 438, 136, 4, 2, d ? kInk : kMuted);

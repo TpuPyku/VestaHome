@@ -27,6 +27,7 @@
 #include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
 #include "vnight.h"    // VestaCore: the night mode shared with OSMapsCE
+#include "vkeys.h"     // VestaCore: the keyboard's text and cursor
 #include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -1053,7 +1054,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
             AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
         if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD)   // the keyboard's cursor to the finger
-            KeysCursorAt((short)LOWORD(lp));
+            VKeysCursorAt(&s_keys, (short)LOWORD(lp) - kKeyFieldX, kKeyFieldW);
         if (s_pressed >= 0 && (s_btns[s_pressed].action == A_KEYFIELD || s_btns[s_pressed].action == A_PRESET ||
                                (s_btns[s_pressed].action == A_KEY && s_btns[s_pressed].arg == K_DIAL * 65536 + L'0') ||
                                (s_btns[s_pressed].action == A_BTCMD &&
@@ -1067,7 +1068,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             int dx = (short)LOWORD(lp) - s_downX, dy = (short)HIWORD(lp) - s_downY;
             if (dx > 6 || dx < -6 || dy > 6 || dy < -6)
                 KillTimer(hwnd, TIMER_LONG);   // moved: not a hold for copy / paste
-            KeysCursorAt((short)LOWORD(lp));
+            VKeysCursorAt(&s_keys, (short)LOWORD(lp) - kKeyFieldX, kKeyFieldW);
             RedrawArea(0, 60, 800, 140);
             return 0;
         }
@@ -1189,9 +1190,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         else if (wp == VK_RETURN)
             KeysDone();
         else if (wp == VK_BACK)
-            KeyBack();
+            VKeysBack(&s_keys);
         else if (wp >= 32)
-            KeyType((wchar_t)wp);
+            VKeysType(&s_keys, (wchar_t)wp);
         BuildButtons();
         Redraw();
         return 0;

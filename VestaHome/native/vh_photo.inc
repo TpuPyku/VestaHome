@@ -397,7 +397,7 @@ static void DoAction(const Btn& b)
     case A_TASKCLOSE:  TaskClose((HWND)(INT_PTR)b.arg); break;
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;
-    case A_CLIPCLEAR:  s_keysText[0] = 0; s_keysCur = 0; break;
+    case A_CLIPCLEAR:  s_keys.text[0] = 0; s_keys.cur = 0; break;
     case A_SAVERBG:   // Settings -> General -> Theme: the saver's background - the mosaic, or a picture (the photo
         if (b.arg == 1) {   // browser picks it, with thumbnails; in the current picture's folder)
             wchar_t cur[MAX_PATH];
@@ -969,10 +969,10 @@ static void DoAction(const Btn& b)
         }
         break;
     case A_OK:       KeysDone(); break;
-    case A_CHAR:     KeyType((wchar_t)b.arg); break;
-    case A_SHIFT:    s_keysShift = !s_keysShift; break;
-    case A_LANG:     s_keysEn = !s_keysEn; break;
-    case A_BKSP:     KeyBack(); break;
+    case A_CHAR:     VKeysType(&s_keys, (wchar_t)b.arg); break;
+    case A_SHIFT:    s_keys.shift = !s_keys.shift; break;
+    case A_LANG:     s_keys.en = !s_keys.en; break;
+    case A_BKSP:     VKeysBack(&s_keys); break;
     case A_FILE:     PickFile(b.arg); break;
     case A_UP:       UpDir(); break;
     case A_MINIMIZE: MinimizeHome(); break;
