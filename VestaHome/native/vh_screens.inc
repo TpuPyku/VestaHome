@@ -1721,17 +1721,7 @@ static void ScrSetWifi(HDC dc)
 
 // The player's picture: kept in proportion (black bands) or stretched over the window; the picture while the
 // car moves (off: only the sound, the rules of the road). Both kept in the ini.
-static void ScrSetVideo(HDC dc)
-{
-    static const wchar_t* scale[2] = { L"Вписать", L"Растянуть" };
-    Settings(dc, S_SET_VIDEO);
-    SetRow(dc, 64, L"Масштаб");
-    Seg(dc, 512, 70, 248, 44, scale, 2, G_VIDEO_SCALE, 15);
-    SetRow(dc, 120, L"Видео в движении", L"выключено: в движении видео на паузе", true);
-    Toggle(dc, 688, 130, T_VIDEO_MOVING);
-}
-
-static void ScrSetPhoto(HDC dc);   // (with the photos, after the settings' data)
+static void ScrSetVideo(HDC dc);   // "Media": with the photos' rows - vh_photo.inc, after the settings' data
 
 static void CanStatusText(wchar_t* s, int n);
 static void Size(wchar_t* s, int n, unsigned __int64 bytes);

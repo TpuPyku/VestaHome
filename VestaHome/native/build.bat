@@ -20,6 +20,9 @@ if not exist "%CORE%\vgps.cpp" goto nocore
 echo === VestaCore: %CORE%
 set SRC=%SRC% "%CORE%\vgps.cpp" "%CORE%\vlogdir.cpp" "%CORE%\vtask.cpp" "%CORE%\vnight.cpp" "%CORE%\vkeys.cpp"
 set BRINC=%BRINC% /I"%CORE%"
+rem the modem's operators' presets (Settings -> Network): VestaModem's mdm.cpp (its tests: VestaModem\native)
+set SRC=%SRC% "%~dp0..\..\VestaModem\native\mdm.cpp"
+set BRINC=%BRINC% /I"%~dp0..\..\VestaModem\native"
 
 cd /d "%~dp0"
 if not exist obj\arm mkdir obj\arm

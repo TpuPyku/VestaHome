@@ -28,6 +28,7 @@
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
 #include "vnight.h"    // VestaCore: the night mode shared with OSMapsCE
 #include "vkeys.h"     // VestaCore: the keyboard's text and cursor
+#include "mdm.h"       // VestaModem: the operators' presets (Settings -> Network)
 #include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -99,7 +100,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
-              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
               A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
@@ -115,7 +116,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -130,14 +131,14 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_SAVER, T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SUBTITLES, T_SLIDES_OPEN, T_AUTOROTATE, T_MUTED,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, true, false, true, false, true, true, true, true, false,
                               true, false, true, false, true, true };
 enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_FMT, G_PHOTO_SCALE, G_CALLS,
        G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 2, 0, 1, 2, 2, 1, 0, 0, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
-enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME };   // settings typed on the keyboard (A_KEYS)
+enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS };   // typed settings (A_KEYS)
 static wchar_t s_dial[20];          // the number typed on the phone's keypad
 static wchar_t s_callOut[20];       // the number dialled from VestaHome (the stack does not tell it back)
 static wchar_t s_pass[24] = L"vesta2026";
@@ -497,6 +498,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             McuKey(0x54, false);
             return 0;
         }
+        if (wp == 1)
+            NetAutoStep();
         if (wp == 1)
             PlugScreenWatch();   // an add-on's screen came or went: screen.open / screen.close
         if (wp == 1) {

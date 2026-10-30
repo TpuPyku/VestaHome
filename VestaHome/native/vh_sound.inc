@@ -399,6 +399,15 @@ static void OpenCfgKeys(int which)
     case K_BTNAME:   // the unit's name in Bluetooth: VestaStub writes it before the stack starts (next boot)
         OpenKeysFor(s_cfg.btName, 31, L"Имя ГУ в Bluetooth", S_SET_BT);
         break;
+    case K_NETAPN:
+        OpenKeysFor(s_cfg.netApn, 63, L"APN", S_SET_NET);
+        break;
+    case K_NETUSER:
+        OpenKeysFor(s_cfg.netUser, 31, L"Логин", S_SET_NET);
+        break;
+    case K_NETPASS:
+        OpenKeysFor(s_cfg.netPass, 31, L"Пароль", S_SET_NET);
+        break;
     case K_HOMECOORD:
         if (s_cfg.homeLat || s_cfg.homeLon)
             _snwprintf(s_coordText, 48, L"%.5f, %.5f", s_cfg.homeLat, s_cfg.homeLon);
@@ -490,6 +499,8 @@ static void CfgKeysDone()
         }
         return;
     }
+    if (s_keysTarget == s_cfg.netApn || s_keysTarget == s_cfg.netUser || s_keysTarget == s_cfg.netPass)
+        s_cfg.netOp = NetOwn();   // typed: the operator's own settings now
     if (s_keysTarget == s_coordText) {
         wchar_t* e;
         double lat = wcstod(s_coordText, &e);
@@ -516,6 +527,7 @@ static void CfgToControls()
     s_seg[G_CAMSND] = !s_cfg.camSound ? 0 : s_cfg.camOver < 0 ? 1 : 2;   // off / always / over (cam.overby)
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
     s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
+    s_on[T_NET_AUTO] = s_cfg.netAuto;
     s_on[T_NMEA_PORT] = s_cfg.nmeaPort;
     s_on[T_WIFI] = s_cfg.wifiOn;
     s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
@@ -549,6 +561,7 @@ static void ControlsToCfg()
     }
     s_cfg.camWeekly = s_on[T_CAM_WEEKLY];
     s_cfg.videoMoving = s_on[T_VIDEO_MOVING];
+    s_cfg.netAuto = s_on[T_NET_AUTO];
     s_cfg.photoSlides = s_on[T_SLIDES_OPEN];
     s_cfg.photoAutoRot = s_on[T_AUTOROTATE];
     if (s_cfg.nmeaPort != s_on[T_NMEA_PORT]) {

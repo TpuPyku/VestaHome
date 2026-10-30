@@ -14,6 +14,15 @@ void MdmStatInit(MdmStat* s);
 bool MdmLine(MdmStat* s, const char* line);   // one line from the modem: true when the status changed
 const char* MdmApn(const char* imsi);         // the operator's APN by its MCC + MNC; "internet" when not known
 
+struct MdmOp {             // an operator's mobile internet (VestaHome: Settings -> Network)
+    const char*    sim;    // its MCC + MNC (the SIM's IMSI begins with it)
+    const wchar_t* name;
+    const char*    apn, *user, *pass;
+};
+const MdmOp* MdmOps(int* n);                  // Russia's and the CIS's
+const MdmOp* MdmOpBySim(const char* imsi);    // NULL: not known
+bool MdmApnCommand(const char* apn, char* out, int cap);   // AT+CGDCONT for it; false: none, or a quote in it
+
 struct LineAcc {
     char buf[128];
     int  len;

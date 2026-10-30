@@ -1,4 +1,4 @@
-// test_mdm.cpp - VestaModem's parts with no USB in them, on the PC: the APN of a SIM, the status from the modem's
+﻿// test_mdm.cpp - VestaModem's parts with no USB in them, on the PC: the APN of a SIM, the status from the modem's
 // lines, the lines out of the byte stream, the queue between the USB reader and the COM port.
 #include <windows.h>
 #include <stdio.h>
@@ -38,6 +38,31 @@ int main()
     Check(!strcmp(MdmApn("250111234567890"), "internet.yota"), "APN: Yota");
     Check(!strcmp(MdmApn("999991234567890"), "internet"), "APN: not known - internet");
     Check(!strcmp(MdmApn(""), "internet"), "APN: no IMSI - internet");
+
+    // the operators' presets (VestaHome: Settings -> Network; the user 2026-10-30: Russia's and the CIS's - Tele2 of
+    // Kazakhstan and T2 of Russia two operators)
+    int n = 0;
+    const MdmOp* ops = MdmOps(&n);
+    const MdmOp* t2 = MdmOpBySim("250201234567890");
+    const MdmOp* kz = MdmOpBySim("401771234567890");
+    Check(n >= 18 && t2 && kz && t2 != kz && !wcscmp(t2->name, L"T2 (Россия)") && !wcscmp(kz->name, L"Tele2 (Казахстан)"),
+          "presets: T2 of Russia and Tele2 of Kazakhstan apart");
+    Check(!strcmp(kz->apn, "internet") && !strcmp(t2->apn, "internet.tele2.ru"), "presets: their APNs");
+    const MdmOp* mts = MdmOpBySim("250011234567890");
+    Check(mts && !strcmp(mts->user, "mts") && !strcmp(mts->pass, "mts"), "presets: MTS's login and password");
+    Check(!MdmOpBySim("999991234567890") && !MdmOpBySim(""), "presets: an unknown SIM - none");
+    bool apns = true;   // the APN by the SIM: the preset's
+    for (int i = 0; i < n; i++) {
+        char imsi[16];
+        _snprintf(imsi, sizeof(imsi), "%s1234567890", ops[i].sim);
+        apns = apns && !strcmp(MdmApn(imsi), ops[i].apn) && MdmOpBySim(imsi) == &ops[i];
+    }
+    Check(apns, "presets: each one's SIM gives its APN");
+    char cmd[96];
+    Check(MdmApnCommand("internet.mts.ru", cmd, sizeof(cmd)) && !strcmp(cmd, "AT+CGDCONT=1,\"IP\",\"internet.mts.ru\"\r"),
+          "APN: the modem's command");
+    Check(!MdmApnCommand("bad\"apn", cmd, sizeof(cmd)) && !MdmApnCommand("", cmd, sizeof(cmd)),
+          "APN: none, or with a quote - no command");
 
     MdmStat st;
     MdmStatInit(&st);

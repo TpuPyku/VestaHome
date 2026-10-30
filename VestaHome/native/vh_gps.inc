@@ -276,6 +276,30 @@ static void ModemGet(ModemInfo* m)
 }
 
 #ifdef UNDER_CE
+// The chosen APN onto the modem (its COM port, free before RAS takes it): AT+CGDCONT - the dial's *99# uses it.
+// By the SIM (netOp 0): the driver set its own already.
+static void ModemApnSet(const wchar_t* port)
+{
+    char apn[64], cmd[96];
+    WideCharToMultiByte(CP_ACP, 0, s_cfg.netApn, -1, apn, sizeof(apn), NULL, NULL);
+    if (!s_cfg.netOp || !MdmApnCommand(apn, cmd, sizeof(cmd)))
+        return;
+    HANDLE h = CreateFile(port, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        VLog(L"модем: APN не задан - порт %s не открылся (%lu)", port, GetLastError());
+        return;
+    }
+    COMMTIMEOUTS to = { 0, 0, 2000, 0, 1000 };
+    SetCommTimeouts(h, &to);
+    DWORD n = 0;
+    char ans[64] = "";
+    WriteFile(h, cmd, (DWORD)strlen(cmd), &n, NULL);
+    ReadFile(h, ans, sizeof(ans) - 1, &n, NULL);
+    ans[n < sizeof(ans) ? n : sizeof(ans) - 1] = 0;
+    CloseHandle(h);
+    VLog(L"модем: APN %S - %S", apn, strstr(ans, "OK") ? "OK" : "нет ответа OK");
+}
+
 static DWORD WINAPI ModemDial(LPVOID)
 {
     RASENTRY e;
@@ -294,6 +318,8 @@ static DWORD WINAPI ModemDial(LPVOID)
         memset(&p, 0, sizeof(p));
         p.dwSize = sizeof(p);
         wcscpy(p.szEntryName, L"VestaModem");
+        wcsncpy(p.szUserName, s_cfg.netUser, UNLEN);
+        wcsncpy(p.szPassword, s_cfg.netPass, PWLEN);
         r = RasDial(NULL, NULL, &p, 0, NULL, &c);   // (no notifier: it waits for the end)
     }
     if (r && c) {
@@ -312,6 +338,8 @@ static DWORD WINAPI ModemDial(LPVOID)
 }
 #endif
 
+static bool s_netHeld;   // hung up by hand: not dialled by itself till the modem is out and in again
+
 static void ModemNet()   // the diagnostics' button: the driver registered, then dial / hang up
 {
     if (s_modemState <= 0) {
@@ -326,6 +354,7 @@ static void ModemNet()   // the diagnostics' button: the driver registered, then
     if (s_ras) {
         RasHangUp(s_ras);
         s_ras = NULL;
+        s_netHeld = true;
         VLog(L"модем: отключено");
         return;
     }
@@ -334,6 +363,8 @@ static void ModemNet()   // the diagnostics' button: the driver registered, then
         return;
     }
     VLog(L"модем: дозвон через %s (сигнал %d, сеть %d, SIM %d)", m.port, m.rssi, m.mode, m.sim);
+    s_netHeld = false;
+    ModemApnSet(m.port);
     s_rasErr = 0;
     s_rasBusy = 1;
     HANDLE t = CreateThread(NULL, 0, ModemDial, NULL, 0, NULL);
@@ -813,4 +844,101 @@ static void ClockStep(bool hour, int dir)
     t.wMilliseconds = 0;
     ClockSet(t);
     VLog(L"часы вручную: %02u:%02u", t.wHour, t.wMinute);
+}
+
+// ---------------------------------------------------------------- Settings -> Network
+
+// "Network" (the user 2026-10-30): the USB modem - its state and the button, the operator's preset (by the SIM,
+// Russia's and the CIS's, own), its APN / login / password typed, dialing by itself
+static int NetOwn()   // the "own" operator's number (after the presets)
+{
+    int n = 0;
+    MdmOps(&n);
+    return n + 1;
+}
+
+static void NetOpName(int op, wchar_t* s, int cap)
+{
+    int n = 0;
+    const MdmOp* ops = MdmOps(&n);
+    if (op <= 0)
+        wcsncpy(s, L"Авто (по SIM)", cap);
+    else if (op <= n)
+        wcsncpy(s, ops[op - 1].name, cap);
+    else
+        wcsncpy(s, L"Свой", cap);
+    s[cap - 1] = 0;
+}
+
+static void NetOpStep(int d)   // the operator stepped: its preset's APN, login, password (by the SIM: none)
+{
+    int n = 0;
+    const MdmOp* ops = MdmOps(&n);
+    s_cfg.netOp = (s_cfg.netOp + d + n + 2) % (n + 2);
+    if (s_cfg.netOp >= 1 && s_cfg.netOp <= n) {
+        const MdmOp& o = ops[s_cfg.netOp - 1];
+        _snwprintf(s_cfg.netApn, 64, L"%S", o.apn);
+        _snwprintf(s_cfg.netUser, 32, L"%S", o.user);
+        _snwprintf(s_cfg.netPass, 32, L"%S", o.pass);
+    } else if (!s_cfg.netOp)
+        s_cfg.netApn[0] = s_cfg.netUser[0] = s_cfg.netPass[0] = 0;
+    SaveCfg();
+}
+
+static void ScrSetNet(HDC dc)
+{
+    Settings(dc, S_SET_NET);
+    wchar_t st[64], op[40];
+    ModemLabel(st, 64);   // (the diagnostics' button's text: its "USB-модем:" and "· подключить" off for the row)
+    wchar_t* c = wcsstr(st, L": ");
+    if (c)
+        memmove(st, c + 2, (wcslen(c + 2) + 1) * sizeof(wchar_t));
+    c = wcsrchr(st, L'·');
+    if (c && (wcsstr(c, L"подключить") || wcsstr(c, L"отключить") || wcsstr(c, L"ещё раз")))
+        c[c > st ? -1 : 0] = 0;
+    ModemInfo m;
+    ModemGet(&m);
+    SetRow(dc, 64, L"USB-модем", st);
+    Button(dc, 600, 70, 160, 44, s_rasBusy ? L"…" : m.online ? L"Отключить" : L"Подключить", m.online ? B_SEL : B_N,
+           IC_NONE, 16, 0, s_rasBusy ? A_NONE : A_MODEMTEST);
+    SetRow(dc, 120, L"Оператор");
+    NetOpName(s_cfg.netOp, op, 40);
+    Stepper(dc, 480, 124, 280, op, 48, 15, A_NETOP);
+    bool sim = s_cfg.netOp == 0;
+    SetRow(dc, 176, L"APN", sim ? L"по SIM-карте (нажмите, чтобы задать)" : s_cfg.netApn[0] ? s_cfg.netApn : L"—",
+           false, A_KEYS, K_NETAPN);
+    SetRow(dc, 232, L"Логин", s_cfg.netUser[0] ? s_cfg.netUser : L"—", false, A_KEYS, K_NETUSER);
+    SetRow(dc, 288, L"Пароль", s_cfg.netPass[0] ? L"••••" : L"—", false, A_KEYS, K_NETPASS);
+    SetRow(dc, 344, L"Автоподключение", L"при вставке модема и после обрыва", true);
+    Toggle(dc, 688, 354, T_NET_AUTO);
+}
+
+
+// Dialing by itself (Settings -> Network: on by default): the driver registered at the start; the modem in, a SIM,
+// not online - dial, again after a failure in 30 s, then doubling up to 5 minutes; hung up by hand - not till the
+// modem is out and in again
+static void NetAutoStep()   // every second
+{
+#ifdef UNDER_CE
+    static DWORD s_next, s_wait = 30000;
+    if (!s_cfg.netAuto || s_modemState < 0 || s_rasBusy)
+        return;
+    if (!s_modemState) {
+        ModemUsbSet();
+        return;
+    }
+    ModemInfo m;
+    ModemGet(&m);
+    if (!m.port[0] || m.online) {   // out (the next one in dials), or online
+        s_netHeld = s_netHeld && m.port[0];
+        s_wait = 30000;
+        return;
+    }
+    if (s_netHeld || m.sim == 255 || (LONG)(GetTickCount() - s_next) < 0)
+        return;
+    s_next = GetTickCount() + s_wait;
+    s_wait = s_wait < 150000 ? s_wait * 2 : 300000;
+    VLog(L"модем: автоподключение");
+    ModemNet();
+#endif
 }

@@ -366,20 +366,26 @@ static void ScrPhotoView(HDC dc)
     IconBtn(dc, IC_FULL, 732, 417, 44, kText, A_PHFULL);   // the whole screen (the settings: Настройки -> Фото)
 }
 
-static void ScrSetPhoto(HDC dc)
+// "Media" (the user 2026-10-30: the video's and the photos' sections as one - room for "Network")
+static void ScrSetVideo(HDC dc)
 {
-    static const wchar_t* scale[2] = { L"Вписать", L"Заполн." };
-    Settings(dc, S_SET_PHOTO);
-    SetRow(dc, 64, L"Интервал слайд-шоу");
+    static const wchar_t* scale[2] = { L"Вписать", L"Растянуть" };
+    static const wchar_t* fit[2] = { L"Вписать", L"Заполн." };
+    Settings(dc, S_SET_VIDEO);
+    SetRow(dc, 64, L"Видео: масштаб");
+    Seg(dc, 512, 70, 248, 44, scale, 2, G_VIDEO_SCALE, 15);
+    SetRow(dc, 120, L"Видео в движении", L"выключено: в движении видео на паузе");
+    Toggle(dc, 688, 130, T_VIDEO_MOVING);
+    SetRow(dc, 176, L"Фото: интервал слайд-шоу");
     wchar_t iv[16];
     _snwprintf(iv, 16, L"%d С", s_cfg.photoInterval);
-    Stepper(dc, 560, 68, 200, iv, 48, 18, A_PHINT);
-    SetRow(dc, 120, L"Масштаб");
-    Seg(dc, 512, 126, 248, 44, scale, 2, G_PHOTO_SCALE, 15);
-    SetRow(dc, 176, L"Слайд-шоу при открытии");
-    Toggle(dc, 688, 186, T_SLIDES_OPEN);
-    SetRow(dc, 232, L"Автоповорот", NULL, true);
-    Toggle(dc, 688, 242, T_AUTOROTATE);
+    Stepper(dc, 560, 180, 200, iv, 48, 18, A_PHINT);
+    SetRow(dc, 232, L"Фото: масштаб");
+    Seg(dc, 512, 238, 248, 44, fit, 2, G_PHOTO_SCALE, 15);
+    SetRow(dc, 288, L"Слайд-шоу при открытии");
+    Toggle(dc, 688, 298, T_SLIDES_OPEN);
+    SetRow(dc, 344, L"Автоповорот фото", NULL, true);
+    Toggle(dc, 688, 354, T_AUTOROTATE);
 }
 
 static void DoAction(const Btn& b)
@@ -653,6 +659,7 @@ static void DoAction(const Btn& b)
     case A_RSCAN:    RadioScan(); break;
     case A_RFILL:    RadioFill(); break;
     case A_MODEMTEST: ModemNet(); break;
+    case A_NETOP:     NetOpStep(b.arg); break;
     case A_BTMUSIC:  BtMusicOn(); break;
     case A_BTCMD:
         if (b.arg == BT_CMD_PLAYPAUSE || b.arg == BT_CMD_PLAY) {   // the phone's music: the source too, ours stop

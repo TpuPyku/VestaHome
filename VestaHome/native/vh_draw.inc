@@ -2173,6 +2173,7 @@ static int Section(Screen s)
     case S_SETTINGS: case S_SET_SOUND: case S_SET_BALANCE: case S_SET_SCREEN: case S_SET_RADIO: case S_SET_BT:
     case S_SET_WIFI: case S_SET_VIDEO: case S_SET_PHOTO: case S_INFO: case S_SET_CAR: case S_SET_VOLUME:
     case S_SET_OBD: case S_BT_PAIRED: case S_BT_PAIRNEW: case S_SET_THEME: case S_WIFI_SAVED: case S_SET_PLUGINS:
+    case S_SET_NET:
         return 5;
     default:
         return -1;
@@ -2383,7 +2384,7 @@ static void Settings(HDC dc, Screen active)
     static const Tab items[10] = { { IC_GEAR, L"Общие", S_SETTINGS }, { IC_VOL, L"Звук", S_SET_SOUND },
                                   { IC_SUN, L"Экран", S_SET_SCREEN }, { IC_RADIO, L"Радио", S_SET_RADIO },
                                   { IC_BT, L"Bluetooth", S_SET_BT }, { IC_WIFI, L"Wi-Fi", S_SET_WIFI },
-                                  { IC_VIDEO, L"Видео", S_SET_VIDEO }, { IC_PHOTO, L"Фото", S_SET_PHOTO },
+                                  { IC_VIDEO, L"Медиа", S_SET_VIDEO }, { IC_CLOUD, L"Сеть", S_SET_NET },
                                   { IC_CAR, L"Автомобиль", S_SET_CAR }, { IC_INFO, L"О системе", S_INFO } };
     Frame(dc, L"Настройки");
     for (int i = 0; i < 10; i++) {
@@ -2391,6 +2392,7 @@ static void Settings(HDC dc, Screen active)
         bool on = items[i].to == active || (active == S_SET_BALANCE && items[i].to == S_SET_SOUND) ||
                   (active == S_SET_PLUGINS && items[i].to == S_SETTINGS) ||
                   (active == S_SET_THEME && items[i].to == S_SET_SCREEN) ||
+                  (active == S_SET_PHOTO && items[i].to == S_SET_VIDEO) ||
                   (active == S_WIFI_SAVED && items[i].to == S_SET_WIFI) ||
                   ((active == S_SET_OBD || active == S_BT_PAIRED || active == S_BT_PAIRNEW) &&
                    items[i].to == S_SET_BT);

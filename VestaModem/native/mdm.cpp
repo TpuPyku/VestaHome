@@ -1,5 +1,6 @@
-// mdm.cpp - see mdm.h.
+﻿// mdm.cpp - see mdm.h.
 #include <windows.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "mdm.h"
@@ -58,18 +59,57 @@ bool MdmLine(MdmStat* s, const char* line)
     return Imsi(s, line);
 }
 
+// The operators (the user 2026-10-30: Russia's and some of the CIS's; Tele2 of Kazakhstan and T2 of Russia are two)
+static const MdmOp kOps[] = {
+    { "25001", L"МТС (Россия)", "internet.mts.ru", "mts", "mts" },
+    { "25002", L"МегаФон", "internet", "gdata", "gdata" },
+    { "25099", L"Билайн (Россия)", "internet.beeline.ru", "beeline", "beeline" },
+    { "25020", L"T2 (Россия)", "internet.tele2.ru", "", "" },
+    { "25011", L"Yota", "internet.yota", "", "" },
+    { "25062", L"Т-Мобайл", "m.tinkoff", "", "" },
+    { "25035", L"Мотив", "inet.ycc.ru", "motiv", "motiv" },
+    { "40101", L"Beeline (Казахстан)", "internet.beeline.kz", "@internet.beeline", "beeline" },
+    { "40102", L"Kcell", "internet", "", "" },
+    { "40177", L"Tele2 (Казахстан)", "internet", "", "" },
+    { "40107", L"Altel", "internet", "", "" },
+    { "25701", L"A1 (Беларусь)", "internet.velcom.by", "", "" },
+    { "25702", L"МТС (Беларусь)", "mts", "mts", "mts" },
+    { "25704", L"life:) (Беларусь)", "internet.life.com.by", "", "" },
+    { "43404", L"Beeline (Узбекистан)", "internet.beeline.uz", "beeline", "beeline" },
+    { "43405", L"Ucell", "internet", "", "" },
+    { "43701", L"Beeline (Киргизия)", "internet.beeline.kg", "", "" },
+    { "43709", L"O! (Киргизия)", "internet", "", "" },
+    { "28301", L"Beeline (Армения)", "internet.beeline.am", "", "" },
+    { "40001", L"Azercell", "internet", "", "" },
+};
+
+const MdmOp* MdmOps(int* n)
+{
+    *n = (int)(sizeof(kOps) / sizeof(kOps[0]));
+    return kOps;
+}
+
+const MdmOp* MdmOpBySim(const char* imsi)
+{
+    for (int i = 0; i < (int)(sizeof(kOps) / sizeof(kOps[0])); i++)
+        if (!strncmp(imsi, kOps[i].sim, 5))
+            return &kOps[i];
+    return NULL;
+}
+
 const char* MdmApn(const char* imsi)
 {
-    static const char* kApn[][2] = { { "25001", "internet.mts.ru" }, { "25002", "internet" },
-                                     { "25099", "internet.beeline.ru" }, { "25020", "internet.tele2.ru" },
-                                     { "25011", "internet.yota" }, { "25062", "m.tinkoff" },
-                                     { "25035", "inet.ycc.ru" }, { "40101", "internet.beeline.kz" },
-                                     { "40177", "internet" }, { "25701", "internet.velcom.by" },
-                                     { "25702", "mts" } };
-    for (int i = 0; i < (int)(sizeof(kApn) / sizeof(kApn[0])); i++)
-        if (!strncmp(imsi, kApn[i][0], 5))
-            return kApn[i][1];
-    return "internet";
+    const MdmOp* op = MdmOpBySim(imsi);
+    return op ? op->apn : "internet";
+}
+
+bool MdmApnCommand(const char* apn, char* out, int cap)
+{
+    if (!apn[0] || strchr(apn, '"'))
+        return false;
+    _snprintf(out, cap, "AT+CGDCONT=1,\"IP\",\"%s\"\r", apn);
+    out[cap - 1] = 0;
+    return true;
 }
 
 void LineFeed(LineAcc* a, const BYTE* b, int n, LineFn fn, void* ctx)
