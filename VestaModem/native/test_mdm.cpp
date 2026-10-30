@@ -47,7 +47,7 @@ int main()
     const MdmOp* kz = MdmOpBySim("401771234567890");
     Check(n >= 18 && t2 && kz && t2 != kz && !wcscmp(t2->name, L"T2 (Россия)") && !wcscmp(kz->name, L"Tele2 (Казахстан)"),
           "presets: T2 of Russia and Tele2 of Kazakhstan apart");
-    Check(!strcmp(kz->apn, "internet") && !strcmp(t2->apn, "internet.tele2.ru"), "presets: their APNs");
+    Check(!strcmp(kz->apn, "internet.tele2.kz") && !strcmp(t2->apn, "internet.tele2.ru"), "presets: their APNs");
     const MdmOp* mts = MdmOpBySim("250011234567890");
     Check(mts && !strcmp(mts->user, "mts") && !strcmp(mts->pass, "mts"), "presets: MTS's login and password");
     Check(!MdmOpBySim("999991234567890") && !MdmOpBySim(""), "presets: an unknown SIM - none");

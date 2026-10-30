@@ -59,27 +59,28 @@ bool MdmLine(MdmStat* s, const char* line)
     return Imsi(s, line);
 }
 
-// The operators (the user 2026-10-30: Russia's and some of the CIS's; Tele2 of Kazakhstan and T2 of Russia are two)
+// The operators (the user 2026-10-30: Russia's and some of the CIS's; Tele2 of Kazakhstan and T2 of Russia are two),
+// their APNs as their own sites give them (checked 2026-10-30; Beeline Kyrgyzstan's only in a search's snippet)
 static const MdmOp kOps[] = {
     { "25001", L"МТС (Россия)", "internet.mts.ru", "mts", "mts" },
     { "25002", L"МегаФон", "internet", "gdata", "gdata" },
     { "25099", L"Билайн (Россия)", "internet.beeline.ru", "beeline", "beeline" },
     { "25020", L"T2 (Россия)", "internet.tele2.ru", "", "" },
     { "25011", L"Yota", "internet.yota", "", "" },
-    { "25062", L"Т-Мобайл", "m.tinkoff", "", "" },
+    { "25062", L"Т-Мобайл", "tt", "", "" },
     { "25035", L"Мотив", "inet.ycc.ru", "motiv", "motiv" },
     { "40101", L"Beeline (Казахстан)", "internet.beeline.kz", "@internet.beeline", "beeline" },
     { "40102", L"Kcell", "internet", "", "" },
-    { "40177", L"Tele2 (Казахстан)", "internet", "", "" },
+    { "40177", L"Tele2 (Казахстан)", "internet.tele2.kz", "", "" },
     { "40107", L"Altel", "internet", "", "" },
-    { "25701", L"A1 (Беларусь)", "internet.velcom.by", "", "" },
+    { "25701", L"A1 (Беларусь)", "internet", "", "" },
     { "25702", L"МТС (Беларусь)", "mts", "mts", "mts" },
     { "25704", L"life:) (Беларусь)", "internet.life.com.by", "", "" },
     { "43404", L"Beeline (Узбекистан)", "internet.beeline.uz", "beeline", "beeline" },
     { "43405", L"Ucell", "internet", "", "" },
-    { "43701", L"Beeline (Киргизия)", "internet.beeline.kg", "", "" },
+    { "43701", L"Beeline (Киргизия)", "internet", "", "" },
     { "43709", L"O! (Киргизия)", "internet", "", "" },
-    { "28301", L"Beeline (Армения)", "internet.beeline.am", "", "" },
+    { "28301", L"Team (Армения)", "internet", "", "" },
     { "40001", L"Azercell", "internet", "", "" },
 };
 
