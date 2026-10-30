@@ -409,13 +409,117 @@ static void ScrTestAv(HDC dc)
     WaveDevName(s_cfg.beepDev, s, 64);
     wchar_t b[96];
     _snwprintf(b, 96, L"УСТРОЙСТВО ПИСКА: %s", s);
-    Button(dc, 40, 352, 470, 42, b, B_N, IC_NONE, 15, 0, A_AVDEV);   // the next device and a beep on it
-    Button(dc, 520, 352, 240, 42, L"Стекло (ошибка OBD)", B_N, IC_NONE, 15, 0, A_AVTEST, 100);
+    Button(dc, 40, 352, 330, 42, b, B_N, IC_NONE, 14, 0, A_AVDEV);   // the next device and a beep on it
+    Button(dc, 380, 352, 190, 42, L"Голос поверх радио", B_N, IC_NONE, 14, 0, A_SCREEN, S_TEST_VOICE);
+    Button(dc, 580, 352, 180, 42, L"Стекло (OBD)", B_N, IC_NONE, 14, 0, A_AVTEST, 100);
     if (dir[0])
         _snwprintf(s, 160, L"Файлы: %s. Писк — через канал голоса навигации (радио тише).", dir);
     else
         wcscpy(s, L"Нет папки TestMedia (на SD-карте, USB или рядом с VestaHome) — работает только писк.");
     TWrap(dc, 96, 436, s, 13, kDim, 400, 688, 2, 16);   // the bottom strip, right of "back"
+}
+
+// "Voice over the radio" - a trial (the user 2026-10-30: Navitel says no prompts to the MCU - can the unit's sound
+// go over the radio without turning it down?): the MCU's three navigation commands switched one by one, a 10 s
+// sound to hear meanwhile, the MCU's System status (0x7905: the boards' temperatures, the tuner's field, the
+// subs not known yet) live - does any of it follow the sound? Each step in the log.
+static const char* kVoiceCmds[3] = { "SPApi_SendRadioNaviVoiceGuidance", "SPApi_SendRadioNaviMediaMuteStatus",
+                                     "SPApi_SendRadioIsNaviSourceCouldIn" };
+static int      s_voiceExp[3] = { -1, -1, -1 };   // the value sent last, -1 none
+static HWAVEOUT s_expOut;
+static WAVEHDR  s_expHdr;
+static short*   s_expTone;
+enum { kExpToneN = 11025 * 10 };
+
+static void ExpToneStop()
+{
+    if (!s_expOut)
+        return;
+    waveOutReset(s_expOut);
+    waveOutUnprepareHeader(s_expOut, &s_expHdr, sizeof(s_expHdr));
+    waveOutClose(s_expOut);
+    s_expOut = NULL;
+}
+
+static void ExpTone()   // 10 s of three notes in turn (440 / 554 / 659 Hz, 250 ms each) on the beep's device
+{
+    ExpToneStop();
+    if (!s_expTone && (s_expTone = (short*)malloc(kExpToneN * sizeof(short))) != NULL)
+        for (int i = 0; i < kExpToneN; i++) {
+            static const double kF[3] = { 440, 554, 659 };
+            int k = i / (11025 / 4), at = i % (11025 / 4);
+            double env = at < 300 ? at / 300.0 : 1.0;
+            s_expTone[i] = (short)(8000 * env * sin(i * 2 * 3.14159265 * kF[k % 3] / 11025));
+        }
+    WAVEFORMATEX wf;
+    memset(&wf, 0, sizeof(wf));
+    wf.wFormatTag = WAVE_FORMAT_PCM;
+    wf.nChannels = 1;
+    wf.nSamplesPerSec = 11025;
+    wf.wBitsPerSample = 16;
+    wf.nBlockAlign = 2;
+    wf.nAvgBytesPerSec = 22050;
+    UINT dev = s_cfg.beepDev < 0 ? WAVE_MAPPER : (UINT)s_cfg.beepDev;
+    if (!s_expTone || waveOutOpen(&s_expOut, dev, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+        s_expOut = NULL;
+        VLog(L"голос-опыт: звук не открылся");
+        return;
+    }
+    memset(&s_expHdr, 0, sizeof(s_expHdr));
+    s_expHdr.lpData = (LPSTR)s_expTone;
+    s_expHdr.dwBufferLength = kExpToneN * sizeof(short);
+    waveOutPrepareHeader(s_expOut, &s_expHdr, sizeof(s_expHdr));
+    waveOutWrite(s_expOut, &s_expHdr, sizeof(s_expHdr));
+    VLog(L"голос-опыт: звук 10 с (4402=%d, 4414=%d, 4C14=%d)", s_voiceExp[0], s_voiceExp[1], s_voiceExp[2]);
+}
+
+static void VoiceExp(int k)   // 0..2 a command flipped, 3 the sound, 4 all off
+{
+    if (k >= 0 && k < 3) {
+        s_voiceExp[k] = s_voiceExp[k] == 1 ? 0 : 1;
+        McuSend3(kVoiceCmds[k], s_voiceExp[k], 0, 0);
+        VLog(L"голос-опыт: %S(%d)", kVoiceCmds[k], s_voiceExp[k]);
+    } else if (k == 3)
+        ExpTone();
+    else if (k == 4) {
+        ExpToneStop();
+        for (int i = 0; i < 3; i++) {
+            s_voiceExp[i] = 0;
+            McuSend3(kVoiceCmds[i], 0, 0, 0);
+        }
+        VLog(L"голос-опыт: всё выключено");
+    }
+}
+
+static void ScrTestVoice(HDC dc)
+{
+    static const wchar_t* kNames[3] = { L"Голос навигации · 4402", L"Медиа под навигацию · 4414",
+                                        L"Навигация может войти · 4C14" };
+    Frame(dc, L"Голос поверх радио (опыт)");
+    Panel(dc, 16, 68, 768, 336);
+    for (int i = 0; i < 3; i++) {
+        wchar_t s[64];
+        _snwprintf(s, 64, L"%s: %s", kNames[i], s_voiceExp[i] < 0 ? L"—" : s_voiceExp[i] ? L"1" : L"0");
+        Button(dc, 40, 84 + i * 54, 470, 46, s, s_voiceExp[i] == 1 ? B_SEL : B_N, IC_NONE, 15, 0, A_VOICEEXP, i);
+    }
+    Button(dc, 520, 84, 240, 46, L"Играть звук 10 с", B_PRI, IC_NONE, 15, 0, A_VOICEEXP, 3);
+    Button(dc, 520, 138, 240, 46, L"Всё выключить", B_N, IC_NONE, 15, 0, A_VOICEEXP, 4);
+    // the MCU's System status by sub (0x7905): known - 0A board °C, 06 amplifier °C, 0D screen °C, 07 tuner field dB,
+    // 03 / 0E wheel buttons mV; the rest not known
+    EnterCriticalSection(&s_mcuCs);
+    int sys[16];
+    memcpy(sys, s_info.sys, sizeof(sys));
+    LeaveCriticalSection(&s_mcuCs);
+    for (int k = 0; k < 16; k++) {
+        wchar_t s[32];
+        if (sys[k] < 0)
+            _snwprintf(s, 32, L"%02X: —", k);
+        else
+            _snwprintf(s, 32, L"%02X: %d", k, sys[k]);
+        T(dc, 48 + (k % 4) * 180, 270 + (k / 4) * 32, s, 15, sys[k] < 0 ? kMuted : kText, 400, AL_START, 170);
+    }
+    TWrap(dc, 96, 436, L"Включите радио, нажимайте команды и «Играть звук»: слышно ли звук поверх радио, тише ли радио. "
+          L"Ниже — System status MCU, раз в 2 с.", 13, kDim, 400, 688, 2, 16);
 }
 
 static void AvDevNext()
