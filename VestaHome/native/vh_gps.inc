@@ -885,6 +885,66 @@ static void NetOpStep(int d)   // the operator stepped: its preset's APN, login,
     SaveCfg();
 }
 
+// The phone's internet over Bluetooth (the user 2026-10-31; Android: "Hotspot -> Bluetooth tethering"): the stack's
+// PAN through our proxy (btshm.h BT_CMD_PAN) - the connected phone as its NAP; the network adapter BTCENDIS1 (the
+// firmware's registry) gets its address from the phone by DHCP
+static char s_panIp[16];   // BTCENDIS1's address while online
+
+static bool NetPhone(BtState* bt)   // a phone connected by Bluetooth (calls or music): its address in bt
+{
+    return BtGet(bt, NULL) && bt->devAddr[0] && (bt->hf == 2 || bt->av >= 1);
+}
+
+static void NetPanLabel(const BtState& bt, bool phone, wchar_t* s, int cap)   // (40 characters at most: the button)
+{
+    if (!phone)
+        wcsncpy(s, L"телефон не подключён по Bluetooth", cap);
+    else if (bt.pan == BT_PAN_ONLINE && s_panIp[0])
+        _snwprintf(s, cap, L"в сети · %S", s_panIp);
+    else if (bt.pan == BT_PAN_ONLINE)
+        wcsncpy(s, L"подключено, ждём адрес…", cap);
+    else if (bt.pan == BT_PAN_CONNECTING)
+        wcsncpy(s, L"подключение…", cap);
+    else if (bt.pan == BT_PAN_FAILED)
+        wcsncpy(s, L"не вышло: включён ли «Bluetooth-модем»?", cap);
+    else
+        wcsncpy(s, L"на телефоне включите «Bluetooth-модем»", cap);
+    s[cap - 1] = 0;
+}
+
+static void NetPanTap()
+{
+    BtState bt;
+    if (!NetPhone(&bt))
+        return;
+    wchar_t a[20];
+    MultiByteToWideChar(CP_ACP, 0, bt.devAddr, -1, a, 20);
+    a[19] = 0;
+    bool on = bt.pan == BT_PAN_ONLINE || bt.pan == BT_PAN_CONNECTING;
+    VLog(L"BT-модем: %s %s", on ? L"отключить" : L"подключить", a);
+    BtCmdText(BT_CMD_PAN, on ? L"" : a);
+}
+
+// Every second: the state's changes logged; online - the adapter's address, asked till it has one
+static void NetPanWatch()
+{
+    static int s_last = -1;
+    BtState bt;
+    if (!BtGet(&bt, NULL))
+        return;
+    if (bt.pan != s_last) {
+        static const wchar_t* kNames[4] = { L"нет", L"подключение", L"в сети", L"не вышло" };
+        VLog(L"BT-модем: %s", bt.pan >= 0 && bt.pan < 4 ? kNames[bt.pan] : L"?");
+        s_last = bt.pan;
+        s_panIp[0] = 0;
+    }
+    if (bt.pan == BT_PAN_ONLINE && !s_panIp[0]) {
+        AdapterIp("BTCENDIS1", s_panIp);
+        if (s_panIp[0])
+            VLog(L"BT-модем: адрес %S", s_panIp);
+    }
+}
+
 static void ScrSetNet(HDC dc)
 {
     Settings(dc, S_SET_NET);
@@ -901,14 +961,24 @@ static void ScrSetNet(HDC dc)
     SetRow(dc, 64, L"USB-модем", st);
     Button(dc, 600, 70, 160, 44, s_rasBusy ? L"…" : m.online ? L"Отключить" : L"Подключить", m.online ? B_SEL : B_N,
            IC_NONE, 16, 0, s_rasBusy ? A_NONE : A_MODEMTEST);
-    SetRow(dc, 120, L"Оператор");
+    BtState bt;
+    bool phone = NetPhone(&bt);
+    wchar_t pan[80];
+    NetPanLabel(bt, phone, pan, 80);
+    SetRow(dc, 120, L"Телефон (Bluetooth)", pan);
+    bool panOn = phone && (bt.pan == BT_PAN_ONLINE || bt.pan == BT_PAN_CONNECTING);
+    Button(dc, 600, 126, 160, 44, panOn ? L"Отключить" : L"Подключить", !phone ? B_DIS : panOn ? B_SEL : B_N,
+           IC_NONE, 16, 0, phone ? A_NETPAN : A_NONE);
+    SetRow(dc, 176, L"Оператор модема");
     NetOpName(s_cfg.netOp, op, 40);
-    Stepper(dc, 480, 124, 280, op, 48, 15, A_NETOP);
+    Stepper(dc, 480, 180, 280, op, 48, 15, A_NETOP);
     bool sim = s_cfg.netOp == 0;
-    SetRow(dc, 176, L"APN", sim ? L"по SIM-карте (нажмите, чтобы задать)" : s_cfg.netApn[0] ? s_cfg.netApn : L"—",
+    SetRow(dc, 232, L"APN", sim ? L"по SIM-карте (нажмите, чтобы задать)" : s_cfg.netApn[0] ? s_cfg.netApn : L"—",
            false, A_KEYS, K_NETAPN);
-    SetRow(dc, 232, L"Логин", s_cfg.netUser[0] ? s_cfg.netUser : L"—", false, A_KEYS, K_NETUSER);
-    SetRow(dc, 288, L"Пароль", s_cfg.netPass[0] ? L"••••" : L"—", false, A_KEYS, K_NETPASS);
+    SetRow(dc, 288, L"Логин и пароль", L"для оператора «Свой»");   // (two keyboards: the login, the password)
+    Button(dc, 480, 294, 136, 44, s_cfg.netUser[0] ? s_cfg.netUser : L"Логин", B_N, IC_NONE, 15, 0, A_KEYS,
+           K_NETUSER);
+    Button(dc, 624, 294, 136, 44, s_cfg.netPass[0] ? L"••••" : L"Пароль", B_N, IC_NONE, 15, 0, A_KEYS, K_NETPASS);
     SetRow(dc, 344, L"Автоподключение", L"при вставке модема и после обрыва", true);
     Toggle(dc, 688, 354, T_NET_AUTO);
 }
@@ -919,6 +989,7 @@ static void ScrSetNet(HDC dc)
 // modem is out and in again
 static void NetAutoStep()   // every second
 {
+    NetPanWatch();
 #ifdef UNDER_CE
     static DWORD s_next, s_wait = 30000;
     if (!s_cfg.netAuto || s_modemState < 0 || s_rasBusy)

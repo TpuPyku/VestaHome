@@ -122,6 +122,9 @@ static void Publish(int* ev)
         case 0x2B: st.av = ev[1]; st.avTick = e->tick; break;
         case 0x2C: st.lengthMs = ev[1]; st.posMs = ev[2]; st.playing = ev[3]; st.playTick = e->tick; break;
         case 0x30: st.avrcp = ev[1]; break;
+        case 0x45: st.pan = BT_PAN_ONLINE; st.panTick = e->tick; break;   // (PAN: the phone's internet)
+        case 0x4B: st.pan = BT_PAN_FAILED; st.panTick = e->tick; break;
+        case 0x46: st.pan = BT_PAN_IDLE; st.panTick = e->tick; break;
         case 0x2E: {
             int items = ev[1] < 0 ? 0 : ev[1] > 7 ? 7 : ev[1];
             st.title[0] = st.artist[0] = st.album[0] = 0;
@@ -508,6 +511,21 @@ static DWORD WINAPI CmdThread(LPVOID)
             char a[40];
             CopyText(a, s_shm->cmdText, 18);
             r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Spp_SetAddr])(a);
+        } else if (cmd == BT_CMD_PAN) {   // the phone's internet: connect to its NAP (0x1116), or let it go
+            char a[40];
+            CopyText(a, s_shm->cmdText, 18);
+            if (a[0]) {
+                r = ((int (*)(char*, unsigned short))g_real[IDX_Flc_Bluetooth_PanServer_Connect])(a, 0x1116);
+                InterlockedIncrement((LONG*)&s_shm->seq);   // (0 / 2: on its way - the event tells the end)
+                s_shm->st.pan = r == 0 || r == 2 ? BT_PAN_CONNECTING : BT_PAN_FAILED;
+                s_shm->st.panTick = GetTickCount();
+                InterlockedIncrement((LONG*)&s_shm->seq);
+            } else {
+                r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_PanServer_Disconnect])();
+            }
+            wchar_t b[64];
+            wsprintfW(b, L"PAN %S -> %d", a[0] ? a : "off", r);
+            LogLine(b);
         } else if (cmd == BT_CMD_SDP) {
             char a[40];
             CopyText(a, s_shm->cmdText, 18);
@@ -595,7 +613,7 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
                 memset(&s_shm->st, 0, sizeof(s_shm->st));
                 s_shm->st.av = s_shm->st.avrcp = s_shm->st.hf = s_shm->st.hfAudio = -1;
                 s_shm->st.battery = s_shm->st.signal = -1;
-                s_shm->version = 4;
+                s_shm->version = 5;
                 s_shm->magic = BT_SHM_MAGIC;
             }
             if (s_shm) {

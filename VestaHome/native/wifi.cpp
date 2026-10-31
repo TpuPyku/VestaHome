@@ -392,7 +392,7 @@ static bool SetPrefs(const IntfEntry& cur, const WlanConfig* add, int addCount, 
     return r == 0;
 }
 
-static void ReadIp(char* ip)
+static void IpOf(const char* name, char* ip)   // the adapter's address by its name ("" none yet)
 {
     ip[0] = 0;
     if (!s_adapters)
@@ -403,17 +403,37 @@ static void ReadIp(char* ip)
         return;
     AdapterInfo* a = (AdapterInfo*)malloc(size);
     if (a && s_adapters(a, &size) == 0) {
-        char guid[64];
-        WideCharToMultiByte(CP_ACP, 0, s_guid, -1, guid, sizeof(guid), NULL, NULL);
         for (AdapterInfo* p = a; p; p = p->next)
-            if (!_stricmp(p->name, guid) && strcmp(p->ipList.ip, "0.0.0.0")) {
+            if (!_stricmp(p->name, name) && strcmp(p->ipList.ip, "0.0.0.0")) {
                 strncpy(ip, p->ipList.ip, 15);
                 ip[15] = 0;
             }
     }
     free(a);
 }
+
+static void ReadIp(char* ip)
+{
+    char guid[64];
+    WideCharToMultiByte(CP_ACP, 0, s_guid, -1, guid, sizeof(guid), NULL, NULL);
+    IpOf(guid, ip);
+}
 #endif
+
+void AdapterIp(const char* name, char* ip)
+{
+    ip[0] = 0;
+#ifdef UNDER_CE
+    if (!s_adapters) {
+        HMODULE m = LoadLibrary(L"iphlpapi.dll");
+        if (m)
+            s_adapters = (AdaptersFn)PROC(m, "GetAdaptersInfo");
+    }
+    IpOf(name, ip);
+#else
+    (void)name;
+#endif
+}
 
 static void Publish(const WifiInfo& w)
 {

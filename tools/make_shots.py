@@ -2,7 +2,7 @@
 """make_shots.py - the screens of VestaHome for the user's guide (docs/manual-outline.md), from the PC build.
 
 Starts VestaHome/VestaHome/VestaHomePC.exe (build it first), stands in for the Bluetooth proxy (a phone connected,
-its book and call log: the shared memories VestaBT4 / VestaBTPB1, demo data) and walks the screens by taps,
+its book and call log: the shared memories VestaBT5 / VestaBTPB1, demo data) and walks the screens by taps,
 saving what the window drew into docs/shots/<NN>_<name>.png (not in git: made again on demand). The window's
 VestaHome.ini is kept and put back. Windows only (ctypes, Pillow).
 
@@ -28,7 +28,8 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'docs', 'sh
 # the nav bar and the settings' sections (800 x 480)
 HOME, RADIO, MEDIA, PHONE, APPS, SETTINGS = (60, 440), (170, 440), (282, 440), (394, 440), (506, 440), (618, 440)
 SET = {'general': (60, 90), 'sound': (170, 90), 'screen': (60, 160), 'radio': (170, 160), 'bt': (60, 230),
-       'wifi': (170, 230), 'video': (60, 300), 'photo': (170, 300), 'car': (60, 370), 'info': (170, 370)}
+       'wifi': (170, 230), 'video': (60, 300), 'net': (170, 300), 'car': (60, 370), 'info': (170, 370)}   # (video:
+       # "Медиа" - video and photo; net: "Сеть", 2026-10-30)
 TAB = {'music': (62, 88), 'net': (160, 88), 'bt': (260, 88), 'aux': (360, 88), 'video': (458, 88),
        'photo': (557, 88), 'list': (760, 88)}
 SHOTS = [
@@ -85,7 +86,7 @@ class BtSt(ctypes.Structure):
                 ('trackNo', ctypes.c_int), ('trackCount', ctypes.c_int), ('durationMs', ctypes.c_int),
                 ('call', ctypes.c_int * 2), ('callNumber', ctypes.c_char * 32), ('operatorName', ctypes.c_char * 32),
                 ('callTick', W.DWORD), ('avTick', W.DWORD), ('playTick', W.DWORD), ('mediaTick', W.DWORD),
-                ('devTick', W.DWORD)]
+                ('devTick', W.DWORD), ('pan', ctypes.c_int), ('panTick', W.DWORD)]
 
 
 class BtEv(ctypes.Structure):
@@ -120,9 +121,9 @@ NAMES = ['Алексей Петров', 'Анна', 'Борис Иванович
 
 
 def bluetooth():   # the proxy's stand-in: a phone connected, playing; the book and the calls when asked
-    m = mapping(BtShm, 'VestaBT4')
+    m = mapping(BtShm, 'VestaBT5')
     pb = mapping(Pb, 'VestaBTPB1')
-    m.magic, m.version, m.origOk = 0x54425456, 4, 1
+    m.magic, m.version, m.origOk = 0x54425456, 5, 1
     s = m.st
     s.ready, s.av, s.avrcp, s.hf, s.battery, s.signal = 1, 2, 1, 2, 4, 5
     s.devAddr, s.devName, s.operatorName = b'A4:E2:87:98:D6:9F', 'Телефон'.encode(), b'OPERATOR'

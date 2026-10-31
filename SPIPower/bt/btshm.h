@@ -20,12 +20,14 @@
 //   0x30 AVRCP: ev[1] 1 connected, 0 not      (1 title, 2 artist, 3 album, 4 track no., 5 tracks, 6 genre,
 //                                              7 duration ms), its UTF-8 text at ev + 4 + i*0x42
 //   0x38 PBAP: ev[1] 2 connected, 0 not   0x39 a pull's entries start   0x3A one entry (BtPb)   0x3B they end
+//   0x45 PAN (the phone's internet, Bluetooth tethering): connected   0x4B its connect failed   0x46 disconnected
+//        (FLC_BLUETOOTH_SDK's PanCallback, Ghidra 2026-10-31: XCBPAN user events 1 ok / 1 failed / 2)
 // State: written under a sequence lock (seq odd while writing); a reader copies it between two equal even seqs.
 #ifndef BTSHM_H
 #define BTSHM_H
 
-#define BT_SHM_NAME   L"VestaBT4"       // v4 (2026-10-20): 16 paired, search / pair / unpair (v3: calls, rewind)
-#define BT_CMD_EVENT  L"VestaBT4_Cmd"   // set by VestaHome after writing a command
+#define BT_SHM_NAME   L"VestaBT5"       // v5 (2026-10-31): PAN (v4: 16 paired, search / pair / unpair)
+#define BT_CMD_EVENT  L"VestaBT5_Cmd"   // set by VestaHome after writing a command
 #define BT_SHM_MAGIC  0x54425456        // "VTBT"
 #define BT_EV_SLOTS   64
 #define BT_EV_DATA    64                // the first bytes of each event, for the log and later decoding
@@ -59,7 +61,11 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
                              (Conn_Pair_Confirm) */,
        BT_CMD_SDP /* cmdText: the address - Conn_Search_SC_IAP(addr): the SDP search of SPP (0x1101) alone; the
                      answer: event 0x0B (the services found), 0x4F (one SPP) - OBD 2026-10-29: the stack's own
-                     search of three UUIDs at once is where the clone's link failed */ };
+                     search of three UUIDs at once is where the clone's link failed */,
+       BT_CMD_PAN /* cmdText: the phone's address - its internet over Bluetooth (the user 2026-10-31; Android's
+                     "Bluetooth tethering"): Flc_Bluetooth_PanServer_Connect(addr, 0x1116 - the phone a NAP), the
+                     answer an event (0x45 / 0x4B); "" - PanServer_Disconnect() */ };
+enum { BT_PAN_IDLE, BT_PAN_CONNECTING, BT_PAN_ONLINE, BT_PAN_FAILED };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
 struct BtEvent {
@@ -87,11 +93,13 @@ struct BtState {
     char  operatorName[32];             // 0x14
     DWORD callTick;                     // when a call's state last changed
     DWORD avTick, playTick, mediaTick, devTick;
+    int   pan;                          // BT_PAN_*: the phone's internet (BT_CMD_PAN, events 0x45 / 0x4B / 0x46)
+    DWORD panTick;
 };
 
 struct BtShm {
     DWORD         magic;
-    DWORD         version;              // 3
+    DWORD         version;              // 5
     volatile LONG seq;                  // the state's sequence lock
     volatile LONG evSeq;                // events written so far
     volatile LONG attach;               // proxy loads into processes since boot

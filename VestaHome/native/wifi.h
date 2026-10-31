@@ -53,5 +53,7 @@ void WifiApSetup(const wchar_t* ssid, const wchar_t* pass, bool autoOn);
 void WifiApManual(bool on);   // by hand: the access point until switched off
 // 0..4 bars from dBm
 int  WifiBars(int rssi);
+// An adapter's IPv4 address by its name (e.g. "BTCENDIS1", Bluetooth PAN); "" none yet (ip: 16 chars)
+void AdapterIp(const char* name, char* ip);
 
 #endif
