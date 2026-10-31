@@ -76,3 +76,6 @@ VestaHome/VestaHome/Temp/
 
 # add-ons put next to the PC build for testing (VestaCore/plugins/*)
 VestaHome/VestaHome/Plugins/
+
+# the head unit check sheets: working papers, kept locally only (the user 2026-10-31)
+docs/checklist-*
