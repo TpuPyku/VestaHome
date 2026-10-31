@@ -2,7 +2,8 @@
 """make_shots.py - the screens of VestaHome for the user's guide (docs/manual-outline.md), from the PC build.
 
 Starts VestaHome/VestaHome/VestaHomePC.exe (build it first), stands in for the Bluetooth proxy (a phone connected,
-its book and call log: the shared memories VestaBT5 / VestaBTPB1, demo data) and walks the screens by taps,
+its book and call log: the shared memories VestaBT5 / VestaBTPB1, demo data) and the MCU proxy (the radio on
+FM 101.2 with RDS and presets: VestaMCU2), plays a made-up drive as the GPS (shots.nmea) and walks the screens by taps,
 saving what the window drew into docs/shots/<NN>_<name>.png (not in git: made again on demand). The window's
 VestaHome.ini is kept and put back. Windows only (ctypes, Pillow).
 
@@ -163,6 +164,65 @@ def bluetooth():   # the proxy's stand-in: a phone connected, playing; the book 
         m.cmdDone = m.cmdSeq
 
 
+class McuMsg(ctypes.Structure):   # vh_mcu.inc / SPIPower/native/mcushm.h
+    _fields_ = [('seq', ctypes.c_long), ('tick', W.DWORD), ('id', ctypes.c_ushort), ('len', ctypes.c_ubyte),
+                ('skel', ctypes.c_ubyte), ('data', ctypes.c_ubyte * 40)]
+
+
+class McuShm(ctypes.Structure):
+    _fields_ = [('magic', W.DWORD), ('version', W.DWORD), ('seq', ctypes.c_long), ('attach', ctypes.c_long),
+                ('wraps', ctypes.c_long), ('reserved', W.DWORD * 3), ('msg', McuMsg * 256)]
+
+
+def fm_names(first, names):   # 0x0930: four station names of 8 characters from <first>
+    return [0, first, first + len(names) - 1, 0] + list(b''.join(n.ljust(8).encode() for n in names))
+
+
+def mcu():   # the MCU proxy's stand-in: the tuner on FM1 101.2 with RDS, its presets, the volume
+    m = mapping(McuShm, 'VestaMCU2')
+    m.magic, m.version = 0x55434D56, 2
+    freqs = [8790, 9160, 9580, 9900, 10120, 10380, 10570, 10780]
+    names = ['RETRO', 'SPORT', 'MAXIMUM', 'NASHE', 'DFM', 'MONTE', 'AVTO', 'HIT FM']
+    rt = 'Dance Radio - Dua Lipa - Levitating'.ljust(64).encode()
+    msgs = [(0x0908, [0, 1, 0, 0, 8] + sum([[f >> 8, f & 0xFF] for f in freqs], [])),
+            (0x0908, [0, 0, 0, 0, 8] + sum([[f >> 8, f & 0xFF] for f in freqs], [])),
+            (0x0930, fm_names(0, names[:4])), (0x0930, fm_names(4, names[4:])),
+            (0x0901, [0, 0, 10120 >> 8, 10120 & 0xFF]), (0x0907, [0, 0, 4]),
+            (0x090B, [0, 0, 0] + list(b'  DFM   ')),
+            (0x0931, [0, 0, 0, 0] + list(rt[:32])), (0x0931, [0, 0, 0, 1] + list(rt[32:])),
+            (0x3101, [0, 0, 14]), (0x4904, [0, 0])]   # the volume; the source: the radio
+    for i, (mid, data) in enumerate(msgs):
+        e = m.msg[i]
+        e.tick, e.id, e.len = k32.GetTickCount(), mid, len(data)
+        e.data[:len(data)] = data
+        e.seq = i + 1
+    m.seq = len(msgs)
+    while True:   # keep the mapping (and the radio's state) while VestaHome runs
+        time.sleep(1)
+
+
+def track(path):   # a drive for the GPS replay (gps.port=<name>.nmea): north-east from Samara at 62 km/h
+    def nmea(s):
+        c = 0
+        for ch in s.encode():
+            c ^= ch
+        return '$%s*%02X\r\n' % (s, c)
+
+    def deg(v, w):   # ddmm.mmmm
+        d = int(v)
+        return ('%0' + str(w) + 'd%07.4f') % (d, (v - d) * 60)
+
+    lat, lon = 53.2001, 50.1500
+    with open(path, 'w', newline='') as f:
+        for i in range(3600):
+            t = '%02d%02d%02d.00' % (16 + i // 3600, i // 60 % 60, i % 60)
+            la, lo = deg(lat, 2), deg(lon, 3)
+            f.write(nmea('GPGGA,%s,%s,N,%s,E,1,09,0.9,62.0,M,0.0,M,,' % (t, la, lo)))
+            f.write(nmea('GPRMC,%s,A,%s,N,%s,E,33.5,48.0,311026,,,A' % (t, la, lo)))
+            lat += 0.000115
+            lon += 0.000190
+
+
 def grab(h, path):   # what the window drew (its DC)
     rc = W.RECT()
     u32.GetClientRect(h, ctypes.byref(rc))
@@ -192,7 +252,12 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     ini = os.path.join(VH, 'VestaHome.ini')
     saved = open(ini, 'rb').read() if os.path.exists(ini) else None
+    nmea = os.path.join(VH, 'shots.nmea')   # (*.nmea: not in git)
+    track(nmea)
+    lines = [l for l in (saved or b'').split(b'\r\n') if not l.startswith(b'gps.port=')]
+    open(ini, 'wb').write(b'\r\n'.join([b'gps.port=shots.nmea'] + lines))
     threading.Thread(target=bluetooth, daemon=True).start()
+    threading.Thread(target=mcu, daemon=True).start()
     p = subprocess.Popen([EXE], cwd=VH)
     try:
         time.sleep(4)
@@ -241,6 +306,9 @@ def main():
         p.kill()
         if saved is not None:
             open(ini, 'wb').write(saved)
+        else:
+            os.remove(ini)
+        os.remove(nmea)
     print('done: %s' % os.path.abspath(OUT))
 
 
