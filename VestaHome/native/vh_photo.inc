@@ -672,6 +672,7 @@ static void DoAction(const Btn& b)
                 BtMusicOn();
         }
         BtCmd(b.arg);
+        BtMusicSoon();
         break;
     case A_REBOOTNO: McuKey(0x5A, false); Back(); break;
     case A_MFILE:    MusicPick(b.arg); break;
@@ -1038,8 +1039,8 @@ static void ResumeMedia()   // the file of the screen the start went back to (be
 // VestaMcuHost; while the stock shell runs, it does them itself and VestaHome must not do them twice).
 // key 7 long (the power button on the volume knob) - the screen off / on; the wheel's 0x12 "phone" - a call coming
 // answered, otherwise up: the radio's seek up, the next track / station (held - the phone's screen); 0x14 "hang up" -
-// a call ended, otherwise down (the user 2026-10-22: as the stock shell, by the mode); 8 / 9 short - next / previous
-// too (which is which: to verify on the unit).
+// a call ended, otherwise down (the user 2026-10-22: as the stock shell, by the mode); the wheel's up 9 / down 8 -
+// next / previous, also while OSMapsCE's map is in front (the user 2026-11-02; held - its zoom, PlugKey).
 static bool McuHostOn()
 {
     HANDLE h = CreateEvent(NULL, TRUE, FALSE, L"VestaMcuHost");
@@ -1122,8 +1123,8 @@ static void HwKey(int key, int st, int kind)
         } else {
             MediaStep(-1);
         }
-    } else if ((key == 8 || key == 9) && st == 1 && kind == 1) {
-        MediaStep(key == 8 ? 1 : -1);
+    } else if ((key == 8 || key == 9) && st == 1 && kind == 1) {   // up 9 / down 8 (HU 2026-10-31: they were swapped)
+        MediaStep(key == 9 ? 1 : -1);
     } else {
         return;
     }

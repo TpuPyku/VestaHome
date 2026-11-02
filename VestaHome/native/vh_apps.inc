@@ -490,8 +490,8 @@ static void OnGuardTimer()
         InvalidateRect(s_wnd, NULL, FALSE);
         return;
     }
-    if (GetForegroundWindow() == s_wnd)
-        return;
+    if (GetForegroundWindow() == s_wnd || s_rvcWnd)   // (the rear camera's: nothing over it - HU 2026-10-31, OSMapsCE
+        return;                                       // raised here covered the camera, not taking the focus)
     Guarded g;
     g.n = 0;
     EnumWindows(EnumGuard, (LPARAM)&g);   // top to bottom

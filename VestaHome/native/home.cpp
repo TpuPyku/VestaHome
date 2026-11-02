@@ -714,6 +714,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 }
             }
         }
+        if (wp == 1)
+            BtMusicTick(hwnd);
         if (wp == 1 && (s_screen == S_AUDIO_BT || s_screen == S_SET_BT || s_screen == S_BT_PAIRED) &&
             IsWindowVisible(hwnd)) {
             BtState bt;   // the Bluetooth screens follow the proxy's state

@@ -23,6 +23,8 @@ static void MenuKeyNow()
     VLog(L"mcu: клавиша 0x%02X после «назад» x%d (%s)", key, s_mkBacks,
          s_menuMain ? L"главное меню" : s_mkBacks >= kMenuBacks ? L"меню не подтверждено" : L"без ответа - уже там");
     McuKey(key, false);
+    s_menuMain = false;   // (the key leaves the main menu - the radio's or the phone's; the MCU says nothing of it: HU
+                          // 2026-10-31, radio -> Bluetooth: 0x84 sent with no "back" from the radio's menu, ignored)
     if (key == 0x7F)
         s_srcByUs = s_radioSrcAsk = now;   // (the preset 1.5 s after the key itself)
     else if (key == 0x84)

@@ -631,6 +631,44 @@ static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x890
     MainMenuKey(0x84);   // (then 0x54: TIMER_BTSRC)
 }
 
+// The phone's music without the stock shell (HU 2026-10-31: the track and the time stood still, play not turned into
+// pause): the stack tells the track and the play state only when asked (the shell's events every 2 s are gone) - asked
+// every 2 s while the phone's music is the source or on the screen, soon after a key (BtMusicSoon); while it plays the
+// screen showing it drawn every second (the time moves on between the answers). From the 1 s timer.
+static DWORD s_btAsked;
+static bool HomeMediaRect(RECT* rc);   // (vh_userwidgets.inc)
+static void Redraw();
+static void RedrawArea(int l, int t, int r, int b);
+
+static void BtMusicSoon()   // a key sent: its answer asked for in half a second
+{
+    s_btAsked = GetTickCount() - 1500;
+}
+
+static void BtMusicShown(int src)   // playing: the screen showing it drawn again (its time)
+{
+    RECT wr;
+    if (s_screen == S_AUDIO_BT)
+        Redraw();
+    else if (s_screen == S_HOME && src == 9 && HomeMediaRect(&wr))
+        RedrawArea(wr.left, wr.top, wr.right, wr.bottom);
+}
+
+static void BtMusicTick(HWND hwnd)
+{
+    BtState bt;
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    if (!BtGet(&bt, NULL) || bt.av < 1 || (src != 9 && s_screen != S_AUDIO_BT))
+        return;
+    if (GetTickCount() - s_btAsked >= 2000) {
+        s_btAsked = GetTickCount();
+        BtCmd(BT_CMD_MEDIAINFO);
+    }
+    if (bt.playing == 1 && IsWindowVisible(hwnd))
+        BtMusicShown(src);
+}
+
 static void ScrAudioBt(HDC dc)
 {
     Frame(dc, L"Медиа · Bluetooth");

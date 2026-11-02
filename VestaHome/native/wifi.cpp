@@ -63,7 +63,7 @@ typedef char kWlanConfigSize[sizeof(WlanConfig) == 196 ? 1 : -1];
 struct ConfigList { ULONG count; ULONG index; };   // + count WlanConfig
 
 enum { INTF_ALL = 0xFFFFFFFF, INTF_PREFLIST = 0x00040000, INTF_SSID = 0x01000000, INTF_BSSIDLIST = 0x04000000,
-       WZCCTL_WEPK_PRESENT = 1, WZCCTL_WEPK_XFORMAT = 2,
+       WZCCTL_WEPK_PRESENT = 1, WZCCTL_WEPK_XFORMAT = 2, WZCCTL_ONEX_ENABLED = 0x10, EAP_TYPE_TLS = 13,
        AUTH_OPEN = 0, AUTH_WPA = 3, AUTH_WPAPSK = 4, AUTH_WPA2 = 6, AUTH_WPA2PSK = 7,
        PRIV_WEP = 0, PRIV_NONE = 1, PRIV_TKIP = 4, PRIV_AES = 6, INFRA_BSS = 1 };
 
@@ -286,6 +286,8 @@ static bool HexBytes(const char* s, BYTE* out, int n)
     return true;
 }
 
+static const DWORD kEapolEnabled = 0x80000000;   // EAPOL_ENABLED (WZC_EAPOL_PARAMS.dwEapFlags)
+
 // A preferred configuration for a visible network (its scan entry gives the security) and a password.
 static bool MakeConfig(const WlanConfig& seen, const wchar_t* pass, WlanConfig* c, wchar_t* why, int cap)
 {
@@ -339,7 +341,12 @@ static bool MakeConfig(const WlanConfig& seen, const wchar_t* pass, WlanConfig* 
             wcsncpy(why, L"пароль WPA: от 8 до 63 символов", cap);
             return false;
         }
-        c->ctlFlags = WZCCTL_WEPK_PRESENT | WZCCTL_WEPK_XFORMAT;
+        // the 4-way handshake of WPA-PSK is EAPOL's (eapol.dll): 802.1X on, as CE's wzctool sets it (HU 2026-10-31:
+        // without the stock shell's WifiDK no phone ever gave an address - the link dropped after 2 s)
+        c->ctlFlags = WZCCTL_WEPK_PRESENT | WZCCTL_WEPK_XFORMAT | WZCCTL_ONEX_ENABLED;
+        c->enable8021x = TRUE;
+        c->eapFlags = kEapolEnabled;
+        c->eapType = EAP_TYPE_TLS;
     }
     Encrypt(c);
     return true;
@@ -798,7 +805,8 @@ static DWORD WINAPI WifiThread(LPVOID)
                 lastAuto = GetTickCount();
                 if (SetPrefs(e, add, na, NULL)) {
                     connectTick = lastAuto;
-                    Log(L"wifi: известные сети отданы WZC: %d", na);
+                    Log(L"wifi: известные сети отданы WZC: %d (auth %u, шифр %u / %u, 802.1X %d, флаги %X)", na,
+                        add[0].authMode, add[0].privacy, add[0].wpaMCastCipher, add[0].enable8021x, add[0].ctlFlags);
                 }
             }
         }

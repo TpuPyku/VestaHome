@@ -140,10 +140,11 @@ static void RvcTick()
         RvcHide();
     if (!s_rvcWnd)
         return;
-    if (GetForegroundWindow() != s_rvcWnd) {   // over everything, the maps too (OSMapsCE is topmost as well)
-        SetWindowPos(s_rvcWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    // over everything, the maps too (OSMapsCE is topmost as well), every tick: a window raised without the focus
+    // covered it with the camera still in front (HU 2026-10-31)
+    SetWindowPos(s_rvcWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    if (GetForegroundWindow() != s_rvcWnd)
         SetForegroundWindow(s_rvcWnd);
-    }
     int a;
     bool v;
     RvcAngleNow(&a, &v);
