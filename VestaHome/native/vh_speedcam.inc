@@ -393,6 +393,138 @@ static void WaveDevsLog()
     }
     if (!n)
         VLog(L"звук: устройств waveOut нет");
+    UINT m = waveInGetNumDevs();   // the microphones (the user 2026-11-02: voice commands - is there one for us?)
+    for (UINT i = 0; i < m; i++) {
+        WAVEINCAPS c;
+        memset(&c, 0, sizeof(c));
+        waveInGetDevCaps(i, &c, sizeof(c));
+        VLog(L"звук: запись %u · %s (форматы %08X, каналов %u)", i, c.szPname, (unsigned)c.dwFormats, c.wChannels);
+    }
+    if (!m)
+        VLog(L"звук: устройств записи (waveIn) нет");
+}
+
+// ---- the microphone's trial (the user 2026-11-02: voice commands on the unit - can a program hear the cabin?): every
+// waveIn device 3 s at 16 kHz mono, its loudness into the log and on the screen; the loudest played back
+enum { kMicRate = 16000, kMicN = kMicRate * 3 };
+static volatile LONG s_micBusy;
+static wchar_t s_micText[160] = L"не проверялся";
+static short*  s_micRec;
+
+static int MicRecord(UINT dev, short* buf, int* peak, int* avg)   // 0 ok, else the error (open / record)
+{
+    WAVEFORMATEX wf;
+    memset(&wf, 0, sizeof(wf));
+    wf.wFormatTag = WAVE_FORMAT_PCM;
+    wf.nChannels = 1;
+    wf.nSamplesPerSec = kMicRate;
+    wf.wBitsPerSample = 16;
+    wf.nBlockAlign = 2;
+    wf.nAvgBytesPerSec = kMicRate * 2;
+    HWAVEIN h = NULL;
+    MMRESULT r = waveInOpen(&h, dev, &wf, 0, 0, CALLBACK_NULL);
+    if (r != MMSYSERR_NOERROR)
+        return (int)r;
+    WAVEHDR hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    hdr.lpData = (LPSTR)buf;
+    hdr.dwBufferLength = kMicN * sizeof(short);
+    waveInPrepareHeader(h, &hdr, sizeof(hdr));
+    waveInAddBuffer(h, &hdr, sizeof(hdr));
+    r = waveInStart(h);
+    for (int i = 0; i < 40 && r == MMSYSERR_NOERROR && !(hdr.dwFlags & WHDR_DONE); i++)
+        Sleep(100);
+    waveInReset(h);
+    waveInUnprepareHeader(h, &hdr, sizeof(hdr));
+    waveInClose(h);
+    int n = (int)(hdr.dwBytesRecorded / 2);
+    __int64 sum = 0;
+    *peak = 0;
+    for (int i = 0; i < n; i++) {
+        int v = buf[i] < 0 ? -buf[i] : buf[i];
+        *peak = v > *peak ? v : *peak;
+        sum += v;
+    }
+    *avg = n ? (int)(sum / n) : 0;
+    return r != MMSYSERR_NOERROR ? (int)r + 1000 : n ? 0 : -1;   // (-1: nothing recorded)
+}
+
+static void MicPlay(const short* buf)   // the recording on the beep's device
+{
+    WAVEFORMATEX wf;
+    memset(&wf, 0, sizeof(wf));
+    wf.wFormatTag = WAVE_FORMAT_PCM;
+    wf.nChannels = 1;
+    wf.nSamplesPerSec = kMicRate;
+    wf.wBitsPerSample = 16;
+    wf.nBlockAlign = 2;
+    wf.nAvgBytesPerSec = kMicRate * 2;
+    HWAVEOUT o = NULL;
+    UINT dev = s_cfg.beepDev < 0 ? WAVE_MAPPER : (UINT)s_cfg.beepDev;
+    if (waveOutOpen(&o, dev, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR)
+        return;
+    WAVEHDR hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    hdr.lpData = (LPSTR)buf;
+    hdr.dwBufferLength = kMicN * sizeof(short);
+    waveOutPrepareHeader(o, &hdr, sizeof(hdr));
+    waveOutWrite(o, &hdr, sizeof(hdr));
+    for (int i = 0; i < 40 && !(hdr.dwFlags & WHDR_DONE); i++)
+        Sleep(100);
+    waveOutReset(o);
+    waveOutUnprepareHeader(o, &hdr, sizeof(hdr));
+    waveOutClose(o);
+}
+
+static DWORD WINAPI MicThread(LPVOID)
+{
+    UINT m = waveInGetNumDevs();
+    short* best = NULL;
+    int bestPeak = -1;
+    wchar_t text[160] = L"";
+    for (UINT d = 0; d < m && d < 4; d++) {
+        short* buf = (short*)calloc(kMicN, sizeof(short));
+        if (!buf)
+            break;
+        int peak = 0, avg = 0, r = MicRecord(d, buf, &peak, &avg);
+        VLog(L"микрофон: устройство %u - %s, пик %d, средний %d", d, r == 0 ? L"запись есть" : r == -1 ?
+             L"записи нет (0 байт)" : r >= 1000 ? L"запись не началась" : L"не открылось", peak, avg);
+        int len = (int)wcslen(text);
+        _snwprintf(text + len, 160 - len, L"%s%u: %s", len ? L"; " : L"", d,
+                   r ? L"нет" : peak < 200 ? L"тишина" : L"звук есть");
+        if (!r && peak > bestPeak) {
+            free(best);
+            best = buf;
+            bestPeak = peak;
+        } else {
+            free(buf);
+        }
+    }
+    if (!m)
+        wcscpy(text, L"устройств записи нет");
+    text[159] = 0;
+    wcscpy(s_micText, text);
+    PostMessage(s_wnd, WM_APP_WX, 0, 0);   // (drawn again)
+    if (best && bestPeak >= 200) {
+        VLog(L"микрофон: воспроизведение записи (пик %d)", bestPeak);
+        MicPlay(best);
+    }
+    free(best);
+    s_micBusy = 0;
+    PostMessage(s_wnd, WM_APP_WX, 0, 0);
+    return 0;
+}
+
+static void MicProbe()
+{
+    if (InterlockedExchange((LONG*)&s_micBusy, 1))
+        return;
+    wcscpy(s_micText, L"говорите 3 с на каждое устройство…");
+    HANDLE t = CreateThread(NULL, 0, MicThread, NULL, 0, NULL);
+    if (t)
+        CloseHandle(t);
+    else
+        s_micBusy = 0;
 }
 
 static void ScrTestAv(HDC dc)
@@ -481,6 +613,8 @@ static void VoiceExp(int k)   // 0..2 a command flipped, 3 the sound, 4 all off
         VLog(L"голос-опыт: %S(%d)", kVoiceCmds[k], s_voiceExp[k]);
     } else if (k == 3)
         ExpTone();
+    else if (k == 5)
+        MicProbe();
     else if (k == 4) {
         ExpToneStop();
         for (int i = 0; i < 3; i++) {
@@ -504,6 +638,9 @@ static void ScrTestVoice(HDC dc)
     }
     Button(dc, 520, 84, 240, 46, L"Играть звук 10 с", B_PRI, IC_NONE, 15, 0, A_VOICEEXP, 3);
     Button(dc, 520, 138, 240, 46, L"Всё выключить", B_N, IC_NONE, 15, 0, A_VOICEEXP, 4);
+    Button(dc, 520, 192, 240, 46, s_micBusy ? L"Запись…" : L"Проба микрофона", s_micBusy ? B_SEL : B_N, IC_NONE, 15, 0,
+           A_VOICEEXP, 5);
+    TWrap(dc, 40, 246, s_micText, 14, kMuted, 400, 720, 1, 0);
     // the MCU's System status by sub (0x7905): known - 0A board °C, 06 amplifier °C, 0D screen °C, 07 tuner field dB,
     // 03 / 0E wheel buttons mV; the rest not known
     EnterCriticalSection(&s_mcuCs);
