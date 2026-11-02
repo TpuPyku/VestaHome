@@ -372,6 +372,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             WSAStartup(MAKEWORD(2, 2), &wsa);
         }
         InitializeCriticalSection(&s_wxCs);
+        WxLoad();
         NetInit();
         HttpInit();
         GpsStartCore();

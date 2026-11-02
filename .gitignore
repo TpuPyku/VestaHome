@@ -82,3 +82,4 @@ docs/checklist-*
 
 # our Ghidra scripts for the firmware study: kept locally only (the user 2026-10-31)
 SPIPower/ghidra_scripts/
+VestaHome/VestaHome/weather.dat
