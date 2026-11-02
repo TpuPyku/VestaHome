@@ -699,6 +699,8 @@ struct Open {   // one CreateFile of it
     COMMTIMEOUTS  to;
     DWORD         mask;      // SetCommMask
     volatile bool closing;
+    int           logged[2];   // the stream's bytes logged: read, written (LogStream)
+    bool          ppp[2];      // PPP began that way: no more logged
 };
 
 static void Lines(Dev* d, WORD bits)   // the modem lines, logged on a change
@@ -798,6 +800,40 @@ static int ReadSome(Open* o, BYTE* buf, DWORD len)   // what waits, or what come
     }
 }
 
+// The COM port's stream into the log (HU 2026-10-31: RAS 679 - what the dial said was unseen): text as it is, CR / LF
+// shown, other bytes as '.'; from PPP's first 0x7E (binary) nothing more. The characters written.
+static int StreamText(const BYTE* b, int n, char* out, int cap, bool* ppp)
+{
+    int k = 0;
+    for (int i = 0; i < n && !*ppp && k < cap - 1; i++) {
+        if (b[i] == 0x7E) {
+            *ppp = true;
+            break;
+        }
+        const char* esc = b[i] == 13 ? "\\r" : b[i] == 10 ? "\\n" : NULL;
+        if (esc && k + 2 < cap) {
+            out[k++] = esc[0];
+            out[k++] = esc[1];
+        } else if (!esc) {
+            out[k++] = b[i] >= 32 && b[i] < 127 ? (char)b[i] : '.';
+        }
+    }
+    out[k] = 0;
+    return k;
+}
+
+static void LogStream(Open* o, bool write, const BYTE* b, int n)   // the first 512 bytes each way of an opening
+{
+    int w = write ? 1 : 0;
+    if (n <= 0 || o->ppp[w] || o->logged[w] >= 512)
+        return;
+    char t[600];
+    int k = StreamText(b, n < 512 - o->logged[w] ? n : 512 - o->logged[w], t, sizeof(t), &o->ppp[w]);
+    o->logged[w] += n;
+    if (k)
+        Log(L"COM %s %S", write ? L"->" : L"<-", t);
+}
+
 static DWORD WriteAll(Dev* d, const BYTE* buf, DWORD len);
 
 static DWORD Transfer(DWORD h, void* buf, DWORD len, bool write)   // ReadFile / WriteFile: the bytes, -1 - failed
@@ -807,6 +843,7 @@ static DWORD Transfer(DWORD h, void* buf, DWORD len, bool write)   // ReadFile /
         return (DWORD)-1;
     InterlockedIncrement((LONG*)&o->d->busy);
     DWORD n = write ? WriteAll(o->d, (const BYTE*)buf, len) : (DWORD)ReadSome(o, (BYTE*)buf, len);
+    LogStream(o, write, (const BYTE*)buf, (int)n);
     InterlockedDecrement((LONG*)&o->d->busy);
     return !write || n || !len ? n : (DWORD)-1;
 }

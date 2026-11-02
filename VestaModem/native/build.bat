@@ -38,7 +38,8 @@ if "%COVER%"=="1" set DBG=/DEBUG
   /link %DBG% /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" kernel32.lib
 if errorlevel 1 goto fail
 obj\pc\test_mdm.exe
-if errorlevel 1 goto fail
+rem (a crash is a negative code: "errorlevel 1" missed it)
+if %errorlevel% neq 0 goto fail
 rem the driver over a made-up USBD (the SDK's usbdi.h after the desktop headers)
 "%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP /EHa test_vmodem.cpp mdm.cpp /Foobj\pc\ /Fdobj\pc\ /Feobj\pc\test_vmodem.exe ^
   /DUNICODE /D_UNICODE /DWIN32 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS ^
@@ -46,7 +47,7 @@ rem the driver over a made-up USBD (the SDK's usbdi.h after the desktop headers)
   /link %DBG% /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" kernel32.lib advapi32.lib
 if errorlevel 1 goto fail
 obj\pc\test_vmodem.exe
-if errorlevel 1 goto fail
+if %errorlevel% neq 0 goto fail
 
 echo === OK
 exit /b 0

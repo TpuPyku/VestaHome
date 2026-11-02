@@ -474,10 +474,43 @@ static bool LastCtl(int itf, int bits)
     return s_ctlCount && s_ctlItf[s_ctlCount - 1] == itf && s_ctlBits[s_ctlCount - 1] == bits;
 }
 
+// The COM port's stream into the log (HU 2026-10-31: RAS 679 - what the dial said unseen): text as it is, CR / LF
+// shown, other bytes as '.'; from PPP's first 0x7E nothing more (binary)
+static void StreamChecks()
+{
+    char out[64];
+    bool ppp = false;
+    Check(StreamText((const BYTE*)"ATDT*99#\r\n", 10, out, sizeof(out), &ppp) == 12 && !strcmp(out, "ATDT*99#\\r\\n") &&
+          !ppp, "stream: text as it is, CR LF shown");
+    Check(StreamText((const BYTE*)"NO\x01\x80", 4, out, sizeof(out), &ppp) == 4 && !strcmp(out, "NO.."), "stream: others as '.'");
+    Check(StreamText((const BYTE*)"OK\x7E\xFF", 4, out, sizeof(out), &ppp) == 2 && !strcmp(out, "OK") && ppp,
+          "stream: PPP's 0x7E - the text before it, then no more");
+    ppp = false;
+    Check(StreamText((const BYTE*)"0123456789", 10, out, 6, &ppp) == 5 && !strcmp(out, "01234"), "stream: cut at the room");
+    Check(StreamText((const BYTE*)" }\x7F\x1F", 4, out, sizeof(out), &ppp) == 4 && !strcmp(out, " }.."),
+          "stream: the space and } kept, DEL and below the space as '.'");
+    Check(StreamText((const BYTE*)"AB\r", 3, out, 4, &ppp) == 2 && !strcmp(out, "AB") &&
+          StreamText((const BYTE*)"AB\r", 3, out, 5, &ppp) == 4, "stream: no room for \\r - left out, room - in");
+    Open o;
+    memset(&o, 0, sizeof(o));
+    static BYTE big[600];
+    memset(big, 'A', sizeof(big));
+    LogStream(&o, true, (const BYTE*)"AT\r", 3);
+    LogStream(&o, false, big, 0);
+    Check(o.logged[1] == 3 && o.logged[0] == 0, "stream: counted each way");
+    LogStream(&o, true, big, 600);
+    LogStream(&o, true, big, 600);
+    Check(o.logged[1] == 603, "stream: 512 bytes an opening at most, then no more");
+    LogStream(&o, false, (const BYTE*)"\x7E\x01", 2);
+    LogStream(&o, false, big, 10);
+    Check(o.ppp[0] && o.logged[0] == 2 && !o.ppp[1], "stream: PPP began - that way no more");
+}
+
 int main()
 {
     InitializeCriticalSection(&s_usbCs);
     DllMain(NULL, DLL_PROCESS_ATTACH, NULL);
+    StreamChecks();   // (after DllMain: the log's lock)
     s_funcs.lpGetDeviceInfo = FInfo;
     s_funcs.lpOpenPipe = FOpenPipe;
     s_funcs.lpClosePipe = FClosePipe;
