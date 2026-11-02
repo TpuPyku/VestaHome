@@ -156,6 +156,92 @@ static Icon PlugIcon(const wchar_t* name)
 
 // The connected add-ons' widgets into the user widgets' list (UserWidgetsScan calls it, before their order is read):
 // key "p:<add-on>.<widget>", drawn by WUser, a tap - widget.tap to the add-on.
+// OSMapsCE's map widget before it runs (the user 2026-10-31: on the main screen always): the first two of its
+// favourite places (VestaCore vfavs, favorites.txt beside its exe; read again every 10 s) - a tap: OSMapsCE with the
+// route there ("route" as its command line, or the command to the copy running); elsewhere - OSMapsCE opens.
+static const wchar_t kOsmKey[] = L"p:OSMapsCE.map";
+static VFavs s_osmFavs;
+static DWORD s_osmFavsTick;
+
+static int NaviApp();   // (vh_tasks.inc: OSMapsCE on the apps' list)
+static void RunApp(int i);
+
+static Plugin* OsmPlug()   // OSMapsCE running and connected
+{
+    Plugin* p = PlugById(L"OSMapsCE");
+    return p && p->hwnd && IsWindow(p->hwnd) ? p : NULL;
+}
+
+static void OsmFavsRead()
+{
+    int app = NaviApp();
+    if (app < 0 || (s_osmFavsTick && GetTickCount() - s_osmFavsTick < 10000))
+        return;
+    s_osmFavsTick = GetTickCount() | 1;
+    wchar_t path[MAX_PATH];
+    wcscpy(path, s_apps[app].path);
+    wchar_t* slash = wcsrchr(path, L'\\');
+    wcscpy(slash ? slash + 1 : path, L"favorites.txt");
+    VFavsLoad(&s_osmFavs, path);
+}
+
+static void OsmFavGo(int i)   // a favourite tapped: OSMapsCE, the route there
+{
+    int app = NaviApp();
+    if (app < 0 || i < 0 || i >= s_osmFavs.n)
+        return;
+    const VFav& f = s_osmFavs.f[i];
+    wchar_t cmd[160];
+    _snwprintf(cmd, 160, L"route\tlat=%.6f\tlon=%.6f\tname=%s", f.lat, f.lon, f.name);
+    cmd[159] = 0;
+    VLog(L"OSMapsCE: маршрут к «%s»", f.name);
+    Plugin* p = OsmPlug();
+    if (p) {   // running: the command, then to the front
+        COPYDATASTRUCT c;
+        c.dwData = VHAP_MAGIC;
+        c.cbData = (DWORD)(wcslen(cmd) * sizeof(wchar_t));
+        c.lpData = cmd;
+        SendMessage(p->hwnd, WM_COPYDATA, (WPARAM)s_wnd, (LPARAM)&c);
+        RunApp(app);
+        return;
+    }
+    wchar_t keep[200];
+    wcscpy(keep, s_apps[app].params);   // (its own parameters for this start only)
+    wcsncpy(s_apps[app].params, cmd, 199);
+    s_apps[app].params[199] = 0;
+    RunApp(app);
+    wcscpy(s_apps[app].params, keep);
+}
+
+static void OsmWidgetAppend()   // before it runs: the widget kept on the list, ours to draw
+{
+    if (OsmPlug() || NaviApp() < 0 || s_uwCount >= kWgUser)
+        return;
+    for (int i = 0; i < s_uwCount; i++)
+        if (!wcscmp(s_uw[i].key, kOsmKey))
+            return;
+    UserWg& u = s_uw[s_uwCount++];
+    memset(&u, 0, sizeof(u));
+    wcscpy(u.key, kOsmKey);
+    wcscpy(u.title, L"Карта OSM");
+    u.ic = PlugIcon(L"map");
+    u.wide = u.big = true;
+    u.have = true;
+    wcscpy(u.tap, L"plugin");
+}
+
+static void OsmWidgetDraw(HDC dc, int x, int y, int ww, int hh)
+{
+    OsmFavsRead();
+    int n = s_osmFavs.n < 2 ? s_osmFavs.n : 2;
+    for (int i = 0; i < n; i++)
+        Button(dc, x + 16 + i * ((ww - 40) / 2 + 8), y + 60, (ww - 40) / 2, 64, s_osmFavs.f[i].name, B_N, IC_STAR, 18,
+               0, A_OSMFAV, i);
+    TWrap(dc, x + 16, y + (n ? 140 : 70), n ? L"маршрут туда — нажатие на адрес" :
+          L"Избранное: долгое нажатие на карте → «В ИЗБРАННОЕ»", 15, kMuted, 400, ww - 32, 2, 0);
+    T(dc, x + 16, y + hh - 22, L"нажмите, чтобы открыть карту", 14, kDim, 400, AL_START, ww - 32);
+}
+
 static void PlugWidgetsAppend()
 {
     for (int i = 0; i < s_plugN; i++) {
@@ -179,6 +265,7 @@ static void PlugWidgetsAppend()
             u.state = g.state;
         }
     }
+    OsmWidgetAppend();
 }
 
 static void PlugWidgetCopy(Plugin& p, const PlugWidget& g)   // a widget's new values into its entry on the list
@@ -210,6 +297,11 @@ static bool PlugWidgetTap(const UserWg& u)   // an add-on's widget tapped: its s
     wcsncpy(pid, u.key + 2, n);
     pid[n] = 0;
     Plugin* p = PlugById(pid);
+    if (!wcscmp(u.key, kOsmKey) && !OsmPlug()) {   // OSMapsCE not running: it opens
+        if (NaviApp() >= 0)
+            RunApp(NaviApp());
+        return true;
+    }
     if (!p)
         return true;
     for (int k = 0; k < p->nw; k++)
@@ -464,6 +556,10 @@ static PlugWidget* PlugWidgetOf(const UserWg& u, Plugin** pp = NULL)   // an add
 
 static bool PlugWidgetDraw(HDC dc, const UserWg& w, int x, int y, int ww, int hh)
 {
+    if (!wcscmp(w.key, kOsmKey) && !OsmPlug()) {
+        OsmWidgetDraw(dc, x, y, ww, hh);
+        return true;
+    }
     PlugWidget* g = PlugWidgetOf(w);
     if (!g || !g->image)
         return false;

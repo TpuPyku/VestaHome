@@ -662,6 +662,7 @@ static void DoAction(const Btn& b)
     case A_MODEMTEST: ModemNet(); break;
     case A_NETOP:     NetOpStep(b.arg); break;
     case A_NETPAN:    NetPanTap(); break;
+    case A_OSMFAV:    OsmFavGo(b.arg); break;
     case A_BTMUSIC:  BtMusicOn(); break;
     case A_BTCMD:
         if (b.arg == BT_CMD_PLAYPAUSE || b.arg == BT_CMD_PLAY) {   // the phone's music: the source too, ours stop

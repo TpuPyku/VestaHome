@@ -18,7 +18,7 @@ set CORE=%~dp0..\..\..\VestaCore
 if not exist "%CORE%\vgps.cpp" set CORE=%~dp0..\..\core
 if not exist "%CORE%\vgps.cpp" goto nocore
 echo === VestaCore: %CORE%
-set SRC=%SRC% "%CORE%\vgps.cpp" "%CORE%\vlogdir.cpp" "%CORE%\vtask.cpp" "%CORE%\vnight.cpp" "%CORE%\vkeys.cpp"
+set SRC=%SRC% "%CORE%\vgps.cpp" "%CORE%\vlogdir.cpp" "%CORE%\vtask.cpp" "%CORE%\vnight.cpp" "%CORE%\vkeys.cpp" "%CORE%\vfavs.cpp"
 set BRINC=%BRINC% /I"%CORE%"
 rem the modem's operators' presets (Settings -> Network): VestaModem's mdm.cpp (its tests: VestaModem\native)
 set SRC=%SRC% "%~dp0..\..\VestaModem\native\mdm.cpp"
