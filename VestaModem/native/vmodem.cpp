@@ -105,6 +105,7 @@ struct Dev {
     HANDLE           uiThread;    // the PC UI's reader
     HANDLE           rxThread;    // the modem port's reader (none when the PC UI is the data port too)
     volatile bool    gone;
+    volatile bool    simBusy;     // "+CME ERROR: SIM busy" heard (the IMSI asked again once it is ready)
     Port             ui, data;    // the status and the COM port's; shared - the same one
     bool             shared;
     CRITICAL_SECTION cs;          // rx, st
@@ -356,6 +357,8 @@ static void OnUiLine(void* ctx, const char* line)
         StatusSet(L"Mode", st.mode);
         StatusSet(L"Sim", st.sim);
     }
+    if (strstr(line, "SIM busy"))
+        d->simBusy = true;
     if (!strcmp(line, st.imsi))
         Log(L"  IMSI оператора %.5S…", line);
     else if (strncmp(line, "^RSSI:", 6) && strncmp(line, "^DSFLOWRPT:", 11)) Log(L"  модем: %S", line);
@@ -461,13 +464,21 @@ static void PortName(wchar_t* name, int cap)   // the COM port's "COMn:" (Driver
     RegCloseKey(act);
 }
 
-static void UiSetup(Dev* d)   // the PC UI: no echo, the SIM's operator and its APN, the status asked
+// The PC UI: no echo, the SIM's operator and its APN, the status asked. The IMSI asked again once the SIM is ready
+// (HU 2026-10-31: "+CME ERROR: SIM busy" at once, ^SIMST:1 1.5 s later - the APN fell back to "internet")
+static void UiSetup(Dev* d)
 {
     Send(d, d->ui, "ATE0\r");
     Sleep(300);
-    Send(d, d->ui, "AT+CIMI\r");
-    for (int i = 0; i < 20 && !d->st.imsi[0] && !d->gone; i++)
-        Sleep(100);
+    for (int k = 0; k < 2 && !d->st.imsi[0] && !d->gone && (!k || d->simBusy); k++) {
+        for (int i = 0; k && i < 100 && d->st.sim != 1 && !d->gone; i++)   // (the SIM: up to 10 s)
+            Sleep(100);
+        if (k)
+            Log(L"  SIM %s - IMSI ещё раз", d->st.sim == 1 ? L"готова" : L"не готова за 10 с");
+        Send(d, d->ui, "AT+CIMI\r");
+        for (int i = 0; i < 20 && !d->st.imsi[0] && !d->gone; i++)
+            Sleep(100);
+    }
     const char* apn = Apn(d);
     char cmd[96];
     _snprintf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"\r", apn);

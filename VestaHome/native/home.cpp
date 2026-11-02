@@ -299,6 +299,15 @@ static COLORREF C(COLORREF c)
     return RGB(GetRValue(c) * 2 / 3, GetGValue(c) * 2 / 3, GetBValue(c) * 2 / 3);
 }
 // The rest of VestaHome, in this order (one translation unit: the parts are not compiled on their own).
+// A crash's place in the log (HU 2026-10-31: VestaHome fell with C0000005 playing the internet radio over the phone,
+// nowhere known): the code, the address and the program's base; then on as before (the system's handler next)
+static int CrashNote(EXCEPTION_POINTERS* e, const wchar_t* where)
+{
+    VLog(L"СБОЙ в %s: код %08X, адрес %08X (VestaHome с %08X)", where, (unsigned)e->ExceptionRecord->ExceptionCode,
+         (unsigned)(size_t)e->ExceptionRecord->ExceptionAddress, (unsigned)(size_t)GetModuleHandle(NULL));
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 #include "vh_draw.inc"
 #include "vh_screens.inc"
 #include "vh_diag.inc"
@@ -1350,7 +1359,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        __try {
+            DispatchMessage(&msg);
+        } __except (CrashNote(GetExceptionInformation(), L"окне")) {
+        }
     }
     return 0;
 }

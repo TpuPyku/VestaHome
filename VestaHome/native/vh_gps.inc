@@ -276,27 +276,44 @@ static void ModemGet(ModemInfo* m)
 }
 
 #ifdef UNDER_CE
-// The chosen APN onto the modem (its COM port, free before RAS takes it): AT+CGDCONT - the dial's *99# uses it.
-// By the SIM (netOp 0): the driver set its own already.
-static void ModemApnSet(const wchar_t* port)
+// A command to the modem through its COM port (free before RAS takes it, and after): its answer (empty: none)
+static wchar_t s_modemPort[16];   // the port of the last dial (the answers after a failed one)
+
+static void ModemAsk(const wchar_t* port, const char* cmd, char* ans, int cap)
 {
-    char apn[64], cmd[96];
-    WideCharToMultiByte(CP_ACP, 0, s_cfg.netApn, -1, apn, sizeof(apn), NULL, NULL);
-    if (!s_cfg.netOp || !MdmApnCommand(apn, cmd, sizeof(cmd)))
-        return;
+    ans[0] = 0;
     HANDLE h = CreateFile(port, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (h == INVALID_HANDLE_VALUE) {
-        VLog(L"модем: APN не задан - порт %s не открылся (%lu)", port, GetLastError());
+        VLog(L"модем: порт %s не открылся (%lu)", port, GetLastError());
         return;
     }
     COMMTIMEOUTS to = { 0, 0, 2000, 0, 1000 };
     SetCommTimeouts(h, &to);
     DWORD n = 0;
-    char ans[64] = "";
     WriteFile(h, cmd, (DWORD)strlen(cmd), &n, NULL);
-    ReadFile(h, ans, sizeof(ans) - 1, &n, NULL);
-    ans[n < sizeof(ans) ? n : sizeof(ans) - 1] = 0;
+    ReadFile(h, ans, cap - 1, &n, NULL);
+    ans[n < (DWORD)cap ? n : cap - 1] = 0;
     CloseHandle(h);
+    for (char* p = ans; *p; p++)   // (one line in the log)
+        if (*p == '\r' || *p == '\n')
+            *p = ' ';
+}
+
+static void ModemTell(const wchar_t* port, const char* cmd)   // asked, the answer into the log (HU 2026-10-31: RAS 679)
+{
+    char ans[96];
+    ModemAsk(port, cmd, ans, sizeof(ans));
+    VLog(L"модем: %.*S -> %S", (int)strlen(cmd) - 1, cmd, ans[0] ? ans : "нет ответа");
+}
+
+// The chosen APN onto the modem: AT+CGDCONT - the dial's *99# uses it. By the SIM (netOp 0): the driver set its own.
+static void ModemApnSet(const wchar_t* port)
+{
+    char apn[64], cmd[96], ans[64];
+    WideCharToMultiByte(CP_ACP, 0, s_cfg.netApn, -1, apn, sizeof(apn), NULL, NULL);
+    if (!s_cfg.netOp || !MdmApnCommand(apn, cmd, sizeof(cmd)))
+        return;
+    ModemAsk(port, cmd, ans, sizeof(ans));
     VLog(L"модем: APN %S - %S", apn, strstr(ans, "OK") ? "OK" : "нет ответа OK");
 }
 
@@ -328,9 +345,10 @@ static DWORD WINAPI ModemDial(LPVOID)
     }
     s_ras = c;
     s_rasErr = r;
-    if (r)
+    if (r) {
         VLog(L"модем: дозвон *99# - ошибка RAS %lu", r);
-    else
+        ModemTell(s_modemPort, "AT+CEER\r");   // the network's reason (27 the APN unknown, 33 no data on the SIM...)
+    } else
         VLog(L"модем: в сети");
     InterlockedExchange((LONG*)&s_rasBusy, 0);
     PostMessage(s_wnd, WM_APP_MODEM, 0, 0);
@@ -364,7 +382,11 @@ static void ModemNet()   // the diagnostics' button: the driver registered, then
     }
     VLog(L"модем: дозвон через %s (сигнал %d, сеть %d, SIM %d)", m.port, m.rssi, m.mode, m.sim);
     s_netHeld = false;
+    wcsncpy(s_modemPort, m.port, 15);
+    s_modemPort[15] = 0;
     ModemApnSet(m.port);
+    ModemTell(m.port, "AT+CGATT?\r");   // the packet service: attached?
+    ModemTell(m.port, "AT+CGREG?\r");
     s_rasErr = 0;
     s_rasBusy = 1;
     HANDLE t = CreateThread(NULL, 0, ModemDial, NULL, 0, NULL);
@@ -912,17 +934,96 @@ static void NetPanLabel(const BtState& bt, bool phone, wchar_t* s, int cap)   //
     s[cap - 1] = 0;
 }
 
+// HU 2026-10-31: connected only by hand; under load (traffic, internet radio) the link stood still with no event -
+// off and on again brought it back in 0.2 s. So: by itself (Автоподключение) 10 s after the phone is there, no other
+// internet, not in a call, not after the user's "Отключить" (till the phone goes); "подключение" at most 20 s; while
+// online a check every minute (DNS) - two failed: off, and on again in 3 s; Wi-Fi hands no networks meanwhile.
+static bool  s_panHeld;               // switched off by hand
+static DWORD s_panPhone, s_panNext, s_panWait = 60000, s_panConn, s_panCheck;
+static volatile LONG s_panProbe;      // the check: 0 running / none, 1 ok, -1 failed
+static int   s_panFails;
+
+static void PanSend(const BtState& bt, bool on)
+{
+    wchar_t a[20];
+    MultiByteToWideChar(CP_ACP, 0, bt.devAddr, -1, a, 20);
+    a[19] = 0;
+    VLog(L"BT-модем: %s %s", on ? L"подключить" : L"отключить", a);
+    BtCmdText(BT_CMD_PAN, on ? a : L"");
+    s_panConn = on ? GetTickCount() : 0;
+}
+
 static void NetPanTap()
 {
     BtState bt;
     if (!NetPhone(&bt))
         return;
-    wchar_t a[20];
-    MultiByteToWideChar(CP_ACP, 0, bt.devAddr, -1, a, 20);
-    a[19] = 0;
     bool on = bt.pan == BT_PAN_ONLINE || bt.pan == BT_PAN_CONNECTING;
-    VLog(L"BT-модем: %s %s", on ? L"отключить" : L"подключить", a);
-    BtCmdText(BT_CMD_PAN, on ? L"" : a);
+    s_panHeld = on;
+    s_panWait = 60000;
+    PanSend(bt, !on);
+}
+
+static DWORD WINAPI PanProbeThread(LPVOID)   // the link through the phone: a name resolved
+{
+    s_panProbe = gethostbyname("ya.ru") ? 1 : -1;
+    return 0;
+}
+
+static void PanHealth(const BtState& bt)   // online: the check every minute; two failed - off, on again in 3 s
+{
+    DWORD now = GetTickCount();
+    if (s_panProbe) {
+        s_panFails = s_panProbe > 0 ? 0 : s_panFails + 1;
+        if (s_panProbe < 0)
+            VLog(L"BT-модем: нет связи (%d)", s_panFails);
+        s_panProbe = 0;
+        if (s_panFails >= 2) {
+            s_panFails = 0;
+            PanSend(bt, false);
+            s_panNext = now + 3000;
+            s_panWait = 60000;
+            return;
+        }
+    }
+    if (now - s_panCheck < 60000)
+        return;
+    s_panCheck = now;
+    HANDLE h = CreateThread(NULL, 0, PanProbeThread, NULL, 0, NULL);
+    if (h)
+        CloseHandle(h);
+}
+
+static bool NetOther()   // another internet: Wi-Fi or the USB modem
+{
+    WifiInfo w;
+    WifiGet(&w);
+    ModemInfo m;
+    ModemGet(&m);
+    return w.state == WIFI_CONNECTED || m.online;
+}
+
+static void PanAuto(const BtState& bt)   // every second while a phone is connected
+{
+    DWORD now = GetTickCount();
+    if (!s_panPhone)
+        s_panPhone = now | 1;
+    if (bt.pan == BT_PAN_CONNECTING && s_panConn && now - s_panConn > 20000) {   // no answer: let it go
+        PanSend(bt, false);
+        s_panNext = now + s_panWait;
+        return;
+    }
+    if (bt.pan == BT_PAN_ONLINE) {
+        s_panWait = 60000;
+        PanHealth(bt);
+        return;
+    }
+    if (!s_cfg.netAuto || s_panHeld || bt.pan == BT_PAN_CONNECTING || bt.call[0] != BT_CALL_NONE ||
+        now - s_panPhone < 10000 || (LONG)(now - s_panNext) < 0 || NetOther())
+        return;
+    s_panNext = now + s_panWait;
+    s_panWait = s_panWait < 150000 ? s_panWait * 2 : 300000;
+    PanSend(bt, true);
 }
 
 // Every second: the state's changes logged; online - the adapter's address, asked till it has one
@@ -942,6 +1043,13 @@ static void NetPanWatch()
         AdapterIp("BTCENDIS1", s_panIp);
         if (s_panIp[0])
             VLog(L"BT-модем: адрес %S", s_panIp);
+    }
+    WifiQuiet(bt.pan == BT_PAN_ONLINE);
+    if (NetPhone(&bt)) {
+        PanAuto(bt);
+    } else {   // the phone gone: by itself again next time
+        s_panPhone = 0;
+        s_panHeld = false;
     }
 }
 

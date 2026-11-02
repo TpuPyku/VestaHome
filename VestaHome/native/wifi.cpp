@@ -36,6 +36,8 @@ struct IntfEntry {
     DWORD   room[16];            // whatever a newer service may write after them
 };
 struct Ssid { ULONG len; UCHAR ssid[32]; };
+static volatile bool s_quiet;   // WifiQuiet
+
 struct WlanConfig {              // WZC_WLAN_CONFIG (CE 6.0)
     ULONG   length;
     DWORD   ctlFlags;
@@ -427,6 +429,11 @@ static void ReadIp(char* ip)
 }
 #endif
 
+void WifiQuiet(bool on)
+{
+    s_quiet = on;
+}
+
 void AdapterIp(const char* name, char* ip)
 {
     ip[0] = 0;
@@ -786,7 +793,7 @@ static DWORD WINAPI WifiThread(LPVOID)
             }
         }
         // not connected: the known networks in sight go to WZC (the registry was reset on boot)
-        if (!connected && !conn && seen && (!lastAuto || GetTickCount() - lastAuto > 60000)) {
+        if (!connected && !conn && seen && !s_quiet && (!lastAuto || GetTickCount() - lastAuto > 60000)) {
             WlanConfig add[kWifiKnown];
             int na = 0;
             for (int k = 0; k < w.count && na < kWifiKnown; k++) {

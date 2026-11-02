@@ -46,6 +46,7 @@ void WifiForget(const wchar_t* ssid);
 void WifiRemember(const wchar_t* ssid, const wchar_t* pass);   // the known networks, from the settings
 // The radio on / off (the settings' switch; also before WifiStart).
 void WifiEnable(bool on);
+void WifiQuiet(bool on);   // no networks handed to WZC meanwhile (another internet is on: its link left alone)
 // The unit's own access point (2.4 GHz, WPA2-AES), for a phone whose hotspot is on 5 GHz: a phone connected to a
 // 2.4 GHz network puts its hotspot on 2.4 GHz and keeps it there. autoOn: with no known network in sight the unit
 // raises it, waits for a phone, then goes back to a client and joins the phone's hotspot (a known network).

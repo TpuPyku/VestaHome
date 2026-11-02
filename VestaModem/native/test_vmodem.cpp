@@ -122,9 +122,22 @@ static DWORD WINAPI LateImsi(LPVOID)   // (the SIM answers after a while)
     return 0;
 }
 
+static bool s_simBusy;   // the first IMSI asked: "SIM busy", the SIM ready a moment later (HU 2026-10-31)
+
+static DWORD WINAPI SimReady(LPVOID)
+{
+    Sleep(300);
+    Feed(4, "\r\n^SIMST:1\r\n");
+    return 0;
+}
+
 static void Answer(int itf, const char* cmd)   // the modem's replies
 {
-    if (itf == 4 && strstr(cmd, "AT+CIMI"))
+    if (itf == 4 && strstr(cmd, "AT+CIMI") && s_simBusy) {
+        s_simBusy = false;
+        Feed(4, "\r\n+CME ERROR: SIM busy\r\n");
+        CloseHandle(CreateThread(NULL, 0, SimReady, NULL, 0, NULL));
+    } else if (itf == 4 && strstr(cmd, "AT+CIMI"))
         CloseHandle(CreateThread(NULL, 0, LateImsi, NULL, 0, NULL));
     else if (itf == 0 && s_modemAnswers && !strcmp(cmd, "AT\r"))   // longer than a packet: "OK" in the second
         Feed(0, "AT\r\r\n+ZZZZ: 0123456789012345678901234567890123456789012345678901234567890123456789\r\nOK\r\n");
@@ -489,12 +502,15 @@ int main()
 
     // ---- the modem, its port answering
     s_modemAnswers = true;
+    s_simBusy = true;
     Check(Attach(kHuaweiModem) != FALSE, "modem: taken");
     Check(Until(Activated, 5000) && !wcscmp(s_activated, L"Drivers\\VestaModemCom"), "modem: its COM port activated");
     FPipe* uiOut = PipeOf(4, false), *mdOut = PipeOf(0, false);
     uiOut->out[uiOut->outLen] = 0;
     Check(strstr(uiOut->out, "AT+CIMI\r") && strstr(uiOut->out, "AT+CGDCONT=1,\"IP\",\"internet.mts.ru\"\r"),
           "modem: the SIM's operator asked, its APN set on the PC UI");
+    const char* first = strstr(uiOut->out, "AT+CIMI");
+    Check(first && strstr(first + 1, "AT+CIMI"), "modem: SIM busy - its IMSI asked again once ready, the APN by it");
     Check(RegIs(L"Apn", L"internet.mts.ru") && RegInt(L"Data") == 0, "modem: the APN and the data port in the status");
     Check(s_ctlCount >= 2 && s_ctlItf[0] == 4 && s_ctlBits[0] == 3 && s_ctlItf[1] == 0 && s_ctlBits[1] == 3,
           "modem: DTR + RTS on the PC UI and the modem's port");

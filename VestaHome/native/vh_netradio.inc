@@ -214,7 +214,19 @@ static void CALLBACK NetStallSync(DWORD, DWORD, DWORD data, void* user)
 
 struct NetStart { LONG gen; char url[400]; };
 
-static DWORD WINAPI NetThread(LPVOID p)
+static int CrashNote(EXCEPTION_POINTERS* e, const wchar_t* where);   // (home.cpp)
+static DWORD NetThreadRun(LPVOID p);
+
+static DWORD WINAPI NetThread(LPVOID p)   // (a crash's place into the log first)
+{
+    __try {
+        return NetThreadRun(p);
+    } __except (CrashNote(GetExceptionInformation(), L"потоке радио-сети")) {
+    }
+    return 0;
+}
+
+static DWORD NetThreadRun(LPVOID p)
 {
     VLog(L"поток радио-сети: id %08X", (unsigned)GetCurrentThreadId());
     NetStart* st = (NetStart*)p;
