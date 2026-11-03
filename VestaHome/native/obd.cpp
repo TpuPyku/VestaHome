@@ -1,13 +1,14 @@
 ﻿// OBD-II through a Bluetooth ELM327 adapter (obd.h). BTCELegacy.dll's own IOCTLs (Ghidra 2026-10-20 on its
 // COM_IOControl): 0x1B0324 connect as a client, 0x1B0328 disconnect, 0x1B032C its state (1 idle, 5-8 connecting /
 // connected). The client connection takes the address from \Drivers\BT\XCBTSER1 "BtAddress" (xBtProt.dll's
-// WRF_ConnectToASerialProfile reads it there).
+// WRF_ConnectToASerialProfile reads it there). When the stack's SDP search fails, RFCOMM channel 1 straight (btrf.h).
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
 #include <ctype.h>
 #include "obd.h"
+#include "btrf.h"
 
 #ifdef UNDER_CE
 static const REGSAM kRegRead = 0, kRegAll = 0;
@@ -27,6 +28,7 @@ static volatile bool  s_stop;
 static char           s_devAddr[18];
 static volatile int   s_dtcWant;         // 1 read the trouble codes, 2 clear them (the thread does it)
 static ObdSppAddrFn   s_sppAddr;
+static bool           s_rf;              // the adapter on the direct RFCOMM channel, not the stack's serial port
 
 static void Changed()
 {
@@ -123,15 +125,54 @@ static void PortRelease(HANDLE h)
     Say(L"порт отпущен: состояние %ld за %lu мс", (long)st, GetTickCount() - t0);
 }
 
+// The adapter's bytes: the serial port (its read timeouts 300 ms), or the direct channel (s_rf)
+static bool LinkWrite(HANDLE h, const char* p, int n)
+{
+    DWORD w = 0;
+    return s_rf ? BtRfWrite(p, n) : WriteFile(h, p, n, &w, NULL) && (int)w == n;
+}
+
+static bool LinkRead(HANDLE h, char* b, int cap, DWORD* got)
+{
+    if (!s_rf)
+        return ReadFile(h, b, cap, got, NULL) != 0;
+    int n = BtRfRead(b, cap, 300);
+    *got = n > 0 ? n : 0;
+    return n >= 0;
+}
+
+static void LinkClose(HANDLE h)
+{
+    if (s_rf) {
+        BtRfClose();
+        s_rf = false;
+        return;
+    }
+    PortRelease(h);
+    CloseHandle(h);
+}
+
+// No SDP (many ELM327 clones answer none, the stack then gives up): its own calls, channel 1 straight
+static bool DirectChannel()
+{
+    static BtRfApi api;   // (the open channel keeps using it)
+    if (!BtRfLoad(&api)) {
+        Say(L"прямой канал: в btapi.dll нет вызовов RFCOMM");
+        return false;
+    }
+    Say(L"прямой канал RFCOMM 1 (без поиска SDP)");
+    s_rf = BtRfOpen(&api, s_devAddr, 1, Say, 10000, 8000);
+    return s_rf;
+}
+
 // One ELM327 command: its answer up to the prompt '>', the line breaks as spaces (or '\n' with lines). false: the
 // port failed.
 static bool Elm(HANDLE h, const char* cmd, int waitMs, char* out, int cap, bool lines = false)
 {
     char line[32];
     int n = _snprintf(line, sizeof(line) - 1, "%s\r", cmd);
-    DWORD w = 0;
     out[0] = 0;
-    if (!WriteFile(h, line, n, &w, NULL) || (int)w != n)
+    if (!LinkWrite(h, line, n))
         return false;
     int len = 0;
     DWORD t0 = GetTickCount();
@@ -139,7 +180,7 @@ static bool Elm(HANDLE h, const char* cmd, int waitMs, char* out, int cap, bool 
     while (!prompt && !s_stop && GetTickCount() - t0 < (DWORD)waitMs) {
         char b[64];
         DWORD got = 0;
-        if (!ReadFile(h, b, sizeof(b), &got, NULL))
+        if (!LinkRead(h, b, sizeof(b), &got))
             return false;
         for (DWORD i = 0; i < got; i++) {
             char c = b[i];
@@ -395,7 +436,8 @@ static DWORD WINAPI ObdThread(LPVOID)
     bool hciHad = false, hciOurs = HciThreadSet(GetCurrentThreadId(), &hciWas, &hciHad);
     DWORD got = 0;
     BOOL ok = FALSE;
-    for (int t = 1; t <= 3 && !ok && !s_stop; t++) {
+    bool refused = false;   // after the link: the same SDP search again would fail again - the direct channel next
+    for (int t = 1; t <= 3 && !ok && !refused && !s_stop; t++) {
         DWORD t0 = GetTickCount();
         ok = DeviceIoControl(h, IOCTL_BT_CONNECT, NULL, 0, NULL, 0, &got, NULL);
         DWORD err = ok ? 0 : GetLastError(), ms = GetTickCount() - t0;
@@ -405,7 +447,8 @@ static DWORD WINAPI ObdThread(LPVOID)
             err, (long)PortState(h));
         if (hciOurs)
             HciEvents(t0, ok ? 0 : 1000);
-        if (!ok && t < 3) {
+        refused = !ok && ms < 4990;
+        if (!ok && t < 3 && !refused) {
             PortRelease(h);   // (the next try from an idle port)
             Sleep(2000);
         }
@@ -422,10 +465,18 @@ static DWORD WINAPI ObdThread(LPVOID)
         Say(L"  стек: SPPBtAddress «%s»; ThreadinId был %s%lu", a, hciHad ? L"" : L"не задан, ", hciWas);
         HciThreadRestore(hciWas, hciHad);
     }
-    if (!ok || s_stop) {
+    if (!ok && !s_stop) {
         PortRelease(h);
         CloseHandle(h);
-        SetState(s_stop ? OBD_IDLE : OBD_FAILED);
+        h = INVALID_HANDLE_VALUE;
+        if (!DirectChannel()) {
+            SetState(OBD_FAILED);
+            return 0;
+        }
+    }
+    if (s_stop) {
+        LinkClose(h);
+        SetState(OBD_IDLE);
         return 0;
     }
     static const char* kInit[6] = { "ATZ", "ATE0", "ATL0", "ATI", "ATSP0", "0100" };
@@ -493,8 +544,7 @@ static DWORD WINAPI ObdThread(LPVOID)
         Changed();
         Sleep(500);
     }
-    PortRelease(h);
-    CloseHandle(h);
+    LinkClose(h);
     Say(L"отключено");
     SetState(alive ? OBD_IDLE : OBD_FAILED);
     return 0;
