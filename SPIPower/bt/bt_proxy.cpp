@@ -526,6 +526,30 @@ static DWORD WINAPI CmdThread(LPVOID)
             wchar_t b[64];
             wsprintfW(b, L"PAN %S -> %d", a[0] ? a : "off", r);
             LogLine(b);
+        } else if (cmd == BT_CMD_PHONE) {   // the phone off for the OBD adapter / the stack's connects back
+            static int s_powerOn = -1, s_linkLost = -1;   // as they were before the first "0"
+            if (s_shm->cmdText[0] == '0') {
+                if (s_powerOn < 0) {
+                    s_powerOn = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_GetPowerOnConnectStatus])() & 0xFF ? 1 : 0;
+                    s_linkLost = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Conn_GetLinkLostConnectStatus])() & 0xFF ? 1 : 0;
+                }
+                ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_EnablePowerOnConnect])(0);
+                ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_EnableLinkLostConnect])(0);
+                int p = ((FlcFn0)g_real[IDX_Flc_Bluetooth_PanServer_Disconnect])();
+                int a = ((FlcFn0)g_real[IDX_Flc_Bluetooth_Av_Disconnect])();
+                r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Hf_Disconnect])(0);
+                wchar_t b[64];
+                wsprintfW(b, L"PHONE off: PAN %d, AV %d, HF %d", p, a, r);
+                LogLine(b);
+            } else {
+                int on = s_powerOn < 0 ? 1 : s_powerOn, lost = s_linkLost < 0 ? 1 : s_linkLost;
+                ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_EnablePowerOnConnect])(on);
+                r = ((int (*)(int))g_real[IDX_Flc_Bluetooth_Conn_EnableLinkLostConnect])(lost);
+                s_powerOn = s_linkLost = -1;
+                wchar_t b[64];
+                wsprintfW(b, L"PHONE on: power-on %d, link lost %d", on, lost);
+                LogLine(b);
+            }
         } else if (cmd == BT_CMD_SDP) {
             char a[40];
             CopyText(a, s_shm->cmdText, 18);

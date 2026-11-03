@@ -64,7 +64,11 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
                      search of three UUIDs at once is where the clone's link failed */,
        BT_CMD_PAN /* cmdText: the phone's address - its internet over Bluetooth (the user 2026-10-31; Android's
                      "Bluetooth tethering"): Flc_Bluetooth_PanServer_Connect(addr, 0x1116 - the phone a NAP), the
-                     answer an event (0x45 / 0x4B); "" - PanServer_Disconnect() */ };
+                     answer an event (0x45 / 0x4B); "" - PanServer_Disconnect() */,
+       BT_CMD_PHONE /* cmdText "0": Bluetooth for the OBD adapter alone (the user 2026-11-03: one device at a time;
+                       the stack keeps one) - the stack's own connects (power-on, link lost) off, the phone's
+                       internet, music and handsfree let go (PanServer_Disconnect, Av_Disconnect, Hf_Disconnect(0));
+                       "1": the stack's connects as they were before "0" */ };
 enum { BT_PAN_IDLE, BT_PAN_CONNECTING, BT_PAN_ONLINE, BT_PAN_FAILED };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
