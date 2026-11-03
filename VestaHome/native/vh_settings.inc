@@ -299,18 +299,23 @@ static void HomeWidgetsLoad(const wchar_t* v)
         }
 }
 
-// The order to save: the widgets known now, then the user widgets of homeRaw not found now (the card out).
-static void HomeWidgetsText(wchar_t* out, int cap)
+// The order to save (the user 2026-11-03: the widgets' order lost after an update - an add-on's widget connects
+// seconds after the start, a card's ones when the card is in; one saved meanwhile dropped it or put it last): the
+// widgets known now in their order, and each of homeRaw's not found now (a card's "u.", an add-on's "p:") right after
+// the one it followed there (none before it: first).
+static bool WgKnown(const wchar_t* k, int len)
 {
-    out[0] = 0;
-    for (int i = 0; i < WgCount(); i++) {
-        int id = s_cfg.homeOrder[i];
-        wchar_t t[48];
-        _snwprintf(t, 48, L"%s%s%s", i ? L"," : L"", s_cfg.homeHidden >> id & 1 ? L"-" : L"", WgKey(id));
-        if ((int)(wcslen(out) + wcslen(t)) < cap)
-            wcscat(out, t);
-    }
+    for (int i = 0; i < WgCount(); i++)
+        if ((int)wcslen(WgKey(i)) == len && !wcsncmp(WgKey(i), k, len))
+            return true;
+    return false;
+}
+
+static void HomeAbsentAfter(const wchar_t* after, int afterLen, wchar_t* out, int cap)   // homeRaw's absent ones
+{                                                                                        // that followed "after"
     const wchar_t* v = s_cfg.homeRaw;
+    const wchar_t* prev = NULL;   // the last known one seen in homeRaw
+    int prevLen = 0;
     while (*v) {
         while (*v == L' ' || *v == L',')
             v++;
@@ -319,14 +324,32 @@ static void HomeWidgetsText(wchar_t* out, int cap)
         const wchar_t* e = k;
         while (*e && *e != L',' && *e != L' ')
             e++;
-        bool known = false;
-        for (int i = 0; i < WgCount() && !known; i++)
-            known = (int)wcslen(WgKey(i)) == e - k && !wcsncmp(WgKey(i), k, e - k);
-        if (!known && e - k > 2 && !wcsncmp(k, L"u.", 2) && (int)(wcslen(out) + (e - b) + 2) < cap) {
-            wcscat(out, L",");
+        int len = (int)(e - k);
+        bool ours = len > 2 && (!wcsncmp(k, L"u.", 2) || !wcsncmp(k, L"p:", 2));
+        if (WgKnown(k, len)) {
+            prev = k;
+            prevLen = len;
+        } else if (ours && prevLen == afterLen && (!after || !wcsncmp(prev, after, afterLen)) &&
+                   (int)(wcslen(out) + (e - b) + 2) < cap) {
+            if (out[0])
+                wcscat(out, L",");
             wcsncat(out, b, e - b);
         }
         v = e;
+    }
+}
+
+static void HomeWidgetsText(wchar_t* out, int cap)
+{
+    out[0] = 0;
+    HomeAbsentAfter(NULL, 0, out, cap);
+    for (int i = 0; i < WgCount(); i++) {
+        int id = s_cfg.homeOrder[i];
+        wchar_t t[48];
+        _snwprintf(t, 48, L"%s%s%s", out[0] ? L"," : L"", s_cfg.homeHidden >> id & 1 ? L"-" : L"", WgKey(id));
+        if ((int)(wcslen(out) + wcslen(t)) < cap)
+            wcscat(out, t);
+        HomeAbsentAfter(WgKey(id), (int)wcslen(WgKey(id)), out, cap);
     }
     wcsncpy(s_cfg.homeRaw, out, 399);
     s_cfg.homeRaw[399] = 0;
