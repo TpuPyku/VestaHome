@@ -111,6 +111,18 @@ static DWORD PortState(HANDLE h)
     return st;
 }
 
+// The link let go and the stack left to settle (the user 2026-11-03: Bluetooth hung after an OBD try - the port
+// was closed at once after a refused connect, the stack's link / SDP query maybe still under way): the disconnect
+// asked, then up to 5 s for the port to be idle (1) again.
+static void PortRelease(HANDLE h)
+{
+    DWORD got = 0, t0 = GetTickCount(), st = 0;
+    DeviceIoControl(h, IOCTL_BT_DISCONNECT, NULL, 0, NULL, 0, &got, NULL);
+    while ((st = PortState(h)) != 1 && st != 0xFFFFFFFF && GetTickCount() - t0 < 5000)
+        Sleep(200);
+    Say(L"порт отпущен: состояние %ld за %lu мс", (long)st, GetTickCount() - t0);
+}
+
 // One ELM327 command: its answer up to the prompt '>', the line breaks as spaces (or '\n' with lines). false: the
 // port failed.
 static bool Elm(HANDLE h, const char* cmd, int waitMs, char* out, int cap, bool lines = false)
@@ -393,8 +405,10 @@ static DWORD WINAPI ObdThread(LPVOID)
             err, (long)PortState(h));
         if (hciOurs)
             HciEvents(t0, ok ? 0 : 1000);
-        if (!ok && t < 3)
+        if (!ok && t < 3) {
+            PortRelease(h);   // (the next try from an idle port)
             Sleep(2000);
+        }
     }
     if (hciOurs) {
         wchar_t a[40] = L"";
@@ -409,6 +423,7 @@ static DWORD WINAPI ObdThread(LPVOID)
         HciThreadRestore(hciWas, hciHad);
     }
     if (!ok || s_stop) {
+        PortRelease(h);
         CloseHandle(h);
         SetState(s_stop ? OBD_IDLE : OBD_FAILED);
         return 0;
@@ -478,7 +493,7 @@ static DWORD WINAPI ObdThread(LPVOID)
         Changed();
         Sleep(500);
     }
-    DeviceIoControl(h, IOCTL_BT_DISCONNECT, NULL, 0, NULL, 0, &got, NULL);
+    PortRelease(h);
     CloseHandle(h);
     Say(L"отключено");
     SetState(alive ? OBD_IDLE : OBD_FAILED);
