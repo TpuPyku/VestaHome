@@ -126,6 +126,20 @@ typedef LONG (*DkGetModeFn)(int*);
 typedef LONG (*DkApFn)(BYTE*);
 typedef LONG (*DkAssocFn)(void**, DWORD*);
 typedef void (*DelArrFn)(void*);
+// The client as the stock shell joins a network (Ghidra 2026-11-03, G3NavHMI's WifiThreadConnectManage and the
+// DLL's WDK_STA_*; the user 2026-11-03: Wi-Fi worked with the shell, never through WZC alone): the networks in
+// sight (GetAvailableApList: entries of 0x74 bytes, the network's own description - 0x54 bytes: its size, the
+// SSID's 34 wide chars, three words of its security - at +4), that description and a security block (0x630
+// bytes: the key's wide chars at +4, the WEP key's index at +0x204, 1) to AddPreferredAp, then
+// ConnectToPreferredApByName(SSID).
+typedef LONG (*DkListFn)(BYTE*, int*);
+typedef LONG (*DkAddFn)(BYTE*, BYTE*, DWORD);
+typedef LONG (*DkNameFn)(const wchar_t*);
+static DkListFn    s_dkList;
+static DkAddFn     s_dkAdd;
+static DkNameFn    s_dkJoin, s_dkDrop;
+enum { DKE_SIZE = 0x74, DKE_AP = 4, DKE_SSID = 8, DKAP_AUTH = 0x48, DKAP_CIPHER = 0x4C, DKAP_PRIV = 0x50,
+       DKSEC_SIZE = 0x630, DKSEC_KEY = 4, DKSEC_KEYID = 0x204, kDkSeen = 48 };
 static DkModeFn    s_dkSetMode;
 static DkGetModeFn s_dkGetMode;
 static DkApFn      s_dkApGetDef, s_dkApSetDef, s_dkApSetCur;
@@ -493,6 +507,12 @@ static bool LoadDk()
     s_dkApSetCur = (DkApFn)PROC(m, "WDK_AP_SetCurrentSettings");
     s_dkAssoc = (DkAssocFn)PROC(m, "WDK_AP_GetAssociationList");
     s_delArr = (DelArrFn)PROC(GetModuleHandle(L"coredll.dll"), "??_V@YAXPAX@Z");
+    s_dkList = (DkListFn)PROC(m, "WDK_STA_GetAvailableApList");
+    s_dkAdd = (DkAddFn)PROC(m, "WDK_STA_AddPreferredAp");
+    s_dkJoin = (DkNameFn)PROC(m, "WDK_STA_ConnectToPreferredApByName");
+    s_dkDrop = (DkNameFn)PROC(m, "WDK_STA_RemovePreferredApByName");
+    if (!s_dkList || !s_dkAdd || !s_dkJoin || !s_dkDrop)
+        s_dkAdd = NULL;   // (the client through WZC then)
     if (!init || !s_dkSetMode || !s_dkGetMode || !s_dkApGetDef || !s_dkApSetDef || !s_dkApSetCur || !s_dkAssoc) {
         s_dkSetMode = NULL;
         return false;
@@ -505,6 +525,38 @@ static bool LoadDk()
         s_dkSetMode = NULL;
     s_dkBootMode = mode;
     return s_dkSetMode != NULL;
+}
+
+// A network joined as the shell joins it (see DkListFn); false: not in sight or refused (why: the message)
+static bool DkJoin(const wchar_t* ssid, const wchar_t* pass, wchar_t* why, int cap)
+{
+    int n = kDkSeen;
+    BYTE* list = (BYTE*)malloc(kDkSeen * DKE_SIZE);
+    LONG hr = list ? s_dkList(list, &n) : E_OUTOFMEMORY;
+    BYTE* ap = NULL;
+    for (int i = 0; hr >= 0 && i < n && i < kDkSeen && !ap; i++)
+        if (!wcsncmp((const wchar_t*)(list + i * DKE_SIZE + DKE_SSID), ssid, 33))
+            ap = list + i * DKE_SIZE + DKE_AP;
+    if (!ap) {
+        Log(L"wifi: SDK: сети %s нет в списке (0x%08X, сетей %d)", ssid, (unsigned)hr, n);
+        _snwprintf(why, cap, L"сети %s не видно", ssid);
+        free(list);
+        return false;
+    }
+    static BYTE sec[DKSEC_SIZE];
+    memset(sec, 0, sizeof(sec));
+    wcsncpy((wchar_t*)(sec + DKSEC_KEY), pass, 255);
+    *(DWORD*)(sec + DKSEC_KEYID) = 1;
+    LONG drop = s_dkDrop(ssid);   // (a stale one with an older password)
+    LONG add = s_dkAdd(ap, sec, 0);
+    LONG join = add >= 0 ? s_dkJoin(ssid) : add;
+    Log(L"wifi: SDK: %s (защита %u/%u/%u) - Remove 0x%08X, Add 0x%08X, Connect 0x%08X", ssid,
+        *(DWORD*)(ap + DKAP_AUTH), *(DWORD*)(ap + DKAP_CIPHER), *(DWORD*)(ap + DKAP_PRIV), (unsigned)drop,
+        (unsigned)add, (unsigned)join);
+    free(list);
+    if (join < 0)
+        _snwprintf(why, cap, L"%s: отказ 0x%08X", ssid, (unsigned)join);
+    return join >= 0;
 }
 
 static bool DkMode(int mode)
@@ -775,6 +827,8 @@ static DWORD WINAPI WifiThread(LPVOID)
         LeaveCriticalSection(&s_cs);
         if (forget) {
             SetPrefs(e, NULL, 0, fs);
+            if (s_dkAdd)
+                s_dkDrop(fs);   // (the SDK's list too)
             _snwprintf(w.msg, 96, L"забыта сеть %s", fs);
         }
         if (conn) {
@@ -783,7 +837,13 @@ static DWORD WINAPI WifiThread(LPVOID)
                 if (SameSsid(list[i], cs))
                     break;
             WlanConfig c;
-            if (i == seen) {
+            if (s_dkAdd) {
+                if (DkJoin(cs, cp, w.msg, 96)) {
+                    _snwprintf(w.msg, 96, L"подключение к %s…", cs);
+                    connectTick = GetTickCount();
+                    wcscpy(w.ssid, cs);
+                }
+            } else if (i == seen) {
                 _snwprintf(w.msg, 96, L"сети %s не видно", cs);
             } else if (MakeConfig(list[i], cp, &c, w.msg, 96) && SetPrefs(e, &c, 1, NULL)) {
                 _snwprintf(w.msg, 96, L"подключение к %s…", cs);
@@ -793,7 +853,16 @@ static DWORD WINAPI WifiThread(LPVOID)
             }
         }
         // not connected: the known networks in sight go to WZC (the registry was reset on boot)
-        if (!connected && !conn && seen && !s_quiet && (!lastAuto || GetTickCount() - lastAuto > 60000)) {
+        if (!connected && !conn && seen && !s_quiet && s_dkAdd && (!lastAuto || GetTickCount() - lastAuto > 60000)) {
+            wchar_t pass[64], why[96];   // (the networks are strongest first: the first known one)
+            for (int k = 0; k < w.count; k++)
+                if (w.nets[k].known && IsKnown(w.nets[k].ssid, pass)) {
+                    lastAuto = GetTickCount();
+                    if (DkJoin(w.nets[k].ssid, pass, why, 96))
+                        connectTick = lastAuto;
+                    break;
+                }
+        } else if (!connected && !conn && seen && !s_quiet && (!lastAuto || GetTickCount() - lastAuto > 60000)) {
             WlanConfig add[kWifiKnown];
             int na = 0;
             for (int k = 0; k < w.count && na < kWifiKnown; k++) {
