@@ -815,6 +815,14 @@ static DWORD WINAPI WifiThread(LPVOID)
             n.ch = ChannelOf(list[i]);
         }
         qsort(w.nets, w.count, sizeof(WifiNet), CmpRssi);
+        {   // how many in sight and how weak the weakest (the user 2026-11-03: dozens around, only the nearest seen)
+            static int s_loggedNets = -1;
+            if (w.count != s_loggedNets && (!w.count || s_loggedNets <= 0 || abs(w.count - s_loggedNets) >= 3)) {
+                s_loggedNets = w.count;
+                Log(L"wifi: видно сетей %d (записей WZC %d), уровни %d..%d дБм", w.count, seen,
+                    w.count ? w.nets[0].rssi : 0, w.count ? w.nets[w.count - 1].rssi : 0);
+            }
+        }
 
         // requests from the window
         EnterCriticalSection(&s_cs);
