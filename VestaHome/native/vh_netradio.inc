@@ -12,11 +12,17 @@ enum { NET_READY = 1, NET_FAILED, NET_ENDED, NET_META, NET_STALL, kNetMax = 100,
 enum { NR_OFF, NR_CONNECT, NR_PLAY, NR_STALL, NR_WAIT, NR_ERROR };
 
 struct NetStation { wchar_t name[64]; char url[400]; };
+// A stream's "file" - owned by its references (the user 2026-11-03: VestaHome fell, C0000005, 17-40 s after the station
+// was changed, in none of our guarded threads: BASS's reading thread read the HTTP stream while the close freed it,
+// then the file itself was freed under it): the owner's one and each read's own; the HTTP stream closed and the file
+// freed with the last one (NetFileRelease). A close only marks it and breaks a blocked read.
 struct NetFile {
-    HttpStream* http;     // NULL once closed (under s_netCs)
+    HttpStream* http;     // (under s_netCs)
     int         metaint;  // the ICY block size (0: no metadata)
     int         left;     // audio bytes before the next metadata block
     LONG        gen;
+    int         refs;     // (under s_netCs)
+    bool        closed;   // BASS let it go: reads end
 };
 struct NetReady { LONG gen; DWORD chan; NetFile* file; };
 
@@ -36,6 +42,8 @@ static wchar_t     s_netMsg[96];   // the state or the error (under s_netCs whil
 static wchar_t     s_netTitle[160]; // the song (ICY StreamTitle), under s_netCs
 static wchar_t     s_netInfo[64];   // MP3 / AAC / OGG
 static CRITICAL_SECTION s_netCs;
+
+static int CrashNote(EXCEPTION_POINTERS* e, const wchar_t* where);   // (home.cpp)
 
 static void NetInit()
 {
@@ -136,10 +144,26 @@ static void NetMeta(const char* m, LONG gen)
         PostMessage(s_wnd, WM_APP_NET, NET_META, gen);
 }
 
-static bool NetReadFull(NetFile* f, char* buf, int len)
+static void NetFileRelease(NetFile* f)   // a reference let go; the last one closes the stream, frees the file
+{
+    if (!f)
+        return;
+    EnterCriticalSection(&s_netCs);
+    bool last = --f->refs <= 0;
+    HttpStream* h = last ? f->http : NULL;
+    if (last)
+        f->http = NULL;
+    LeaveCriticalSection(&s_netCs);
+    if (h)
+        HttpStreamClose(h);
+    if (last)
+        free(f);
+}
+
+static bool NetReadFull(NetFile* f, HttpStream* h, char* buf, int len)
 {
     while (len > 0) {
-        int k = HttpStreamRead(f->http, buf, len);
+        int k = HttpStreamRead(h, buf, len);
         if (k <= 0)
             return false;
         buf += k;
@@ -149,17 +173,16 @@ static bool NetReadFull(NetFile* f, char* buf, int len)
 }
 
 // BASS's download thread: the audio bytes; the metadata blocks are taken out. 0 = the end of the "file".
-static DWORD CALLBACK NetReadProc(void* buf, DWORD len, void* user)
+static DWORD NetReadBody(NetFile* f, HttpStream* h, void* buf, DWORD len)
 {
-    NetFile* f = (NetFile*)user;
     for (;;) {
         if (f->metaint && f->left == 0) {
             unsigned char l;
-            if (!NetReadFull(f, (char*)&l, 1))
+            if (!NetReadFull(f, h, (char*)&l, 1))
                 return 0;
             if (l) {
                 char m[16 * 255 + 1];
-                if (!NetReadFull(f, m, l * 16))
+                if (!NetReadFull(f, h, m, l * 16))
                     return 0;
                 m[l * 16] = 0;
                 NetMeta(m, f->gen);
@@ -170,7 +193,7 @@ static DWORD CALLBACK NetReadProc(void* buf, DWORD len, void* user)
         int want = (int)len;
         if (f->metaint && want > f->left)
             want = f->left;
-        int k = HttpStreamRead(f->http, (char*)buf, want);
+        int k = HttpStreamRead(h, (char*)buf, want);
         if (k <= 0)
             return 0;   // broken or closed: BASS plays what it has, then the END sync
         if (f->metaint)
@@ -179,13 +202,33 @@ static DWORD CALLBACK NetReadProc(void* buf, DWORD len, void* user)
     }
 }
 
-static void CALLBACK NetCloseProc(void* user)
+static DWORD CALLBACK NetReadProc(void* buf, DWORD len, void* user)   // (BASS's thread: a crash logged, not ours)
 {
     NetFile* f = (NetFile*)user;
     EnterCriticalSection(&s_netCs);
+    HttpStream* h = f->closed ? NULL : f->http;
+    if (h)
+        f->refs++;   // (the file and its stream stay while this read is on)
+    LeaveCriticalSection(&s_netCs);
+    if (!h)
+        return 0;
+    DWORD r = 0;
+    __try {
+        r = NetReadBody(f, h, buf, len);
+    } __except (CrashNote(GetExceptionInformation(), L"чтении радио-сети")) {
+        r = 0;
+    }
+    NetFileRelease(f);
+    return r;
+}
+
+static void CALLBACK NetCloseProc(void* user)   // BASS lets the file go: reads end (the owner's release frees it)
+{
+    NetFile* f = (NetFile*)user;
+    EnterCriticalSection(&s_netCs);
+    f->closed = true;
     if (f->http)
-        HttpStreamClose(f->http);
-    f->http = NULL;
+        HttpStreamAbort(f->http);
     LeaveCriticalSection(&s_netCs);
 }
 
@@ -214,7 +257,6 @@ static void CALLBACK NetStallSync(DWORD, DWORD, DWORD data, void* user)
 
 struct NetStart { LONG gen; char url[400]; };
 
-static int CrashNote(EXCEPTION_POINTERS* e, const wchar_t* where);   // (home.cpp)
 static DWORD NetThreadRun(LPVOID p);
 
 static DWORD WINAPI NetThread(LPVOID p)   // (a crash's place into the log first)
@@ -241,6 +283,7 @@ static DWORD NetThreadRun(LPVOID p)
     } else {
         f = (NetFile*)calloc(1, sizeof(NetFile));
         if (f) {
+            f->refs = 1;   // (the owner's: the thread's, then the window's)
             f->http = h;
             f->metaint = metaint;
             f->left = metaint;
@@ -253,13 +296,9 @@ static DWORD NetThreadRun(LPVOID p)
             int berr = chan ? 0 : s_bass.error();
             EnterCriticalSection(&s_netCs);
             s_netOpening = NULL;
-            if (!chan && f->http)
-                HttpStreamClose(f->http);
-            if (!chan)
-                f->http = NULL;
             LeaveCriticalSection(&s_netCs);
             if (!chan) {
-                free(f);
+                NetFileRelease(f);   // (the stream closed with it)
                 f = NULL;
                 _snwprintf(msg, 96, L"поток не играет (BASS %d)", berr);
             }
@@ -281,7 +320,7 @@ static DWORD NetThreadRun(LPVOID p)
         if (!r || !PostMessage(s_wnd, WM_APP_NET, NET_READY, (LPARAM)r)) {
             NetAbortFile(f);
             s_bass.streamFree(chan);
-            free(f);
+            NetFileRelease(f);
             free(r);
         }
     } else if (st->gen == s_netGen) {   // (an older attempt, stopped or replaced, ends quietly)
@@ -303,7 +342,7 @@ static void NetFreeChan()
         s_bass.streamFree(s_netChan);   // calls NetCloseProc
         s_netChan = 0;
     }
-    free(s_netFile);
+    NetFileRelease(s_netFile);
     s_netFile = NULL;
 }
 
@@ -393,7 +432,7 @@ static void OnNetMessage(WPARAM wp, LPARAM lp)
         if (r->gen != s_netGen || !s_netOn) {   // stopped or another station meanwhile
             NetAbortFile(r->file);
             s_bass.streamFree(r->chan);
-            free(r->file);
+            NetFileRelease(r->file);
         } else {
             s_netChan = r->chan;
             s_netFile = r->file;
