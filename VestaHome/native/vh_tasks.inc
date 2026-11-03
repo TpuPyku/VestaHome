@@ -433,7 +433,7 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
             _snwprintf(t1, 16, L"%d:%02d", len / 60000, len / 1000 % 60);
         }
         WMediaBody(dc, g, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1);
-        bool playing = bt.playing ? bt.playing == 1 : bt.av == 2;
+        bool playing = BtPlayingNow(bt);
         MediaArrows(dc, g, d, A_BTCMD, BT_CMD_PREV, A_BTCMD, BT_CMD_NEXT);
         bool down = Zone(g.cx - g.r, g.cy - g.r, 2 * g.r, 2 * g.r, A_BTCMD, BT_CMD_PLAYPAUSE);
         Disc(dc, g.cx, g.cy, g.r, down ? kFacet : kOrange);

@@ -663,17 +663,22 @@ static void DoAction(const Btn& b)
     case A_NETPAN:    NetPanTap(); break;
     case A_OSMFAV:    OsmFavGo(b.arg); break;
     case A_BTMUSIC:  BtMusicOn(); break;
-    case A_BTCMD:
+    case A_BTCMD: {
+        int want = -1;   // (play / pause: shown at once)
         if (b.arg == BT_CMD_PLAYPAUSE || b.arg == BT_CMD_PLAY) {   // the phone's music: the source too, ours stop
             int vol, mute, src;
             VolGet(&vol, &mute, &src);
             OursQuiet();
             if (src != 9)
                 BtMusicOn();
+            BtState bt;
+            if (BtGet(&bt, NULL))
+                want = b.arg == BT_CMD_PLAY || !BtPlayingNow(bt) ? 1 : 0;
         }
         BtCmd(b.arg);
-        BtMusicSoon();
+        BtMusicSoon(want);
         break;
+    }
     case A_REBOOTNO: McuKey(0x5A, false); Back(); break;
     case A_MFILE:    MusicPick(b.arg); break;
     case A_PHONECALL:

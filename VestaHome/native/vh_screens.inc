@@ -636,13 +636,28 @@ static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x890
 // every 2 s while the phone's music is the source or on the screen, soon after a key (BtMusicSoon); while it plays the
 // screen showing it drawn every second (the time moves on between the answers). From the 1 s timer.
 static DWORD s_btAsked;
+static int   s_btSoon;        // quick asks left after a key: each second (the phone takes a second or two to turn)
+static int   s_btWant = -1;   // the play state a key asked for, shown till the phone tells it (3 s at most: the user
+static DWORD s_btWantTick;    // 2026-11-03 - play / pause turned 2-3 s late)
 static bool HomeMediaRect(RECT* rc);   // (vh_userwidgets.inc)
 static void Redraw();
 static void RedrawArea(int l, int t, int r, int b);
 
-static void BtMusicSoon()   // a key sent: its answer asked for in half a second
+static bool BtPlayingNow(const BtState& bt)   // playing, as the screen shows it: a key's wish till the phone agrees
 {
-    s_btAsked = GetTickCount() - 1500;
+    bool told = bt.playing ? bt.playing == 1 : bt.av == 2;
+    bool wish = s_btWant >= 0 && GetTickCount() - s_btWantTick < 3000;
+    return wish ? s_btWant == 1 : told;
+}
+
+static void BtMusicSoon(int want)   // a key sent: its answer asked for at once and twice more; want: play (1),
+{                                   // pause (0), -1 not a play key
+    s_btSoon = 3;
+    s_btAsked = 0;
+    if (want >= 0) {
+        s_btWant = want;
+        s_btWantTick = GetTickCount();
+    }
 }
 
 static void BtMusicShown(int src)   // playing: the screen showing it drawn again (its time)
@@ -661,12 +676,18 @@ static void BtMusicTick(HWND hwnd)
     VolGet(&vol, &mute, &src);
     if (!BtGet(&bt, NULL) || bt.av < 1 || (src != 9 && s_screen != S_AUDIO_BT))
         return;
-    if (GetTickCount() - s_btAsked >= 2000) {
+    if (s_btSoon > 0 || GetTickCount() - s_btAsked >= 2000) {
+        s_btSoon -= s_btSoon > 0;
         s_btAsked = GetTickCount();
         BtCmd(BT_CMD_MEDIAINFO);
     }
-    if (bt.playing == 1 && IsWindowVisible(hwnd))
+    if (s_btWant >= 0 && bt.playing && (bt.playing == 1) == (s_btWant == 1))
+        s_btWant = -1;   // (the phone agrees)
+    static int s_shown = -1;   // the state drawn last: a change drawn at once (pause too - nothing moves then)
+    int now = BtPlayingNow(bt) ? 1 : 0;
+    if ((bt.playing == 1 || now != s_shown) && IsWindowVisible(hwnd))
         BtMusicShown(src);
+    s_shown = now;
 }
 
 static void ScrAudioBt(HDC dc)
@@ -734,7 +755,7 @@ static void ScrAudioBt(HDC dc)
     if (!on)   // not the source (the phone not connected, or the switch did not take): by hand
         Button(dc, 584, 124, 200, 40, L"Включить звук", B_N, IC_BT, 14, 20, A_BTMUSIC);
     bool ctl = proxy && bt.av >= 1;   // the buttons: the SDK's AVRCP keys, through the proxy
-    bool playing = bt.playing ? bt.playing == 1 : bt.av == 2;
+    bool playing = BtPlayingNow(bt);
     // as the music's: bare arrows, the big orange play (the user 2026-10-24); without the phone dim and dead
     IconBtn(dc, IC_PREV, 392, 312, 48, ctl ? kText : kOff, ctl ? A_BTCMD : A_NONE, BT_CMD_PREV);
     bool down = ctl && Zone(486, 294, 84, 84, A_BTCMD, BT_CMD_PLAYPAUSE);
