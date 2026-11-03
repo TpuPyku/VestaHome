@@ -140,8 +140,7 @@ static DkListFn    s_dkList, s_dkPrefs;
 static DkAddFn     s_dkAdd;
 static DkNameFn    s_dkJoin, s_dkDrop;
 enum { DKE_SIZE = 0x74, DKE_AP = 4, DKE_SSID = 8, DKAP_SIZE = 0x54, DKAP_SSID = 4, DKAP_AUTH = 0x48,
-       DKAP_CIPHER = 0x4C, DKAP_PRIV = 0x50, DKSEC_SIZE = 0x630, DKSEC_KEY = 4, DKSEC_KEYID = 0x204, kDkSeen = 48,
-       kNoneSeenMs = 60000 };   // a client seeing no network that long: the saved ones dropped, the client restarted
+       DKAP_CIPHER = 0x4C, DKAP_PRIV = 0x50, DKSEC_SIZE = 0x630, DKSEC_KEY = 4, DKSEC_KEYID = 0x204, kDkSeen = 48 };
 static DkModeFn    s_dkSetMode;
 static DkGetModeFn s_dkGetMode;
 static DkApFn      s_dkApGetDef, s_dkApSetDef, s_dkApSetCur;
@@ -686,7 +685,6 @@ static DWORD WINAPI WifiThread(LPVOID)
     if (LoadDk() && s_dkBootMode == DK_OFF && s_wantOn)
         DkMode(DK_STA);
     DkClearPrefs(L"старт");
-    DWORD noneSince = 0, lastReset = 0;   // a client seeing no network: since when; the last restart for it
     DWORD linkTick = 0;    // the link up without an address yet: since when (the log of a slow phone's hotspot)
     bool hadIp = false;
     DWORD lastAuto = 0, connectTick = 0;
@@ -851,23 +849,6 @@ static DWORD WINAPI WifiThread(LPVOID)
                     w.count ? w.nets[0].rssi : 0, w.count ? w.nets[w.count - 1].rssi : 0);
             }
         }
-        if (w.count || connected || !s_dkSetMode) {
-            noneSince = 0;
-        } else if (!noneSince) {
-            noneSince = GetTickCount();
-        } else if (GetTickCount() - noneSince > kNoneSeenMs && (!lastReset || GetTickCount() - lastReset > kRetryMs)) {
-            // the client stuck (HU 2026-11-03): as a power cut - nothing saved, the adapter started again
-            s_delete(&e);
-            DkClearPrefs(L"сетей не видно 60 с");
-            DkMode(DK_OFF);
-            Sleep(1000);
-            DkMode(DK_STA);
-            lastReset = GetTickCount();
-            noneSince = 0;
-            haveAdapter = false;
-            continue;
-        }
-
         // requests from the window
         EnterCriticalSection(&s_cs);
         bool scan = s_scanReq, conn = s_connReq, forget = s_forgetReq;
