@@ -121,6 +121,79 @@ static void StartVolumeTick()
     }
 }
 
+// ---- Bluetooth for one device (btowner.h): the phone or the OBD adapter, remembered (bt.owner); the adapter's
+// owner: the phone let go and the stack's own connects off (the proxy's BT_CMD_PHONE), the adapter connected.
+static int   s_btoLastAct = BTA_NONE, s_btoTries;
+static DWORD s_btoActTick;
+
+static bool BtPhoneOn(const BtState& bt)   // handsfree, music or internet
+{
+    return bt.hf >= 1 || bt.av >= 1 || bt.pan == BT_PAN_ONLINE || bt.pan == BT_PAN_CONNECTING;
+}
+
+static void BtOwnerSet(int owner)   // the user's choice: a phone or the adapter connected by hand
+{
+    s_btoTries = 0;
+    if (owner == s_cfg.btOwner)
+        return;
+    s_cfg.btOwner = owner;
+    s_btoLastAct = BTA_NONE;
+    SaveCfg();
+    VLog(L"bt: Bluetooth отдан %s", owner == BTO_OBD ? L"OBD-адаптеру (телефон отключаю)" : L"телефону");
+    if (owner == BTO_PHONE) {
+        ObdStop();
+        BtCmdText(BT_CMD_PHONE, L"1");   // the stack's connects as they were
+    }
+}
+
+static void BtObdConnectNow()
+{
+    char a[18];
+    WideCharToMultiByte(CP_ACP, 0, s_obdAddr, -1, a, 18, NULL, NULL);
+    a[17] = 0;
+    s_btoTries++;
+    s_btoLastAct = BTA_OBD_CONNECT;
+    s_btoActTick = GetTickCount();
+    VLog(L"obd: подключаю %S (попытка %d)", a, s_btoTries);
+    ObdConnect(a);
+}
+
+static void BtOwnerTick()   // once a second, 10 s on from the start
+{
+    BtState bt;
+    if (GetTickCount() - s_bootTick < 10000 || !BtGet(&bt, NULL))
+        return;
+    ObdInfo o;
+    ObdGet(&o);
+    if (o.state == OBD_ON)
+        s_btoTries = 0;
+    BtOwnerIn in;
+    in.owner = s_cfg.btOwner;
+    in.phone = BtPhoneOn(bt);
+    in.obdBusy = o.state == OBD_CONNECTING || o.state == OBD_ON;
+    in.obdAddr = s_obdAddr[0] != 0;
+    in.hold = (s_obdEvSeen >= 0 && GetTickCount() - s_obdSearchTick < 15000) ||
+              (s_obdPairTick && GetTickCount() - s_obdPairTick < 30000);
+    in.lastAct = s_btoLastAct;
+    in.sinceAct = GetTickCount() - s_btoActTick;
+    in.tries = s_btoTries;
+    switch (BtOwnerStep(in)) {
+    case BTA_PHONE_OFF:
+        VLog(L"bt: Bluetooth у OBD-адаптера - телефон отключаю%s", in.phone ? L"" : L" (его ещё нет)");
+        BtCmdText(BT_CMD_PHONE, L"0");
+        s_btoLastAct = BTA_PHONE_OFF;
+        s_btoActTick = GetTickCount();
+        break;
+    case BTA_OBD_CONNECT:
+        BtObdConnectNow();
+        break;
+    case BTA_OBD_STOP:
+        VLog(L"obd: Bluetooth у телефона - адаптер отключаю");
+        ObdStop();
+        break;
+    }
+}
+
 // Once a second from the start: 10 s on (the MCU's link up) the source comes back. Bluetooth: the stack itself
 // connects the last phone at power-on when the shell allows it; not connected after 15 s (and again at 45 s) we
 // connect the one remembered (bt.last) as the shell does (Hf_Connect + Av_Connect, the proxy's BT_CMD_CONNECT),
@@ -152,7 +225,9 @@ static void ResumeSourceTick()
         BtState bt;
         bool proxy = BtGet(&bt, NULL);
         bool phone = proxy && bt.av >= 1;   // A2DP connected
-        if (!phone) {
+        if (s_cfg.btOwner == BTO_OBD) {
+            VLog(L"запуск: Bluetooth у OBD-адаптера - телефон не подключаю");
+        } else if (!phone) {
             if (proxy && ((s_tries == 0 && el >= 15000) || (s_tries == 1 && el >= 45000))) {
                 s_tries++;
                 if (bt.hf >= 1) {   // the phone is there, its music not

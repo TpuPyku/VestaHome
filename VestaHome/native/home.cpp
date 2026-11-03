@@ -24,6 +24,7 @@
 #include "video.h"
 #include "wifi.h"
 #include "obd.h"
+#include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "secret.h"
 #include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
@@ -600,6 +601,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             ResumeSourceTick();
             PbTick();
             PairTick();
+            BtOwnerTick();
             TripTick();
             SpeedVolTick();
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)

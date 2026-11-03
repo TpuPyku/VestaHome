@@ -725,6 +725,7 @@ static void DoAction(const Btn& b)
         break;
     }
     case A_BTCONNECT:
+        BtOwnerSet(BTO_PHONE);
         BtCmdText(BT_CMD_CONNECT, s_cfg.btLast);
         wcscpy(s_status, L"подключаю телефон…");
         VLog(L"телефон: подключить %s", s_cfg.btLast);
@@ -800,6 +801,8 @@ static void DoAction(const Btn& b)
         s_obdFoundN = 0;
         s_obdEvSeen = BtShmGet() ? BtShmGet()->evSeq : -1;
         s_obdSearchTick = GetTickCount();
+        BtOwnerSet(BTO_OBD);   // the phone let go first: the search broke its link (HU 2026-11-03)
+        BtOwnerTick();
         VLog(L"obd: поиск устройств");
         BtCmd(BT_CMD_SEARCH);
         Redraw();
@@ -833,6 +836,7 @@ static void DoAction(const Btn& b)
         _snwprintf(t, 40, L"%S %S", s_pnAddr, kObdPins[s_obdPin]);
         t[39] = 0;
         VLog(L"bt: сопряжение телефона %s", t);
+        BtOwnerSet(BTO_PHONE);
         BtCmdText(BT_CMD_PAIR, t);
         break;
     }
@@ -841,6 +845,7 @@ static void DoAction(const Btn& b)
         _snwprintf(t, 20, L"%S", s_pnAddr);
         t[19] = 0;
         VLog(L"bt: подключить %s", t);
+        BtOwnerSet(BTO_PHONE);
         BtCmdText(BT_CMD_CONNECT, t);
         break;
     }
@@ -869,20 +874,30 @@ static void DoAction(const Btn& b)
         _snwprintf(t, 40, L"%s %S", s_obdAddr, kObdPins[s_obdPin]);
         t[39] = 0;
         VLog(L"obd: сопряжение %s", t);
+        s_obdPairTick = GetTickCount();   // (first: no connect from the tick meanwhile)
+        BtOwnerSet(BTO_OBD);
+        BtOwnerTick();
         BtCmdText(BT_CMD_PAIR, t);
-        s_obdPairTick = GetTickCount();
         break;
     }
     case A_OBDCONN: {
         ObdInfo o;
         ObdGet(&o);
-        if (o.state == OBD_CONNECTING || o.state == OBD_ON) {
-            ObdStop();
+        BtState bt;
+        if (o.state == OBD_CONNECTING || o.state == OBD_ON) {   // Bluetooth back to the phone
+            BtOwnerSet(BTO_PHONE);
+            if (s_cfg.btLast[0]) {
+                VLog(L"телефон: подключить %s", s_cfg.btLast);
+                BtCmdText(BT_CMD_CONNECT, s_cfg.btLast);
+            }
+        } else if (BtGet(&bt, NULL) && BtPhoneOn(bt)) {   // the phone let go, the adapter 5 s later (BtOwnerTick)
+            BtOwnerSet(BTO_OBD);
+            BtOwnerTick();
         } else {
-            char a[18];
-            WideCharToMultiByte(CP_ACP, 0, s_obdAddr, -1, a, 18, NULL, NULL);
-            a[17] = 0;
-            ObdConnect(a);
+            BtOwnerSet(BTO_OBD);
+            if (s_btoLastAct == BTA_NONE)   // the stack's own connects of the phone off all the same
+                BtCmdText(BT_CMD_PHONE, L"0");
+            BtObdConnectNow();
         }
         Redraw();
         break;

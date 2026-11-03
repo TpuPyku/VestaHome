@@ -93,6 +93,7 @@ struct Cfg {
     wchar_t uiScreen[16], uiSource[8];   // the screen and the source last seen (Resume*): "home", "radio"...
     wchar_t uiMedia[16];                 // the media's tab last seen: "music", "netradio", "bt"... (the nav bar)
     wchar_t btLast[18];                // the phone connected last, "A4:E2:87:98:D6:9F"
+    int     btOwner;                   // Bluetooth's one device (btowner.h): BTO_PHONE / BTO_OBD
     wchar_t favs[640];                 // the phone's favourites: "name|number;" each (Phone -> Favourites)
     wchar_t photoDir[MAX_PATH];        // the photos' folder last opened
     wchar_t photoFile[MAX_PATH];       // the picture last viewed there (the start goes back to it)
@@ -505,6 +506,8 @@ static void LoadCfg()
         } else if (!wcscmp(k, L"bt.last")) {
             wcsncpy(s_cfg.btLast, v, 17);
             s_cfg.btLast[17] = 0;
+        } else if (!wcscmp(k, L"bt.owner")) {
+            s_cfg.btOwner = !wcscmp(v, L"obd") ? BTO_OBD : BTO_PHONE;
         } else if (!wcscmp(k, L"phone.fav")) {
             wcsncpy(s_cfg.favs, v, 639);
             s_cfg.favs[639] = 0;
@@ -657,6 +660,8 @@ static void SaveCfg()
         L"ui.screen=%s\r\nui.source=%s\r\nui.media=%s\r\n"
         L"# bt.last: the phone connected last (its address): connected again at the start when the source was BT\r\n"
         L"bt.last=%s\r\n"
+        L"# bt.owner: Bluetooth's one device, phone or obd (the OBD adapter: connected at the start, the phone let go)\r\n"
+        L"bt.owner=%s\r\n"
         L"# phone.fav: the phone's favourites, name|number; each\r\nphone.fav=%s\r\n"
         L"# obd.addr: the OBD-II Bluetooth adapter (ELM327; Settings -> Bluetooth -> OBD)\r\n"
         L"obd.addr=%s\r\n"
@@ -673,7 +678,8 @@ static void SaveCfg()
         s_cfg.camOver, s_cfg.camOverBy, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
+        s_cfg.radioStation, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast,
+        s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto, s_cfg.netOp, s_cfg.netApn, s_cfg.netUser,
         s_cfg.netPass, s_cfg.netAuto);
@@ -720,6 +726,11 @@ static void SaveCfg()
     } else {
         DeleteFile(tmp);
     }
+}
+
+static int BtOwner()
+{
+    return s_cfg.btOwner;
 }
 
 static const wchar_t* BtLastAddr()

@@ -801,6 +801,7 @@ static void BtCmdText(int cmd, const wchar_t* text)
 }
 
 static const wchar_t* BtLastAddr();   // (vh_settings: bt.last)
+static int BtOwner();                 // (vh_settings: bt.owner)
 static int FavFind(const wchar_t* num);
 
 static void ScrPhone(HDC dc)
@@ -1474,6 +1475,9 @@ static void ScrSetObd(HDC dc)
     }
     s[159] = 0;
     SetRow(dc, 64, L"OBD-адаптер (ELM327)", s);
+    T(dc, 264, 322, BtOwner() == BTO_OBD ? L"Bluetooth у адаптера: телефон отключён, «Отключить» вернёт его"
+                                         : L"Bluetooth у телефона: «Подключить» отключит телефон", 13, kMuted, 400,
+      AL_START, 504);
     bool searching = s_obdEvSeen >= 0 && GetTickCount() - s_obdSearchTick < 15000;
     Button(dc, 656, 70, 112, 44, searching ? L"Поиск…" : L"Найти", !proxy ? B_DIS : searching ? B_SEL : B_N, IC_NONE,
            15, 0, proxy ? A_OBDSCAN : A_NONE);
