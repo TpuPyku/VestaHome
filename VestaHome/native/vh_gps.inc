@@ -322,7 +322,10 @@ static DWORD WINAPI ModemDial(LPVOID)
     RASENTRY e;
     memset(&e, 0, sizeof(e));
     e.dwSize = sizeof(e);
-    e.dwfOptions = RASEO_RemoteDefaultGateway;   // the internet through it (Wi-Fi's route stays for its own net)
+    // the internet through it (Wi-Fi's route stays for its own net); dialled as a local call (HU 2026-11-03: RAS 679
+    // every time - the modem got ATDT8,10,0*99#: the entry's country code 0 against the unit's location's 7 made it an
+    // international call by its format "8,10,EFG", the network answered "Bearer capability not authorized")
+    e.dwfOptions = RASEO_RemoteDefaultGateway | RASEO_DialAsLocalCall;
     e.dwfNetProtocols = RASNP_Ip;
     e.dwFramingProtocol = RASFP_Ppp;
     wcscpy(e.szLocalPhoneNumber, L"*99#");
