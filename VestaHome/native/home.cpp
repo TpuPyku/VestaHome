@@ -187,8 +187,9 @@ static wchar_t s_dir[MAX_PATH];
 
 // Events log VestaHome.log - on the unit only on the SD card / USB disk (VestaCore LogDir: VestaLogs folder), never
 // the built-in flash; without a card no log. What happened just before a hang of the unit. Opened and closed
-// for every line, so a reset keeps it; started again past 256 KB. Uptime first - the clock may jump.
+// for every line, so a reset keeps it; past kLogMax it becomes VestaHome.old.log. Uptime first - the clock may jump.
 static CRITICAL_SECTION s_logLock;
+static const DWORD kLogMax = 1024 * 1024;
 
 // All our logs on / off (Diagnostics -> Logs; the user 2026-10-21: on by default): the flag \SDMMC\VestaLogs.off,
 // written once when switched off (not a log) - the proxies and VestaStub read it too. PC: in the exe's folder.
@@ -265,11 +266,18 @@ static void VLog(const wchar_t* fmt, ...)
     }
     wcscat(path, L"VestaHome.log");
     HANDLE h = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, 0, NULL);
+    if (h != INVALID_HANDLE_VALUE && GetFileSize(h, NULL) > kLogMax) {
+        // into VestaHome.old.log, a new one started (HU 2026-11-03: emptied at 256 KB, the OBD session lost with it)
+        CloseHandle(h);
+        wchar_t old[MAX_PATH];
+        wcscpy(old, path);
+        wcscpy(old + wcslen(old) - 4, L".old.log");
+        DeleteFile(old);
+        MoveFile(path, old);
+        h = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, 0, NULL);
+    }
     if (h != INVALID_HANDLE_VALUE) {
-        if (GetFileSize(h, NULL) > 256 * 1024)
-            SetEndOfFile(h);   // at 0: start over
-        else
-            SetFilePointer(h, 0, NULL, FILE_END);
+        SetFilePointer(h, 0, NULL, FILE_END);
         DWORD w;
         WriteFile(h, buf, n, &w, NULL);
         CloseHandle(h);
