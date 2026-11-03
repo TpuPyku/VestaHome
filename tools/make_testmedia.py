@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""make_testmedia.py - short test files for VestaHome's "Diagnostics -> Sound and video" (and the player, video).
+"""make_testmedia.py - short test files for VestaHome's players (music, video) and its photo viewer.
 
 Writes VestaHome\\VestaHome\\VestaHome\\TestMedia\\ (the build output folder; make_tests.py copies it to
 Tests\\SDMemory\\TestMedia; VestaHomePC finds it next to the exe):

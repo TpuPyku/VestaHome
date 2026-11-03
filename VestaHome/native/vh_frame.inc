@@ -66,7 +66,6 @@ static void DrawScreen(HDC dc, Screen s)
     case S_TEST_CAN:    ScrTestCan(dc); break;
     case S_TEST_MCU:    ScrTestMcu(dc); break;
     case S_TEST_AV:     ScrTestAv(dc); break;
-    case S_TEST_VOICE:  ScrTestVoice(dc); break;
     case S_INFO_MORE:   ScrInfoMore(dc); break;
     case S_LICENSES:    ScrLicenses(dc); break;
     case S_SET_VOLUME:  ScrSetVolume(dc); break;

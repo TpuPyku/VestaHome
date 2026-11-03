@@ -43,7 +43,7 @@ PLAN = (
     (os.path.join(VL, 'VestaLaunch'), r'SDMMC\VestaLaunch',
         ('VestaLaunch.exe', 'Skin')),
     # VestaHome itself is installed by VestaHomeInstall (SDMemory\VestaHomeInstall, from make_deploy.py)
-    # short audio/video files for VestaHome's "Diagnostics -> Sound and video" (made by make_testmedia.py)
+    # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDMemory',
         ('TestMedia',)),
     # the user widgets' examples and their guide (VestaHome reads \SDMemory\VestaWidgets\*.ini)

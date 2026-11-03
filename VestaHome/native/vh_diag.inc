@@ -12,7 +12,7 @@ static int   s_touchCount;
 struct Test { const wchar_t* label; Action a; int arg; };
 static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L"Касания", A_SCREEN, S_TEST_TOUCH },
                                 { L"Калибровка", A_CALIBRATE, 0 }, { L"Память и диски", A_SCREEN, S_TEST_MEM },
-                                { L"Кнопки · MCU", A_SCREEN, S_TEST_MCU }, { L"Звук и видео", A_SCREEN, S_TEST_AV },
+                                { L"Кнопки · MCU", A_SCREEN, S_TEST_MCU }, { L"Звук", A_SCREEN, S_TEST_AV },
                                 { L"GPS · CAN · Поток", A_SCREEN, S_TEST_CAN },
                                 { L"Камера заднего хода", A_RVCVIEW, 0 },   // (the user 2026-10-29: here, not in "Car")
                                 { L"Текстовые файлы", A_TEXTFILES, 0 }, { NULL, A_NONE, 0 } };
@@ -65,9 +65,6 @@ static void ScrDiag(HDC dc)
     for (int i = 0; i < 10 && kTests[i].label; i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
                kTests[i].a == A_SOON ? B_DIS : B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
-    wchar_t m[48];   // the USB modem (vh_gps.inc ModemNet): the last place
-    ModemLabel(m, 48);
-    Button(dc, 408, 288, 352, 44, m, s_modemState > 0 ? B_SEL : B_N, IC_NONE, 16, 0, A_MODEMTEST);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
     T(dc, 40, 390, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 600);

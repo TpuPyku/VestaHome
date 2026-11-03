@@ -649,9 +649,8 @@ static void DoAction(const Btn& b)
     case A_SEEK:     PlayerSeek(b.arg); break;
     case A_SHUFFLE:  s_cfg.shuffle = !s_cfg.shuffle; SaveCfg(); break;
     case A_REPEAT:   s_cfg.repeat = !s_cfg.repeat; SaveCfg(); break;
-    case A_AVTEST:   AvTestRun(b.arg); break;
+    case A_AVTEST:   Beep2(); break;
     case A_AVDEV:    AvDevNext(); break;
-    case A_VOICEEXP: VoiceExp(b.arg); break;
     case A_PRESET:   RadioOn(); RadioPreset(b.arg); break;
     case A_RKEY:     RadioKey(b.arg); break;
     case A_RPAGE:    RadioPageTo(s_radioPage + 1); break;   // the band button: the next page, round
