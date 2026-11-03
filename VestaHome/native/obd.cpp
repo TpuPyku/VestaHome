@@ -479,10 +479,13 @@ static DWORD WINAPI ObdThread(LPVOID)
         SetState(OBD_IDLE);
         return 0;
     }
-    static const char* kInit[6] = { "ATZ", "ATE0", "ATL0", "ATI", "ATSP0", "0100" };
+    // 0100 again with the headers: each block answering into the log with its CAN id (the user 2026-11-03: which
+    // blocks the car has - the body's, the climate's may need their own start); then without, for the polls
+    enum { kInits = 9, kSearch = 5 };
+    static const char* kInit[kInits] = { "ATZ", "ATE0", "ATL0", "ATI", "ATSP0", "0100", "ATH1", "0100", "ATH0" };
     char r[160];
-    for (int i = 0; i < 6 && !s_stop; i++) {
-        if (!Elm(h, kInit[i], i == 5 ? 12000 : 4000, r, sizeof(r))) {
+    for (int i = 0; i < kInits && !s_stop; i++) {
+        if (!Elm(h, kInit[i], i == kSearch ? 12000 : 4000, r, sizeof(r))) {
             Say(L"%S: порт отказал (%lu)", kInit[i], GetLastError());
             break;
         }
