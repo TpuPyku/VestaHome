@@ -135,11 +135,13 @@ typedef void (*DelArrFn)(void*);
 typedef LONG (*DkListFn)(BYTE*, int*);
 typedef LONG (*DkAddFn)(BYTE*, BYTE*, DWORD);
 typedef LONG (*DkNameFn)(const wchar_t*);
-static DkListFn    s_dkList;
+// The saved ones (GetPreferredApList, Ghidra 2026-11-03: entries of that description alone, 0x54 bytes).
+static DkListFn    s_dkList, s_dkPrefs;
 static DkAddFn     s_dkAdd;
 static DkNameFn    s_dkJoin, s_dkDrop;
-enum { DKE_SIZE = 0x74, DKE_AP = 4, DKE_SSID = 8, DKAP_AUTH = 0x48, DKAP_CIPHER = 0x4C, DKAP_PRIV = 0x50,
-       DKSEC_SIZE = 0x630, DKSEC_KEY = 4, DKSEC_KEYID = 0x204, kDkSeen = 48 };
+enum { DKE_SIZE = 0x74, DKE_AP = 4, DKE_SSID = 8, DKAP_SIZE = 0x54, DKAP_SSID = 4, DKAP_AUTH = 0x48,
+       DKAP_CIPHER = 0x4C, DKAP_PRIV = 0x50, DKSEC_SIZE = 0x630, DKSEC_KEY = 4, DKSEC_KEYID = 0x204, kDkSeen = 48,
+       kNoneSeenMs = 60000 };   // a client seeing no network that long: the saved ones dropped, the client restarted
 static DkModeFn    s_dkSetMode;
 static DkGetModeFn s_dkGetMode;
 static DkApFn      s_dkApGetDef, s_dkApSetDef, s_dkApSetCur;
@@ -511,6 +513,7 @@ static bool LoadDk()
     s_dkAdd = (DkAddFn)PROC(m, "WDK_STA_AddPreferredAp");
     s_dkJoin = (DkNameFn)PROC(m, "WDK_STA_ConnectToPreferredApByName");
     s_dkDrop = (DkNameFn)PROC(m, "WDK_STA_RemovePreferredApByName");
+    s_dkPrefs = (DkListFn)PROC(m, "WDK_STA_GetPreferredApList");
     if (!s_dkList || !s_dkAdd || !s_dkJoin || !s_dkDrop)
         s_dkAdd = NULL;   // (the client through WZC then)
     if (!init || !s_dkSetMode || !s_dkGetMode || !s_dkApGetDef || !s_dkApSetDef || !s_dkApSetCur || !s_dkAssoc) {
@@ -557,6 +560,29 @@ static bool DkJoin(const wchar_t* ssid, const wchar_t* pass, wchar_t* why, int c
     if (join < 0)
         _snwprintf(why, cap, L"%s: отказ 0x%08X", ssid, (unsigned)join);
     return join >= 0;
+}
+
+// The SDK's saved networks into the log and dropped - as a power cut leaves them (the user 2026-11-03: after
+// joining a phone's hotspot no network at all, an ordinary restart did not help - it keeps the registry - a power
+// cut did). VestaHome joins its known ones itself (DkJoin, their passwords its own).
+static void DkClearPrefs(const wchar_t* why)
+{
+    if (!s_dkPrefs || !s_dkAdd)
+        return;
+    int n = kDkSeen;
+    BYTE* list = (BYTE*)malloc(kDkSeen * DKAP_SIZE);
+    LONG hr = list ? s_dkPrefs(list, &n) : E_OUTOFMEMORY;
+    Log(L"wifi: SDK: сохранённых сетей %d (0x%08X), удаляю - %s", hr >= 0 ? n : 0, (unsigned)hr, why);
+    for (int i = 0; hr >= 0 && i < n && i < kDkSeen; i++) {
+        BYTE* ap = list + i * DKAP_SIZE;
+        wchar_t ssid[34];
+        wcsncpy(ssid, (const wchar_t*)(ap + DKAP_SSID), 33);
+        ssid[33] = 0;
+        LONG r = s_dkDrop(ssid);
+        Log(L"wifi: SDK:   %s (защита %u/%u/%u) - Remove 0x%08X", ssid, *(DWORD*)(ap + DKAP_AUTH),
+            *(DWORD*)(ap + DKAP_CIPHER), *(DWORD*)(ap + DKAP_PRIV), (unsigned)r);
+    }
+    free(list);
 }
 
 static bool DkMode(int mode)
@@ -659,6 +685,8 @@ static DWORD WINAPI WifiThread(LPVOID)
     // adapters stay off: the shell switched the client on at its start. Then VestaHome does it.
     if (LoadDk() && s_dkBootMode == DK_OFF && s_wantOn)
         DkMode(DK_STA);
+    DkClearPrefs(L"старт");
+    DWORD noneSince = 0, lastReset = 0;   // a client seeing no network: since when; the last restart for it
     DWORD linkTick = 0;    // the link up without an address yet: since when (the log of a slow phone's hotspot)
     bool hadIp = false;
     DWORD lastAuto = 0, connectTick = 0;
@@ -822,6 +850,22 @@ static DWORD WINAPI WifiThread(LPVOID)
                 Log(L"wifi: видно сетей %d (записей WZC %d), уровни %d..%d дБм", w.count, seen,
                     w.count ? w.nets[0].rssi : 0, w.count ? w.nets[w.count - 1].rssi : 0);
             }
+        }
+        if (w.count || connected || !s_dkSetMode) {
+            noneSince = 0;
+        } else if (!noneSince) {
+            noneSince = GetTickCount();
+        } else if (GetTickCount() - noneSince > kNoneSeenMs && (!lastReset || GetTickCount() - lastReset > kRetryMs)) {
+            // the client stuck (HU 2026-11-03): as a power cut - nothing saved, the adapter started again
+            s_delete(&e);
+            DkClearPrefs(L"сетей не видно 60 с");
+            DkMode(DK_OFF);
+            Sleep(1000);
+            DkMode(DK_STA);
+            lastReset = GetTickCount();
+            noneSince = 0;
+            haveAdapter = false;
+            continue;
         }
 
         // requests from the window
