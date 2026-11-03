@@ -1,17 +1,20 @@
 """Draws the program icon and writes app.ico (16, 32, 48, 64 px, 32-bit with AND mask).
 
 Skin concept v0.1: orange rounded square with a faint triangle mosaic, white line sign.
-VestaHome: a house; VestaLaunch (its copy of this script): the 2 x 2 "apps" grid.
+VestaHome: a house; VestaLaunch (its copy of this script): the 2 x 2 "apps" grid; VestaHomeInstall: an arrow
+down into a tray.
 Windows CE can't read PNG-compressed icon entries, so every size is a plain BMP entry; where CE ignores
 the alpha channel, the AND mask (alpha < 50 %) still cuts the shape out.
 
     python make_icon.py            -> app.ico next to this script
+    python make_icon.py install F  -> the installer's sign into the icon file F (SPIPower/install/build.bat)
 """
 import os
 import struct
+import sys
 from PIL import Image, ImageDraw
 
-SIGN = 'home'                                 # 'home' (VestaHome) or 'apps' (VestaLaunch)
+SIGN = 'home'                                 # 'home' (VestaHome), 'apps' (VestaLaunch), 'install'
 TOP, BOTTOM = (255, 107, 26), (194, 74, 11)   # #ff6b1a -> #c24a0b
 SIZES = (16, 32, 48, 64)
 PANEL = (0x17, 0x19, 0x1c)                    # tile colour of VestaHome/VestaLaunch: edges blend into it
@@ -55,6 +58,10 @@ def draw():
     if SIGN == 'home':
         line([(52, 128), (128, 60), (204, 128)])
         line([(76, 108), (76, 200), (180, 200), (180, 108)])
+    elif SIGN == 'install':
+        line([(128, 52), (128, 150)])
+        line([(84, 108), (128, 152), (172, 108)])
+        line([(56, 160), (56, 204), (200, 204), (200, 160)])
     else:
         for x, y in ((62, 62), (138, 62), (62, 138), (138, 138)):
             d.rounded_rectangle([x * k, y * k, (x + 56) * k, (y + 56) * k], radius=12 * k, outline=white,
@@ -87,6 +94,11 @@ def entry(img, n):
 
 
 def main():
+    global SIGN
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, 'app.ico')
+    if len(sys.argv) > 2:
+        SIGN, path = sys.argv[1], os.path.abspath(sys.argv[2])
     img = draw()
     data = [entry(img, n) for n in SIZES]
     out = struct.pack('<HHH', 0, 1, len(SIZES))
@@ -96,10 +108,11 @@ def main():
         offset += len(e)
     for e in data:
         out += e
-    here = os.path.dirname(os.path.abspath(__file__))
-    open(os.path.join(here, 'app.ico'), 'wb').write(out)
-    img.resize((128, 128), Image.LANCZOS).save(os.path.join(here, 'obj', 'app_preview.png'))
-    print(os.path.join(here, 'app.ico'), len(out))
+    open(path, 'wb').write(out)
+    obj = os.path.join(os.path.dirname(path), 'obj')
+    os.makedirs(obj, exist_ok=True)
+    img.resize((128, 128), Image.LANCZOS).save(os.path.join(obj, os.path.basename(path)[:-4] + '_preview.png'))
+    print(path, len(out))
 
 
 if __name__ == '__main__':

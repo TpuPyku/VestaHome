@@ -1,5 +1,7 @@
 // VestaHomeInstall resources (install\build.bat): VestaHome packed by make_vh_payload.py, and the proxy itself -
 // the installer is one file and works from any folder (SD card, USB disk, the unit's memory)
+// the icon (the first one is the one shells show): python ../../VestaHome/native/make_icon.py install app.ico
+1 ICON "app.ico"
 101 RCDATA "vh_payload.bin"
 102 RCDATA "..\\out\\SPIPowerMgr.dll"
 103 RCDATA "..\\rescue\\drill\\SwDnl_drill.upg"
