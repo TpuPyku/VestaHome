@@ -321,24 +321,31 @@ static void ModemApnSet(const wchar_t* port)
 // number as it is (HU 2026-11-03: RAS 679 every time - the modem got ATDT8,10,0*99#: the entry's country code 0
 // against the location's 7 made it an international call by its format "8,10,EFG", the network answered "Bearer
 // capability not authorized"; RASEO_DialAsLocalCall alone did not change it)
-static void ModemDialHere(RASENTRY* e)
+// The location under root (HKCU on the unit - its HKLM copy is the image's default, HU 2026-11-03: not there
+// at run time); name: the current one's number
+static bool ModemDialAt(HKEY root, wchar_t* name, RASENTRY* e)
 {
     HKEY k;
     DWORD cur = 0, type, sz = sizeof(cur);
-    wchar_t loc[160], name[12];
-    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"ControlPanel\\Dial", 0, 0, &k) == ERROR_SUCCESS) {
-        RegQueryValueEx(k, L"CurrentLoc", NULL, &type, (BYTE*)&cur, &sz);
-        RegCloseKey(k);
-    }
+    wchar_t loc[160];
+    if (RegOpenKeyEx(root, L"ControlPanel\\Dial", 0, 0, &k) != ERROR_SUCCESS)
+        return false;
+    RegQueryValueEx(k, L"CurrentLoc", NULL, &type, (BYTE*)&cur, &sz);
+    RegCloseKey(k);
     swprintf(name, L"%lu", cur);
+    if (RegOpenKeyEx(root, L"ControlPanel\\Dial\\Locations", 0, 0, &k) != ERROR_SUCCESS)
+        return false;
     sz = sizeof(loc);
-    bool ok = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"ControlPanel\\Dial\\Locations", 0, 0, &k) == ERROR_SUCCESS;
-    if (ok) {
-        ok = RegQueryValueEx(k, name, NULL, &type, (BYTE*)loc, &sz) == ERROR_SUCCESS &&
-             DialLocation(loc, sz / sizeof(wchar_t), e->szAreaCode, RAS_MaxAreaCode + 1, &e->dwCountryCode);
-        RegCloseKey(k);
-    }
-    if (!ok) {
+    bool ok = RegQueryValueEx(k, name, NULL, &type, (BYTE*)loc, &sz) == ERROR_SUCCESS &&
+              DialLocation(loc, sz / sizeof(wchar_t), e->szAreaCode, RAS_MaxAreaCode + 1, &e->dwCountryCode);
+    RegCloseKey(k);
+    return ok;
+}
+
+static void ModemDialHere(RASENTRY* e)
+{
+    wchar_t name[12] = L"?";
+    if (!ModemDialAt(HKEY_CURRENT_USER, name, e) && !ModemDialAt(HKEY_LOCAL_MACHINE, name, e)) {
         VLog(L"модем: правила набора «%s» не прочитаны - номер как есть", name);
         return;
     }
