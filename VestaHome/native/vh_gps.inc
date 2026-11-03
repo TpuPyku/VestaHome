@@ -317,15 +317,44 @@ static void ModemApnSet(const wchar_t* port)
     VLog(L"модем: APN %S - %S", apn, strstr(ans, "OK") ? "OK" : "нет ответа OK");
 }
 
+// The current dialing location's area code and country into the entry: the call is local, its format "G" the
+// number as it is (HU 2026-11-03: RAS 679 every time - the modem got ATDT8,10,0*99#: the entry's country code 0
+// against the location's 7 made it an international call by its format "8,10,EFG", the network answered "Bearer
+// capability not authorized"; RASEO_DialAsLocalCall alone did not change it)
+static void ModemDialHere(RASENTRY* e)
+{
+    HKEY k;
+    DWORD cur = 0, type, sz = sizeof(cur);
+    wchar_t loc[160], name[12];
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"ControlPanel\\Dial", 0, 0, &k) == ERROR_SUCCESS) {
+        RegQueryValueEx(k, L"CurrentLoc", NULL, &type, (BYTE*)&cur, &sz);
+        RegCloseKey(k);
+    }
+    swprintf(name, L"%lu", cur);
+    sz = sizeof(loc);
+    bool ok = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"ControlPanel\\Dial\\Locations", 0, 0, &k) == ERROR_SUCCESS;
+    if (ok) {
+        ok = RegQueryValueEx(k, name, NULL, &type, (BYTE*)loc, &sz) == ERROR_SUCCESS &&
+             DialLocation(loc, sz / sizeof(wchar_t), e->szAreaCode, RAS_MaxAreaCode + 1, &e->dwCountryCode);
+        RegCloseKey(k);
+    }
+    if (!ok) {
+        VLog(L"модем: правила набора «%s» не прочитаны - номер как есть", name);
+        return;
+    }
+    e->dwCountryID = e->dwCountryCode;
+    e->dwfOptions |= RASEO_UseCountryAndAreaCodes;
+    VLog(L"модем: правила набора «%s»: страна %lu, код %s - звонок местный", name, e->dwCountryCode, e->szAreaCode);
+}
+
 static DWORD WINAPI ModemDial(LPVOID)
 {
     RASENTRY e;
     memset(&e, 0, sizeof(e));
     e.dwSize = sizeof(e);
-    // the internet through it (Wi-Fi's route stays for its own net); dialled as a local call (HU 2026-11-03: RAS 679
-    // every time - the modem got ATDT8,10,0*99#: the entry's country code 0 against the unit's location's 7 made it an
-    // international call by its format "8,10,EFG", the network answered "Bearer capability not authorized")
+    // the internet through it (Wi-Fi's route stays for its own net); dialled as a local call (ModemDialHere)
     e.dwfOptions = RASEO_RemoteDefaultGateway | RASEO_DialAsLocalCall;
+    ModemDialHere(&e);
     e.dwfNetProtocols = RASNP_Ip;
     e.dwFramingProtocol = RASFP_Ppp;
     wcscpy(e.szLocalPhoneNumber, L"*99#");

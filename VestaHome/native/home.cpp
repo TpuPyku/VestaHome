@@ -18,6 +18,7 @@
 #include <tlhelp32.h>   // our threads' load (OwnThreadsLoad); toolhelp.dll itself is loaded at run time
 #ifdef UNDER_CE
 #include <ras.h>        // the USB modem's dial-up (vh_gps.inc ModemNet)
+#include "dialloc.h"    // its number as a local call
 #endif
 #include "https.h"
 #include "video.h"
