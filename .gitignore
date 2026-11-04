@@ -10,6 +10,7 @@ __pycache__/
 VestaHome/VestaHome/*.log
 VestaHome/VestaHome/apps.txt
 VestaHome/VestaHome/radio_fav.txt
+VestaHome/VestaHome/radio_recent.txt
 VestaHome/VestaHome/VestaHome.ini
 VestaHome/VestaHome/*.tmp
 VestaHome/VestaHome/*.nmea

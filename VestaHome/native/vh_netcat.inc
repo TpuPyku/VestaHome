@@ -33,9 +33,11 @@ static DWORD WINAPI NcThread(LPVOID p)
     unsigned char* body = NULL;
     int len = 0, status = 0;
     j->err = NET_CONNECT;
-    for (int k = 0; k < 2; k++) {   // this server, then the other
+    // this server, then the other; HTTPS, then plain HTTP (2026-11-04: a provider resets TLS to radio-browser now
+    // and then, both servers at once - its plain HTTP answered; the catalogue is public, no secret goes there)
+    for (int k = 0; k < 4; k++) {
         int h = (s_ncHost + k) % 2;
-        j->err = HttpGet(kNcHosts[h], true, j->path, &body, &len, &status);
+        j->err = HttpGet(kNcHosts[h], k < 2, j->path, &body, &len, &status);
         if (j->err == NET_OK && status == 200) {
             s_ncHost = h;
             break;
@@ -201,23 +203,24 @@ static void OnNetCat(NcJob* j)
 }
 
 // ---- the screens
-static void NetListTabs(HDC dc, int active)   // Мои станции · Избранное · Каталог, as playlists
+static void NetListTabs(HDC dc, int active)   // Мои станции · Избранное · Недавние · Каталог, as playlists
 {
     wchar_t a[32], b[32];
     _snwprintf(a, 32, L"Мои станции %d", s_nl[NL_MINE].n);
     _snwprintf(b, 32, L"Избранное %d", s_nl[NL_FAV].n);
-    const wchar_t* label[3] = { a, b, L"Каталог" };
-    static const Icon ic[3] = { IC_RADIO, IC_STAR_F, IC_NETRADIO };
-    for (int i = 0, x = 16; i < 3; i++) {
-        int w = TextWidth(dc, label[i], 16, 700) + 68;
-        Button(dc, x, 62, w, 44, label[i], i == active ? B_SEL : B_N, ic[i], 16, 20, A_NRLIST, i);
+    const wchar_t* label[4] = { a, b, L"Недавние", L"Каталог" };
+    static const Icon ic[4] = { IC_RADIO, IC_STAR_F, IC_CLOCK, IC_NETRADIO };
+    static const int which[4] = { NL_MINE, NL_FAV, NL_RECENT, NL_CAT };
+    for (int i = 0, x = 16; i < 4; i++) {
+        int w = TextWidth(dc, label[i], 16, 700) + 56;
+        Button(dc, x, 62, w, 44, label[i], which[i] == active ? B_SEL : B_N, ic[i], 16, 20, A_NRLIST, which[i]);
         x += w + 8;
     }
     Button(dc, 652, 62, 132, 44, L"Поиск", B_N, IC_SEARCH, 16, 20, A_NCSEARCH);
 }
 
 static const wchar_t* const kNcTile[5][2] = {
-    { L"Популярные", L"чаще всего слушают" }, { L"Россия", L"станции России" },
+    { L"Популярные", L"чаще всего слушают" }, { L"СНГ", L"Россия, Беларусь…" },
     { L"Жанры", L"поп, рок, джаз, новости…" }, { L"Страны", L"по числу станций" },
     { L"Языки", L"русский, английский…" }
 };
@@ -245,17 +248,15 @@ static void NcTile(int i)
 {
     if (i == 0)
         NcOpenPage(NC_TOP, NULL, kNcTile[0][0], -1);
-    else if (i == 1)
-        NcOpenPage(NC_COUNTRY, "RU", L"Россия", -1);
     else
-        NcOpenCats(i == 2 ? NC_TAGS : i == 3 ? NC_COUNTRIES : NC_LANGS);
+        NcOpenCats(i == 1 ? NC_CIS : i == 2 ? NC_TAGS : i == 3 ? NC_COUNTRIES : NC_LANGS);
 }
 
 static Scroll s_ncList = { 0, 0, 5 * 62 };
 
 static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, the most stations first
 {
-    static const wchar_t* kTitle[3] = { L"Жанры", L"Страны", L"Языки" };
+    static const wchar_t* kTitle[4] = { L"Жанры", L"Страны", L"Языки", L"СНГ" };   // (by NC_TAGS..)
     wchar_t s[80];
     _snwprintf(s, 80, L"Каталог › %s", kTitle[s_ncCatKind >= 0 ? s_ncCatKind : 0]);
     Frame(dc, s);
@@ -286,13 +287,13 @@ static void NcPick(int i)
     if (i < 0 || i >= s_ncCatN)
         return;
     const NcCat& c = s_ncCats[i];
-    NcOpenPage(s_ncCatKind == NC_COUNTRIES ? NC_COUNTRY : s_ncCatKind == NC_LANGS ? NC_LANG : NC_TAG, c.key, c.name,
+    NcOpenPage(s_ncCatKind == NC_COUNTRIES || s_ncCatKind == NC_CIS ? NC_COUNTRY : s_ncCatKind == NC_LANGS ? NC_LANG : NC_TAG, c.key, c.name,
                c.count);
 }
 
 // Media -> internet radio (design netradio-v0.7): the list it plays from (a tap - that list), the station with
 // its star, the song, the country and the stream; previous / on-off / next in that list.
-static const wchar_t* const kNetListName[kNetLists] = { L"Мои станции", L"Избранное", L"Каталог" };
+static const wchar_t* const kNetListName[kNetLists] = { L"Мои станции", L"Избранное", L"Каталог", L"Недавние" };
 
 static void ScrNetRadio(HDC dc)
 {
@@ -373,9 +374,11 @@ static void ScrNetRadioList(HDC dc)
     wchar_t s[120];
     _snwprintf(s, 120, L"Интернет-радио · %s", cat ? L"Каталог" : kNetListName[s_netView]);
     Frame(dc, s);
-    if (cat) {
-        _snwprintf(s, 120, L"Каталог › %s", s_ncPage.title);
-        T(dc, 24, 94, s, 16, kText, 700, AL_START, 520);
+    if (cat) {   // "Каталог" - its ways in, with the lists' tabs (or a station of the catalogue playing hides them)
+        int bw = TextWidth(dc, L"Каталог", 16, 700) + 56;
+        Button(dc, 16, 62, bw, 44, L"Каталог", B_N, IC_NETRADIO, 16, 20, A_NRLIST, NL_CAT);
+        _snwprintf(s, 120, L"› %s", s_ncPage.title);
+        T(dc, 16 + bw + 12, 94, s, 16, kText, 700, AL_START, 600 - bw);
         if (l.n) {
             if (s_ncPage.total > 0)
                 _snwprintf(s, 120, L"%d–%d из %d", s_ncPage.offset + 1, s_ncPage.offset + s_ncPage.raw, s_ncPage.total);
@@ -402,8 +405,9 @@ static void ScrNetRadioList(HDC dc)
     ScrollEnd(dc, s_netList, 728, top - 4, 56, bottom - top + 8, 96);
     if (!l.n) {
         const wchar_t* why = cat ? (s_ncBusy ? L"Загрузка…" : s_ncMsg[0] ? s_ncMsg : L"Пусто")
-                           : s_netView == NL_FAV ? L"Пусто: звёздочка у станции добавляет её сюда"
-                                                  : L"Нет станций: radio.txt рядом с VestaHome";
+                           : s_netView == NL_FAV    ? L"Пусто: звёздочка у станции добавляет её сюда"
+                           : s_netView == NL_RECENT ? L"Пусто: здесь будут станции, которые вы включали"
+                                                    : L"Нет станций: radio.txt рядом с VestaHome";
         T(dc, 40, top + 44, why, 17, cat && s_ncMsg[0] ? kOrange : kMuted, 400, AL_START, 660);
     }
     Dock(dc);

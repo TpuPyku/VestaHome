@@ -77,6 +77,20 @@ int NcFormatLine(const NcStation& s, char* out, int cap)
     return n < 0 ? (int)strlen(out) : n;
 }
 
+int NcRecentPut(NcStation* list, int n, int cap, const NcStation& s)
+{
+    int at = 0;
+    while (at < n && strcmp(list[at].url, s.url))
+        at++;
+    if (at == n && n < cap)
+        n++;
+    if (at == cap)
+        at = cap - 1;
+    memmove(&list[1], &list[0], at * sizeof(NcStation));
+    list[0] = s;
+    return n;
+}
+
 // ---- Russian names
 struct NcWord { const char* key; const wchar_t* ru; };
 
@@ -109,8 +123,17 @@ static const NcWord kCountries[] = {
     { "AM", L"Армения" }, { "AZ", L"Азербайджан" }, { "UZ", L"Узбекистан" }, { "KG", L"Киргизия" },
     { "MD", L"Молдова" }, { "RS", L"Сербия" }, { "BG", L"Болгария" }, { "HR", L"Хорватия" },
     { "ID", L"Индонезия" }, { "KR", L"Южная Корея" }, { "CO", L"Колумбия" }, { "CL", L"Чили" },
-    { "PE", L"Перу" }, { NULL, NULL }
+    { "PE", L"Перу" }, { "TJ", L"Таджикистан" }, { "TM", L"Туркменистан" }, { NULL, NULL }
 };
+
+static bool InCis(const char* code)   // the CIS's members and Turkmenistan (its associate)
+{
+    static const char* const kCis[] = { "RU", "BY", "KZ", "UZ", "KG", "TJ", "TM", "AM", "AZ", "MD", NULL };
+    for (int i = 0; kCis[i]; i++)
+        if (!_stricmp(kCis[i], code))
+            return true;
+    return false;
+}
 
 static const NcWord kLangs[] = {
     { "russian", L"Русский" }, { "english", L"Английский" }, { "german", L"Немецкий" },
@@ -123,7 +146,7 @@ static const NcWord kLangs[] = {
 
 void NcName(int kind, const char* key, const char* name, wchar_t* out, int cap)
 {
-    const NcWord* t = kind == NC_COUNTRIES ? kCountries : kind == NC_LANGS ? kLangs : kTags;
+    const NcWord* t = kind == NC_COUNTRIES || kind == NC_CIS ? kCountries : kind == NC_LANGS ? kLangs : kTags;
     for (; t->key; t++)
         if (!_stricmp(t->key, key)) {
             wcsncpy(out, t->ru, cap - 1);
@@ -191,11 +214,11 @@ int NcCats(const char* json, int kind, NcCat* out, int cap)
         NcCat& c = out[n];
         char name[64];
         JStr(JKey(it, "name"), name, sizeof(name));
-        if (kind == NC_COUNTRIES)
+        if (kind == NC_COUNTRIES || kind == NC_CIS)
             JStr(JKey(it, "iso_3166_1"), c.key, sizeof(c.key));
         else
             strcpy(c.key, name);
-        if (!c.key[0])
+        if (!c.key[0] || (kind == NC_CIS && !InCis(c.key)))
             continue;
         NcName(kind, c.key, name, c.name, 48);
         c.count = (int)JNum(JKey(it, "stationcount"), 0);
@@ -207,9 +230,10 @@ int NcCats(const char* json, int kind, NcCat* out, int cap)
 // ---- the requests' paths
 void NcCatsPath(int kind, char* out, int cap)
 {
-    const char* what = kind == NC_COUNTRIES ? "countries" : kind == NC_LANGS ? "languages" : "tags";
+    bool countries = kind == NC_COUNTRIES || kind == NC_CIS;
+    const char* what = countries ? "countries" : kind == NC_LANGS ? "languages" : "tags";
     _snprintf(out, cap, "/json/%s?order=stationcount&reverse=true&hidebroken=true%s", what,
-              kind == NC_COUNTRIES ? "" : "&limit=100");
+              countries ? "" : "&limit=100");
     out[cap - 1] = 0;
 }
 

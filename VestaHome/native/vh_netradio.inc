@@ -13,8 +13,9 @@ enum { NR_OFF, NR_CONNECT, NR_PLAY, NR_STALL, NR_WAIT, NR_ERROR };
 
 // The stations come in lists the player steps through (the user 2026-11-04: switched like playlists): ours
 // (radio.txt), the favourites (radio_fav.txt beside it, a star on any station), a page of the catalogue
-// (radio-browser.info, netcat.h). The station playing is a copy: it plays on when its list changes.
-enum { NL_MINE, NL_FAV, NL_CAT, kNetLists };
+// (radio-browser.info, netcat.h), the recent ones (radio_recent.txt, the latest played first). The station playing is
+// a copy: it plays on when its list changes. (The numbers are kept in VestaHome.ini's radio.list.)
+enum { NL_MINE, NL_FAV, NL_CAT, NL_RECENT, kNetLists, kNetRecent = 20 };
 struct NetList { NcStation* st; int n; };
 // A stream's "file" - owned by its references (the user 2026-11-03: VestaHome fell, C0000005, 17-40 s after the station
 // was changed, in none of our guarded threads: BASS's reading thread read the HTTP stream while the close freed it,
@@ -57,9 +58,9 @@ static void NetInit()
     InitializeCriticalSection(&s_netCs);
 }
 
-static const wchar_t* kNetFile[2] = { L"radio.txt", L"radio_fav.txt" };
+static const wchar_t* kNetFile[kNetLists] = { L"radio.txt", L"radio_fav.txt", NULL, L"radio_recent.txt" };
 
-static void NetReadList(int which)   // radio.txt or radio_fav.txt beside the exe, a station a line (netcat.h)
+static void NetReadList(int which)   // radio.txt, radio_fav.txt, radio_recent.txt beside the exe, a station a line
 {
     NetList& l = s_nl[which];
     l.n = 0;
@@ -100,6 +101,7 @@ static void NetLoadList()
         s_nl[i].st = (NcStation*)calloc(kNetMax, sizeof(NcStation));
     NetReadList(NL_MINE);
     NetReadList(NL_FAV);
+    NetReadList(NL_RECENT);
     // the station last chosen, in its list (radio.list, radio.url; before them: by its name in radio.txt)
     char url[400];
     WideCharToMultiByte(CP_UTF8, 0, s_cfg.radioUrl, -1, url, sizeof(url), NULL, NULL);
@@ -129,21 +131,22 @@ static bool NetIsFav(const NcStation& s)
     return NetFind(NL_FAV, s.url) >= 0;
 }
 
-static void NetSaveFav()   // (rare: a star tapped - the flash's wear does not matter)
+// (rare: a star tapped, a station chosen - the flash's wear does not matter: VestaHome.ini is written then too)
+static void NetSaveList(int which)
 {
     wchar_t path[MAX_PATH];
-    _snwprintf(path, MAX_PATH, L"%s%s", s_dir, kNetFile[NL_FAV]);
+    _snwprintf(path, MAX_PATH, L"%s%s", s_dir, kNetFile[which]);
     HANDLE f = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) {
         VLog(L"радио: не записать %s", path);
         return;
     }
     DWORD w;
-    static const char head[] = "# VestaHome: the internet radio's favourites, name|address|catalogue id|second line\r\n";
+    static const char head[] = "# VestaHome: the internet radio's stations, name|address|catalogue id|second line\r\n";
     WriteFile(f, head, sizeof(head) - 1, &w, NULL);
-    for (int i = 0; i < s_nl[NL_FAV].n; i++) {
+    for (int i = 0; i < s_nl[which].n; i++) {
         char line[700];
-        int n = NcFormatLine(s_nl[NL_FAV].st[i], line, sizeof(line) - 2);
+        int n = NcFormatLine(s_nl[which].st[i], line, sizeof(line) - 2);
         line[n++] = '\r';
         line[n++] = '\n';
         WriteFile(f, line, n, &w, NULL);
@@ -163,7 +166,7 @@ static void NetFavToggle(const NcStation& s)
         f.st[f.n++] = s;
     }
     VLog(at >= 0 ? L"радио: «%s» убрана из избранного" : L"радио: «%s» добавлена в избранное", s.name);
-    NetSaveFav();
+    NetSaveList(NL_FAV);
     if (s_netNow.url[0])
         s_netCur = NetFind(s_netWhich, s_netNow.url);
 }
@@ -483,6 +486,11 @@ static void NetPlayNow()
     MultiByteToWideChar(CP_UTF8, 0, s_netNow.url, -1, s_cfg.radioUrl, 400);
     s_cfg.radioList = s_netWhich;
     SaveCfg();
+    if (s_netWhich != NL_RECENT && s_nl[NL_RECENT].st) {   // (played from the recent ones: they keep their order,
+        NetList& r = s_nl[NL_RECENT];                       // or the next would be the one just played)
+        r.n = NcRecentPut(r.st, r.n, kNetRecent, s_netNow);
+        NetSaveList(NL_RECENT);
+    }
     VLog(L"радио: %s", s_netNow.name);
     if (s_netNow.uuid[0])
         NetCatClick(s_netNow.uuid);

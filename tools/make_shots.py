@@ -5,7 +5,8 @@ Starts VestaHome/VestaHome/VestaHomePC.exe (build it first), stands in for the B
 its book and call log: the shared memories VestaBT5 / VestaBTPB1, demo data) and the MCU proxy (the radio on
 FM 101.2 with RDS and presets: VestaMCU2), plays a made-up drive as the GPS (shots.nmea) and walks the screens by taps,
 saving what the window drew into docs/shots/<NN>_<name>.png (not in git: made again on demand). The window's
-VestaHome.ini is kept and put back. Windows only (ctypes, Pillow).
+VestaHome.ini is kept and put back; the radio's favourites and recent ones start empty and are put back too.
+Windows only (ctypes, Pillow).
 
 Usage: python VestaHome/tools/make_shots.py [out_dir]   (VH_SHOTS=name,name... - only those)
 """
@@ -65,15 +66,19 @@ SHOTS = [
     ('speed_set', [HOME, (760, 86)]),   # (home's page 1: run alone - VH_SHOTS=speed_set,weather_set,camdl)
     ('weather_set', [HOME, (760, 256)]), ('camdl', [HOME, (760, 86), (400, 440)]),
     # the internet radio's catalogue (radio-browser.info: needs the internet), the list's tab "Каталог"
-    ('netradio_catalog', [MEDIA, TAB['net'], TAB['list'], (470, 84)]),
-    ('netradio_genres', [MEDIA, TAB['net'], TAB['list'], (470, 84), (660, 180), ('sleep', 6)]),
-    ('netradio_genre', [MEDIA, TAB['net'], TAB['list'], (470, 84), (660, 180), ('sleep', 6), (300, 104), ('sleep', 6)]),
-    ('netradio_top_star', [MEDIA, TAB['net'], TAB['list'], (470, 84), (140, 180), ('sleep', 6), (674, 148)]),
-    ('netradio_more', [MEDIA, TAB['net'], TAB['list'], (470, 84), (140, 180), ('sleep', 6), (520, 438), ('sleep', 6)]),
+    ('netradio_catalog', [MEDIA, TAB['net'], TAB['list'], (572, 84)]),
+    ('netradio_genres', [MEDIA, TAB['net'], TAB['list'], (572, 84), (660, 180), ('sleep', 6)]),
+    ('netradio_genre', [MEDIA, TAB['net'], TAB['list'], (572, 84), (660, 180), ('sleep', 6), (300, 104), ('sleep', 6)]),
+    ('netradio_top_star', [MEDIA, TAB['net'], TAB['list'], (572, 84), (140, 180), ('sleep', 6), (674, 148)]),
+    ('netradio_more', [MEDIA, TAB['net'], TAB['list'], (572, 84), (140, 180), ('sleep', 6), (520, 438), ('sleep', 6)]),
     ('netradio_search_keys', [MEDIA, TAB['net'], TAB['list'], (718, 84)]),
     ('netradio_search', [MEDIA, TAB['net'], TAB['list'], (718, 84), ('type', 'jazz'), ('sleep', 6)]),
     ('netradio_cat_play', [MEDIA, TAB['net'], TAB['list'], (718, 84), ('type', 'jazz'), ('sleep', 6), (300, 148),
                            ('sleep', 8)]),
+    # (after netradio_cat_play: a catalogue station played, then one of ours)
+    ('netradio_recent', [MEDIA, TAB['net'], TAB['list'], (60, 84), (100, 84), (300, 210), ('sleep', 2), TAB['list'], (442, 84)]),
+    ('netradio_cis', [MEDIA, TAB['net'], TAB['list'], (572, 84), (400, 180), ('sleep', 6)]),
+    ('netradio_cis_ru', [MEDIA, TAB['net'], TAB['list'], (572, 84), (400, 180), ('sleep', 6), (300, 104), ('sleep', 6)]),
 ]
 
 if os.environ.get('VH_SHOTS'):   # only these (comma-separated names), from a fresh start
@@ -234,6 +239,9 @@ def track(path):   # a drive for the GPS replay (gps.port=<name>.nmea): north-ea
 
 
 def grab(h, path):   # what the window drew (its DC)
+    u32.InvalidateRect(h, None, False)   # (drawn again first: behind another window VestaHome skips the redraws
+    u32.UpdateWindow(h)                  # that an answer from the network asks for)
+    time.sleep(0.3)
     rc = W.RECT()
     u32.GetClientRect(h, ctypes.byref(rc))
     w, hh = rc.right, rc.bottom
@@ -262,6 +270,12 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     ini = os.path.join(VH, 'VestaHome.ini')
     saved = open(ini, 'rb').read() if os.path.exists(ini) else None
+    lists = {}   # (the radio's own files: the shots start without them)
+    for f in ('radio_fav.txt', 'radio_recent.txt'):
+        path = os.path.join(VH, f)
+        if os.path.exists(path):
+            lists[path] = open(path, 'rb').read()
+            os.remove(path)
     nmea = os.path.join(VH, 'shots.nmea')   # (*.nmea: not in git)
     track(nmea)
     lines = [l for l in (saved or b'').split(b'\r\n') if not l.startswith(b'gps.port=')]
@@ -288,8 +302,10 @@ def main():
                 print('%02d %s: the window is gone (%s)' % (n + 1, name, 'exited' if p.poll() is not None else 'hidden'))
                 break
             for st in steps:
-                if st[0] == 'sleep':
+                if st[0] == 'sleep':   # (then drawn again: the taps' zones are made by the drawing - see grab)
                     time.sleep(st[1])
+                    u32.InvalidateRect(h, None, False)
+                    u32.UpdateWindow(h)
                 elif st[0] == 'type':   # the keyboard screen: the text, then Enter (the PC build's WM_CHAR)
                     for ch in st[1] + '\r':
                         u32.SendMessageW(h, 0x102, ord(ch), 0)
@@ -324,6 +340,12 @@ def main():
         else:
             os.remove(ini)
         os.remove(nmea)
+        for f in ('radio_fav.txt', 'radio_recent.txt'):
+            path = os.path.join(VH, f)
+            if path in lists:
+                open(path, 'wb').write(lists[path])
+            elif os.path.exists(path):
+                os.remove(path)
     print('done: %s' % os.path.abspath(OUT))
 
 

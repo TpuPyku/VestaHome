@@ -184,8 +184,49 @@ static void TestEdges()
     Check(strstr(big, "name=a%20b&order=name&reverse=false") != 0, "a search by the name");
 }
 
+static void TestCis()
+{
+    NcCat c[4];
+    int n = NcCats("[{\"name\":\"Germany\",\"iso_3166_1\":\"DE\",\"stationcount\":3000},"
+                   "{\"name\":\"Russia\",\"iso_3166_1\":\"RU\",\"stationcount\":900},"
+                   "{\"name\":\"Latvia\",\"iso_3166_1\":\"LV\",\"stationcount\":90},"
+                   "{\"name\":\"Kazakhstan\",\"iso_3166_1\":\"KZ\",\"stationcount\":80},"
+                   "{\"name\":\"Tajikistan\",\"iso_3166_1\":\"TJ\",\"stationcount\":5}]", NC_CIS, c, 4);
+    Check(n == 3 && !strcmp(c[0].key, "RU") && !wcscmp(c[0].name, L"Россия") && c[0].count == 900 &&
+          !wcscmp(c[1].name, L"Казахстан") && !wcscmp(c[2].name, L"Таджикистан"), "the CIS: only its countries");
+    char p[300];
+    NcCatsPath(NC_CIS, p, sizeof(p));
+    Check(!strcmp(p, "/json/countries?order=stationcount&reverse=true&hidebroken=true"), "the CIS: the countries");
+}
+
+static NcStation St(const char* url)
+{
+    NcStation s;
+    memset(&s, 0, sizeof(s));
+    strcpy(s.url, url);
+    s.name[0] = (wchar_t)url[0];
+    return s;
+}
+
+static void TestRecent()
+{
+    NcStation l[3];
+    int n = NcRecentPut(l, 0, 3, St("a"));
+    n = NcRecentPut(l, n, 3, St("b"));
+    Check(n == 2 && !strcmp(l[0].url, "b") && !strcmp(l[1].url, "a"), "the latest first");
+    n = NcRecentPut(l, n, 3, St("a"));
+    Check(n == 2 && !strcmp(l[0].url, "a") && !strcmp(l[1].url, "b"), "played again: to the top, once");
+    n = NcRecentPut(l, n, 3, St("c"));
+    n = NcRecentPut(l, n, 3, St("d"));
+    Check(n == 3 && !strcmp(l[0].url, "d") && !strcmp(l[1].url, "c") && !strcmp(l[2].url, "a"), "full: the oldest out");
+    n = NcRecentPut(l, n, 3, St("a"));
+    Check(n == 3 && !strcmp(l[0].url, "a") && !strcmp(l[1].url, "d") && !strcmp(l[2].url, "c"), "full, the last again");
+}
+
 int main()
 {
+    TestCis();
+    TestRecent();
     TestEdges();
     TestLines();
     TestStations();

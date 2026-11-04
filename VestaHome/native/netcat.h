@@ -22,7 +22,12 @@ int  NcFormatLine(const NcStation& s, char* out, int cap);   // the line back (f
 // in its order, cap at most.
 int NcStations(const char* json, NcStation* out, int cap);
 
-enum { NC_TAGS, NC_COUNTRIES, NC_LANGS };   // the category lists
+// The station played to the top of the recent ones (the latest first; once each, by its address; full: the oldest
+// goes); the list's new length.
+int NcRecentPut(NcStation* list, int n, int cap, const NcStation& s);
+
+// The category lists; NC_CIS: the countries, only the CIS ones (the user 2026-11-04: "at least the CIS").
+enum { NC_TAGS, NC_COUNTRIES, NC_LANGS, NC_CIS };
 struct NcCat {
     char    key[64];       // what a request takes: the tag, the country's code, the language
     wchar_t name[48];      // shown: Russian if known

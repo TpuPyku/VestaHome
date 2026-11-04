@@ -705,7 +705,7 @@ static void SaveCfg()
                            L"# screen.saverbg: the saver's background, 0 the mosaic (the accent's light), 1 its own picture "
                            L"(screen.saverfile: PNG / JPG / BMP, fitted to the screen)\r\nscreen.saverbg=%d\r\nscreen.saverfile=%s\r\n"
                            L"# radio.list / radio.url: the internet radio's list (0 radio.txt, 1 radio_fav.txt, 2 the "
-                           L"catalogue) and its station's address\r\nradio.list=%d\r\nradio.url=%s\r\n",
+                           L"catalogue, 3 radio_recent.txt) and its station's address\r\nradio.list=%d\r\nradio.url=%s\r\n",
                            kAccents[s_cfg.accent].code, s_cfg.saverBg, s_cfg.saverFile, s_cfg.radioList, s_cfg.radioUrl);
         n += k > 0 ? k : 0;
     }
