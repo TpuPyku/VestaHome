@@ -108,49 +108,51 @@ def screen(path, height):
     return out, pad
 
 
-def cover(w, h, shots, size, title, sub, gap):
+def cover(w, h, left, right, size, title, sub, gap, clear):
+    """The name in the middle (the user 2026-11-04: the 3:1 one is the phones' view, cut at the sides), the screens
+    to its left and right, `clear` px kept free around the middle."""
     im = mosaic(w, h)
     dark = Image.new('RGB', (w, h), (0, 0, 0))
     im = Image.blend(im, dark, 0.15)
     orange = Image.new('RGB', (w, h), ORANGE)
-    im = Image.composite(orange, im, glow(w, h, int(w * 0.70), int(h * 0.55), int(h * 1.1), 120))
-    im = Image.composite(orange, im, glow(w, h, int(w * 0.04), h, int(h * 0.7), 70))
+    im = Image.composite(orange, im, glow(w, h, w // 2, int(h * 0.5), int(h * 1.1), 120))
     im = im.convert('RGBA')
-    # the screens from the right edge leftwards, the first on top
     sh = int(h * size)
-    x = w - int(h * 0.12)
     placed = []
-    for i, name in enumerate(shots):
-        path = os.path.join(SHOTS if not name.startswith('osm_') else OUT, name)
-        s, pad = screen(path, sh)
-        x -= s.width - 2 * pad
-        placed.append((s, x - pad, (h - sh) // 2 - pad + (i % 2) * int(h * 0.04) - int(h * 0.02)))
-        x -= gap
-    for s, sx, sy in reversed(placed):
+    for side, names in ((-1, left), (1, right)):
+        x = w // 2 + side * clear
+        for i, name in enumerate(names):   # from the middle outwards, the nearer on top
+            path = os.path.join(SHOTS if not name.startswith('osm_') else OUT, name)
+            s, pad = screen(path, sh)
+            sw = s.width - 2 * pad
+            sx = x - sw if side < 0 else x
+            placed.append((i, s, sx - pad, (h - sh) // 2 - pad + (i % 2) * int(h * 0.04) - int(h * 0.02)))
+            x += side * (sw + gap)
+    for i, s, sx, sy in sorted(placed, key=lambda p: -p[0]):
         im.alpha_composite(s, (sx, sy))
     d = ImageDraw.Draw(im)
     big = ImageFont.truetype(os.path.join(FONTS, 'GolosText-Bold.ttf'), title)
     small = ImageFont.truetype(os.path.join(FONTS, 'GolosText-Regular.ttf'), sub)
-    tx = int(h * 0.16)
     ty = h // 2 - title // 2 - sub
-    d.text((tx, ty), 'VestaHome', font=big, fill=(255, 255, 255))
-    d.text((tx + int(title * 0.04), ty + int(title * 1.15)), 'Оболочка для MMC Лада Веста', font=small,
-           fill=(190, 196, 206))
-    d.text((tx + int(title * 0.04), ty + int(title * 1.15) + int(sub * 1.4)), 'Карты OSMapsCE',
-           font=small, fill=ORANGE)
-    return im.convert('RGB'), placed[-1][1] + placed[-1][0].height // 6
+    lines = (('VestaHome', big, (255, 255, 255), ty),
+             ('Оболочка для MMC Лада Веста', small, (190, 196, 206), ty + int(title * 1.15)),
+             ('Карты OSMapsCE', small, ORANGE, ty + int(title * 1.15) + int(sub * 1.4)))
+    for text, font, col, y in lines:
+        box = font.getbbox(text)
+        d.text(((w - (box[2] - box[0])) // 2 - box[0], y), text, font=font, fill=col)
+    return im.convert('RGB')
 
 
 def main():
     os.makedirs(OUT, exist_ok=True)
     if '--osm' in sys.argv:
         osm_shots()
-    for name, w, h, shots, size, title, sub, gap in (
-            ('cover_8x1', 2400, 300, ['01_home.png', 'osm_night.png', '04_radio.png', 'osm_day.png'], 0.72, 64, 24, 28),
-            ('cover_3x1', 1500, 500, ['01_home.png', 'osm_night.png'], 0.50, 78, 28, -110)):   # (overlapped)
-        im, left = cover(w, h, shots, size, title, sub, gap)
-        im.save(os.path.join(OUT, name + '.png'))
-        print('%s: %d x %d, the screens from x %d' % (name, w, h, left))
+    for name, w, h, left, right, size, title, sub, gap, clear in (
+            ('cover_8x1', 2400, 300, ['04_radio.png', 'osm_day.png'], ['01_home.png', 'osm_night.png'], 0.72, 64, 24,
+             28, 300),
+            ('cover_3x1', 1500, 500, ['osm_night.png'], ['01_home.png'], 0.46, 70, 26, 0, 300)):
+        cover(w, h, left, right, size, title, sub, gap, clear).save(os.path.join(OUT, name + '.png'))
+        print('%s: %d x %d' % (name, w, h))
 
 
 if __name__ == '__main__':
