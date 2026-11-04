@@ -238,6 +238,27 @@ static void ModemUsbSet()
 #define WM_APP_MODEM (WM_APP + 29)
 #ifdef UNDER_CE
 static HRASCONN      s_ras;
+static HANDLE        s_rasEv;      // the dial's end (OnRasEvent): its result in s_rasEnd
+static volatile DWORD s_rasEnd;
+
+// The dial's steps, from RAS (WM_RASDIALEVENT; sheet 22: RAS 619 - at which step was unseen): each logged, the end
+// to the dialling thread
+static void OnRasEvent(DWORD state, DWORD err)
+{
+    static const wchar_t* const kStep[] = { L"порт открываю", L"порт открыт", L"модем звонит", L"модем соединился",
+        L"все устройства", L"проверка", L"проверка: ответ", L"проверка ещё раз", L"обратный звонок", L"смена пароля",
+        L"PPP: протоколы", L"PPP: скорость", L"проверка принята", L"проверка заново", L"проверено" };
+    const wchar_t* step = state < sizeof(kStep) / sizeof(kStep[0]) ? kStep[state]
+                        : state == RASCS_Connected ? L"в сети" : state == RASCS_Disconnected ? L"разъединён" : L"?";
+    if (err)
+        VLog(L"модем: RAS шаг %lu (%s) - ошибка %lu", state, step, err);
+    else
+        VLog(L"модем: RAS шаг %lu (%s)", state, step);
+    if (err || state == RASCS_Connected || state == RASCS_Disconnected) {
+        s_rasEnd = err ? err : state == RASCS_Connected ? 0 : ERROR_PORT_DISCONNECTED;
+        SetEvent(s_rasEv);
+    }
+}
 
 static int ModemDw(HKEY k, const wchar_t* name)
 {
@@ -403,7 +424,12 @@ static DWORD WINAPI ModemDial(LPVOID)
         wcscpy(p.szEntryName, L"VestaModem");
         wcsncpy(p.szUserName, s_cfg.netUser, UNLEN);
         wcsncpy(p.szPassword, s_cfg.netPass, PWLEN);
-        r = RasDial(NULL, NULL, &p, 0, NULL, &c);   // (no notifier: it waits for the end)
+        if (!s_rasEv)
+            s_rasEv = CreateEvent(NULL, FALSE, FALSE, NULL);
+        ResetEvent(s_rasEv);
+        r = RasDial(NULL, NULL, &p, 0xFFFFFFFF, s_wnd, &c);   // (the window told each step: OnRasEvent)
+        if (!r)
+            r = WaitForSingleObject(s_rasEv, 120000) == WAIT_OBJECT_0 ? s_rasEnd : ERROR_TIMEOUT;
     }
     if (r && c) {
         RasHangUp(c);

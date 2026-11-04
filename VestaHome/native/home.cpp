@@ -18,6 +18,7 @@
 #include <tlhelp32.h>   // our threads' load (OwnThreadsLoad); toolhelp.dll itself is loaded at run time
 #ifdef UNDER_CE
 #include <ras.h>        // the USB modem's dial-up (vh_gps.inc ModemNet)
+#include <raserror.h>   // (its results: ERROR_PORT_DISCONNECTED, 619)
 #ifdef UNDER_CE
 #include <tapi.h>       // its dialling location (ModemCarLocation)
 #endif
@@ -1084,6 +1085,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
+#ifdef UNDER_CE
+    case WM_RASDIALEVENT:   // the modem's dial: a step (vh_gps.inc OnRasEvent)
+        OnRasEvent((DWORD)wp, (DWORD)lp);
+        return 0;
+#endif
     case WM_APP_MODEM:   // the modem's dial is done (vh_gps.inc ModemDial)
         if (IsWindowVisible(hwnd) && s_screen == S_DIAG)
             Redraw();

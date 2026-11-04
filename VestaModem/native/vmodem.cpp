@@ -121,6 +121,8 @@ struct Dev {
     volatile LONG    opens;       // the COM port's handles
     volatile LONG    busy;        // COM calls inside (the detach waits for them)
     volatile LONG    maskSeq;     // a new mask, a purge, a close: the WaitCommEvent going on ends
+    volatile LONG    trace;       // the serial calls still to log after a dial (sheet 22: RAS 619 7 ms after CONNECT,
+                                  // the host hung up - which call it read wrong was unseen)
 };
 
 static Dev* volatile s_dev;   // the modem of the COM port (one at a time)
@@ -701,6 +703,7 @@ struct Open {   // one CreateFile of it
     volatile bool closing;
     int           logged[2];   // the stream's bytes logged: read, written (LogStream)
     bool          ppp[2];      // PPP began that way: no more logged
+    bool          pppSaid[2];  // its beginning logged
 };
 
 static void Lines(Dev* d, WORD bits)   // the modem lines, logged on a change
@@ -750,6 +753,8 @@ DWORD COM_Open(DWORD dev, DWORD access, DWORD)
         Log(L"COM: открыт (%d)", d->opens);
     } else {
         o->closing = true;   // (a query handle: no reads)
+        if (d->trace > 0)
+            Log(L"COM: открыт для запросов (доступ 0x%X)", access);
     }
     return (DWORD)o;
 }
@@ -825,6 +830,12 @@ static int StreamText(const BYTE* b, int n, char* out, int cap, bool* ppp)
 static void LogStream(Open* o, bool write, const BYTE* b, int n)   // the first 512 bytes each way of an opening
 {
     int w = write ? 1 : 0;
+    if (n > 2 && write && !o->ppp[w] && (!_strnicmp((const char*)b, "ATD", 3)))
+        o->d->trace = 400;   // a dial: the serial calls from now on
+    if (n > 0 && !o->pppSaid[w] && memchr(b, 0x7E, n)) {
+        o->pppSaid[w] = true;
+        Log(L"COM %s [PPP с этого места, %d Б]", write ? L"->" : L"<-", n);
+    }
     if (n <= 0 || o->ppp[w] || o->logged[w] >= 512)
         return;
     char t[600];
@@ -1001,8 +1012,17 @@ BOOL COM_IOControl(DWORD h, DWORD code, PBYTE in, DWORD inLen, PBYTE out, DWORD 
     if (actual)
         *actual = 0;
     InterlockedIncrement((LONG*)&o->d->busy);
+    DWORD t0 = GetTickCount();
     BOOL ok = Io(o, code, in, inLen, out, outLen, actual);
-    if (!ok)
+    if (o->d->trace > 0 && InterlockedDecrement((LONG*)&o->d->trace) >= 0) {
+        // the code's function (bits 2-13), what went in and out; a wait's result, a mask, a DCB's lines and speed
+        DWORD val = in && inLen >= 4 ? *(const DWORD*)in : out && actual && *actual >= 4 ? *(const DWORD*)out : 0;
+        if (code == IOCTL_SER_SET_DCB && in && inLen >= sizeof(DCB))
+            val = ((const DCB*)in)->BaudRate | ((const DCB*)in)->fDtrControl << 28 | ((const DCB*)in)->fRtsControl << 30;
+        Log(L"COM io %c 0x%08X (%u) in %u out %u -> %d, %u Б, знач. 0x%X, %u мс", o->closing ? L'q' : L'h', code,
+            (code >> 2) & 0xFFF, inLen, outLen, ok, actual ? *actual : 0, val, GetTickCount() - t0);
+    }
+    if (!ok)   // (after the log: it would reset the error)
         SetLastError(ERROR_INVALID_PARAMETER);
     InterlockedDecrement((LONG*)&o->d->busy);
     return ok;
