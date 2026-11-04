@@ -981,9 +981,61 @@ static void BuildBackground()
     }
 }
 
-// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top); the glow over it.
-static void Glow(int top, int bottom);
+// One row of the mosaic (y counted from anchor) into dst's pixels [x0, x1).
+static void TileRow(Pix* dst, const Pix* t, int y, int anchor, int x0, int x1)
+{
+    const Pix* src = t + ((y - anchor) % s_tileH) * s_tileW;
+    for (int x = x0; x < x1;) {
+        int o = x % s_tileW, n = s_tileW - o < x1 - x ? s_tileW - o : x1 - x;
+        memcpy(dst + x, src + o, n * sizeof(Pix));
+        x += n;
+    }
+}
 
+// The orange glow at the top right over row y's pixels [x0, x1) (y < kGlowH, x0 >= kGlowX).
+static void GlowRow(Pix* row, int y, int x0, int x1, COLORREF o)
+{
+    int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o);
+    const int kMax = 7864;   // 12 % of 65536 (HU 2026-10-24: brighter than the mockup's 7 %)
+    const unsigned char* g = s_glow + y * kGlowW - kGlowX;
+    for (int x = x0; x < x1; x++) {
+        int a = g[x] * kMax / 255;   // of 65536
+        if (!a)
+            continue;
+        Pix p = row[x];
+        int r = PR(p), gg = PG(p), b = PB(p);
+        row[x] = PIX(r + ((orr - r) * a + 32768) / 65536, gg + ((og - gg) * a + 32768) / 65536,
+                     b + ((ob - b) * a + 32768) / 65536);
+    }
+}
+
+// The background's top rows [0, kGlowH) with the glow, 800 wide, made once for the night and the accent it shows
+// (the glow was blended into every frame again: 154 000 pixels); NULL - no glow, or no memory (then per frame).
+static Pix*     s_glowBg;
+static int      s_glowBgNight = -1;
+static COLORREF s_glowBgColor;
+
+static const Pix* GlowBackground(const Pix* t)
+{
+    if (!s_glow)
+        return NULL;
+    COLORREF o = C(kOrange);
+    if (s_glowBg && s_glowBgNight == (int)s_night && s_glowBgColor == o)
+        return s_glowBg;
+    if (!s_glowBg)
+        s_glowBg = (Pix*)malloc(800 * kGlowH * sizeof(Pix));
+    if (!s_glowBg)
+        return NULL;
+    for (int y = 0; y < kGlowH; y++) {
+        TileRow(s_glowBg + y * 800, t, y, 0, 0, 800);
+        GlowRow(s_glowBg + y * 800, y, kGlowX, 800, o);
+    }
+    s_glowBgNight = s_night;
+    s_glowBgColor = o;
+    return s_glowBg;
+}
+
+// Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top); the glow over it.
 static void Pattern(int top, int bottom, int anchor)
 {
     const Pix* t = s_tile[s_night ? 1 : 0];
@@ -996,39 +1048,17 @@ static void Pattern(int top, int bottom, int anchor)
         top = s_clip.top;
     if (bottom > s_clip.bottom)
         bottom = s_clip.bottom;
-    for (int y = top; y < bottom; y++) {
-        const Pix* src = t + ((y - anchor) % s_tileH) * s_tileW;
-        Pix* dst = s_backBits + (479 - y) * 800;
-        for (int x = s_clip.left; x < s_clip.right;) {
-            int o = x % s_tileW, n = s_tileW - o < s_clip.right - x ? s_tileW - o : s_clip.right - x;
-            memcpy(dst + x, src + o, n * sizeof(Pix));
-            x += n;
-        }
-    }
-    Glow(top, bottom);
-}
-
-// The orange glow at the top right over the background just copied (rows [top, bottom), inside the clip).
-static void Glow(int top, int bottom)
-{
-    if (!s_glow)
-        return;
-    COLORREF o = C(kOrange);
-    int orr = GetRValue(o), og = GetGValue(o), ob = GetBValue(o);
-    const int kMax = 7864;   // 12 % of 65536 (HU 2026-10-24: brighter than the mockup's 7 %)
+    const Pix* gb = anchor == 0 ? GlowBackground(t) : NULL;
     int x0 = s_clip.left > kGlowX ? s_clip.left : kGlowX;
-    for (int y = top; y < bottom && y < kGlowH; y++) {
-        const unsigned char* g = s_glow + y * kGlowW - kGlowX;
-        Pix* row = s_backBits + (479 - y) * 800;
-        for (int x = x0; x < s_clip.right; x++) {
-            int a = g[x] * kMax / 255;   // of 65536
-            if (!a)
-                continue;
-            Pix p = row[x];
-            int r = PR(p), gg = PG(p), b = PB(p);
-            row[x] = PIX(r + ((orr - r) * a + 32768) / 65536, gg + ((og - gg) * a + 32768) / 65536,
-                         b + ((ob - b) * a + 32768) / 65536);
+    for (int y = top; y < bottom; y++) {
+        Pix* dst = s_backBits + (479 - y) * 800;
+        if (gb && y < kGlowH) {
+            memcpy(dst + s_clip.left, gb + y * 800 + s_clip.left, (s_clip.right - s_clip.left) * sizeof(Pix));
+            continue;
         }
+        TileRow(dst, t, y, anchor, s_clip.left, s_clip.right);
+        if (s_glow && y < kGlowH)
+            GlowRow(dst, y, x0, s_clip.right, C(kOrange));
     }
 }
 

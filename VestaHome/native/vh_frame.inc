@@ -78,13 +78,18 @@ static void DrawScreen(HDC dc, Screen s)
     }
 }
 
+// The full frames' parts since the last load line, ms: the background, the screen, the bars, out to the display.
+static DWORD s_partMs[4];
+
 // A screen and, for the main ones, the bottom bar of sections.
 static void DrawFrame(HDC dc)
 {
+    DWORD t0 = GetTickCount();
     if (s_screen == S_HOME)
         MainBackground(dc);
     else
         SubBackground(dc);
+    DWORD t1 = GetTickCount();
     if (s_partial) {
         s_zoneIdx = 0;
     } else {
@@ -93,11 +98,17 @@ static void DrawFrame(HDC dc)
     }
     s_frameBack = A_NONE;
     DrawScreen(dc, s_screen);
+    DWORD t2 = GetTickCount();
     int sec = NavSection(s_screen);
     if (sec >= 0)
         NavBar(dc, sec);
     else
         BackButton(dc);
+    if (!s_partial) {
+        s_partMs[0] += t1 - t0;
+        s_partMs[1] += t2 - t1;
+        s_partMs[2] += GetTickCount() - t2;
+    }
 }
 
 static int s_drawnMinute = -1;   // the minute on the clock of the last frame
@@ -128,7 +139,9 @@ static void Redraw()
     VLog(L"кадр: экран %d, %u мкс, измерений текста %u", (int)s_screen,
          (unsigned)((q1.QuadPart - q0.QuadPart) * 1000000 / qf.QuadPart), (unsigned)(s_txtMeasures - m0));
 #endif
+    DWORD tb = GetTickCount();
     BitBlt(hdc, 0, 0, 800, 480, dc, 0, 0, SRCCOPY);   // the video's window is left out (WS_CLIPCHILDREN)
+    s_partMs[3] += GetTickCount() - tb;
     SelectObject(dc, ob);
     DeleteDC(dc);
     ReleaseDC(s_wnd, hdc);
@@ -303,13 +316,16 @@ static void LogLoad(HWND hwnd)
     }
     wchar_t thr[160];
     OwnThreadsLoad(thr, 160);
-    VLog(L"нагрузка: ЦП %d%%; %s; кадров %u, в среднем %u мс, макс %u мс (экран %d, измерений текста %u); "
-         L"частичных %u (%u на экран), в среднем %u мс; потоки VH: %s",
+    DWORD n = s_drawCount ? s_drawCount : 1;
+    VLog(L"нагрузка: ЦП %d%%; %s; кадров %u, в среднем %u мс (фон %u, экран %u, панели %u, вывод %u), макс %u мс "
+         L"(экран %d, измерений текста %u); частичных %u (%u на экран), в среднем %u мс; потоки VH: %s",
          s_task.cpu10 >= 0 ? (s_task.cpu10 + 5) / 10 : -1, top[0] ? top : L"процессы не видны", (unsigned)s_drawCount,
-         (unsigned)(s_drawCount ? s_drawMs / s_drawCount : 0), (unsigned)s_drawMax, s_drawMaxScreen,
+         (unsigned)(s_drawMs / n), (unsigned)(s_partMs[0] / n), (unsigned)(s_partMs[1] / n),
+         (unsigned)(s_partMs[2] / n), (unsigned)(s_partMs[3] / n), (unsigned)s_drawMax, s_drawMaxScreen,
          (unsigned)s_drawMaxText, (unsigned)s_areaCount, (unsigned)s_areaShown,
          (unsigned)(s_areaCount ? s_areaMs / s_areaCount : 0), thr);
     s_drawCount = s_drawMs = s_drawMax = s_areaCount = s_areaMs = s_areaShown = 0;
+    memset(s_partMs, 0, sizeof(s_partMs));
 }
 
 // The band that slides on a page turn: under the top bar, above the bottom bar and above the page dots where
