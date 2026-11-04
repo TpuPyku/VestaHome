@@ -1,0 +1,567 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Интернет-радио VestaHome</title><style>
+@font-face { font-family: 'Golos Text'; font-weight: 400; src: url('../VestaHome/VestaHome/Fonts/GolosText-Regular.ttf'); }
+@font-face { font-family: 'Golos Text'; font-weight: 700; src: url('../VestaHome/VestaHome/Fonts/GolosText-Bold.ttf'); }
+@page { size: 297mm 210mm; margin: 0; }
+:root { --bg:#0e1013; --s1:#1a1d22; --s2:#23272e; --sep:#2a2f37; --tx:#f5f3ee; --t2:#aab0b8; --t3:#6c727c;
+        --or:#72c059; --orS:rgba(114,192,89,.16); --ok:#33c27a; }
+* { box-sizing: border-box; }
+html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; background: #08090b; color: var(--tx); font-family: 'Golos Text', Tahoma, sans-serif; }
+.page { width: 297mm; height: 210mm; padding: 9mm 12mm; page-break-after: always; position: relative; overflow: hidden;
+        display: flex; flex-direction: column; background: #08090b; }
+.zoom { zoom: 1.08; align-self: center; }
+.saver { background: radial-gradient(90% 70% at 50% 40%, rgba(255,107,26,.12), transparent 60%),
+         linear-gradient(180deg, rgba(11,12,14,.6), rgba(11,12,14,.85)),
+         url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="112" viewBox="0 0 64 112"><path d="M0 0 32 56 0 112z" fill="%23171a20"/><path d="M64 0 32 56 64 112z" fill="%23121419"/><path d="M0 0h64L32 56z" fill="%231b1e24"/><path d="M0 112h64L32 56z" fill="%230f1114"/></svg>') 0 0/64px 112px, #0b0c0e !important; }
+h1 { font-size: 26px; margin: 0 0 4px; } h2 { font-size: 20px; margin: 0 0 6px; color: var(--or); }
+.lead { color: var(--t2); font-size: 13px; margin: 0 0 10px; }
+.row { display: flex; gap: 14px; align-items: flex-start; }
+.note { font-size: 11.5px; color: var(--t2); line-height: 1.45; } .note b { color: var(--tx); }
+.note ul { margin: 4px 0; padding-left: 16px; } .note li { margin: 2px 0; }
+.was { width: 240px; flex: none; } .was img { width: 240px; border-radius: 6px; display: block; opacity: .95; }
+.was span { font-size: 11px; color: var(--t3); }
+/* ---- the screen */
+.scr { width: 800px; height: 480px; position: relative; overflow: hidden; border-radius: 10px; flex: none;
+       background: radial-gradient(120% 90% at 85% 0%, rgba(255,107,26,.07), transparent 55%),
+                   linear-gradient(180deg, rgba(14,16,19,.25), rgba(10,11,13,.7)),
+                   url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="112" viewBox="0 0 64 112"><path d="M0 0 32 56 0 112z" fill="%23171a20"/><path d="M64 0 32 56 64 112z" fill="%23121419"/><path d="M0 0h64L32 56z" fill="%231b1e24"/><path d="M0 112h64L32 56z" fill="%230f1114"/></svg>') 0 0/64px 112px, #0e1013;
+       box-shadow: 0 0 0 1px #20242a; }
+.top { position: absolute; left: 0; right: 0; top: 0; height: 48px; display: flex; align-items: center;
+       padding: 0 24px; gap: 14px; }
+.top .t { font-size: 20px; font-weight: bold; } .top .d { font-size: 18px; color: var(--t2); }
+.top .sp { flex: 1; } .top .st { display: flex; gap: 14px; color: var(--t3); align-items: center; }
+.top .clk { font-size: 22px; font-weight: bold; margin-left: 6px; } .top .on { color: var(--or); }
+.bot { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: flex; align-items: center;
+       justify-content: space-between; padding: 0 24px; background: linear-gradient(0deg, rgba(10,11,13,.96), rgba(10,11,13,.6)); }
+.bot .i { width: 64px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--t2);
+          border-radius: 22px; gap: 8px; font-size: 15px; font-weight: bold; }
+.bot .a { width: auto; padding: 0 18px; background: var(--orS); color: var(--or); }
+.card { position: absolute; background: var(--s1); border-radius: 20px; padding: 18px 20px; }
+.cap { font-size: 13px; color: var(--t2); display: flex; align-items: center; gap: 8px; }
+.cap svg { color: var(--or); }
+.big { font-size: 52px; font-weight: bold; line-height: 1; } .mid { font-size: 26px; font-weight: bold; }
+.t2 { color: var(--t2); } .t3 { color: var(--t3); } .or { color: var(--or); }
+.pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 20px;
+        background: var(--s2); font-size: 15px; color: var(--t2); }
+.pill.a { background: var(--orS); color: var(--or); font-weight: bold; }
+.btn { display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--s2); }
+.play { background: var(--or); color: #0e1013; }
+.facet { background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="70" viewBox="0 0 40 70"><path d="M0 0 20 35 0 70z" fill="%23467737"/><path d="M40 0 20 35 40 70z" fill="%233b632e"/><path d="M0 0h40L20 35z" fill="%234f863e"/><path d="M0 70h40L20 35z" fill="%23335628"/></svg>') 0 0/40px 70px; }
+.bar { height: 6px; border-radius: 3px; background: var(--s2); position: relative; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--or); }
+.knob { position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--tx); top: -6px; }
+.lrow { display: flex; align-items: center; height: 60px; gap: 14px; border-bottom: 1px solid var(--sep); }
+.lrow:last-child { border-bottom: 0; }
+.tog { width: 52px; height: 30px; border-radius: 15px; background: var(--s2); position: relative; }
+.tog::after { content: ''; position: absolute; left: 4px; top: 4px; width: 22px; height: 22px; border-radius: 50%;
+              background: var(--t3); }
+.tog.on { background: var(--or); } .tog.on::after { left: 26px; background: #0e1013; }
+.tok { display: inline-block; width: 30px; height: 30px; border-radius: 8px; vertical-align: middle; margin-right: 6px;
+       box-shadow: 0 0 0 1px #2c3038; }
+table.tk { border-collapse: collapse; font-size: 12px; } table.tk td { padding: 3px 10px 3px 0; color: var(--t2); }
+table.tk td b { color: var(--tx); }
+
+.seg { position:absolute; left:16px; right:16px; top:60px; height:48px; display:flex; gap:8px; }
+.seg .pill { height:44px; font-size:16px; }
+.lst { position:absolute; left:16px; right:88px; top:116px; bottom:72px; background:var(--s1); border-radius:16px;
+       padding:4px 8px; overflow:hidden; }
+.it { display:flex; align-items:center; gap:14px; height:58px; padding:0 14px; border-radius:12px; font-size:17px;
+      font-weight:bold; color:var(--t2); }
+.it.a { background:var(--orS); color:var(--or); } .it .s { font-size:13px; font-weight:normal; color:var(--t3); }
+.it .f { margin-left:auto; color:var(--t3); } .it .f.on { color:var(--or); }
+.scroll { position:absolute; right:16px; top:116px; bottom:72px; width:56px; display:flex; flex-direction:column;
+          justify-content:space-between; align-items:center; }
+.scroll .btn { width:56px; height:92px; border-radius:20px; background:var(--s1); color:var(--t2); }
+.scroll .rail { width:4px; flex:1; margin:10px 0; border-radius:2px; background:var(--s2); position:relative; }
+.scroll .rail i { position:absolute; left:0; right:0; top:30%; height:14%; border-radius:2px; background:var(--t2); }
+.foot { position:absolute; left:16px; right:16px; bottom:10px; height:52px; display:flex; align-items:center; gap:12px; }
+.foot .btn { width:52px; height:52px; color:var(--t2); }
+.tile { background:var(--s1); border-radius:18px; padding:16px 18px; display:flex; flex-direction:column; gap:8px; }
+.tile .n { font-size:19px; font-weight:bold; } .tile .s { font-size:13px; color:var(--t2); }
+.tile svg { color:var(--or); }
+.chip { display:flex; align-items:center; justify-content:space-between; height:52px; padding:0 18px; border-radius:14px;
+        background:var(--s1); font-size:17px; font-weight:bold; color:var(--t2); }
+.chip span { font-size:13px; font-weight:normal; color:var(--t3); }
+.key { background:var(--s2); border-radius:8px; height:44px; display:flex; align-items:center; justify-content:center;
+       font-size:18px; color:var(--tx); }
+</style></head><body><div class="page"><h1>Интернет-радио: избранное и каталог</h1><p class="lead">Макет 2026-11-04 на основе VestaHome 0.6. Списки станций переключаются, как плейлисты: Мои станции, Избранное, Каталог (radio-browser.info) по категориям. На каждой странице сверху — экран, ниже — как он выглядит сейчас и пояснения.</p><h2>Как это работает</h2><div class="note" style="font-size:13px"><ul>
+<li><b>Источник:</b> API radio-browser.info по HTTPS (наш клиент https.cpp и корни из trust_anchors.inc; корень
+сертификата серверов проверить при реализации; Let's Encrypt — ISRG X1 уже есть). Сервер — из списка all.api.radio-browser.info, при ошибке — следующий.
+Свой User-Agent «VestaHome/0.7», как просят правила каталога.</li>
+<li><b>Запросы:</b> жанры <code>/json/tags?order=stationcount&amp;reverse=true&amp;limit=100</code>, страны
+<code>/json/countries</code>, языки <code>/json/languages</code>, станции <code>/json/stations/bytag/джаз?order=clickcount
+&amp;reverse=true&amp;limit=50&amp;offset=0&amp;hidebroken=true&amp;codec=…</code>, популярные <code>/json/stations/topclick/50</code>,
+поиск <code>/json/stations/search?name=…</code>. При включении станции — <code>/json/url/&lt;id&gt;</code> (каталог так считает
+прослушивания и отдаёт рабочий адрес).</li>
+<li><b>Память и сеть:</b> ответы JSON читаются потоком, в памяти — только нужные поля открытой страницы; списки
+жанров, стран и языков кэшируются на SD на сутки (без SD — только в памяти). Без интернета — «Каталог недоступен»,
+Мои станции и Избранное работают как раньше.</li>
+<li><b>Файлы:</b> radio.txt (Мои станции) — без изменений; radio_fav.txt — Избранное; radio_recent.txt — Недавние (на SD).</li>
+<li><b>Выбранный список и станция</b> запоминаются, как сейчас станция: после перезапуска играет тот же список.</li>
+<li><b>Акцент</b> на макете — из вашей темы (Криптон); на ГУ — тот, что выбран.</li>
+</ul></div></div>
+<div class="page"><h2>1. Плеер: из какого списка играет</h2><div class="zoom"><div class="scr"><div class="top"><span class="t">Медиа · Интернет-радио</span><span class="sp"></span><span class="st"><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+</svg><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7 7 10 10-5 5V2l5 5L7 17" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h.01" />
+  <path d="M2 8.82a15 15 0 0 1 20 0" />
+  <path d="M5 12.859a10 10 0 0 1 14 0" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+</svg><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+  <path d="M16 9a5 5 0 0 1 0 6" />
+  <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+</svg><span style="color:var(--t2);font-size:16px">12</span></span><span class="clk">16:21</span></div><div style="position:absolute;left:16px;right:16px;top:62px;display:flex;gap:8px;align-items:center"><span class="pill" style="height:40px;font-size:14px">Музыка</span><span class="pill a" style="height:40px;font-size:14px">Интернет</span><span class="pill" style="height:40px;font-size:14px">Bluetooth</span><span class="pill" style="height:40px;font-size:14px">AUX</span><span class="pill" style="height:40px;font-size:14px">Видео</span><span class="pill" style="height:40px;font-size:14px">Фото</span><span style="flex:1"></span><span class="btn" style="width:48px;height:48px;color:var(--t2)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M3 5h.01" />
+  <path d="M3 12h.01" />
+  <path d="M3 19h.01" />
+  <path d="M8 5h13" />
+  <path d="M8 12h13" />
+  <path d="M8 19h13" />
+</svg></span></div>
+<div class="facet" style="position:absolute;left:16px;top:124px;width:232px;height:232px;border-radius:20px;
+  display:flex;align-items:center;justify-content:center">
+  <span style="color:#0e1013"><svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="#0e1013" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9" />
+  <path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5" />
+  <circle cx="12" cy="9" r="2" />
+  <path d="M16.2 4.8c2 2 2.26 5.11.8 7.47" />
+  <path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1" />
+  <path d="M9.5 18h5" />
+  <path d="m8 22 4-11 4 11" />
+</svg></span></div>
+<div style="position:absolute;left:272px;top:132px;right:24px">
+  <span class="pill a" style="height:34px;font-size:13px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg> Избранное · 2 из 6 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m9 18 6-6-6-6" />
+</svg></span>
+  <div style="display:flex;align-items:center;gap:14px;margin-top:12px">
+    <div style="font-size:34px;font-weight:bold">DFM</div><span class="or"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div>
+  <div class="t2" style="font-size:15px;margin-top:4px">Dua Lipa — Levitating</div>
+  <div class="t3" style="font-size:13px;margin-top:2px">Россия · AAC 64 кбит/с</div></div>
+<div style="position:absolute;left:390px;top:294px;display:flex;gap:46px;align-items:center;color:var(--t2)">
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z" />
+  <path d="M3 20V4" />
+</svg><span class="btn play" style="width:84px;height:84px"><svg width="40" height="40" viewBox="0 0 24 24" fill="#0e1013" stroke="#0e1013" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="14" y="3" width="5" height="18" rx="1" />
+  <rect x="5" y="3" width="5" height="18" rx="1" />
+</svg></span><svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M21 4v16" />
+  <path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" />
+</svg></div>
+<div class="bot"><span class="i"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+  <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+</svg></span><span class="i"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><span class="i a"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M21 16V3a1 1 0 0 0-1.28-.96l-10 2.917a1 1 0 0 0-.72.96V19" />
+  <circle cx="18" cy="16" r="3" />
+  <circle cx="6" cy="19" r="3" />
+</svg>Медиа</span><span class="i"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384" />
+</svg></span><span class="i"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="7" height="7" x="3" y="3" rx="1" />
+  <rect width="7" height="7" x="14" y="3" rx="1" />
+  <rect width="7" height="7" x="14" y="14" rx="1" />
+  <rect width="7" height="7" x="3" y="14" rx="1" />
+</svg></span><span class="i"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+  <circle cx="12" cy="12" r="3" />
+</svg></span><span class="i"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+</svg></span></div></div></div><div class="row" style="margin-top:12px"><div class="was"><span>Сейчас</span><img src="../docs/shots/09_netradio.png"></div><div class="note" style="flex:1"><ul><li><b>Над названием — список, из которого играет:</b> «Избранное · 2 из 6». Касание открывает выбор списка.</li><li><b>⏮ ⏭, кнопки руля и крутилка</b> листают станции <b>только этого списка</b>: «Мои станции» (radio.txt), «Избранное» или открытая страница каталога (например, «Джаз», 50 станций).</li><li><b>★ рядом с названием</b> — в избранное / убрать. Под названием — что играет (ICY), страна и поток.</li><li>Обложка остаётся нашей плиткой: значки станций из каталога (favicon) — разные форматы и размеры, на ГУ это память; можно позже, только PNG/JPEG до 64 КБ и с кэшем на SD.</li></ul></div></div></div>
+<div class="page"><h2>2. Списки: «Мои станции»</h2><div class="zoom"><div class="scr"><div class="top"><span class="t">Интернет-радио · Станции</span><span class="sp"></span><span class="st"><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+</svg><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7 7 10 10-5 5V2l5 5L7 17" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h.01" />
+  <path d="M2 8.82a15 15 0 0 1 20 0" />
+  <path d="M5 12.859a10 10 0 0 1 14 0" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+</svg><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+  <path d="M16 9a5 5 0 0 1 0 6" />
+  <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+</svg><span style="color:var(--t2);font-size:16px">12</span></span><span class="clk">16:21</span></div><div class="seg"><span class="pill a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg>Мои станции <span style="opacity:.7;font-weight:normal">28</span></span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg>Избранное <span style="opacity:.7;font-weight:normal">6</span></span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+  <path d="M2 12h20" />
+</svg>Каталог</span><span style="flex:1"></span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" />
+</svg> Поиск</span></div><div class="lst"><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Радио 7 на семи холмах</div><span class="f"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Монте-Карло</div><span class="f"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it a"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>DFM</div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Радио Рекорд</div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Дискотека 90-х</div><span class="f"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div></div><div class="scroll"><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m18 15-6-6-6 6" />
+</svg></span><span class="rail"><i></i></span><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m6 9 6 6 6-6" />
+</svg></span></div><div class="foot"><span class="btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+</svg></span><span style="flex:1"></span><span class="btn" style="background:none"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><span class="btn" style="background:none"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+  <circle cx="12" cy="12" r="3" />
+</svg></span></div></div></div><div class="row" style="margin-top:12px"><div class="was"><span>Сейчас</span><img src="../docs/shots/10_netradio_list.png"></div><div class="note" style="flex:1"><ul><li><b>Сверху — переключатель списков:</b> Мои станции (28) · Избранное (6) · Каталог; справа — Поиск.</li><li>Мои станции — как сейчас: radio.txt рядом с VestaHome, порядок файла.</li><li><b>★ в каждой строке</b>: касание звезды — в избранное / убрать; касание строки — играть.</li></ul></div></div></div>
+<div class="page"><h2>3. Избранное</h2><div class="zoom"><div class="scr"><div class="top"><span class="t">Интернет-радио · Избранное</span><span class="sp"></span><span class="st"><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+</svg><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7 7 10 10-5 5V2l5 5L7 17" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h.01" />
+  <path d="M2 8.82a15 15 0 0 1 20 0" />
+  <path d="M5 12.859a10 10 0 0 1 14 0" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+</svg><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+  <path d="M16 9a5 5 0 0 1 0 6" />
+  <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+</svg><span style="color:var(--t2);font-size:16px">12</span></span><span class="clk">16:21</span></div><div class="seg"><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg>Мои станции <span style="opacity:.7;font-weight:normal">28</span></span><span class="pill a"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg>Избранное <span style="opacity:.7;font-weight:normal">6</span></span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+  <path d="M2 12h20" />
+</svg>Каталог</span><span style="flex:1"></span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" />
+</svg> Поиск</span></div><div class="lst"><div class="it a"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>DFM<div class="s">Мои станции</div></div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Радио Рекорд<div class="s">Мои станции</div></div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Jazz24<div class="s">Каталог · США · джаз</div></div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>SomaFM Groove Salad<div class="s">Каталог · США · эмбиент</div></div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Радио Ваня<div class="s">Каталог · Россия · поп</div></div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div></div><div class="scroll"><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m18 15-6-6-6 6" />
+</svg></span><span class="rail"><i></i></span><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m6 9 6 6 6-6" />
+</svg></span></div><div class="foot"><span class="btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+</svg></span><span style="flex:1"></span></div></div></div><div class="row" style="margin-top:12px"><div class="note" style="flex:1"><ul><li>Станции из любых списков в одном месте. Вторая строка — откуда станция (Мои / Каталог · страна · жанр).</li><li>Хранится в <b>radio_fav.txt</b> рядом с VestaHome (тот же формат «название|адрес», плюс id каталога): переживает перезагрузку, правится руками, как radio.txt.</li><li>Порядок — как добавляли; позже можно «поднять / опустить» долгим нажатием.</li></ul></div></div></div>
+<div class="page"><h2>4. Каталог: категории</h2><div class="zoom"><div class="scr"><div class="top"><span class="t">Интернет-радио · Каталог</span><span class="sp"></span><span class="st"><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+</svg><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7 7 10 10-5 5V2l5 5L7 17" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h.01" />
+  <path d="M2 8.82a15 15 0 0 1 20 0" />
+  <path d="M5 12.859a10 10 0 0 1 14 0" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+</svg><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+  <path d="M16 9a5 5 0 0 1 0 6" />
+  <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+</svg><span style="color:var(--t2);font-size:16px">12</span></span><span class="clk">16:21</span></div><div class="seg"><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg>Мои станции <span style="opacity:.7;font-weight:normal">28</span></span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg>Избранное <span style="opacity:.7;font-weight:normal">6</span></span><span class="pill a"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+  <path d="M2 12h20" />
+</svg>Каталог</span><span style="flex:1"></span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" />
+</svg> Поиск</span></div>
+<div style="position:absolute;left:16px;right:16px;top:116px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px"><div class="tile"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16 7h6v6" />
+  <path d="m22 7-8.5 8.5-5-5L2 17" />
+</svg><div class="n">Популярные</div><div class="s">чаще всего слушают</div></div><div class="tile"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+  <circle cx="12" cy="10" r="3" />
+</svg><div class="n">Россия</div><div class="s">страна по GPS</div></div><div class="tile"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+  <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
+</svg><div class="n">Жанры</div><div class="s">поп, рок, джаз, новости…</div></div><div class="tile"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+  <path d="M2 12h20" />
+</svg><div class="n">Страны</div><div class="s">200+</div></div><div class="tile"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m5 8 6 6" />
+  <path d="m4 14 6-6 2-3" />
+  <path d="M2 5h12" />
+  <path d="M7 2h1" />
+  <path d="m22 22-5-10-5 10" />
+  <path d="M14 18h6" />
+</svg><div class="n">Языки</div><div class="s">русский, английский…</div></div><div class="tile"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 6v6l4 2" />
+</svg><div class="n">Недавние</div><div class="s">что вы включали</div></div></div>
+<div class="t3" style="position:absolute;left:24px;bottom:84px;font-size:12px">radio-browser.info · ~50 000 станций · список
+обновляется при открытии, раз в сутки</div><div class="foot"><span class="btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+</svg></span><span style="flex:1"></span></div></div></div><div class="row" style="margin-top:12px"><div class="note" style="flex:1"><ul><li><b>Шесть входов:</b> Популярные (по прослушиваниям), Россия (страна по GPS, без GPS — по языку), Жанры, Страны, Языки, Недавние (последние 20 включённых — на SD).</li><li>Каталог — radio-browser.info: бесплатный, открытый, без ключа; ~50 000 станций.</li></ul></div></div></div>
+<div class="page"><h2>5. Жанры (и так же страны, языки)</h2><div class="zoom"><div class="scr"><div class="top"><span class="t">Интернет-радио · Каталог</span><span class="sp"></span><span class="st"><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+</svg><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7 7 10 10-5 5V2l5 5L7 17" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h.01" />
+  <path d="M2 8.82a15 15 0 0 1 20 0" />
+  <path d="M5 12.859a10 10 0 0 1 14 0" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+</svg><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+  <path d="M16 9a5 5 0 0 1 0 6" />
+  <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+</svg><span style="color:var(--t2);font-size:16px">12</span></span><span class="clk">16:21</span></div>
+<div style="position:absolute;left:24px;top:64px;font-size:15px" class="t2">Каталог › <b style="color:var(--tx)">Жанры</b>
+  <span class="t3"> · по числу станций</span></div>
+<div style="position:absolute;left:16px;right:88px;top:96px;bottom:72px;display:grid;grid-template-columns:repeat(3,1fr);
+  gap:10px;align-content:start"><div class="chip">Поп<span>6 120</span></div><div class="chip">Рок<span>4 310</span></div><div class="chip">Новости<span>3 870</span></div><div class="chip">Электроника<span>2 950</span></div><div class="chip">Танцевальная<span>2 400</span></div><div class="chip">Классика<span>1 980</span></div><div class="chip">Джаз<span>1 760</span></div><div class="chip">Ретро<span>1 540</span></div><div class="chip">Хиты 80-х<span>1 210</span></div><div class="chip">Разговорное<span>1 150</span></div><div class="chip">Шансон<span>310</span></div><div class="chip">Детское<span>290</span></div></div><div class="scroll"><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m18 15-6-6-6 6" />
+</svg></span><span class="rail"><i></i></span><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m6 9 6 6 6-6" />
+</svg></span></div><div class="foot"><span class="btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+</svg></span><span style="flex:1"></span></div></div></div><div class="row" style="margin-top:12px"><div class="note" style="flex:1"><ul><li>Плитки по числу станций (числа здесь — для примера). Названия жанров каталога — по-английски («jazz», «news»); частые переводим своим словарём, редкие показываем как есть.</li><li>Страны и языки — тем же экраном, с флагом-буквами страны (RU, DE).</li></ul></div></div></div>
+<div class="page"><h2>6. Станции жанра</h2><div class="zoom"><div class="scr"><div class="top"><span class="t">Интернет-радио · Каталог</span><span class="sp"></span><span class="st"><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+</svg><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7 7 10 10-5 5V2l5 5L7 17" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h.01" />
+  <path d="M2 8.82a15 15 0 0 1 20 0" />
+  <path d="M5 12.859a10 10 0 0 1 14 0" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+</svg><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+  <path d="M16 9a5 5 0 0 1 0 6" />
+  <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+</svg><span style="color:var(--t2);font-size:16px">12</span></span><span class="clk">16:21</span></div>
+<div style="position:absolute;left:24px;top:64px;right:24px;display:flex;font-size:15px" class="t2">Каталог › Жанры ›
+  <b style="color:var(--tx);margin-left:4px">Джаз</b><span style="flex:1"></span><span class="t3">1–50 из 1 760</span></div>
+<div class="lst"><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Jazz24<div class="s">США · MP3 128</div></div><span class="f on"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Smooth Jazz Florida<div class="s">США · MP3 128</div></div><span class="f"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it a"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Radio Swiss Jazz<div class="s">Швейцария · AAC 96</div></div><span class="f"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>Jazz FM<div class="s">Россия · AAC 64</div></div><span class="f"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div><div class="it"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg><div>TSF Jazz<div class="s">Франция · MP3 128</div></div><span class="f"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" />
+</svg></span></div></div><div class="scroll"><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m18 15-6-6-6 6" />
+</svg></span><span class="rail"><i></i></span><span class="btn"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m6 9 6 6 6-6" />
+</svg></span></div><div class="foot"><span class="btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+</svg></span><span style="flex:1"></span><span class="pill">Ещё 50</span><span class="pill"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16 7h6v6" />
+  <path d="m22 7-8.5 8.5-5-5L2 17" />
+</svg> Сорт.: популярные</span></div></div></div><div class="row" style="margin-top:12px"><div class="note" style="flex:1"><ul><li><b>Страница по 50 станций</b>, сорт.: популярные (или по названию); «Ещё 50» — следующая страница. В памяти — только открытая страница (~15 КБ).</li><li>Вторая строка: страна, формат и поток. Только то, что VestaHome играет: MP3 и AAC, HTTP и HTTPS; нерабочие станции каталог скрывает сам.</li><li>Касание — играть; ⏮ ⏭ после этого листают эти 50.</li></ul></div></div></div>
+<div class="page"><h2>7. Поиск</h2><div class="zoom"><div class="scr"><div class="top"><span class="t">Интернет-радио · Поиск</span><span class="sp"></span><span class="st"><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M16.247 7.761a6 6 0 0 1 0 8.478" />
+  <path d="M19.075 4.933a10 10 0 0 1 0 14.134" />
+  <path d="M4.925 19.067a10 10 0 0 1 0-14.134" />
+  <path d="M7.753 16.239a6 6 0 0 1 0-8.478" />
+  <circle cx="12" cy="12" r="2" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="3 11 22 2 13 21 11 13 3 11" />
+</svg><span class="on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7 7 10 10-5 5V2l5 5L7 17" />
+</svg></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 20h.01" />
+  <path d="M2 8.82a15 15 0 0 1 20 0" />
+  <path d="M5 12.859a10 10 0 0 1 14 0" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+</svg><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" />
+  <path d="M16 9a5 5 0 0 1 0 6" />
+  <path d="M19.364 18.364a9 9 0 0 0 0-12.728" />
+</svg><span style="color:var(--t2);font-size:16px">12</span></span><span class="clk">16:21</span></div>
+<div style="position:absolute;left:16px;right:16px;top:62px;height:50px;border-radius:14px;background:var(--s1);
+  display:flex;align-items:center;gap:12px;padding:0 16px;font-size:20px"><span class="t3"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m21 21-4.34-4.34" />
+  <circle cx="11" cy="11" r="8" />
+</svg></span>джаз<span
+  style="width:2px;height:26px;background:var(--or)"></span><span style="flex:1"></span><span class="t3"
+  style="font-size:13px">в названии и жанре</span></div>
+<div style="position:absolute;left:16px;right:16px;top:122px;display:flex;gap:8px">
+  <span class="pill a">Jazz24</span><span class="pill">Радио Джаз</span><span class="pill">Jazz FM</span>
+  <span class="pill">TSF Jazz</span><span class="pill">ещё 236 ›</span></div>
+<div style="position:absolute;left:16px;right:16px;top:180px;display:flex;flex-direction:column;gap:6px"><div style="display:grid;grid-template-columns:repeat(12,1fr);gap:6px"><div class="key">й</div><div class="key">ц</div><div class="key">у</div><div class="key">к</div><div class="key">е</div><div class="key">н</div><div class="key">г</div><div class="key">ш</div><div class="key">щ</div><div class="key">з</div><div class="key">х</div><div class="key">ъ</div></div><div style="display:grid;grid-template-columns:repeat(11,1fr);gap:6px"><div class="key">ф</div><div class="key">ы</div><div class="key">в</div><div class="key">а</div><div class="key">п</div><div class="key">р</div><div class="key">о</div><div class="key">л</div><div class="key">д</div><div class="key">ж</div><div class="key">э</div></div><div style="display:grid;grid-template-columns:repeat(9,1fr);gap:6px"><div class="key">я</div><div class="key">ч</div><div class="key">с</div><div class="key">м</div><div class="key">и</div><div class="key">т</div><div class="key">ь</div><div class="key">б</div><div class="key">ю</div></div>
+  <div style="display:grid;grid-template-columns:2fr 6fr 2fr;gap:6px"><div class="key">123</div><div class="key">пробел</div>
+  <div class="key" style="background:var(--or);color:#0e1013;font-weight:bold">Найти</div></div></div>
+<div class="foot"><span class="btn"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M9 14 4 9l5-5" />
+  <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+</svg></span><span style="flex:1"></span></div></div></div><div class="row" style="margin-top:12px"><div class="note" style="flex:1"><ul><li>Своя клавиатура VestaHome (как для Wi-Fi), по-русски и латиницей. Ищет в названии и жанре; первые результаты сразу над клавиатурой, «ещё…» — полный список.</li></ul></div></div></div></body></html>
