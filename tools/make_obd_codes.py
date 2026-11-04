@@ -1,18 +1,30 @@
 #!/usr/bin/env python3
 """make_obd_codes.py - the OBD trouble codes' meanings for VestaHome ("Car -> Ошибки (OBD)", a tap on a code).
 
-Reads the table the user gave (cp1251, ';'-separated: code;ECU;system;meaning[;more]; by default
-MAIN/obdII.csv next to the repos) and writes VestaHome/VestaHome/obd_codes.txt (UTF-8, one code a line, the same
-fields; a code may have several lines - for different ECUs), which VestaHomeInstall carries next to the exe.
+Reads the tables (cp1251, ';'-separated: code;ECU;system;meaning[;more]) and writes
+VestaHome/VestaHome/obd_codes.txt (UTF-8, one code a line, the same fields; a code may have several lines -
+for different ECUs), which VestaHomeInstall carries next to the exe. By default MAIN/obdII.csv (the user's
+table), MAIN/obdII_vesta.csv (tools/fetch_obd_codes.py) and MAIN/obdII_vesta_modules.csv (the units' own
+dealer lists, filled in by hand).
 
-Usage: python VestaHome/tools/make_obd_codes.py [table.csv]
+A code may be claimed by several tables: the unit's own list wins over the community one over the generic
+VAZ one (RANK), and a row whose meaning repeats a row already taken for that code is dropped - the window
+shows only the first kDtcInfoMax (3) lines of a code, so duplicates would hide the useful ones.
+
+Usage: python VestaHome/tools/make_obd_codes.py [table.csv ...]
 """
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', '..', 'MAIN', 'obdII.csv')
+MAIN = os.path.join(HERE, '..', '..', 'MAIN')
+SRC = sys.argv[1:] or [os.path.join(MAIN, 'obdII.csv'), os.path.join(MAIN, 'obdII_vesta.csv'),
+                       os.path.join(MAIN, 'obdII_vesta_modules.csv')]
 OUT = os.path.join(HERE, '..', 'VestaHome', 'VestaHome', 'obd_codes.txt')
+# the ECU's own (dealer) list first, then the community one, the rest last
+RANK = (('БДФКЭ', 0), ('М86', 1), ('VestaXR', 2))
+TYPE = re.compile(r'^[0-9A-F]{2} - ')     # "11 - text": the failure type byte of a UDS code B1001-11
 
 
 def clean(f):
@@ -22,21 +34,48 @@ def clean(f):
     return ' '.join(f.replace('""', '"').replace('\xa0', ' ').split())
 
 
+def rank(ecu):
+    for key, r in RANK:
+        if key in ecu:
+            return r
+    return 9
+
+
+def meaning_key(code, meaning):
+    """A code is told apart by its failure type byte (B1001-11) when the table has one, by the text otherwise:
+    the same type is written differently by different tables (сиденья/сидения, нагр./нагреватели)."""
+    m = TYPE.match(meaning)
+    return (code, m.group(0)) if m else (code, '=' + meaning)
+
+
 def main():
-    rows = []
-    for line in open(SRC, encoding='cp1251'):
-        f = [clean(x) for x in line.rstrip('\r\n').split(';')]
-        if len(f) < 4 or len(f[0]) != 5:
+    rows = []                                  # (code, rank, seq, rest, meaning)
+    for src in SRC:
+        if not os.path.exists(src):
             continue
-        while f and not f[-1]:
-            f.pop()
-        rows.append((f[0].upper(), ';'.join(f[1:])))
-    rows.sort(key=lambda r: r[0])
+        for line in open(src, encoding='cp1251'):
+            f = [clean(x) for x in line.rstrip('\r\n').split(';')]
+            if len(f) < 4 or len(f[0]) != 5:
+                continue
+            while f and not f[-1]:
+                f.pop()
+            rows.append((f[0].upper(), rank(f[1]), len(rows), ';'.join(f[1:]), ';'.join(f[3:])))
+    rows.sort(key=lambda r: r[:3])             # by code, then by the table's rank, then by the file order
+    out = []
+    seen = set()
+    for code, _rk, _seq, rest, meaning in rows:
+        k = meaning_key(code, meaning)
+        if k in seen:                          # the same code+type: keep the first (best) table's wording
+            continue
+        seen.add(k)
+        out.append((code, rest))
     with open(OUT, 'w', encoding='utf-8', newline='\r\n') as o:
         o.write('# OBD trouble codes: code;ECU;system;meaning[;more] (tools/make_obd_codes.py)\n')
-        for code, rest in rows:
+        for code, rest in out:
             o.write('%s;%s\n' % (code, rest))
-    print('%s: %d codes' % (os.path.normpath(OUT), len(rows)))
+    print('%s: %d codes, %d rows' % (os.path.normpath(OUT), len(set(c for c, _ in out)), len(out)))
+
+
 
 
 if __name__ == '__main__':

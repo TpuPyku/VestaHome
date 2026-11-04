@@ -630,6 +630,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             PbTick();
             PairTick();
             BtOwnerTick();
+            ClockWatchTick();
             static int s_mixTicks;
             if (++s_mixTicks % 2 == 0)
                 MixTick();

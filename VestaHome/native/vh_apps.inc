@@ -479,6 +479,56 @@ static void DropRaised()
     s_raisedCount = 0;
 }
 
+// A raised program stuck on top (sheet 22: Navitel's exit - its process stayed, at 0 % CPU, its window over all,
+// "the system hung"): its windows asked (WM_NULL, 300 ms) every 2 s; none visible or none answering for kStuckMs -
+// it goes under, VestaHome comes forward, the user told where to end it.
+enum { kStuckMs = 15000 };
+typedef LRESULT (WINAPI* SendTimeoutFn)(HWND, UINT, WPARAM, LPARAM, UINT, UINT, PDWORD_PTR);
+
+static BOOL CALLBACK EnumGuardTop(HWND h, LPARAM lp)   // the guarded process's top visible window
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid == s_guardPid && IsWindowVisible(h)) {
+        *(HWND*)lp = h;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static bool GuardStuck()   // (every 0.5 s, VestaHome not in front) true: just given up on
+{
+    static DWORD s_badSince, s_ticks;
+#ifdef UNDER_CE
+    static SendTimeoutFn s_send = (SendTimeoutFn)GetProcAddress(GetModuleHandle(L"coredll.dll"), L"SendMessageTimeout");
+#else
+    static SendTimeoutFn s_send = (SendTimeoutFn)GetProcAddress(GetModuleHandle(L"user32.dll"), "SendMessageTimeoutW");
+#endif
+    if (++s_ticks % 4)
+        return false;
+    HWND top = NULL;
+    EnumWindows(EnumGuardTop, (LPARAM)&top);
+    DWORD_PTR r;
+    bool ok = top && (!s_send || s_send(top, WM_NULL, 0, 0, SMTO_NORMAL, 300, &r));
+    if (ok) {
+        s_badSince = 0;
+        return false;
+    }
+    if (!s_badSince)
+        s_badSince = GetTickCount() | 1;
+    if (GetTickCount() - s_badSince < kStuckMs)
+        return false;
+    s_badSince = 0;
+    VLog(L"приложения: процесс %08X %s 15 с, но не завершился - VestaHome вперёд", s_guardPid,
+         top ? L"не отвечает" : L"без окон");
+    StopGuard();
+    DropRaised();
+    SetForegroundWindow(s_wnd);
+    wcscpy(s_status, top ? L"программа не отвечает: Задачи → Завершить" : L"программа не закрылась: Задачи → Завершить");
+    InvalidateRect(s_wnd, NULL, FALSE);
+    return true;
+}
+
 // Every 0.5 s while a raised program runs: its windows that are not topmost (a new dialog) are raised,
 // bottom one first so that their order stays; not while VestaHome is in front (the program stepped aside).
 // When it has closed, VestaHome (under it all the time) gets the focus back.
@@ -493,6 +543,8 @@ static void OnGuardTimer()
     }
     if (GetForegroundWindow() == s_wnd || s_rvcWnd)   // (the rear camera's: nothing over it - HU 2026-10-31, OSMapsCE
         return;                                       // raised here covered the camera, not taking the focus)
+    if (GuardStuck())
+        return;
     Guarded g;
     g.n = 0;
     EnumWindows(EnumGuard, (LPARAM)&g);   // top to bottom

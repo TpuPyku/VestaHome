@@ -923,6 +923,37 @@ static void GpsTimeSync(const Gps& g)
     }
 }
 
+// The clock watched (sheet 22: twice 2007-03-21 at the same time of day - 1024 weeks back, the GPS week's rollover,
+// at a GPS fix; neither VestaHome nor VestaStub set it): a year under 2020 after a good one - the good one plus the
+// time since, put back (the MCU's too).
+static void ClockWatchTick()   // once a second
+{
+    static SYSTEMTIME s_good;
+    static DWORD s_goodTick;
+    static bool s_have;
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    if (now.wYear >= 2020) {
+        s_good = now;
+        s_goodTick = GetTickCount();
+        s_have = true;
+        return;
+    }
+    if (!s_have)
+        return;
+    SYSTEMTIME t = s_good;
+    FILETIME ft;
+    if (!SystemTimeToFileTime(&t, &ft))
+        return;
+    *(__int64*)&ft += (__int64)(GetTickCount() - s_goodTick) * 10000;
+    if (!FileTimeToSystemTime(&ft, &t))
+        return;
+    VLog(L"часы: откатились на %02u.%02u.%04u %02u:%02u:%02u - возвращаю %02u.%02u.%04u %02u:%02u:%02u", now.wDay,
+         now.wMonth, now.wYear, now.wHour, now.wMinute, now.wSecond, t.wDay, t.wMonth, t.wYear, t.wHour, t.wMinute,
+         t.wSecond);
+    ClockSet(t);
+}
+
 static int TzMinutes()
 {
     return s_cfg.tzMin;
