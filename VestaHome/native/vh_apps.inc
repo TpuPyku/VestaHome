@@ -52,6 +52,7 @@ static bool  s_editMode;          // apps screen: a tile opens its editor instea
 static int   s_editIdx;           // index in s_apps, -1 = new shortcut
 static App   s_edit;
 static bool  s_delArmed;          // "Delete" was pressed once; the second press deletes
+static bool  s_editMix;           // its sound with the radio (sound.mix), written on "Save"
 
 static wchar_t*       s_keysTarget;   // the text being typed: a shortcut's field or a setting
 static const wchar_t* s_keysTitle;
@@ -543,6 +544,7 @@ static void OpenEditor(int i)
         s_edit = s_apps[i];
     else
         memset(&s_edit, 0, sizeof(s_edit));
+    s_editMix = s_edit.path[0] && MixListHas(s_cfg.soundMix, MixExeOf(s_edit.path));
     s_edit.icon = NULL;   // the icons stay owned by s_apps
     s_edit.img.px = NULL;
     s_delArmed = false;
@@ -570,6 +572,11 @@ static void SaveEdit()
         wcscpy(s_status, L"нужны название и программа");
         return;
     }
+    if (s_editIdx >= 0)   // the program changed: the old one's switch goes
+        MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_apps[s_editIdx].path), false);
+    if (!MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_edit.path), s_editMix))
+        VLog(L"звук вместе с радио: список полон, %s не добавлена", MixExeOf(s_edit.path));
+    SaveCfg();
     if (s_editIdx < 0) {
         s_apps[s_appCount++] = s_edit;
     } else {
@@ -584,6 +591,10 @@ static void SaveEdit()
 
 static void DeleteEdit()
 {
+    if (MixListHas(s_cfg.soundMix, MixExeOf(s_apps[s_editIdx].path))) {   // its switch goes with it
+        MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_apps[s_editIdx].path), false);
+        SaveCfg();
+    }
     FreeAppIcon(s_apps[s_editIdx]);
     memmove(&s_apps[s_editIdx], &s_apps[s_editIdx + 1], (s_appCount - s_editIdx - 1) * sizeof(App));
     s_appCount--;
@@ -936,6 +947,7 @@ static void DrawEdit(HDC dc)
             Button(dc, 668, y, 116, 70, L"Сброс", B_N, IC_NONE, 17, 0, A_NOICON);
     }
     Dock(dc);
+    Button(dc, 16, 410, 260, 58, L"Звук вместе с радио", s_editMix ? B_SEL : B_N, IC_NONE, 16, 0, A_MIXTOGGLE);
     if (s_editIdx >= 0)   // the second press deletes
         Button(dc, 290, 410, 220, 58, s_delArmed ? L"Точно удалить?" : L"Удалить", s_delArmed ? B_FILL : B_N,
                IC_NONE, 18, 0, A_DELETE);

@@ -29,6 +29,7 @@
 #include "obd.h"
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
+#include "soundmix.h"  // the programs whose sound goes with the radio
 #include "secret.h"
 #include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
@@ -108,7 +109,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
-              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV };
+              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_MIXTOGGLE };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -607,6 +608,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             PbTick();
             PairTick();
             BtOwnerTick();
+            static int s_mixTicks;
+            if (++s_mixTicks % 2 == 0)
+                MixTick();
             TripTick();
             SpeedVolTick();
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)
@@ -1265,6 +1269,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (s_voice)
             NaviVoice(false);
+        MixSet(false, NULL);
         if (s_rvcWnd)
             RvcHide();
         VideoStop();

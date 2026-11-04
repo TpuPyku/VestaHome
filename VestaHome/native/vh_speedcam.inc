@@ -144,17 +144,53 @@ static void LoadCams(double lat, double lon)
 enum { TIMER_VOICE = 9, WM_NAVIGATION_VOICE = 0x101D, kVoiceLeadMs = 1000, kVoiceTailMs = 800, kVoiceMaxMs = 2000 };
 static int s_voice;   // 0 idle, 1 waiting to play, 2 playing, 3 waiting to end
 
+static bool s_mixOn;   // a program whose sound goes with the radio runs: the navigation channel held open (MixTick)
+
+// No shell window (VestaStub in its place, HU 2026-11-03: "окна оболочки нет — сразу", nothing told the MCU): the
+// MCU told straight, as the shell would (SPApi_SendRadioNaviVoiceGuidance); "0" not while a program holds it.
 static bool NaviVoice(bool on)
 {
     HWND h = FindWindow(NULL, L"RadioCommWindow");
+    bool sent = h != NULL;
     if (h)
         PostMessage(h, WM_NAVIGATION_VOICE, on ? 1 : 0, 0);
+    else
+        sent = s_mixOn || McuSend3("SPApi_SendRadioNaviVoiceGuidance", on ? 1 : 0, 0, 0);
     static int s_logged = -1;
     if (s_logged != (h != NULL)) {
         s_logged = h != NULL;
-        VLog(L"звук поверх радио: %s", h ? L"через оболочку (RadioCommWindow, 0x101D)" : L"окна оболочки нет — сразу");
+        VLog(L"звук поверх радио: %s", h ? L"через оболочку (RadioCommWindow, 0x101D)" : L"окна оболочки нет — MCU напрямую");
     }
-    return h != NULL;
+    return sent;
+}
+
+// The navigation channel held open while a program of sound.mix runs (the stock shell: IsNaviSourceCouldIn(1) when
+// its navigator starts, NaviVoiceGuidance per prompt; HU 2026-10-31: these let the unit's sound through over the
+// radio without turning it down - so the program's sound goes with the radio). With the shell it is the shell's.
+static void MixSet(bool on, const wchar_t* exe)
+{
+    if (on == s_mixOn)
+        return;
+    s_mixOn = on;
+    McuSend3("SPApi_SendRadioIsNaviSourceCouldIn", on ? 1 : 0, 0, 0);
+    McuSend3("SPApi_SendRadioNaviVoiceGuidance", on ? 1 : 0, 0, 0);
+    VLog(L"звук вместе с радио: %s%s", on ? L"вкл - " : L"выкл", on ? exe : L"");
+}
+
+static void MixTick()   // every 2 s
+{
+    static TaskInfo s_mixTask;   // (its own: the load log's minute keeps its sample)
+    static wchar_t s_names[TASK_PROC_MAX][kMixProcName];
+    if (!s_cfg.soundMix[0] || FindWindow(NULL, L"RadioCommWindow")) {
+        MixSet(false, NULL);
+        return;
+    }
+    TaskSample(&s_mixTask, s_wnd);
+    int n = s_mixTask.procOk ? s_mixTask.procCount : 0;
+    for (int i = 0; i < n; i++)
+        wcscpy(s_names[i], s_mixTask.proc[i].name);
+    int at = MixRunning(s_cfg.soundMix, s_names, n);
+    MixSet(at >= 0, at >= 0 ? s_names[at] : NULL);
 }
 
 static HWAVEOUT s_beepOut;
