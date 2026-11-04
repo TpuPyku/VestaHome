@@ -492,6 +492,10 @@ static void CfgKeysDone()
         TeKeysDone();
         return;
     }
+    if (s_keysTarget == s_ncQuery) {   // the radio catalogue's search
+        NcSearchDone();
+        return;
+    }
     if (s_keysTarget == s_wifiPass) {   // the password of a new network: kept and connected with
         if (s_wifiPass[0]) {
             WifiKnownSet(s_wifiTarget, s_wifiPass);

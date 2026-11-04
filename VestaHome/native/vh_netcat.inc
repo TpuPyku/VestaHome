@@ -23,8 +23,9 @@ static bool    s_ncBusy;
 static wchar_t s_ncMsg[96];            // the error of the last request, "" none
 static NcCat*  s_ncCats;               // the category list shown (S_NETCATS)
 static int     s_ncCatN, s_ncCatKind = -1;
-struct NcPage { int kind; char arg[64]; wchar_t title[48]; int offset, total, raw; bool byName; };
+struct NcPage { int kind; char arg[200]; wchar_t title[48]; int offset, total, raw; bool byName; };
 static NcPage  s_ncPage;               // what s_nl[NL_CAT] holds
+static wchar_t s_ncQuery[64];          // the search's text (the keyboard's: VestaCore vkeys)
 
 static DWORD WINAPI NcThread(LPVOID p)
 {
@@ -132,7 +133,10 @@ static void NcOpenPage(int kind, const char* arg, const wchar_t* title, int tota
     s_ncPage.total = total;
     NcAskPage();
     s_netView = NL_CAT;
-    Go(S_NETRADIO_LIST, true);
+    if (s_screen == S_NETRADIO_LIST)   // (a search from the list: in place, not twice in the history)
+        s_screenTick = GetTickCount();
+    else
+        Go(S_NETRADIO_LIST, true);
 }
 
 static void NcStepPage(int dir)   // "Ещё 50" / back by 50
@@ -142,6 +146,25 @@ static void NcStepPage(int dir)   // "Ещё 50" / back by 50
         return;
     s_ncPage.offset = off;
     NcAskPage();
+}
+
+static void OpenKeysFor(wchar_t* target, int cap, const wchar_t* title, Screen back);   // (vh_apps.inc)
+
+static void NcSearchOpen()   // "Поиск": the keyboard, then the stations whose names have the text
+{
+    OpenKeysFor(s_ncQuery, 63, L"Поиск станции по названию", s_screen);
+}
+
+static void NcSearchDone()   // (CfgKeysDone: the keyboard closed on the search's text)
+{
+    if (!s_ncQuery[0])
+        return;
+    char q[200];
+    WideCharToMultiByte(CP_UTF8, 0, s_ncQuery, -1, q, sizeof(q), NULL, NULL);
+    wchar_t t[72];
+    _snwprintf(t, 72, L"«%s»", s_ncQuery);
+    t[71] = 0;
+    NcOpenPage(NC_SEARCH, q, t, -1);
 }
 
 static void NcToggleSort()
@@ -190,6 +213,7 @@ static void NetListTabs(HDC dc, int active)   // Мои станции · Изб
         Button(dc, x, 62, w, 44, label[i], i == active ? B_SEL : B_N, ic[i], 16, 20, A_NRLIST, i);
         x += w + 8;
     }
+    Button(dc, 652, 62, 132, 44, L"Поиск", B_N, IC_SEARCH, 16, 20, A_NCSEARCH);
 }
 
 static const wchar_t* const kNcTile[5][2] = {

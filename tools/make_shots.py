@@ -70,6 +70,10 @@ SHOTS = [
     ('netradio_genre', [MEDIA, TAB['net'], TAB['list'], (470, 84), (660, 180), ('sleep', 6), (300, 104), ('sleep', 6)]),
     ('netradio_top_star', [MEDIA, TAB['net'], TAB['list'], (470, 84), (140, 180), ('sleep', 6), (674, 148)]),
     ('netradio_more', [MEDIA, TAB['net'], TAB['list'], (470, 84), (140, 180), ('sleep', 6), (520, 438), ('sleep', 6)]),
+    ('netradio_search_keys', [MEDIA, TAB['net'], TAB['list'], (718, 84)]),
+    ('netradio_search', [MEDIA, TAB['net'], TAB['list'], (718, 84), ('type', 'jazz'), ('sleep', 6)]),
+    ('netradio_cat_play', [MEDIA, TAB['net'], TAB['list'], (718, 84), ('type', 'jazz'), ('sleep', 6), (300, 148),
+                           ('sleep', 8)]),
 ]
 
 if os.environ.get('VH_SHOTS'):   # only these (comma-separated names), from a fresh start
@@ -286,6 +290,11 @@ def main():
             for st in steps:
                 if st[0] == 'sleep':
                     time.sleep(st[1])
+                elif st[0] == 'type':   # the keyboard screen: the text, then Enter (the PC build's WM_CHAR)
+                    for ch in st[1] + '\r':
+                        u32.SendMessageW(h, 0x102, ord(ch), 0)
+                        time.sleep(0.05)
+                    time.sleep(0.7)
                 elif st[0] in ('swipe', 'swipeback'):   # to the next / the previous page
                     xs = (550, 450, 300, 200) if st[0] == 'swipe' else (250, 350, 500, 600)
                     msg(0x201, xs[0] + (50 if st[0] == 'swipe' else -50), 250, 1)
