@@ -7,7 +7,7 @@
 // screens of the add-on's own window, up to two buttons in the bottom bar, the data subscriptions (gps, car, media,
 // night), notify, open, media; "Settings -> General -> Add-ons". Not yet: volume (no way to it but the knob).
 
-#define VHAP_MAGIC 0x56484150   // 'VHAP'
+// (the protocol's send and fields: VestaCore vhap.h)
 enum { kPlugMax = 4, kPlugScreens = 4, kPlugItems = 16, kPlugWidgets = 2, kPlugRows = 6, kPlugApi = 1 };
 
 struct PlugItem { wchar_t id[24], type[12], label[48], sub[64], value[48], options[64], link[24]; };
@@ -50,26 +50,6 @@ static bool PlugBack()   // "back" on an add-on screen with another under it: th
     return true;
 }
 
-// A field of a command: "key=value" between tabs; false (out "") when it is not there.
-static bool PlugField(const wchar_t* cmd, const wchar_t* key, wchar_t* out, int cap)
-{
-    out[0] = 0;
-    int kl = (int)wcslen(key);
-    for (const wchar_t* p = wcschr(cmd, L'\t'); p; p = wcschr(p + 1, L'\t')) {
-        if (wcsncmp(p + 1, key, kl) || p[1 + kl] != L'=')
-            continue;
-        const wchar_t* v = p + 2 + kl;
-        int n = 0;
-        while (v[n] && v[n] != L'\t' && n < cap - 1) {
-            out[n] = v[n];
-            n++;
-        }
-        out[n] = 0;
-        return true;
-    }
-    return false;
-}
-
 static void BlitPic(const Pic& p, int x, int y, int rad);   // (vh_photo.inc)
 static void MediaStep(int dir);
 static void MediaToggle();
@@ -80,19 +60,10 @@ static void PlugSend(Plugin& p, const wchar_t* fmt, ...)
         p.hwnd = NULL;
         return;
     }
-    wchar_t s[512];
     va_list a;
     va_start(a, fmt);
-    int n = _vsnwprintf(s, 511, fmt, a);
+    VhapSendV(p.hwnd, s_wnd, fmt, a);
     va_end(a);
-    s[511] = 0;
-    if (n < 0)
-        n = (int)wcslen(s);
-    COPYDATASTRUCT c;
-    c.dwData = VHAP_MAGIC;
-    c.cbData = n * sizeof(wchar_t);
-    c.lpData = s;
-    SendMessage(p.hwnd, WM_COPYDATA, (WPARAM)s_wnd, (LPARAM)&c);
 }
 
 // A panel / wheel button to the add-on whose window is in front, if it subscribed to "keys" (7): its answer 2 -
@@ -105,13 +76,7 @@ static bool PlugKey(int key, int st, int kind)
         Plugin& p = s_plug[i];
         if (!(p.sub & 16) || !p.hwnd || !IsWindow(p.hwnd) || fg != p.hwnd)
             continue;
-        wchar_t s[64];
-        int n = _snwprintf(s, 64, L"key\tcode=%d\tst=%d\tkind=%d", key, st, kind);
-        COPYDATASTRUCT c;
-        c.dwData = VHAP_MAGIC;
-        c.cbData = n * sizeof(wchar_t);
-        c.lpData = s;
-        if (SendMessage(p.hwnd, WM_COPYDATA, (WPARAM)s_wnd, (LPARAM)&c) == 2) {
+        if (VhapSend(p.hwnd, s_wnd, L"key\tcode=%d\tst=%d\tkind=%d", key, st, kind) == 2) {
             VLog(L"кнопка 0x%02X — дополнению %s", key, p.id);
             return true;
         }
@@ -197,11 +162,7 @@ static void OsmFavGo(int i)   // a favourite tapped: OSMapsCE, the route there
     VLog(L"OSMapsCE: маршрут к «%s»", f.name);
     Plugin* p = OsmPlug();
     if (p) {   // running: the command, then to the front
-        COPYDATASTRUCT c;
-        c.dwData = VHAP_MAGIC;
-        c.cbData = (DWORD)(wcslen(cmd) * sizeof(wchar_t));
-        c.lpData = cmd;
-        SendMessage(p->hwnd, WM_COPYDATA, (WPARAM)s_wnd, (LPARAM)&c);
+        VhapSend(p->hwnd, s_wnd, L"%s", cmd);
         RunApp(app);
         return;
     }
@@ -466,30 +427,30 @@ static void PlugData()
 static void PlugItemSet(PlugItem& it, const wchar_t* cmd)   // the fields a command names
 {
     wchar_t v[96];
-    if (PlugField(cmd, L"type", v, 12)) wcscpy(it.type, v);
-    if (PlugField(cmd, L"label", v, 48)) wcscpy(it.label, v);
-    if (PlugField(cmd, L"sub", v, 64)) wcscpy(it.sub, v);
-    if (PlugField(cmd, L"value", v, 48)) wcscpy(it.value, v);
-    if (PlugField(cmd, L"options", v, 64)) wcscpy(it.options, v);
-    if (PlugField(cmd, L"link", v, 24)) wcscpy(it.link, v);
+    if (VhapField(cmd, L"type", v, 12)) wcscpy(it.type, v);
+    if (VhapField(cmd, L"label", v, 48)) wcscpy(it.label, v);
+    if (VhapField(cmd, L"sub", v, 64)) wcscpy(it.sub, v);
+    if (VhapField(cmd, L"value", v, 48)) wcscpy(it.value, v);
+    if (VhapField(cmd, L"options", v, 64)) wcscpy(it.options, v);
+    if (VhapField(cmd, L"link", v, 24)) wcscpy(it.link, v);
 }
 
 static void PlugWidgetSet(PlugWidget& g, const wchar_t* cmd)
 {
     wchar_t v[96];
-    if (PlugField(cmd, L"title", v, 40)) wcscpy(g.title, v);
-    if (PlugField(cmd, L"icon", v, 16)) wcscpy(g.icon, v);
-    if (PlugField(cmd, L"screen", v, 24)) wcscpy(g.screen, v);
-    if (PlugField(cmd, L"size", v, 8)) {
+    if (VhapField(cmd, L"title", v, 40)) wcscpy(g.title, v);
+    if (VhapField(cmd, L"icon", v, 16)) wcscpy(g.icon, v);
+    if (VhapField(cmd, L"screen", v, 24)) wcscpy(g.screen, v);
+    if (VhapField(cmd, L"size", v, 8)) {
         g.wide = !wcscmp(v, L"2") || !wcscmp(v, L"2x1");
         g.big = !wcscmp(v, L"big") || !wcscmp(v, L"2x2");
     }
-    if (PlugField(cmd, L"image", v, 8)) g.image = v[0] == L'1';
-    if (PlugField(cmd, L"value", v, 24)) wcscpy(g.value, v);
-    if (PlugField(cmd, L"unit", v, 24)) wcscpy(g.unit, v);
-    if (PlugField(cmd, L"text", v, 96)) wcscpy(g.text[0], v);
-    if (PlugField(cmd, L"text2", v, 96)) wcscpy(g.text[1], v);
-    if (PlugField(cmd, L"state", v, 8))
+    if (VhapField(cmd, L"image", v, 8)) g.image = v[0] == L'1';
+    if (VhapField(cmd, L"value", v, 24)) wcscpy(g.value, v);
+    if (VhapField(cmd, L"unit", v, 24)) wcscpy(g.unit, v);
+    if (VhapField(cmd, L"text", v, 96)) wcscpy(g.text[0], v);
+    if (VhapField(cmd, L"text2", v, 96)) wcscpy(g.text[1], v);
+    if (VhapField(cmd, L"state", v, 8))
         g.state = !wcscmp(v, L"ok") ? 1 : !wcscmp(v, L"warn") ? 2 : !wcscmp(v, L"alert") ? 3 : 0;
 }
 
@@ -588,7 +549,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
     }
     verb[n] = 0;
     if (!wcscmp(verb, L"hello")) {
-        PlugField(cmd, L"id", id, 24);
+        VhapField(cmd, L"id", id, 24);
         if (!id[0])
             return;
         Plugin* p = PlugById(id);
@@ -599,13 +560,13 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         }
         if (!p)
             return;
-        p->hwnd = PlugField(cmd, L"hwnd", v, 16) ? (HWND)wcstoul(v, NULL, 16) : from;
+        p->hwnd = VhapField(cmd, L"hwnd", v, 16) ? (HWND)wcstoul(v, NULL, 16) : from;
         if (!p->hwnd)
             p->hwnd = from;
-        PlugField(cmd, L"name", p->name, 48);
+        VhapField(cmd, L"name", p->name, 48);
         if (!p->name[0])
             wcscpy(p->name, id);
-        PlugField(cmd, L"ver", p->ver, 16);
+        VhapField(cmd, L"ver", p->ver, 16);
         for (int k = 0; k < p->nw; k++)
             PlugWidgetFree(p->wg[k]);
         p->ns = p->nw = 0;   // (declared again after each hello)
@@ -617,7 +578,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         return;
     }
     Plugin* p = PlugByWnd(from);
-    if (!p && PlugField(cmd, L"from", id, 24))
+    if (!p && VhapField(cmd, L"from", id, 24))
         p = PlugById(id);
     if (!p)
         return;   // not said hello
@@ -632,7 +593,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             Back();
         Redraw();
     } else if (!wcscmp(verb, L"widget") || !wcscmp(verb, L"widget.set")) {
-        PlugField(cmd, L"id", id, 24);
+        VhapField(cmd, L"id", id, 24);
         int k = 0;
         while (k < p->nw && wcscmp(p->wg[k].id, id))
             k++;
@@ -652,7 +613,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         PlugWidgetSet(p->wg[k], cmd);
         PlugWidgetCopy(*p, p->wg[k]);
     } else if (!wcscmp(verb, L"widget.frame")) {   // a new picture: only this widget redrawn, when it is in sight
-        PlugField(cmd, L"id", id, 24);
+        VhapField(cmd, L"id", id, 24);
         wchar_t key[40];
         _snwprintf(key, 40, L"p:%s.%s", p->id, id);
         key[39] = 0;
@@ -663,7 +624,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
                 RedrawArea(r.left, r.top, r.right, r.bottom);
         }
     } else if (!wcscmp(verb, L"screen")) {
-        PlugField(cmd, L"id", id, 24);
+        VhapField(cmd, L"id", id, 24);
         PlugScreen* s = PlugScreenOf(*p, id);
         if (!s) {
             if (p->ns == kPlugScreens)
@@ -672,43 +633,43 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             memset(s, 0, sizeof(*s));
             wcscpy(s->id, id);
         }
-        PlugField(cmd, L"title", s->title, 48);
-        PlugField(cmd, L"icon", s->icon, 16);
-        if (PlugField(cmd, L"nav", v, 8))
+        VhapField(cmd, L"title", s->title, 48);
+        VhapField(cmd, L"icon", s->icon, 16);
+        if (VhapField(cmd, L"nav", v, 8))
             s->nav = v[0] == L'1';
-        if (PlugField(cmd, L"own", v, 8))
+        if (VhapField(cmd, L"own", v, 8))
             s->own = v[0] == L'1';
         if (s->nav)
             Redraw();   // a new button in the bottom bar
     } else if (!wcscmp(verb, L"window")) {   // the own window of a screen (own=1)
-        PlugField(cmd, L"screen", v, 24);
+        VhapField(cmd, L"screen", v, 24);
         PlugScreen* s = PlugScreenOf(*p, v);
-        if (s && PlugField(cmd, L"hwnd", v, 16))
+        if (s && VhapField(cmd, L"hwnd", v, 16))
             s->win = (HWND)wcstoul(v, NULL, 16);
     } else if (!wcscmp(verb, L"back")) {   // its own window closed: VestaHome in front again
         PlugOwnClose();
     } else if (!wcscmp(verb, L"subscribe")) {
-        PlugField(cmd, L"what", v, 96);
+        VhapField(cmd, L"what", v, 96);
         p->sub = (wcsstr(v, L"gps") ? 1 : 0) | (wcsstr(v, L"car") ? 2 : 0) | (wcsstr(v, L"media") ? 4 : 0) |
                  (wcsstr(v, L"night") ? 8 : 0) | (wcsstr(v, L"keys") ? 16 : 0);
         p->sub |= 0x100;   // (the first round sends everything)
     } else if (!wcscmp(verb, L"media")) {   // the source playing: toggle / next / prev
-        PlugField(cmd, L"cmd", v, 16);
+        VhapField(cmd, L"cmd", v, 16);
         if (!wcscmp(v, L"next") || !wcscmp(v, L"prev"))
             MediaStep(!wcscmp(v, L"next") ? 1 : -1);
         else if (!wcscmp(v, L"toggle") || !wcscmp(v, L"play") || !wcscmp(v, L"pause"))
             MediaToggle();
     } else if (!wcscmp(verb, L"screen.clear")) {
-        PlugField(cmd, L"id", id, 24);
+        VhapField(cmd, L"id", id, 24);
         PlugScreen* s = PlugScreenOf(*p, id);
         if (s)
             s->n = 0;
     } else if (!wcscmp(verb, L"item") || !wcscmp(verb, L"item.set")) {
-        PlugField(cmd, L"screen", v, 24);
+        VhapField(cmd, L"screen", v, 24);
         PlugScreen* s = PlugScreenOf(*p, v);
         if (!s)
             return;
-        PlugField(cmd, L"id", id, 24);
+        VhapField(cmd, L"id", id, 24);
         int k = 0;
         while (k < s->n && wcscmp(s->it[k].id, id))
             k++;
@@ -723,13 +684,13 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         if (s_screen == S_PLUGIN && s_plugCur == (int)(p - s_plug) && IsWindowVisible(s_wnd))
             Redraw();
     } else if (!wcscmp(verb, L"notify")) {
-        PlugField(cmd, L"text", v, 96);
+        VhapField(cmd, L"text", v, 96);
         _snwprintf(s_status, 96, L"%s", v);
         s_status[95] = 0;
         if (IsWindowVisible(s_wnd))
             Redraw();
     } else if (!wcscmp(verb, L"open")) {
-        PlugField(cmd, L"screen", v, 24);
+        VhapField(cmd, L"screen", v, 24);
         int s;
         if (PlugScreenOf(*p, v, &s)) {
             ShowWindow(s_wnd, SW_SHOW);

@@ -24,6 +24,8 @@
 #include "dialloc.h"    // its number as a local call
 #endif
 #include "vhttp.h"     // VestaCore's HTTP(S) client (HttpInit at the start)
+#include "vhap.h"      // VestaCore: the add-ons' protocol
+#include "vfont.h"     // VestaCore: the fonts
 #include "video.h"
 #include "wifi.h"
 #include "obd.h"

@@ -801,18 +801,9 @@ static int FontsLoad()   // the fonts taken (2 = both: the face is ours)
     return ok;
 }
 
-static HFONT MakeFont(int height, int weight)
+static HFONT MakeFont(int height, int weight)   // (not smoothed: VestaCore vfont.h)
 {
-    LOGFONT lf;
-    memset(&lf, 0, sizeof(lf));
-    lf.lfHeight = -height;
-    lf.lfWeight = weight;
-    lf.lfCharSet = DEFAULT_CHARSET;
-    // no smoothing: on the unit ANTIALIASED_QUALITY comes out as ClearType - coloured fringes in the 16-bit
-    // frame, small text blurred; Tahoma is hinted for crisp unsmoothed pixels
-    lf.lfQuality = NONANTIALIASED_QUALITY;
-    wcscpy(lf.lfFaceName, s_face);
-    return CreateFontIndirect(&lf);
+    return VFontMake(s_face, height, weight);
 }
 
 // Whole file into a malloc'ed buffer with a terminating zero; NULL if it can't be read.
