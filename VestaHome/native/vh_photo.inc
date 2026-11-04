@@ -780,7 +780,13 @@ static void DoAction(const Btn& b)
     case A_VFULL:    s_vidFull = !s_vidFull; break;
     case A_NRPLAY:   NetToggle(); break;
     case A_NRSTEP:   NetStep(b.arg); break;
-    case A_NRPICK:   NetPlay(b.arg); Back(); break;
+    case A_NRPICK:   NetPlay(s_netView, b.arg); Back(); break;
+    case A_NRLIST:   NetListAction(b.arg); break;
+    case A_NRFAV:    NetFavAction(b.arg); break;
+    case A_NCTILE:   NcTile(b.arg); break;
+    case A_NCPICK:   NcPick(b.arg); break;
+    case A_NCMORE:   NcStepPage(b.arg); break;
+    case A_NCSORT:   NcToggleSort(); break;
     case A_WIFINET:  WifiTap(b.arg); break;
     case A_WIFIFORGET: WifiForgetTap(b.arg); break;
     case A_WIFIDEL:   // saved networks: the second press forgets

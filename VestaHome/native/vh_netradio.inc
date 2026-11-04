@@ -11,7 +11,11 @@
 enum { NET_READY = 1, NET_FAILED, NET_ENDED, NET_META, NET_STALL, kNetMax = 100, kNetRows = 5 };
 enum { NR_OFF, NR_CONNECT, NR_PLAY, NR_STALL, NR_WAIT, NR_ERROR };
 
-struct NetStation { wchar_t name[64]; char url[400]; };
+// The stations come in lists the player steps through (the user 2026-11-04: switched like playlists): ours
+// (radio.txt), the favourites (radio_fav.txt beside it, a star on any station), a page of the catalogue
+// (radio-browser.info, netcat.h). The station playing is a copy: it plays on when its list changes.
+enum { NL_MINE, NL_FAV, NL_CAT, kNetLists };
+struct NetList { NcStation* st; int n; };
 // A stream's "file" - owned by its references (the user 2026-11-03: VestaHome fell, C0000005, 17-40 s after the station
 // was changed, in none of our guarded threads: BASS's reading thread read the HTTP stream while the close freed it,
 // then the file itself was freed under it): the owner's one and each read's own; the HTTP stream closed and the file
@@ -26,9 +30,12 @@ struct NetFile {
 };
 struct NetReady { LONG gen; DWORD chan; NetFile* file; };
 
-static NetStation* s_stations;          // radio.txt, read when the screen is first opened
-static int         s_netCount = -1;
-static int         s_netCur = -1;  // the station chosen
+static NetList     s_nl[kNetLists];    // read when the screen is first opened (the catalogue's: when asked)
+static bool        s_netLoaded;
+static NcStation   s_netNow;       // the station chosen (url "" none)
+static int         s_netWhich;     // its list: what the player steps through
+static int         s_netCur = -1;  // its place there (-1: no longer in it)
+static int         s_netView;      // the list the list screen shows
 static bool        s_netOn;        // the radio should play: reconnects while on
 static int         s_netState;     // NR_*
 static DWORD       s_netChan;
@@ -50,45 +57,115 @@ static void NetInit()
     InitializeCriticalSection(&s_netCs);
 }
 
-static void NetLoadList()
+static const wchar_t* kNetFile[2] = { L"radio.txt", L"radio_fav.txt" };
+
+static void NetReadList(int which)   // radio.txt or radio_fav.txt beside the exe, a station a line (netcat.h)
 {
-    if (s_netCount >= 0)
-        return;
-    s_netCount = 0;
-    s_stations = (NetStation*)calloc(kNetMax, sizeof(NetStation));
+    NetList& l = s_nl[which];
+    l.n = 0;
     wchar_t path[MAX_PATH];
-    _snwprintf(path, MAX_PATH, L"%sradio.txt", s_dir);
+    _snwprintf(path, MAX_PATH, L"%s%s", s_dir, kNetFile[which]);
     DWORD size;
-    char* buf = s_stations ? ReadAll(path, &size) : NULL;
+    char* buf = l.st ? ReadAll(path, &size) : NULL;
     if (!buf)
         return;
     char* p = buf;
     if ((unsigned char)p[0] == 0xEF && (unsigned char)p[1] == 0xBB && (unsigned char)p[2] == 0xBF)
         p += 3;
-    while (*p && s_netCount < kNetMax) {
+    while (*p && l.n < kNetMax) {
         char* end = strchr(p, '\n');
         if (end)
             *end = 0;
-        int n = (int)strlen(p);
-        while (n > 0 && (p[n - 1] == '\r' || p[n - 1] == ' ' || p[n - 1] == '\t'))
-            p[--n] = 0;
-        char* bar = strchr(p, '|');
-        if (p[0] != '#' && bar && (!_strnicmp(bar + 1, "http://", 7) || !_strnicmp(bar + 1, "https://", 8))) {
-            *bar = 0;
-            NetStation& s = s_stations[s_netCount];
-            MultiByteToWideChar(CP_UTF8, 0, p, -1, s.name, 64);
-            s.name[63] = 0;
-            Trim(s.name);
-            strncpy(s.url, bar + 1, sizeof(s.url) - 1);
-            if (s.name[0])
-                s_netCount++;
-        }
+        if (NcParseLine(p, &l.st[l.n]))
+            l.n++;
         p = end ? end + 1 : p + strlen(p);
     }
     free(buf);
-    for (int i = 0; i < s_netCount; i++)
-        if (!wcscmp(s_stations[i].name, s_cfg.radioStation))
-            s_netCur = i;
+}
+
+static int NetFind(int which, const char* url)
+{
+    for (int i = 0; i < s_nl[which].n; i++)
+        if (!strcmp(s_nl[which].st[i].url, url))
+            return i;
+    return -1;
+}
+
+static void NetLoadList()
+{
+    if (s_netLoaded)
+        return;
+    s_netLoaded = true;
+    for (int i = 0; i < kNetLists; i++)
+        s_nl[i].st = (NcStation*)calloc(kNetMax, sizeof(NcStation));
+    NetReadList(NL_MINE);
+    NetReadList(NL_FAV);
+    // the station last chosen, in its list (radio.list, radio.url; before them: by its name in radio.txt)
+    char url[400];
+    WideCharToMultiByte(CP_UTF8, 0, s_cfg.radioUrl, -1, url, sizeof(url), NULL, NULL);
+    int which = s_cfg.radioList >= 0 && s_cfg.radioList < kNetLists ? s_cfg.radioList : NL_MINE;
+    int at = which != NL_CAT && url[0] ? NetFind(which, url) : -1;
+    for (int i = 0; at < 0 && which == NL_MINE && i < s_nl[NL_MINE].n; i++)
+        if (!wcscmp(s_nl[NL_MINE].st[i].name, s_cfg.radioStation))
+            at = i;
+    if (at >= 0) {
+        s_netNow = s_nl[which].st[at];
+    } else if (url[0] && s_cfg.radioStation[0]) {   // a catalogue's station (its page is not kept): itself
+        memset(&s_netNow, 0, sizeof(s_netNow));
+        wcscpy(s_netNow.name, s_cfg.radioStation);
+        strcpy(s_netNow.url, url);
+    }
+    s_netWhich = s_netView = which;
+    s_netCur = at;
+}
+
+static const NcStation* NetCur()   // the station chosen, NULL none
+{
+    return s_netNow.url[0] ? &s_netNow : NULL;
+}
+
+static bool NetIsFav(const NcStation& s)
+{
+    return NetFind(NL_FAV, s.url) >= 0;
+}
+
+static void NetSaveFav()   // (rare: a star tapped - the flash's wear does not matter)
+{
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%s%s", s_dir, kNetFile[NL_FAV]);
+    HANDLE f = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) {
+        VLog(L"радио: не записать %s", path);
+        return;
+    }
+    DWORD w;
+    static const char head[] = "# VestaHome: the internet radio's favourites, name|address|catalogue id|second line\r\n";
+    WriteFile(f, head, sizeof(head) - 1, &w, NULL);
+    for (int i = 0; i < s_nl[NL_FAV].n; i++) {
+        char line[700];
+        int n = NcFormatLine(s_nl[NL_FAV].st[i], line, sizeof(line) - 2);
+        line[n++] = '\r';
+        line[n++] = '\n';
+        WriteFile(f, line, n, &w, NULL);
+    }
+    CloseHandle(f);
+}
+
+// The star: in the favourites or out of them. The station playing keeps playing; its place is found again.
+static void NetFavToggle(const NcStation& s)
+{
+    NetList& f = s_nl[NL_FAV];
+    int at = NetFind(NL_FAV, s.url);
+    if (at >= 0) {
+        memmove(&f.st[at], &f.st[at + 1], (f.n - at - 1) * sizeof(NcStation));
+        f.n--;
+    } else if (f.n < kNetMax && f.st) {
+        f.st[f.n++] = s;
+    }
+    VLog(at >= 0 ? L"радио: «%s» убрана из избранного" : L"радио: «%s» добавлена в избранное", s.name);
+    NetSaveFav();
+    if (s_netNow.url[0])
+        s_netCur = NetFind(s_netWhich, s_netNow.url);
 }
 
 static bool ValidUtf8(const unsigned char* s)
@@ -348,13 +425,13 @@ static void NetFreeChan()
 
 static void NetConnect()
 {
-    if (s_netCur < 0 || s_netCur >= s_netCount)
+    if (!NetCur())
         return;
     NetStart* st = (NetStart*)malloc(sizeof(NetStart));
     if (!st)
         return;
     st->gen = InterlockedIncrement(&s_netGen);
-    strcpy(st->url, s_stations[s_netCur].url);
+    strcpy(st->url, s_netNow.url);
     s_netState = NR_CONNECT;
     EnterCriticalSection(&s_netCs);
     wcscpy(s_netMsg, L"подключение…");
@@ -382,12 +459,15 @@ static void NetStop()
     s_netMsg[0] = 0;
 }
 
-static void NetPlay(int i)
+static void NetCatClick(const char* uuid);   // (vh_netcat.inc: the catalogue counts its station played)
+
+// The station chosen (s_netNow) on.
+static void NetPlayNow()
 {
     ResumeByUser();
     s_mediaLast = 2;
     NetLoadList();
-    if (i < 0 || i >= s_netCount)
+    if (!NetCur())
         return;
     if (!BassLoad() || !s_bass.streamUser) {
         wcscpy(s_status, s_bass.state == -1 ? L"нет bass.dll: папка bass рядом с VestaHome" : L"звук не запускается (BASS)");
@@ -396,15 +476,29 @@ static void NetPlay(int i)
     NetStop();
     PlayerStopStream();
     VidPauseForAudio();
-    s_netCur = i;
     s_netOn = true;
     s_netRetries = 0;
     s_netFatal = false;
-    wcscpy(s_cfg.radioStation, s_stations[i].name);
+    wcscpy(s_cfg.radioStation, s_netNow.name);
+    MultiByteToWideChar(CP_UTF8, 0, s_netNow.url, -1, s_cfg.radioUrl, 400);
+    s_cfg.radioList = s_netWhich;
     SaveCfg();
-    VLog(L"радио: %s", s_stations[i].name);
+    VLog(L"радио: %s", s_netNow.name);
+    if (s_netNow.uuid[0])
+        NetCatClick(s_netNow.uuid);
     MediaSource();
     NetConnect();
+}
+
+static void NetPlay(int which, int i)   // a list's station on: the player steps through that list now
+{
+    NetLoadList();
+    if (which < 0 || which >= kNetLists || i < 0 || i >= s_nl[which].n)
+        return;
+    s_netWhich = which;
+    s_netCur = i;
+    s_netNow = s_nl[which].st[i];
+    NetPlayNow();
 }
 
 static void NetToggle()
@@ -412,15 +506,18 @@ static void NetToggle()
     NetLoadList();
     if (s_netOn)
         NetStop();
+    else if (NetCur())
+        NetPlayNow();
     else
-        NetPlay(s_netCur >= 0 ? s_netCur : 0);
+        NetPlay(s_netWhich, 0);
 }
 
 static void NetStep(int dir)
 {
     NetLoadList();
-    if (s_netCount > 0)
-        NetPlay(s_netCur < 0 ? 0 : (s_netCur + dir + s_netCount) % s_netCount);
+    int n = s_nl[s_netWhich].n;
+    if (n > 0)
+        NetPlay(s_netWhich, s_netCur < 0 ? 0 : (s_netCur + dir + n) % n);
 }
 
 // The thread's results and BASS's syncs (wp = what, lp = the attempt).
@@ -502,72 +599,4 @@ static void NetPlayBtn(HDC dc, int cx, int cy, int r, int isz)
     Ico(dc, s_netOn ? IC_PAUSE : IC_PLAY, cx - isz / 2, cy - isz / 2, isz, kInk);
 }
 
-// Media -> internet radio: the station, the song, the state; previous / on-off / next station.
-static void ScrNetRadio(HDC dc)
-{
-    NetLoadList();
-    Frame(dc, L"Медиа · Интернет-радио");
-    MediaTabs(dc, S_NETRADIO, IC_LIST, A_SCREEN, S_NETRADIO_LIST);
-    Cover(dc, IC_NETRADIO, 16, 124, 232);
-    wchar_t s[160], title[160];
-    if (s_netCount <= 0) {
-        T(dc, 272, 170, L"Нет станций", 22, kText, 700, AL_START, 512);
-        _snwprintf(s, 160, L"нет %sradio.txt", s_dir);
-        s[159] = 0;
-        T(dc, 272, 200, s, 15, kMuted, 400, AL_START, 512);
-        T(dc, 272, 224, L"Строка: название|адрес потока (http:// или https://)", 15, kMuted, 400, AL_START, 512);
-        return;
-    }
-    if (s_netCur < 0) {
-        T(dc, 272, 170, L"Выберите станцию", 22, kText, 700, AL_START, 512);
-        T(dc, 272, 200, L"Кнопка списка вверху или ▶ — первая станция", 16, kMuted, 400, AL_START, 512);
-    } else {
-        _snwprintf(s, 160, L"СТАНЦИЯ %d ИЗ %d", s_netCur + 1, s_netCount);
-        T(dc, 272, 150, s, 14, kMuted, 600, AL_START, 512);
-        T(dc, 272, 192, s_stations[s_netCur].name, 34, kText, 700, AL_START, 512);
-        EnterCriticalSection(&s_netCs);
-        wcscpy(title, s_netTitle);
-        LeaveCriticalSection(&s_netCs);
-        if (s_netOn && title[0])
-            T(dc, 272, 222, title, 20, kMuted, 400, AL_START, 512);
-        NetStateText(s, 160);
-        T(dc, 272, 282, s, 17, s_netState == NR_PLAY ? kOrange : kMuted, 600, AL_START, 512);
-    }
-    IconBtn(dc, IC_PREV, 392, 312, 48, kText, A_NRSTEP, -1);
-    NetPlayBtn(dc, 528, 336, 42, 48);
-    IconBtn(dc, IC_FWD, 616, 312, 48, kText, A_NRSTEP, 1);
-}
-
-// The stations of radio.txt, a list that scrolls (the finger, or the arrows by kNetRows rows); the current one
-// orange.
-enum { kNetTop = 72, kNetBottom = 386, kNetPitch = 62 };
-static Scroll s_netList = { 0, 0, kNetRows * kNetPitch };
-
-static void ScrNetRadioList(HDC dc)
-{
-    NetLoadList();
-    s_netList.content = s_netCount > 0 ? s_netCount * kNetPitch - 6 + 8 : 0;   // the rows, 4 px above and below
-    static DWORD s_seen;
-    if (s_seen != s_screenTick) {   // opened: the station playing in view
-        s_seen = s_screenTick;
-        if (s_netCur >= 0 && (s_netCur * kNetPitch < s_netList.pos ||
-                              s_netCur * kNetPitch + kNetPitch > s_netList.pos + kNetBottom - kNetTop))
-            s_netList.pos = (s_netCur - 2) * kNetPitch;
-    }
-    Frame(dc, L"Интернет-радио · Станции");
-    Panel(dc, 16, 68, 704, 322);
-    ScrollBegin(dc, s_netList, 20, kNetTop, 716, kNetBottom);
-    for (int i = 0; i < s_netCount; i++) {
-        int y = kNetTop + 4 + i * kNetPitch - s_netList.pos;
-        if (y + 56 <= kNetTop || y >= kNetBottom)
-            continue;
-        ListRow(dc, 24, y, 680, 56, s_stations[i].name, NULL, i == s_netCur ? L_CUR : L_N, IC_RADIO, NULL, NULL,
-                A_NRPICK, i);
-    }
-    ScrollEnd(dc, s_netList, 728, 68, 56, 322, 96);
-    if (s_netCount <= 0)
-        T(dc, 40, 114, L"Нет станций: radio.txt рядом с VestaHome", 18, kMuted, 400);
-    Dock(dc);
-    IconBtn(dc, IC_RADIO, 600, 417, 44, kText, A_BACK);
-    IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_SOUND);
-}
+// (the player's and the lists' screens: vh_netcat.inc)

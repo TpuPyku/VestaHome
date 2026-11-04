@@ -226,8 +226,8 @@ static void ResumeSourceTick()
     } else if (!wcscmp(s_cfg.uiSource, L"net")) {   // the station last played (radio.station)
         NetLoadList();
         VLog(L"запуск: интернет-радио «%s»", s_cfg.radioStation);
-        if (s_netCur >= 0)
-            NetPlay(s_netCur);
+        if (NetCur())
+            NetPlayNow();
     } else if (!wcscmp(s_cfg.uiSource, L"music")) {
         VLog(L"запуск: музыка «%s»", s_cfg.musicFile);
         if (!s_chan && s_cfg.musicDir[0])

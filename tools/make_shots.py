@@ -64,6 +64,12 @@ SHOTS = [
     ('car_widget_set', [HOME, ('sleep', 2), (240, 256)]),
     ('speed_set', [HOME, (760, 86)]),   # (home's page 1: run alone - VH_SHOTS=speed_set,weather_set,camdl)
     ('weather_set', [HOME, (760, 256)]), ('camdl', [HOME, (760, 86), (400, 440)]),
+    # the internet radio's catalogue (radio-browser.info: needs the internet), the list's tab "Каталог"
+    ('netradio_catalog', [MEDIA, TAB['net'], TAB['list'], (470, 84)]),
+    ('netradio_genres', [MEDIA, TAB['net'], TAB['list'], (470, 84), (660, 180), ('sleep', 6)]),
+    ('netradio_genre', [MEDIA, TAB['net'], TAB['list'], (470, 84), (660, 180), ('sleep', 6), (300, 104), ('sleep', 6)]),
+    ('netradio_top_star', [MEDIA, TAB['net'], TAB['list'], (470, 84), (140, 180), ('sleep', 6), (674, 148)]),
+    ('netradio_more', [MEDIA, TAB['net'], TAB['list'], (470, 84), (140, 180), ('sleep', 6), (520, 438), ('sleep', 6)]),
 ]
 
 if os.environ.get('VH_SHOTS'):   # only these (comma-separated names), from a fresh start

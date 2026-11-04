@@ -26,6 +26,8 @@
 #include "vhttp.h"     // VestaCore's HTTP(S) client (HttpInit at the start)
 #include "vhap.h"      // VestaCore: the add-ons' protocol
 #include "vfont.h"     // VestaCore: the fonts
+#include "netcat.h"    // the internet radio's lines and catalogue
+#include "vjson.h"     // VestaCore: JSON (the catalogue's answers, in netcat.cpp)
 #include "video.h"
 #include "wifi.h"
 #include "obd.h"
@@ -111,7 +113,8 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
-              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_MIXTOGGLE };
+              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_MIXTOGGLE,
+              A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -126,7 +129,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NETCAT, S_NETCATS, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -347,6 +350,7 @@ static const wchar_t* NetErrorText(int err)
 #include "vh_mcu.inc"
 #include "vh_player.inc"
 #include "vh_netradio.inc"
+#include "vh_netcat.inc"
 #include "vh_video.inc"
 #include "vh_sources.inc"
 #include "vh_camera.inc"
@@ -887,6 +891,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_APP_PHOTO:   // a picture or a thumbnail decoded
         if ((s_screen == S_PHOTO || s_screen == S_PHOTO_VIEW) && IsWindowVisible(hwnd) && !s_drag)
+            Redraw();
+        return 0;
+    case WM_APP_NETCAT:   // the radio catalogue's answer
+        OnNetCat((NcJob*)lp);
+        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd &&
+            (s_screen == S_NETCAT || s_screen == S_NETCATS || s_screen == S_NETRADIO_LIST || s_screen == S_NETRADIO))
             Redraw();
         return 0;
     case WM_APP_NET:   // the internet radio: connected, failed, broken, a new song title

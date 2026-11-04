@@ -74,6 +74,8 @@ static void DrawScreen(HDC dc, Screen s)
     case S_TASKS:       DrawTasks(dc); break;
     case S_NETRADIO:    ScrNetRadio(dc); break;
     case S_NETRADIO_LIST: ScrNetRadioList(dc); break;
+    case S_NETCAT:      ScrNetCat(dc); break;
+    case S_NETCATS:     ScrNetCats(dc); break;
     default:            break;
     }
 }

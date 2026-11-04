@@ -103,7 +103,9 @@ struct Cfg {
     bool    wifiApAuto;                // the access point for a phone, automatically (wifi.cpp WifiApSetup)
     wchar_t wifiApSsid[33], wifiApPass[65];
     bool    rvcInvert;                 // the trajectory bends the other way (the CAN angle's sign)
-    wchar_t radioStation[64];          // the internet radio's station (its name in radio.txt)
+    wchar_t radioStation[64];          // the internet radio's station (its name)
+    wchar_t radioUrl[400];             // its address (radio.url), what finds it in its list
+    int     radioList;                 // its list: 0 radio.txt, 1 the favourites, 2 the catalogue (radio.list)
     int     wifiCount;                 // the known Wi-Fi networks: WZC forgets them on every boot (the registry)
     wchar_t wifiSsid[kWifiKnown][33];
     wchar_t wifiPass[kWifiKnown][64];  // open in memory; in the file sealed with the unit's key (secret.cpp)
@@ -574,6 +576,11 @@ static void LoadCfg()
             s_cfg.rvcInvert = CfgBool(v);
         } else if (!wcsncmp(k, L"radio.c", 7) || !wcscmp(k, L"radio.names")) {
             RadioCacheLoad(k, v);
+        } else if (!wcscmp(k, L"radio.url")) {
+            wcsncpy(s_cfg.radioUrl, v, 399);
+            s_cfg.radioUrl[399] = 0;
+        } else if (!wcscmp(k, L"radio.list")) {
+            s_cfg.radioList = _wtoi(v);
         } else if (!wcscmp(k, L"radio.station")) {
             wcsncpy(s_cfg.radioStation, v, 63);
             s_cfg.radioStation[63] = 0;
@@ -696,8 +703,10 @@ static void SaveCfg()
         int k = _snwprintf(text + n, 12000 - n, L"# screen.accent: the accent colour, a Lada Vesta paint code (Settings -> "
                            L"General -> Theme; 130 Марс = the skin's)\r\nscreen.accent=%d\r\n"
                            L"# screen.saverbg: the saver's background, 0 the mosaic (the accent's light), 1 its own picture "
-                           L"(screen.saverfile: PNG / JPG / BMP, fitted to the screen)\r\nscreen.saverbg=%d\r\nscreen.saverfile=%s\r\n",
-                           kAccents[s_cfg.accent].code, s_cfg.saverBg, s_cfg.saverFile);
+                           L"(screen.saverfile: PNG / JPG / BMP, fitted to the screen)\r\nscreen.saverbg=%d\r\nscreen.saverfile=%s\r\n"
+                           L"# radio.list / radio.url: the internet radio's list (0 radio.txt, 1 radio_fav.txt, 2 the "
+                           L"catalogue) and its station's address\r\nradio.list=%d\r\nradio.url=%s\r\n",
+                           kAccents[s_cfg.accent].code, s_cfg.saverBg, s_cfg.saverFile, s_cfg.radioList, s_cfg.radioUrl);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {

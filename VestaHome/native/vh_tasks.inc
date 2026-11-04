@@ -272,15 +272,15 @@ static Icon PlayingIcon(Screen* to)
 static Icon SaverNowPlaying(wchar_t* s, int n)
 {
     s[0] = 0;
-    if (s_netOn && s_netCur >= 0) {
+    if (s_netOn && NetCur()) {
         wchar_t t[160];
         EnterCriticalSection(&s_netCs);
         wcscpy(t, s_netTitle);
         LeaveCriticalSection(&s_netCs);
         if (t[0] && s_netState == NR_PLAY)
-            _snwprintf(s, n, L"%s · %s", s_stations[s_netCur].name, t);
+            _snwprintf(s, n, L"%s · %s", s_netNow.name, t);
         else
-            _snwprintf(s, n, L"%s", s_stations[s_netCur].name);
+            _snwprintf(s, n, L"%s", s_netNow.name);
         s[n - 1] = 0;
         return IC_NETRADIO;
     }
@@ -442,7 +442,7 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
     }
     if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
         NetLoadList();
-    if (s_netCur >= 0 && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
+    if (NetCur() && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
         bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
         wchar_t s[160];
         EnterCriticalSection(&s_netCs);
@@ -450,7 +450,7 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
         LeaveCriticalSection(&s_netCs);
         if (!s[0] || s_netState != NR_PLAY)
             NetStateText(s, 160);
-        WMediaBody(dc, g, d, IC_NETRADIO, s_stations[s_netCur].name, s, NULL, -1, NULL, NULL);
+        WMediaBody(dc, g, d, IC_NETRADIO, s_netNow.name, s, NULL, -1, NULL, NULL);
         MediaArrows(dc, g, d, A_NRSTEP, -1, A_NRSTEP, 1);
         NetPlayBtn(dc, g.cx, g.cy, g.r, g.play);
         return;
