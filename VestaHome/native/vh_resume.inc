@@ -168,11 +168,42 @@ static void BtObdConnectNow()
     ObdConnect(a);
 }
 
+// Bluetooth off / on (Settings -> Bluetooth; the proxy's BT_CMD_POWER, its own thread - off takes up to ~10 s)
+static int BtPowerState();
+
+static void BtPowerSet(bool on)   // the user's switch: kept (bt.power), then the stack
+{
+    int pw = BtPowerState();
+    if (pw == BT_POW_GOING_OFF || pw == BT_POW_GOING_ON)
+        return;
+    s_cfg.btPower = on;
+    SaveCfg();
+    VLog(L"bt: Bluetooth %s", on ? L"включаю" : L"выключаю");
+    BtCmdText(BT_CMD_POWER, on ? L"1" : L"0");
+}
+
+static void BtPowerTick(const BtState& bt)   // the start: as it was left (VestaStub starts the stack always)
+{
+    static bool s_done;
+    if (s_done)
+        return;
+    int pw = BtPowerState();
+    if (pw == BT_POW_OFF || (pw == BT_POW_ON && bt.ready)) {
+        s_done = true;
+        if (s_cfg.btPower != (pw == BT_POW_ON)) {
+            VLog(L"bt: в настройках Bluetooth %s - %s", s_cfg.btPower ? L"включён" : L"выключен",
+                 s_cfg.btPower ? L"включаю" : L"выключаю");
+            BtCmdText(BT_CMD_POWER, s_cfg.btPower ? L"1" : L"0");
+        }
+    }
+}
+
 static void BtOwnerTick()   // once a second, 10 s on from the start
 {
     BtState bt;
     if (GetTickCount() - s_bootTick < 10000 || !BtGet(&bt, NULL))
         return;
+    BtPowerTick(bt);
     if (!kObdOn) {
         if (s_cfg.btOwner == BTO_OBD)
             BtPhoneBack(L"OBD отключён в этой версии");

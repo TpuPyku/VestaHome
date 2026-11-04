@@ -89,6 +89,7 @@ static void Publish(int* ev)
         InterlockedIncrement((LONG*)&s_shm->seq);   // odd: being written
         switch (code) {
         case 0x01: st.ready = 1; break;
+        case 0x02: st.ready = 0; break;   // (Deinit's end)
         case 0x0A:
             CopyText(st.devAddr, (char*)ev + 4, 18);
             CopyText(st.devName, (char*)ev + 0x16, BT_TEXT);
@@ -357,9 +358,13 @@ static bool PbEvent(int* ev)
     return ours;
 }
 
+static HANDLE s_powEv;   // the stack's 0x01 / 0x02 seen: Init / Deinit done (BT_CMD_POWER)
+
 static void ProxyCb(int* ev)
 {
     Publish(ev);
+    if (ev[0] == 0x01 || ev[0] == 0x02)
+        SetEvent(s_powEv);
     LogEvent(ev);
     PairWatch(ev);
     bool hide = ev[0] >= 0x38 && ev[0] <= 0x3E && PbEvent(ev);
@@ -430,6 +435,67 @@ static void PairEnd()
     s_pairAsk = 0;
 }
 
+// ---- Bluetooth off / on (BT_CMD_POWER, btshm.h): as the stock shell's switch, Deinit / Init; while off the
+// exports answer "failed" - the stub's Av_Play / Av_Pause and Deinit at its end too (the stack's locks are gone)
+static void* s_orig[PROXY_COUNT];   // the original's functions (g_real: Failed while off)
+
+static void Exports(bool on)
+{
+    for (int i = 0; i < PROXY_COUNT; i++)
+        g_real[i] = on ? s_orig[i] : (void*)Failed;
+}
+
+static void StateOff()   // what the stack no longer has: no phone, no call, no internet
+{
+    BtState& st = s_shm->st;
+    InterlockedIncrement((LONG*)&s_shm->seq);
+    st.ready = 0;
+    st.av = st.avrcp = st.hf = st.hfAudio = 0;
+    st.playing = 0;
+    st.devAddr[0] = st.devName[0] = 0;
+    st.call[0] = st.call[1] = BT_CALL_NONE;
+    st.pan = BT_PAN_IDLE;
+    InterlockedIncrement((LONG*)&s_shm->seq);
+}
+
+static int PowerCmd(bool on)
+{
+    if (s_shm->power == (on ? BT_POW_ON : BT_POW_OFF))
+        return 0;
+    wchar_t b[96];
+    DWORD t0 = GetTickCount(), w = WAIT_FAILED;
+    ResetEvent(s_powEv);
+    int r;
+    if (!on) {
+        s_shm->power = BT_POW_GOING_OFF;
+        if (s_pairOn)
+            PairEnd();   // (the shell's PIN back while the stack still runs)
+        r = ((FlcFn0)s_orig[IDX_Flc_Bluetooth_Deinit])();   // 2: on its way (its thread), the end - event 0x02
+        bool going = r == 0 || r == 2;
+        if (going) {
+            w = WaitForSingleObject(s_powEv, 12000);
+            Exports(false);
+            StateOff();
+        }
+        s_shm->power = going ? BT_POW_OFF : BT_POW_ON;
+        wsprintfW(b, L"POWER off: Deinit -> %d, event 0x02 %s, %u ms", r, w == WAIT_OBJECT_0 ? L"yes" : L"NO",
+                  GetTickCount() - t0);
+    } else {
+        s_shm->power = BT_POW_GOING_ON;
+        r = ((int (*)(FlcCb))s_orig[IDX_Flc_Bluetooth_Init])(ProxyCb);   // (s_appCb still the stub's)
+        if (r == 0) {
+            Exports(true);
+            ((int (*)(int))s_orig[IDX_Flc_Bluetooth_Conn_EnablePairIndForApp])(1);
+            w = WaitForSingleObject(s_powEv, 10000);
+        }
+        s_shm->power = r == 0 ? BT_POW_ON : BT_POW_OFF;
+        wsprintfW(b, L"POWER on: Init -> %d, event 0x01 %s, %u ms", r, w == WAIT_OBJECT_0 ? L"yes" : L"NO",
+                  GetTickCount() - t0);
+    }
+    LogLine(b);
+    return r;
+}
+
 // VestaHome's commands, carried out in the shell's process by the SDK itself
 static DWORD WINAPI CmdThread(LPVOID)
 {
@@ -444,6 +510,15 @@ static DWORD WINAPI CmdThread(LPVOID)
             continue;
         done = n;
         int cmd = s_shm->cmd, idx = -1;
+        if (cmd == BT_CMD_POWER || s_shm->power != BT_POW_ON) {   // (off: nothing else reaches the stack)
+            int r = cmd == BT_CMD_POWER ? PowerCmd(s_shm->cmdText[0] == '1') : -3;
+            s_shm->cmdResult = r;
+            s_shm->cmdDone = n;
+            wchar_t b[64];
+            wsprintfW(b, L"CMD %d -> %d", cmd, r);
+            LogLine(b);
+            continue;
+        }
         switch (cmd) {
         case BT_CMD_PLAYPAUSE:  idx = IDX_Flc_Bluetooth_Av_PlayPause; break;
         case BT_CMD_PLAY:       idx = IDX_Flc_Bluetooth_Av_Play; break;
@@ -520,8 +595,14 @@ static DWORD WINAPI CmdThread(LPVOID)
                 s_shm->st.pan = r == 0 || r == 2 ? BT_PAN_CONNECTING : BT_PAN_FAILED;
                 s_shm->st.panTick = GetTickCount();
                 InterlockedIncrement((LONG*)&s_shm->seq);
-            } else {
-                r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_PanServer_Disconnect])();
+            } else {   // (sheet 22: a phone gone quiet sends no event - the state stayed "online", VestaHome never
+                r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_PanServer_Disconnect])();   // connected again)
+                if (r == 0) {
+                    InterlockedIncrement((LONG*)&s_shm->seq);
+                    s_shm->st.pan = BT_PAN_IDLE;
+                    s_shm->st.panTick = GetTickCount();
+                    InterlockedIncrement((LONG*)&s_shm->seq);
+                }
             }
             wchar_t b[64];
             wsprintfW(b, L"PAN %S -> %d", a[0] ? a : "off", r);
@@ -620,7 +701,9 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
                 resolved++;
             else
                 g_real[i] = (void*)Failed;
+            s_orig[i] = g_real[i];
         }
+        s_powEv = CreateEventW(NULL, FALSE, FALSE, NULL);
         s_map = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(BtShm), BT_SHM_NAME);
         if (s_map) {
             s_shm = (BtShm*)MapViewOfFile(s_map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(BtShm));

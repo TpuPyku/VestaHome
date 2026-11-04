@@ -68,7 +68,14 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
        BT_CMD_PHONE /* cmdText "0": Bluetooth for the OBD adapter alone (the user 2026-11-03: one device at a time;
                        the stack keeps one) - the stack's own connects (power-on, link lost) off, the phone's
                        internet, music and handsfree let go (PanServer_Disconnect, Av_Disconnect, Hf_Disconnect(0));
-                       "1": the stack's connects on */ };
+                       "1": the stack's connects on */,
+       BT_CMD_POWER /* cmdText "0" / "1": Bluetooth off / on (the user 2026-11-04: a switch as Wi-Fi's) as the
+                       stock shell's switch (CSetUpBTMenuDlg::SlotSwitchBT, Ghidra 2026-11-04): Flc_Bluetooth_Deinit
+                       (it ends in a thread of its own: event 0x02) / Flc_Bluetooth_Init + EnablePairIndForApp(1)
+                       (event 0x01); never PowerOff - the shell does not, it unloads the stack's drivers. While off
+                       every export answers "failed" (1) and every other command -3 (the stack's locks are gone);
+                       the state in BtShm::power */ };
+enum { BT_POW_ON, BT_POW_GOING_OFF, BT_POW_OFF, BT_POW_GOING_ON };   // (0: a proxy older than it - on)
 enum { BT_PAN_IDLE, BT_PAN_CONNECTING, BT_PAN_ONLINE, BT_PAN_FAILED };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };
 
@@ -116,6 +123,7 @@ struct BtShm {
     volatile LONG cmdDone;              // the proxy: the cmdSeq it carried out
     int           cmdResult;            // what the SDK function returned (0 = ok)
     BtEvent       ev[BT_EV_SLOTS];
+    volatile LONG power;                // BT_POW_* (BT_CMD_POWER; at the end: older readers keep their offsets)
 };
 
 // The phone book and the call lists (PBAP, Ghidra 2026-10-21, PROJECT.md): every pull - the shell's own or

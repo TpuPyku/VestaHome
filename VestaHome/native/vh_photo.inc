@@ -555,6 +555,8 @@ static void DoAction(const Btn& b)
             ControlsToCfg();
         if (b.arg == T_LOGS)
             LogsSet(s_on[T_LOGS]);
+        if (b.arg == T_BT)
+            BtPowerSet(s_on[T_BT]);
         if (b.arg == T_AUTOCONNECT || b.arg == T_AUTOANSWER)   // the stack's options (the proxy)
             BtCmdText(BT_CMD_SETOPT, b.arg == T_AUTOCONNECT ? (s_on[b.arg] ? L"c 1" : L"c 0")
                                                             : (s_on[b.arg] ? L"a 1" : L"a 0"));

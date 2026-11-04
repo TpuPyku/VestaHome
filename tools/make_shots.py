@@ -78,6 +78,8 @@ SHOTS = [
     # (after netradio_cat_play: a catalogue station played, then one of ours)
     ('netradio_recent', [MEDIA, TAB['net'], TAB['list'], (60, 84), (100, 84), (300, 210), ('sleep', 2), TAB['list'], (442, 84)]),
     ('netradio_cis', [MEDIA, TAB['net'], TAB['list'], (572, 84), (400, 180), ('sleep', 6)]),
+    ('settings_bt_off', [SETTINGS, SET['bt'], (720, 85), ('sleep', 3)]),   # (off; on - the next, from off)
+    ('settings_bt_on', [SETTINGS, SET['bt'], (720, 85), ('sleep', 4)]),
     ('netradio_cis_ru', [MEDIA, TAB['net'], TAB['list'], (572, 84), (400, 180), ('sleep', 6), (300, 104), ('sleep', 6)]),
 ]
 
@@ -113,7 +115,8 @@ class BtShm(ctypes.Structure):
     _fields_ = [('magic', W.DWORD), ('version', W.DWORD), ('seq', ctypes.c_long), ('evSeq', ctypes.c_long),
                 ('attach', ctypes.c_long), ('inits', ctypes.c_long), ('origOk', ctypes.c_long), ('st', BtSt),
                 ('cmdSeq', ctypes.c_long), ('cmd', ctypes.c_int), ('cmdText', ctypes.c_char * 40),
-                ('cmdDone', ctypes.c_long), ('cmdResult', ctypes.c_int), ('ev', BtEv * 64)]
+                ('cmdDone', ctypes.c_long), ('cmdResult', ctypes.c_int), ('ev', BtEv * 64),
+                ('power', ctypes.c_long)]
 
 
 class PbE(ctypes.Structure):
@@ -176,6 +179,13 @@ def bluetooth():   # the proxy's stand-in: a phone connected, playing; the book 
             pb.seq += 1
         elif m.cmd == 27:   # BT_CMD_GETOPTS
             m.cmdResult = 1
+        elif m.cmd == 33:   # BT_CMD_POWER "0" / "1": as the proxy, its "going" state a while first
+            on = m.cmdText[:1] == b'1'
+            m.power = 3 if on else 1
+            time.sleep(2)
+            s.ready, s.av, s.hf = (1, 2, 2) if on else (0, 0, 0)
+            s.devAddr = b'A4:E2:87:98:D6:9F' if on else b''
+            m.power = 0 if on else 2
         m.cmdDone = m.cmdSeq
 
 

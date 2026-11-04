@@ -94,6 +94,7 @@ struct Cfg {
     wchar_t uiMedia[16];                 // the media's tab last seen: "music", "netradio", "bt"... (the nav bar)
     wchar_t btLast[18];                // the phone connected last, "A4:E2:87:98:D6:9F"
     int     btOwner;                   // Bluetooth's one device (btowner.h): BTO_PHONE / BTO_OBD
+    bool    btPower;                   // Bluetooth on (the proxy's BT_CMD_POWER; ini bt.power)
     wchar_t soundMix[kMixList];        // the programs whose sound goes with the radio (soundmix.h): exe names
     wchar_t favs[640];                 // the phone's favourites: "name|number;" each (Phone -> Favourites)
     wchar_t photoDir[MAX_PATH];        // the photos' folder last opened
@@ -135,6 +136,7 @@ static void CfgDefaults()
     s_cfg.camOverBy = 10;
     s_cfg.beepDev = 1;   // "Audio Output" 1: heard over the radio (HU 2026-10-18-2)
     s_cfg.wifiOn = true;
+    s_cfg.btPower = true;
     s_cfg.netAuto = true;   // (the user 2026-10-30: the modem in - online)
     s_cfg.nmeaCom = 6;
     s_cfg.saverMin = 5;
@@ -511,6 +513,8 @@ static void LoadCfg()
             s_cfg.btLast[17] = 0;
         } else if (!wcscmp(k, L"bt.owner")) {
             s_cfg.btOwner = !wcscmp(v, L"obd") ? BTO_OBD : BTO_PHONE;
+        } else if (!wcscmp(k, L"bt.power")) {
+            s_cfg.btPower = CfgBool(v);
         } else if (!wcscmp(k, L"phone.fav")) {
             wcsncpy(s_cfg.favs, v, 639);
             s_cfg.favs[639] = 0;
@@ -673,6 +677,7 @@ static void SaveCfg()
         L"bt.last=%s\r\n"
         L"# bt.owner: Bluetooth's one device, phone or obd (the OBD adapter: connected at the start, the phone let go)\r\n"
         L"bt.owner=%s\r\n"
+        L"# bt.power: Bluetooth on (1) or off (0) - Settings -> Bluetooth, put back at the start\r\nbt.power=%d\r\n"
         L"# phone.fav: the phone's favourites, name|number; each\r\nphone.fav=%s\r\n"
         L"# obd.addr: the OBD-II Bluetooth adapter (ELM327; Settings -> Bluetooth -> OBD)\r\n"
         L"obd.addr=%s\r\n"
@@ -692,7 +697,7 @@ static void SaveCfg()
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
         s_cfg.radioStation, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast,
-        s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
+        s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.btPower ? 1 : 0, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto, s_cfg.netOp, s_cfg.netApn, s_cfg.netUser,
         s_cfg.netPass, s_cfg.netAuto, s_cfg.soundMix);
