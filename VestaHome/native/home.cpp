@@ -976,7 +976,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 MarkLogs();
             return 0;
         }
-        if (wp == WP_MCU_VOLUME) {   // the volume or the mute changed: the volume window for 2.5 s
+        if (wp == WP_MCU_VOLUME) {   // the volume or the mute changed: the top bar (the window kept 2.5 s if open)
             int v, mu, src;
             VolGet(&v, &mu, &src);
             if (v == s_svSent && GetTickCount() - s_svTick < 3000)
@@ -1005,8 +1005,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             if (!IsWindowVisible(hwnd))
                 return 0;
-            if (GetForegroundWindow() == hwnd && s_screen != S_VOLUME)
-                Go(S_VOLUME, true);
+            // no window by itself (the user 2026-11-04: it held the whole screen while up; the level and the mute
+            // are in the top bar) - only the speaker there opens it
             if (s_screen == S_VOLUME)
                 s_screenTick = GetTickCount();   // kept open while it keeps changing
             BuildButtons();
