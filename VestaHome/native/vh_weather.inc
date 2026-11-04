@@ -1,12 +1,13 @@
 ﻿// vh_weather.inc - part of home.cpp (included there, in order): HTTP(S) and the weather.
 
-// ---- HTTP and HTTPS through https.cpp (BearSSL; the copy of OSMapsCE's client).
+// ---- HTTP and HTTPS through VestaCore's vhttp.cpp (BearSSL; the client shared with OSMapsCE).
 // Body of a 200 answer (malloc'ed, zero-terminated) or NULL with the reason in err.
 static char* Fetch(const char* host, bool tls, const char* path, const char* headers, wchar_t* err, int errCap)
 {
     unsigned char* body = NULL;
     int len = 0, status = 0;
-    int r = HttpGet(host, tls, path, headers, &body, &len, &status);
+    HttpExtra extra = { headers, NULL, 0 };
+    int r = HttpGet(host, tls, path, &body, &len, &status, NULL, NULL, 0, &extra);
     if (r != NET_OK) {
         _snwprintf(err, errCap, L"%S: %s", host, NetErrorText(r));
         return NULL;

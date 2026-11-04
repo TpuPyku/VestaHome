@@ -232,7 +232,7 @@ SCREENS = [
 ]
 
 NOTES = '''<h2>Как это работает</h2><div class="note" style="font-size:13px"><ul>
-<li><b>Источник:</b> API radio-browser.info по HTTPS (наш клиент https.cpp и корни из trust_anchors.inc; корень
+<li><b>Источник:</b> API radio-browser.info по HTTPS (клиент VestaCore vhttp.cpp и корни из его trust_anchors.inc; корень
 сертификата серверов проверить при реализации; Let's Encrypt — ISRG X1 уже есть). Сервер — из списка all.api.radio-browser.info, при ошибке — следующий.
 Свой User-Agent «VestaHome/0.7», как просят правила каталога.</li>
 <li><b>Запросы:</b> жанры <code>/json/tags?order=stationcount&amp;reverse=true&amp;limit=100</code>, страны

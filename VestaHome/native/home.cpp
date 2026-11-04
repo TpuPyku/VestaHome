@@ -23,7 +23,7 @@
 #endif
 #include "dialloc.h"    // its number as a local call
 #endif
-#include "https.h"
+#include "vhttp.h"     // VestaCore's HTTP(S) client (HttpInit at the start)
 #include "video.h"
 #include "wifi.h"
 #include "obd.h"
@@ -323,6 +323,20 @@ static int CrashNote(EXCEPTION_POINTERS* e, const wchar_t* where)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// A vhttp error for the screen and the log.
+static const wchar_t* NetErrorText(int err)
+{
+    switch (err) {
+    case NET_DNS:     return L"нет сети (DNS)";
+    case NET_CONNECT: return L"сервер не отвечает";
+    case NET_TIMEOUT: return L"обрыв связи";
+    case NET_HTTP:    return L"ошибка сервера";
+    case NET_TLS:     return L"ошибка HTTPS";
+    case NET_MEMORY:  return L"мало памяти";
+    }
+    return L"";
+}
+
 #include "vh_draw.inc"
 #include "vh_screens.inc"
 #include "vh_diag.inc"
@@ -399,7 +413,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         InitializeCriticalSection(&s_wxCs);
         WxLoad();
         NetInit();
-        HttpInit();
+        static const HttpSetup http = { "VestaHome/0.5", "*/*", 3 * 1024 * 1024, NULL };   // (no log: as before)
+        HttpInit(&http);
         GpsStartCore();
         McuStart();
         VLog(L"поток главный (окно): id %08X", (unsigned)GetCurrentThreadId());

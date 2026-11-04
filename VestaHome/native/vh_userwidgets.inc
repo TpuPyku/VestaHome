@@ -422,7 +422,8 @@ static void UserWgFetchOne(const UwgJob& j)
     DWORD t0 = GetTickCount();
     unsigned char* body = NULL;
     int len = 0, status = 0;
-    int r = HttpGet(host, tls, path, "User-Agent: Mozilla/5.0 (VestaHome)\r\n", &body, &len, &status);
+    HttpExtra extra = { "User-Agent: Mozilla/5.0 (VestaHome)\r\n", NULL, 0 };
+    int r = HttpGet(host, tls, path, &body, &len, &status, NULL, NULL, 0, &extra);
     if (r != NET_OK || status != 200 || !body) {
         VLog(L"виджет %s: загрузка %S - %s", j.key, host, r != NET_OK ? NetErrorText(r) : L"ответ не 200");
         if (r == NET_OK)
