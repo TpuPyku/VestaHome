@@ -181,15 +181,23 @@ static void MixTick()   // every 2 s
 {
     static TaskInfo s_mixTask;   // (its own: the load log's minute keeps its sample)
     static wchar_t s_names[TASK_PROC_MAX][kMixProcName];
-    if (!s_cfg.soundMix[0] || FindWindow(NULL, L"RadioCommWindow")) {
-        MixSet(false, NULL);
-        return;
+    static int s_why = -1;   // why it is off, logged when it changes (sheet 22: it never came on, nothing said why)
+    int why = !s_cfg.soundMix[0] ? 0 : FindWindow(NULL, L"RadioCommWindow") ? 1 : 2;
+    int at = -1, n = 0;
+    if (why == 2) {
+        TaskSample(&s_mixTask, s_wnd);
+        n = s_mixTask.procOk ? s_mixTask.procCount : 0;
+        for (int i = 0; i < n; i++)
+            wcscpy(s_names[i], s_mixTask.proc[i].name);
+        at = MixRunning(s_cfg.soundMix, s_names, n);
+        why = !s_mixTask.procOk ? 3 : at >= 0 ? 4 : 2;
     }
-    TaskSample(&s_mixTask, s_wnd);
-    int n = s_mixTask.procOk ? s_mixTask.procCount : 0;
-    for (int i = 0; i < n; i++)
-        wcscpy(s_names[i], s_mixTask.proc[i].name);
-    int at = MixRunning(s_cfg.soundMix, s_names, n);
+    if (why != s_why) {
+        static const wchar_t* const kWhy[5] = { L"список пуст", L"есть окно оболочки - звук её", L"программ из списка нет",
+                                               L"список процессов не прочитать", L"программа запущена" };
+        s_why = why;
+        VLog(L"звук вместе с радио: %s (список: %s)", kWhy[why], s_cfg.soundMix);
+    }
     MixSet(at >= 0, at >= 0 ? s_names[at] : NULL);
 }
 

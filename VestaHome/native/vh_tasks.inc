@@ -618,18 +618,19 @@ static void SaverWeather(HDC dc, int cx, int y)
 
 static bool CarSensor(int id, wchar_t* v, int n);   // (below: the trip's)
 static const wchar_t* CarSensorName(int id);
+static bool CarSensorShown(int id);
 
 // The car (2026-10-22, out of the demo; the user: three lines, chosen in its settings): the sensors chosen, "—"
 // while one has no data.
 static void WCar(HDC dc, int x, int y)
 {
     bool d = Widget(dc, x, y, 248, 158, L"Автомобиль", IC_CAR, A_SCREEN, S_CAR, S_WSET_CAR);
-    for (int i = 0; i < 3; i++) {
-        if (s_cfg.carSens[i] < 0)
+    for (int i = 0, k = 0; i < 3; i++) {
+        if (s_cfg.carSens[i] < 0 || !CarSensorShown(s_cfg.carSens[i]))
             continue;
         wchar_t v[32];
         bool have = CarSensor(s_cfg.carSens[i], v, 32);
-        int ly = y + 74 + i * 30;
+        int ly = y + 74 + k++ * 30;
         T(dc, x + 16, ly, CarSensorName(s_cfg.carSens[i]), 15, d ? kInk : kMuted, 400, AL_START, 132);
         T(dc, x + 232, ly, have ? v : L"—", 19, d ? kInk : have ? kText : kDim, 700, AL_END, 96);
     }
@@ -728,8 +729,10 @@ static void WTrip(HDC dc, int x, int y)
         _snwprintf(f, 48, L"сожжено %d,%d л", (int)s_trip.fuelL, (int)(s_trip.fuelL * 10) % 10);
     f[47] = 0;
     CharUpperBuff(f, 1);
-    Sep(dc, x + 20, y + 246, kWgW2 - 40);
-    T(dc, x + 20, y + 280, f, 18, d ? kInk : kText, 700, AL_START, kWgW2 - 40);
+    if (kObdOn) {   // (the fuel: OBD's alone)
+        Sep(dc, x + 20, y + 246, kWgW2 - 40);
+        T(dc, x + 20, y + 280, f, 18, d ? kInk : kText, 700, AL_START, kWgW2 - 40);
+    }
     if (s_trip.started) {
         _snwprintf(s, 96, L"поездка с %02d:%02d", s_trip.start.wHour, s_trip.start.wMinute);
         s[95] = 0;
@@ -977,6 +980,11 @@ static const wchar_t* CarSensorName(int id)
     return id >= 0 && id < kCarSensors ? kCarSensor[id][0] : L"";
 }
 
+static bool CarSensorShown(int id)   // the OBD adapter's (6-9, 17 on) - only with OBD on (btowner.h kObdOn)
+{
+    return kObdOn || id < 6 || (id > 9 && id < 17);
+}
+
 static bool CarSensor(int id, wchar_t* v, int n)   // its value with the unit; false = no data
 {
     v[0] = 0;
@@ -1205,7 +1213,9 @@ static void ScrWSetCar(HDC dc)
     wchar_t s[64];
     _snwprintf(s, 64, L"Выберите до трёх показаний: выбрано %d. «—» — данных пока нет.", n);
     T(dc, 24, 92, s, 16, kMuted, 400, AL_START, 752);
-    for (int id = 0; id < kCarSensors; id++) {
+    for (int id = 0, k = 0; id < kCarSensors; id++) {
+        if (!CarSensorShown(id))
+            continue;
         int at = -1;
         for (int i = 0; i < 3; i++)
             if (s_cfg.carSens[i] == id)
@@ -1215,7 +1225,8 @@ static void ScrWSetCar(HDC dc)
         _snwprintf(label, 64, at >= 0 ? L"%d. %s" : L"%s", at + 1, kCarSensor[id][0]);
         if (at < 0)
             wcscpy(label, kCarSensor[id][0]);
-        int bx = 16 + id / 9 * 258, by = 104 + id % 9 * 34;   // (above y 408: "back" at the bottom left)
+        int bx = 16 + k / 9 * 258, by = 104 + k % 9 * 34;   // (above y 408: "back" at the bottom left)
+        k++;
         Button(dc, bx, by, 250, 30, NULL, at >= 0 ? B_SEL : B_N, IC_NONE, 14, 0, A_CARSENS, id);
         T(dc, bx + 12, by + 21, label, 13, at >= 0 ? kOrange : kText, 700, AL_START, 150);
         T(dc, bx + 238, by + 21, have ? v : L"—", 13, at >= 0 ? kOrange : kMuted, 600, AL_END, 90);

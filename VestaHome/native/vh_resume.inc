@@ -173,6 +173,11 @@ static void BtOwnerTick()   // once a second, 10 s on from the start
     BtState bt;
     if (GetTickCount() - s_bootTick < 10000 || !BtGet(&bt, NULL))
         return;
+    if (!kObdOn) {
+        if (s_cfg.btOwner == BTO_OBD)
+            BtPhoneBack(L"OBD отключён в этой версии");
+        return;
+    }
     ObdInfo o;
     ObdGet(&o);
     if (o.state == OBD_ON)

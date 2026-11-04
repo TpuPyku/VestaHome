@@ -576,6 +576,8 @@ static void SaveEdit()
         MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_apps[s_editIdx].path), false);
     if (!MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_edit.path), s_editMix))
         VLog(L"звук вместе с радио: список полон, %s не добавлена", MixExeOf(s_edit.path));
+    VLog(L"ярлык «%s»: звук вместе с радио %s (%s), список: %s", s_edit.name, s_editMix ? L"вкл" : L"выкл",
+         MixExeOf(s_edit.path), s_cfg.soundMix[0] ? s_cfg.soundMix : L"пуст");
     SaveCfg();
     if (s_editIdx < 0) {
         s_apps[s_appCount++] = s_edit;
@@ -924,32 +926,44 @@ static const wchar_t* kFieldCaption[4] = { L"Название", L"Програм
 static const wchar_t* kFieldEmpty[4] = { L"нажмите, чтобы ввести", L"нажмите, чтобы выбрать exe", L"нет",
     L"своя у программы; нажмите, чтобы выбрать png, ico или exe" };
 
-// One shortcut: four fields (keyboard or file browser behind each), cancel / delete / save.
-// A chosen icon has a "reset" button at the end of its field.
+// One shortcut: four fields (keyboard or file browser behind each), the sound's checkbox, cancel / delete / save.
+// A chosen icon has a "reset" button at the end of its field. (The sound was a button at the bottom left until
+// sheet 22: "back" over its left part cancelled the editor - the user 2026-11-04: a row with a checkbox.)
+enum { kEditH = 62, kEditStep = 68 };
 static void DrawEdit(HDC dc)
 {
     Frame(dc, s_editIdx < 0 ? L"Новый ярлык" : L"Изменить ярлык", A_CANCEL);
     for (int k = 0; k < 4; k++) {
-        int y = 72 + k * 80;
+        int y = 68 + k * kEditStep;
         const wchar_t* v = k == F_NAME ? s_edit.name : k == F_PATH ? s_edit.path :
                            k == F_PARAMS ? s_edit.params : s_edit.iconPath;
         bool reset = k == F_ICON && v[0];
         int w = reset ? 640 : 768;
-        bool d = Zone(16, y, w, 70, A_FIELD, k);
-        R(dc, 16, y, w, 70, 16, d ? kOrange : kPanel);
-        T(dc, 36, y + 26, kFieldCaption[k], 13, d ? kInk : kMuted, 700);
+        bool d = Zone(16, y, w, kEditH, A_FIELD, k);
+        R(dc, 16, y, w, kEditH, 16, d ? kOrange : kPanel);
+        T(dc, 36, y + 23, kFieldCaption[k], 13, d ? kInk : kMuted, 700);
         if (v[0])
-            TTail(dc, 36, y + 55, v, 22, d ? kInk : kText, 700, w - 88);
+            TTail(dc, 36, y + 50, v, 21, d ? kInk : kText, 700, w - 88);
         else
-            T(dc, 36, y + 55, kFieldEmpty[k], 18, d ? kInk : kDim, 400, AL_START, w - 88);
-        Ico(dc, IC_NEXT, 16 + w - 48, y + 19, 32, d ? kInk : kMuted);
+            T(dc, 36, y + 50, kFieldEmpty[k], 18, d ? kInk : kDim, 400, AL_START, w - 88);
+        Ico(dc, IC_NEXT, 16 + w - 48, y + 15, 32, d ? kInk : kMuted);
         if (reset)
-            Button(dc, 668, y, 116, 70, L"Сброс", B_N, IC_NONE, 17, 0, A_NOICON);
+            Button(dc, 668, y, 116, kEditH, L"Сброс", B_N, IC_NONE, 17, 0, A_NOICON);
     }
+    int y = 68 + 4 * kEditStep;   // the checkbox row: its whole width a tap
+    bool d = Zone(16, y, 768, 52, A_MIXTOGGLE);
+    R(dc, 16, y, 768, 52, 16, d ? kOrange : kPanel);
+    R(dc, 32, y + 12, 28, 28, 7, s_editMix ? kOrange : kPanel2);
+    if (s_editMix) {   // the tick
+        Line(dc, 39, y + 26, 44, y + 32, 3, kInk);
+        Line(dc, 44, y + 32, 53, y + 19, 3, kInk);
+    }
+    T(dc, 76, y + 33, L"Звук вместе с радио", 18, d ? kInk : kText, 700);
+    T(dc, 290, y + 33, L"подсказки программы слышны, радио не выключается", 14, d ? kInk : kMuted, 400, AL_START,
+      480);
     Dock(dc);
-    Button(dc, 16, 410, 260, 58, L"Звук вместе с радио", s_editMix ? B_SEL : B_N, IC_NONE, 16, 0, A_MIXTOGGLE);
     if (s_editIdx >= 0)   // the second press deletes
-        Button(dc, 290, 410, 220, 58, s_delArmed ? L"Точно удалить?" : L"Удалить", s_delArmed ? B_FILL : B_N,
+        Button(dc, 330, 410, 220, 58, s_delArmed ? L"Точно удалить?" : L"Удалить", s_delArmed ? B_FILL : B_N,
                IC_NONE, 18, 0, A_DELETE);
     Button(dc, 564, 410, 220, 58, L"Сохранить", B_PRI, IC_NONE, 18, 0, A_SAVE);
 }

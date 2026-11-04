@@ -1322,7 +1322,8 @@ static void ScrSetBt(HDC dc)
             wcsncat(s, nm, 40);
         }
         SetRow(dc, 316, L"Сопряжённые", s[0] ? s : L"—", false, A_SCREEN, S_BT_PAIRED, H);
-        SetRow(dc, 358, L"OBD-адаптер (проверка)", L"поиск, сопряжение и опрос ELM327", true, A_SCREEN, S_SET_OBD, H);
+        if (kObdOn)
+            SetRow(dc, 358, L"OBD-адаптер (проверка)", L"поиск, сопряжение и опрос ELM327", true, A_SCREEN, S_SET_OBD, H);
     } else {
         SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен proxy MCU)");
         SetRow(dc, 120, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");

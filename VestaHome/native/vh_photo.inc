@@ -812,9 +812,11 @@ static void DoAction(const Btn& b)
         s_obdFoundN = 0;
         s_obdEvSeen = BtShmGet() ? BtShmGet()->evSeq : -1;
         s_obdSearchTick = GetTickCount();
-        BtOwnerSet(BTO_OBD);   // the phone let go first: the search broke its link (HU 2026-11-03)
-        BtOwnerTick();
-        VLog(L"obd: поиск устройств");
+        if (s_screen == S_SET_OBD) {   // the adapter's: the phone let go first (the search broke its link, HU
+            BtOwnerSet(BTO_OBD);       // 2026-11-03); a new phone's search no longer gives Bluetooth to the adapter
+            BtOwnerTick();             // (sheet 22: it let the phone go and turned the stack's connects off)
+        }
+        VLog(L"bt: поиск устройств");
         BtCmd(BT_CMD_SEARCH);
         Redraw();
         break;

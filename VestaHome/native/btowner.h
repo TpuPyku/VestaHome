@@ -6,6 +6,10 @@
 #include <windows.h>
 
 enum { BTO_PHONE, BTO_OBD };
+// The OBD adapter at all (the user 2026-11-04, sheet 22: the phone's pairings broke again, the adapter never
+// connected - "disable OBD, we do it after the release"): 0 - Bluetooth always the phone's, a stored "obd" owner
+// handed back to it, no OBD rows anywhere.
+enum { kObdOn = 0 };
 // BTA_PHONE_BACK: the adapter not connected after its tries (or none chosen) - Bluetooth back to the phone, so the
 // phone is not let go for ever (HU 2026-11-04)
 enum { BTA_NONE, BTA_PHONE_OFF, BTA_OBD_CONNECT, BTA_OBD_STOP, BTA_PHONE_BACK };

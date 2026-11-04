@@ -808,8 +808,11 @@ static void ScrCar(HDC dc)   // all the car's sensors (2026-10-22, out of the de
 {
     Frame(dc, L"Автомобиль");
     Panel(dc, 16, 68, 768, 340);   // (above y 408: "back" at the bottom left)
-    for (int id = 0; id < kCarSensors; id++) {   // three columns of nine
-        int x = 28 + id / 9 * 252, y = 72 + id % 9 * 37;
+    for (int id = 0, k = 0; id < kCarSensors; id++) {   // three columns of nine
+        if (!CarSensorShown(id))
+            continue;
+        int x = 28 + k / 9 * 252, y = 72 + k % 9 * 37;
+        k++;
         wchar_t v[32];
         bool have = CarSensor(id, v, 32);
         bool d = id == 24 && Zone(x - 8, y + 2, 252, 34, A_SCREEN, S_OBD_DTC);   // the trouble codes: their screen
@@ -818,7 +821,7 @@ static void ScrCar(HDC dc)   // all the car's sensors (2026-10-22, out of the de
         T(dc, x, y + 24, kCarSensor[id][0], 14, d ? kInk : kMuted, 400, AL_START, 140);
         T(dc, x + 236, y + 24, have ? v : id == 24 ? L"›" : L"—", 15, d ? kInk : have ? kText : kDim, 700, AL_END,
           100);
-        if (id % 9 < 8 && id + 1 < kCarSensors)
+        if ((k - 1) % 9 < 8 && id + 1 < kCarSensors)
             Sep(dc, x, y + 36, 236);
     }
 }
