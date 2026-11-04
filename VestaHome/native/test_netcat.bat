@@ -11,7 +11,7 @@ cd /d "%~dp0"
 set CORE=%~dp0..\..\..\VestaCore
 if not exist "%CORE%\vjson.cpp" set CORE=%~dp0..\..\core
 if not exist obj mkdir obj
-"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_netcat.cpp netcat.cpp "%CORE%\vjson.cpp" /Foobj\ /Fdobj\ /Feobj\test_netcat.exe ^
+"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_netcat.cpp netcat.cpp country.cpp "%CORE%\vjson.cpp" /Foobj\ /Fdobj\ /Feobj\test_netcat.exe ^
   /DUNICODE /D_UNICODE /DWIN32 /D_CRT_SECURE_NO_WARNINGS /I"%CORE%" /I"%VC%\include" /I"%VC%\PlatformSDK\Include" ^
   /link /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" kernel32.lib >obj\build_netcat.log || (type obj\build_netcat.log & exit /b 1)
 if "%1"=="build" exit /b 0

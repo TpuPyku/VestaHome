@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "netcat.h"
+#include "country.h"
 
 static int s_failed, s_checks;
 
@@ -223,8 +224,37 @@ static void TestRecent()
     Check(n == 3 && !strcmp(l[0].url, "a") && !strcmp(l[1].url, "d") && !strcmp(l[2].url, "c"), "full, the last again");
 }
 
+static bool At(double lat, double lon, const char* want)
+{
+    char c[3];
+    bool in = CountryAt(lat, lon, c);
+    return want ? in && !strcmp(c, want) : !in;
+}
+
+static void TestCountry()
+{
+    Check(At(55.75, 37.62, "RU") && At(53.20, 50.15, "RU") && At(43.12, 131.90, "RU"), "Moscow, Samara, Vladivostok");
+    Check(At(54.71, 20.51, "RU"), "Kaliningrad: Russia's other polygon");
+    Check(At(53.90, 27.57, "BY") && At(43.24, 76.89, "KZ") && At(41.30, 69.24, "UZ") && At(40.18, 44.51, "AM"),
+          "Minsk, Almaty, Tashkent, Yerevan");
+    Check(At(60.17, 24.94, "FI") && At(59.91, 10.75, "NO") && At(48.86, 2.35, "FR"), "Helsinki; Oslo, Paris (no ISO_A2)");
+    Check(At(-29.31, 27.48, "LS"), "Maseru: Lesotho, inside South Africa's hole");
+    Check(At(45.0, -30.0, NULL) && At(-40.0, 90.0, NULL), "the sea: none");
+    Check(At(23.8, 54.5, "AE") && At(-17.83, 31.05, "ZW"), "the table's first country and its last");
+    static const short tri[3][2] = { { 0, 0 }, { 1000, 0 }, { 0, 1000 } };   // its long side: x + y = 1000
+    Check(RingHas(tri, 3, 100, 100) && RingHas(tri, 3, 510, 480) && RingHas(tri, 3, 1, 998), "a ring: inside, by its sides");
+    Check(!RingHas(tri, 3, 510, 500) && !RingHas(tri, 3, 990, 20) && !RingHas(tri, 3, -1, 500) &&
+          !RingHas(tri, 3, 500, -1) && !RingHas(tri, 3, 2000, 10), "a ring: just outside each side, far east");
+    static const short tri2[3][2] = { { 100, 200 }, { 1100, 200 }, { 100, 1200 } };   // the same, moved: x + y = 1300
+    Check(RingHas(tri2, 3, 610, 680) && !RingHas(tri2, 3, 610, 700) && RingHas(tri2, 3, 1080, 210) &&
+          !RingHas(tri2, 3, 1090, 220), "a ring off the origin: by its long side");
+    char c[3] = "XX";
+    Check(!CountryAt(45.0, -30.0, c) && !c[0], "the sea: no code");
+}
+
 int main()
 {
+    TestCountry();
     TestCis();
     TestRecent();
     TestEdges();

@@ -28,6 +28,7 @@
 #include "vhap.h"      // VestaCore: the add-ons' protocol
 #include "vfont.h"     // VestaCore: the fonts
 #include "netcat.h"    // the internet radio's lines and catalogue
+#include "country.h"   // the country by GPS (the catalogue's "Рядом")
 #include "vjson.h"     // VestaCore: JSON (the catalogue's answers, in netcat.cpp)
 #include "video.h"
 #include "wifi.h"

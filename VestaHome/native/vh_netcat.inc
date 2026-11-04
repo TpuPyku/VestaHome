@@ -100,8 +100,12 @@ static void NetCatClick(const char* uuid)   // radio-browser counts a station pl
     NcRequest(NCJ_CLICK, 0, path);
 }
 
+static void NcNearNow();
+
 static void NcOpenCats(int kind)   // Genres / Countries / Languages: the list, asked again when it is not this one
 {
+    if (kind == NC_CIS)
+        NcNearNow();
     if (s_ncCatKind != kind) {
         free(s_ncCats);
         s_ncCats = NULL;
@@ -253,6 +257,15 @@ static void NcTile(int i)
 }
 
 static Scroll s_ncList = { 0, 0, 5 * 62 };
+static char   s_ncNear[3];   // the CIS list's first row: the country by GPS ("" none - no fix, the sea)
+
+static void NcNearNow()   // (the user 2026-11-04: "Россия" was always Russia - the country where the car is)
+{
+    Gps g;
+    GpsGet(&g);
+    if (!GpsFresh(g, 120000) || !CountryAt(g.lat, g.lon, s_ncNear))
+        s_ncNear[0] = 0;
+}
 
 static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, the most stations first
 {
@@ -266,10 +279,18 @@ static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, 
         s_ncList.pos = 0;
     }
     Panel(dc, 16, 68, 704, 322);
-    s_ncList.content = s_ncCatN > 0 ? s_ncCatN * 62 + 2 : 0;
+    int up = s_ncCatKind == NC_CIS && s_ncNear[0] ? 1 : 0;   // "Рядом: ..." above the list
+    s_ncList.content = s_ncCatN > 0 ? (s_ncCatN + up) * 62 + 2 : 0;
     ScrollBegin(dc, s_ncList, 20, 72, 716, 386);
+    if (up && 76 - s_ncList.pos + 56 > 72) {
+        wchar_t nm[48], t[64];
+        NcName(NC_COUNTRIES, s_ncNear, s_ncNear, nm, 48);
+        _snwprintf(t, 64, L"Рядом: %s", nm);
+        t[63] = 0;
+        ListRow(dc, 24, 76 - s_ncList.pos, 680, 56, t, L"по GPS", L_CUR, IC_NAV, NULL, NULL, A_NCPICK, -2);
+    }
     for (int i = 0; i < s_ncCatN; i++) {
-        int y = 76 + i * 62 - s_ncList.pos;
+        int y = 76 + (i + up) * 62 - s_ncList.pos;
         if (y + 56 <= 72 || y >= 386)
             continue;
         wchar_t n[16];
@@ -284,6 +305,16 @@ static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, 
 
 static void NcPick(int i)
 {
+    if (i == -2 && s_ncNear[0]) {   // "Рядом": the country by GPS, its count if the list has it
+        wchar_t nm[48];
+        NcName(NC_COUNTRIES, s_ncNear, s_ncNear, nm, 48);
+        int n = -1;
+        for (int k = 0; k < s_ncCatN; k++)
+            if (!strcmp(s_ncCats[k].key, s_ncNear))
+                n = s_ncCats[k].count;
+        NcOpenPage(NC_COUNTRY, s_ncNear, nm, n);
+        return;
+    }
     if (i < 0 || i >= s_ncCatN)
         return;
     const NcCat& c = s_ncCats[i];
