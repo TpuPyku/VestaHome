@@ -76,7 +76,7 @@ static void ObdConnect()
     Check(BtOwnerStep(in) == BTA_NONE, "obd: a search on its way - no connect");
     in.hold = false;
     in.obdAddr = false;
-    Check(BtOwnerStep(in) == BTA_NONE, "obd: no adapter chosen - no connect");
+    Check(BtOwnerStep(in) == BTA_PHONE_BACK, "obd: no adapter chosen - no connect, back to the phone");
     in.obdAddr = true;
     in.obdBusy = true;
     Check(BtOwnerStep(in) == BTA_NONE, "obd: the adapter busy - nothing");
@@ -94,9 +94,26 @@ static void ObdRetry()
     in.tries = kBtoObdTries - 1;
     Check(BtOwnerStep(in) == BTA_OBD_CONNECT, "obd: the last try");
     in.tries = kBtoObdTries;
-    Check(BtOwnerStep(in) == BTA_NONE, "obd: tries used up - none");
+    Check(BtOwnerStep(in) == BTA_PHONE_BACK, "obd: tries used up - Bluetooth back to the phone");
     in.phone = true;
-    Check(BtOwnerStep(in) == BTA_PHONE_OFF, "obd: tries used up, the phone still let go");
+    Check(BtOwnerStep(in) == BTA_PHONE_BACK, "obd: tries used up, the phone there - back to it, not let go");
+    in.obdBusy = true;
+    Check(BtOwnerStep(in) == BTA_PHONE_OFF, "obd: tries used up but the adapter connecting - the phone let go");
+    in.obdBusy = false;
+    in.hold = true;
+    Check(BtOwnerStep(in) == BTA_PHONE_OFF, "obd: tries used up, a search on its way - not given back");
+}
+
+// HU 2026-11-04: the adapter never connected and the phone was let go every 10 s until both were paired again
+static void ObdNoAdapter()
+{
+    BtOwnerIn in = Obd();
+    in.obdAddr = false;
+    in.lastAct = BTA_PHONE_OFF;
+    in.sinceAct = kBtoPhoneOffMs;
+    Check(BtOwnerStep(in) == BTA_PHONE_BACK, "obd: no adapter chosen - back to the phone");
+    in.hold = true;
+    Check(BtOwnerStep(in) == BTA_NONE, "obd: no adapter yet, a search on its way - waited");
 }
 
 int main()
@@ -106,6 +123,7 @@ int main()
     ObdPhoneBack();
     ObdConnect();
     ObdRetry();
+    ObdNoAdapter();
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

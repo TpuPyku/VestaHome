@@ -828,6 +828,8 @@ static void DoAction(const Btn& b)
     case A_PAIRANSWER:   // a phone's request: accept (1) / refuse (0)
         BtCmdText(BT_CMD_PAIRCONFIRM, b.arg ? L"1" : L"0");
         VLog(L"bt: запрос сопряжения %S - %s", s_pairAsk.addr, b.arg ? L"принят" : L"отклонён");
+        if (b.arg)
+            BtOwnerSet(BTO_PHONE);   // a phone paired: Bluetooth for it (HU 2026-11-04: else let go every 10 s)
         Back();
         break;
     case A_PNPAIR: {
@@ -884,12 +886,8 @@ static void DoAction(const Btn& b)
         ObdInfo o;
         ObdGet(&o);
         BtState bt;
-        if (o.state == OBD_CONNECTING || o.state == OBD_ON) {   // Bluetooth back to the phone
-            BtOwnerSet(BTO_PHONE);
-            if (s_cfg.btLast[0]) {
-                VLog(L"телефон: подключить %s", s_cfg.btLast);
-                BtCmdText(BT_CMD_CONNECT, s_cfg.btLast);
-            }
+        if (o.state == OBD_CONNECTING || o.state == OBD_ON) {
+            BtPhoneBack(L"OBD отключён");
         } else if (BtGet(&bt, NULL) && BtPhoneOn(bt)) {   // the phone let go, the adapter 5 s later (BtOwnerTick)
             BtOwnerSet(BTO_OBD);
             BtOwnerTick();

@@ -122,6 +122,16 @@ static int AdvanceCredit(int chan, int n)
     return 0;
 }
 
+static bool s_wakeLinks;
+static char s_wakeAddr[20];
+static void Wake(const char* addr)
+{
+    Called('K');
+    strncpy(s_wakeAddr, addr, 19);
+    s_wakeAddr[19] = 0;
+    s_linked = s_wakeLinks;
+}
+
 static BtRfApi kApi = { Startup, Cleanup, AddDevice, BindToAcl, UnbindFromAcl, GetConnections, RegisterUser,
                         DeregisterUser, OpenClientChannelEx, SendData, CloseChannel, AdvanceCredit };
 
@@ -247,6 +257,22 @@ int main()
     Reset();
     s_bind = 0x0D;
     Check(!Open() && !strcmp(s_calls, "SABX"), "link refused: the stack let go");
+
+    Reset();   // the link refused, an SDP search asked to bring it up (HU 2026-11-04: the link came only with a
+    s_bind = 1;   // pairing or a search)
+    BtRfSetWake(Wake);
+    s_wakeLinks = true;
+    Check(Open() && !strcmp(s_calls, "SABKRO") && !strcmp(s_wakeAddr, "A4:E2:87:98:D6:9F"),
+          "link refused: the search asked for this address, the link up - the channel");
+    s_calls[0] = 0;
+    BtRfClose();
+    Check(!strcmp(s_calls, "CDX"), "link up by the search: not ours - not let go");
+
+    Reset();
+    s_bind = 1;
+    s_wakeLinks = false;
+    Check(!Open() && !strcmp(s_calls, "SABKX"), "link refused, the search brought none: the stack let go");
+    BtRfSetWake(NULL);
 
     Reset();
     s_linkOnBind = false;

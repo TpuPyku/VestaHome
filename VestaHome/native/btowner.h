@@ -6,7 +6,9 @@
 #include <windows.h>
 
 enum { BTO_PHONE, BTO_OBD };
-enum { BTA_NONE, BTA_PHONE_OFF, BTA_OBD_CONNECT, BTA_OBD_STOP };
+// BTA_PHONE_BACK: the adapter not connected after its tries (or none chosen) - Bluetooth back to the phone, so the
+// phone is not let go for ever (HU 2026-11-04)
+enum { BTA_NONE, BTA_PHONE_OFF, BTA_OBD_CONNECT, BTA_OBD_STOP, BTA_PHONE_BACK };
 enum { kBtoPhoneOffMs = 10000,   // the phone back while the adapter has Bluetooth: let go again after that long
        kBtoObdWaitMs = 5000,     // the phone let go: the adapter connected after that long
        kBtoObdRetryMs = 30000,   // a connect failed: the next one after that long (since the last one began)

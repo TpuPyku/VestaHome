@@ -342,6 +342,32 @@ static bool ModemDialAt(HKEY root, wchar_t* name, RASENTRY* e)
     return ok;
 }
 
+static void CALLBACK ModemLineCb(DWORD, DWORD, DWORD, DWORD, DWORD, DWORD)
+{
+}
+
+// The dialling location "0" ("Car": every format the number as it is) made the current one through TAPI (HU
+// 2026-11-04: with location "1" and its country 7 and area 095 in the entry RAS still dialled "8,095*99#" - a
+// long-distance call: NO CARRIER, 679). coredll's TAPI taken at run time.
+static void ModemCarLocation()
+{
+    typedef LONG (WINAPI *InitFn)(HLINEAPP*, HINSTANCE, LINECALLBACK, LPCWSTR, LPDWORD);
+    typedef LONG (WINAPI *SetLocFn)(HLINEAPP, DWORD);
+    typedef LONG (WINAPI *ShutFn)(HLINEAPP);
+    HMODULE m = GetModuleHandle(L"coredll.dll");
+    InitFn init = (InitFn)GetProcAddress(m, L"lineInitialize");
+    SetLocFn set = (SetLocFn)GetProcAddress(m, L"lineSetCurrentLocation");
+    ShutFn shut = (ShutFn)GetProcAddress(m, L"lineShutdown");
+    HLINEAPP h = 0;
+    DWORD n = 0;
+    LONG r = init && set && shut ? init(&h, GetModuleHandle(NULL), ModemLineCb, L"VestaHome", &n) : -1;
+    if (!r) {
+        r = set(h, 0);
+        shut(h);
+    }
+    VLog(L"модем: правила набора «0» (Car) через TAPI - %ld", r);
+}
+
 static void ModemDialHere(RASENTRY* e)
 {
     wchar_t name[12] = L"?";
@@ -361,6 +387,7 @@ static DWORD WINAPI ModemDial(LPVOID)
     e.dwSize = sizeof(e);
     // the internet through it (Wi-Fi's route stays for its own net); dialled as a local call (ModemDialHere)
     e.dwfOptions = RASEO_RemoteDefaultGateway | RASEO_DialAsLocalCall;
+    ModemCarLocation();
     ModemDialHere(&e);
     e.dwfNetProtocols = RASNP_Ip;
     e.dwFramingProtocol = RASFP_Ppp;
@@ -1057,7 +1084,7 @@ static void PanAuto(const BtState& bt)   // every second while a phone is connec
         PanHealth(bt);
         return;
     }
-    if (!s_cfg.netAuto || s_panHeld || bt.pan == BT_PAN_CONNECTING || bt.call[0] != BT_CALL_NONE ||
+    if (!s_cfg.netAuto || s_panHeld || s_cfg.btOwner == BTO_OBD || bt.pan == BT_PAN_CONNECTING || bt.call[0] != BT_CALL_NONE ||
         now - s_panPhone < 10000 || (LONG)(now - s_panNext) < 0 || NetOther())
         return;
     s_panNext = now + s_panWait;

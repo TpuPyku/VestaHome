@@ -1,4 +1,4 @@
-// btrf.cpp - a direct RFCOMM channel through btapi.dll, without SDP (btrf.h). The data comes on btapi's thread
+﻿// btrf.cpp - a direct RFCOMM channel through btapi.dll, without SDP (btrf.h). The data comes on btapi's thread
 // (BtRfOnEvent) into a ring; the reader takes it out and gives the device its credits back.
 #include <windows.h>
 #include <string.h>
@@ -24,6 +24,8 @@ static bool             s_bound, s_registered, s_asked, s_up;
 static volatile bool    s_opened, s_closed;
 static char             s_ring[kRing];
 static int              s_head, s_len, s_owed;   // the ring's first byte and length; the packets not credited back
+static void           (*s_wake)(const char* addr);
+static char             s_addrText[18];
 
 static int Hex(char c)
 {
@@ -98,6 +100,23 @@ static bool Linked(const unsigned char* bd)
     return false;
 }
 
+// The link asked; refused - the stack's own SDP search asked to bring it up (s_wake), the link then not ours
+static bool Bind()
+{
+    int r = s_api->BindToAcl(s_dev);
+    if (r == 0 || r == kStatusPending) {
+        s_bound = true;
+        return true;
+    }
+    if (!s_wake) {
+        s_log(L"rfcomm: связь не начата (%d)", r);
+        return false;
+    }
+    s_log(L"rfcomm: связь не начата (%d) - прошу поиск SDP", r);
+    s_wake(s_addrText);
+    return true;
+}
+
 static bool Link(const unsigned char* bd, int ms)
 {
     int r = s_api->AddDevice(bd, 0, &s_dev);
@@ -109,12 +128,8 @@ static bool Link(const unsigned char* bd, int ms)
         s_log(L"rfcomm: связь уже есть");
         return true;
     }
-    r = s_api->BindToAcl(s_dev);
-    if (r != 0 && r != kStatusPending) {
-        s_log(L"rfcomm: связь не начата (%d)", r);
+    if (!Bind())
         return false;
-    }
-    s_bound = true;
     for (DWORD t0 = GetTickCount(); !Linked(bd); Sleep(100))
         if (GetTickCount() - t0 >= (DWORD)ms) {
             s_log(L"rfcomm: нет связи за %d мс (адаптер не ответил)", ms);
@@ -187,6 +202,7 @@ bool BtRfOpen(const BtRfApi* api, const char* addr, int server, BtRfLogFn log, i
         return false;
     }
     Reset(api, log, openMs);
+    strcpy(s_addrText, addr);
     if (!Link(bd, linkMs) || !Channel(server, openMs)) {
         Release();
         return false;
@@ -235,6 +251,11 @@ bool BtRfWrite(const char* p, int n)
         return false;
     int r = s_api->SendData(s_chan, p, n, 0);
     return r == 0 || r == kStatusPending;
+}
+
+void BtRfSetWake(void (*wake)(const char* addr))
+{
+    s_wake = wake;
 }
 
 void BtRfClose()

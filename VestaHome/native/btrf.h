@@ -39,6 +39,9 @@ bool BtRfOpen(const BtRfApi* api, const char* addr, int server, BtRfLogFn log, i
 int  BtRfRead(char* buf, int cap, int waitMs);       // the bytes come (0 none in time), -1 the channel closed
 bool BtRfWrite(const char* p, int n);
 void BtRfClose();
+// Asked when the stack refuses the link (BTDDB_BindToACL 1, HU 2026-11-04): something of the stack's own that brings
+// it up (an SDP search of the device); the link is then waited for. NULL: none.
+void BtRfSetWake(void (*wake)(const char* addr));
 void BtRfOnEvent(const unsigned char* ev);           // the stack's callback (public for the test)
 
 #endif

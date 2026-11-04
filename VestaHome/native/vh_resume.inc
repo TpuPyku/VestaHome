@@ -146,6 +146,16 @@ static void BtOwnerSet(int owner)   // the user's choice: a phone or the adapter
     }
 }
 
+static void BtPhoneBack(const wchar_t* why)   // Bluetooth to the phone, the last one connected again
+{
+    VLog(L"bt: %s - Bluetooth телефону", why);
+    BtOwnerSet(BTO_PHONE);
+    if (s_cfg.btLast[0]) {
+        VLog(L"телефон: подключить %s", s_cfg.btLast);
+        BtCmdText(BT_CMD_CONNECT, s_cfg.btLast);
+    }
+}
+
 static void BtObdConnectNow()
 {
     char a[18];
@@ -186,6 +196,9 @@ static void BtOwnerTick()   // once a second, 10 s on from the start
         break;
     case BTA_OBD_CONNECT:
         BtObdConnectNow();
+        break;
+    case BTA_PHONE_BACK:
+        BtPhoneBack(in.obdAddr ? L"OBD не подключился за 3 попытки" : L"OBD-адаптер не выбран");
         break;
     case BTA_OBD_STOP:
         VLog(L"obd: Bluetooth у телефона - адаптер отключаю");

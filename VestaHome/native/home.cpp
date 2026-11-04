@@ -18,12 +18,16 @@
 #include <tlhelp32.h>   // our threads' load (OwnThreadsLoad); toolhelp.dll itself is loaded at run time
 #ifdef UNDER_CE
 #include <ras.h>        // the USB modem's dial-up (vh_gps.inc ModemNet)
+#ifdef UNDER_CE
+#include <tapi.h>       // its dialling location (ModemCarLocation)
+#endif
 #include "dialloc.h"    // its number as a local call
 #endif
 #include "https.h"
 #include "video.h"
 #include "wifi.h"
 #include "obd.h"
+#include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "secret.h"
 #include "rvc.h"
@@ -412,6 +416,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (s_cfg.nmeaPort)   // the navigators' COM port (the registry is new at every boot)
             NmeaPortStart(true, false);
         ObdSetSppAddrFn(ObdSppAddr);
+        BtRfSetWake(ObdSdpWake);
         for (int i = 0; i < s_cfg.wifiCount; i++)
             if (!s_cfg.wifiLocked[i])
                 WifiRemember(s_cfg.wifiSsid[i], s_cfg.wifiPass[i]);

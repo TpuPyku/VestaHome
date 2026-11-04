@@ -1419,6 +1419,16 @@ static int ObdSppAddr(const char* addr)
     return b->cmdDone == want ? b->cmdResult : -2;
 }
 
+// obd.cpp's thread (btrf.cpp): the stack refused the link - its SDP search of the adapter brings the link up (HU
+// 2026-11-04: the direct channel opened only right after a pairing or a search)
+static void ObdSdpWake(const char* addr)
+{
+    wchar_t w[18];
+    MultiByteToWideChar(CP_ACP, 0, addr, -1, w, 18);
+    w[17] = 0;
+    BtCmdText(BT_CMD_SDP, w);
+}
+
 static bool ObdScanEvents()
 {
     BtShm* b = BtShmGet();

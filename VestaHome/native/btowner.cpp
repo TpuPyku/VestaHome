@@ -10,7 +10,7 @@ static bool PhoneToLetGo(const BtOwnerIn& in)
 
 static bool ObdToConnect(const BtOwnerIn& in)
 {
-    if (in.phone || in.obdBusy || !in.obdAddr || in.hold || in.tries >= kBtoObdTries)
+    if (in.phone || in.obdBusy || in.hold)
         return false;
     return in.sinceAct >= (DWORD)(in.lastAct == BTA_OBD_CONNECT ? kBtoObdRetryMs : kBtoObdWaitMs);
 }
@@ -19,6 +19,8 @@ int BtOwnerStep(const BtOwnerIn& in)
 {
     if (in.owner != BTO_OBD)
         return in.obdBusy ? BTA_OBD_STOP : BTA_NONE;
+    if (!in.hold && !in.obdBusy && (!in.obdAddr || in.tries >= kBtoObdTries))
+        return BTA_PHONE_BACK;
     if (PhoneToLetGo(in))
         return BTA_PHONE_OFF;
     return ObdToConnect(in) ? BTA_OBD_CONNECT : BTA_NONE;
