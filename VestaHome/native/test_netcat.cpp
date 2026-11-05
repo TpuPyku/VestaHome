@@ -87,18 +87,18 @@ static void TestCats()
 static void TestPaths()
 {
     char p[300];
-    NcStationsPath(NC_TAG, "hip hop", 50, false, p, sizeof(p));
+    NcStationsPath(NC_TAG, "hip hop", 20, false, p, sizeof(p));
     Check(!strcmp(p, "/json/stations/search?tag=hip%20hop&tagExact=true&order=clickcount&reverse=true"
-                     "&hidebroken=true&limit=50&offset=50"), "a tag's second page, the most listened first");
+                     "&hidebroken=true&limit=20&offset=20"), "a tag's second page, the most listened first");
     NcStationsPath(NC_COUNTRY, "RU", 0, true, p, sizeof(p));
-    Check(!strcmp(p, "/json/stations/search?countrycode=RU&order=name&reverse=false&hidebroken=true&limit=50&offset=0"),
+    Check(!strcmp(p, "/json/stations/search?countrycode=RU&order=name&reverse=false&hidebroken=true&limit=20&offset=0"),
           "a country by the name");
     NcStationsPath(NC_LANG, "russian", 0, false, p, sizeof(p));
     Check(strstr(p, "?language=russian&languageExact=true&order=clickcount") != 0, "a language");
     NcStationsPath(NC_SEARCH, "\xD0\xB4\xD0\xB6\xD0\xB0\xD0\xB7", 0, false, p, sizeof(p));
     Check(strstr(p, "?name=%D0%B4%D0%B6%D0%B0%D0%B7&order=clickcount") != 0, "a search, UTF-8 encoded");
     NcStationsPath(NC_TOP, NULL, 0, false, p, sizeof(p));
-    Check(!strcmp(p, "/json/stations/search?order=clickcount&reverse=true&hidebroken=true&limit=50&offset=0"),
+    Check(!strcmp(p, "/json/stations/search?order=clickcount&reverse=true&hidebroken=true&limit=20&offset=0"),
           "the most listened of all");
     NcCatsPath(NC_TAGS, p, sizeof(p));
     Check(!strcmp(p, "/json/tags?order=stationcount&reverse=true&hidebroken=true&limit=100"), "the tags");

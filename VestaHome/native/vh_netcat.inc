@@ -1,5 +1,5 @@
 ﻿// vh_netcat.inc - part of home.cpp (included there, in order): the internet radio's catalogue, radio-browser.info
-// (the user 2026-11-04, design netradio-v0.7: categories -> a list of them -> a page of 50 stations, as a playlist).
+// (the user 2026-11-04, design netradio-v0.7: categories -> a list of them -> a page of kNcPage stations, as a playlist).
 // Its requests run in a thread of their own (VestaCore vhttp, the API's two servers in turn); the answers are read
 // there (netcat.h) and handed over by WM_APP_NETCAT. In memory: the open page (s_nl[NL_CAT]) and the category list.
 #define WM_APP_NETCAT (WM_APP + 30)
@@ -36,6 +36,8 @@ static DWORD WINAPI NcThread(LPVOID p)
     // this server, then the other; HTTPS, then plain HTTP (2026-11-04: a provider resets TLS to radio-browser now
     // and then, both servers at once - its plain HTTP answered; the catalogue is public, no secret goes there)
     for (int k = 0; k < 4; k++) {
+        if (j->what != NCJ_CLICK && j->gen != s_ncGen)   // another asked meanwhile: no more tries on the link
+            break;                                        // (05.11: two at once over BT, each up to 4 x 16 s)
         int h = (s_ncHost + k) % 2;
         DWORD t0 = GetTickCount();
         j->err = HttpGet(kNcHosts[h], k < 2, j->path, &body, &len, &status);
@@ -145,7 +147,7 @@ static void NcOpenPage(int kind, const char* arg, const wchar_t* title, int tota
         Go(S_NETRADIO_LIST, true);
 }
 
-static void NcStepPage(int dir)   // "Ещё 50" / back by 50
+static void NcStepPage(int dir)   // "Ещё 20" / back by kNcPage
 {
     int off = s_ncPage.offset + dir * kNcPage;
     if (off < 0 || (dir > 0 && s_ncPage.raw < kNcPage))
@@ -378,7 +380,7 @@ static void ScrNetRadio(HDC dc)
 }
 
 // A list of stations (ours, the favourites, a catalogue page) that scrolls; a star on each row; the station
-// playing orange. The catalogue's page: its place instead of the tabs, "Ещё 50" and the sort below.
+// playing orange. The catalogue's page: its place instead of the tabs, "Ещё 20" and the sort below.
 enum { kNetPitch = 62 };
 static Scroll s_netList = { 0, 0, kNetRows * kNetPitch };
 
@@ -445,7 +447,7 @@ static void ScrNetRadioList(HDC dc)
         if (s_ncPage.offset > 0)
             Button(dc, 330, 412, 120, 52, L"Назад 50", B_N, IC_NONE, 15, 0, A_NCMORE, -1);
         if (s_ncPage.raw >= kNcPage)
-            Button(dc, 460, 412, 120, 52, L"Ещё 50", B_N, IC_NONE, 15, 0, A_NCMORE, 1);
+            Button(dc, 460, 412, 120, 52, L"Ещё 20", B_N, IC_NONE, 15, 0, A_NCMORE, 1);
         Button(dc, 590, 412, 194, 52, s_ncPage.byName ? L"Сорт.: название" : L"Сорт.: популярные", B_N, IC_NONE, 15,
                0, A_NCSORT);
     } else {

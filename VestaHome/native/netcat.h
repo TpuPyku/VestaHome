@@ -4,7 +4,9 @@
 #pragma once
 #include <windows.h>
 
-enum { kNcPage = 50 };   // stations a catalogue page asks for
+// stations a catalogue page asks for (HU 2026-11-05: 50 = 57 KB - radio-browser's server sends answers over
+// ~32 KB chunked and stalls on them over BT and 3G; 20 = ~23 KB, sent with its length)
+enum { kNcPage = 20 };
 
 struct NcStation {
     wchar_t name[64];
