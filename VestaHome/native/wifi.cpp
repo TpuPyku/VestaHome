@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include "wifi.h"
+#include "wifiie.h"
 
 #ifdef UNDER_CE
 #define PROC(m, n) GetProcAddress(m, L##n)
@@ -160,12 +161,12 @@ static void Log(const wchar_t* fmt, ...)
 {
     if (!s_log)
         return;
-    wchar_t s[200];
+    wchar_t s[400];   // (VLog's room: a beacon's IEs)
     va_list a;
     va_start(a, fmt);
-    _vsnwprintf(s, 200, fmt, a);
+    _vsnwprintf(s, 400, fmt, a);
     va_end(a);
-    s[199] = 0;
+    s[399] = 0;
     s_log(L"%s", s);
 }
 
@@ -668,6 +669,122 @@ static void RadioPower(bool on)
 #endif
 }
 
+#ifdef UNDER_CE
+// What WZC and the SDK do not show (sheet 22: MRNote13P's link drops in 2-10 s without an address, MiNote3's holds;
+// the SDK shows both as 2/3/7): the beacons' IEs, what the unit's driver sent at the association, whether the
+// 4-way handshake gave it its key. NDISUIO (nuiouser.h): on CE an OID is queried by the adapter's name, no open
+// needed; only queries, WZC keeps the adapter.
+enum { IOCTL_UIO_QUERY = 0x120804,   // _NDISUIO_CTL_CODE(0x201, METHOD_BUFFERED, FILE_ANY_ACCESS)
+       OID_BSSID_LIST = 0x0D010217, OID_ENC_STATUS = 0x0D01011B, OID_ASSOC_INFO = 0x0D01011F, kUioHead = 8 };
+static HANDLE  s_uio = INVALID_HANDLE_VALUE;
+static BYTE    s_uioBuf[16384];   // the thread's alone
+static int     s_uioName = -1;    // the name the driver answers to: 0 WZC's (WFIL\NDCUFMP2), 1 past its '\'
+static wchar_t s_beaconLogged[kWifiNets][33];
+static int     s_beaconCount;
+
+// An OID of the client adapter: its data (in s_uioBuf) and their length, -1 none
+static int UioQuery(DWORD oid, const BYTE** data)
+{
+    if (s_uio == INVALID_HANDLE_VALUE)
+        s_uio = CreateFile(L"UIO1:", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (s_uio == INVALID_HANDLE_VALUE)
+        return -1;
+    const wchar_t* tail = wcsrchr(s_guid, L'\\');
+    const wchar_t* names[2] = { s_guid, tail ? tail + 1 : s_guid };
+    DWORD err = 0;
+    for (int i = s_uioName < 0 ? 0 : s_uioName; i < 2; i++) {
+        memset(s_uioBuf, 0, kUioHead);
+        *(DWORD*)s_uioBuf = oid;
+        *(const wchar_t**)(s_uioBuf + 4) = names[i];
+        DWORD got = 0;
+        if (DeviceIoControl(s_uio, IOCTL_UIO_QUERY, s_uioBuf, sizeof(s_uioBuf), s_uioBuf, sizeof(s_uioBuf), &got,
+                            NULL) && got >= kUioHead) {
+            if (s_uioName < 0)
+                Log(L"wifi: NDISUIO отвечает по имени %s", names[i]);
+            s_uioName = i;
+            *data = s_uioBuf + kUioHead;
+            return (int)(got - kUioHead);
+        }
+        err = GetLastError();
+        if (s_uioName >= 0)
+            break;
+    }
+    static DWORD s_loggedErr = 0;
+    if (err != s_loggedErr) {
+        s_loggedErr = err;
+        Log(L"wifi: NDISUIO OID %08X: ошибка %u", (unsigned)oid, (unsigned)err);
+    }
+    return -1;
+}
+
+static bool BeaconLogged(const wchar_t* ssid)
+{
+    for (int i = 0; i < s_beaconCount; i++)
+        if (!wcscmp(s_beaconLogged[i], ssid))
+            return true;
+    return false;
+}
+
+// The beacons of the networks in sight not logged yet (or of one again: again = its name), one line each
+static void LogBeacons(const WifiInfo& w, const wchar_t* again)
+{
+    bool fresh = again != NULL;
+    for (int k = 0; k < w.count && !fresh; k++)
+        fresh = !BeaconLogged(w.nets[k].ssid) && s_beaconCount < kWifiNets;
+    const BYTE* d;
+    int n = fresh ? UioQuery(OID_BSSID_LIST, &d) : -1;
+    BssEntry b[kWifiNets];
+    int m = n > 0 ? BssList(d, n, b, kWifiNets) : 0;
+    for (int i = 0; i < m; i++) {
+        wchar_t ssid[33];
+        if (!MultiByteToWideChar(CP_UTF8, 0, b[i].ssid, -1, ssid, 33))
+            MultiByteToWideChar(CP_ACP, 0, b[i].ssid, -1, ssid, 33);
+        ssid[32] = 0;
+        bool want = again ? !wcscmp(ssid, again) : !BeaconLogged(ssid);
+        if (!ssid[0] || !want)
+            continue;
+        if (!again && s_beaconCount < kWifiNets)
+            wcscpy(s_beaconLogged[s_beaconCount++], ssid);
+        char t[300];
+        IeText(b[i].ies, b[i].ieLen, t, sizeof(t));
+        Log(L"wifi: маяк %s %02X:%02X:%02X:%02X:%02X:%02X %d дБм: %S", ssid, b[i].mac[0], b[i].mac[1], b[i].mac[2],
+            b[i].mac[3], b[i].mac[4], b[i].mac[5], b[i].rssi, t);
+    }
+}
+
+// The link just up: what the driver sent with its association request and what the access point answered
+static void LogAssoc()
+{
+    const BYTE *d, *req, *resp;
+    int n = UioQuery(OID_ASSOC_INFO, &d), rl, sl, status;
+    if (n < 0)
+        return;
+    if (!AssocIes(d, n, &req, &rl, &resp, &sl, &status)) {
+        Log(L"wifi: ассоциация: данные не разобрать (%d байт)", n);
+        return;
+    }
+    char t[300];
+    IeText(req, rl, t, sizeof(t));
+    Log(L"wifi: ассоциация (ответ точки %d): ГУ послало %S", status, t);
+    IeText(resp, sl, t, sizeof(t));
+    Log(L"wifi: ассоциация: точка ответила %S", t);
+}
+
+// The key's state (the 4-way handshake done or not) into the log when it changes
+static void LogEncryption(DWORD* last, DWORD sinceLink)
+{
+    const BYTE* d;
+    if (UioQuery(OID_ENC_STATUS, &d) < 4)
+        return;
+    DWORD st = *(const DWORD*)d;
+    if (st == *last)
+        return;
+    *last = st;
+    Log(L"wifi: шифрование: %s (%u с после связи)", EncText(st), (unsigned)(sinceLink / 1000));
+}
+#endif
+
 static DWORD WINAPI WifiThread(LPVOID)
 {
     Log(L"поток Wi-Fi: id %08X", (unsigned)GetCurrentThreadId());
@@ -687,6 +804,7 @@ static DWORD WINAPI WifiThread(LPVOID)
     DkClearPrefs(L"старт");
     DWORD linkTick = 0;    // the link up without an address yet: since when (the log of a slow phone's hotspot)
     bool hadIp = false;
+    DWORD encLogged = (DWORD)-1;   // LogEncryption's last
     DWORD lastAuto = 0, connectTick = 0;
     bool haveAdapter = false, radioOn = true;   // the unit boots with it on
     // the access point: ap = it is up; autoAp = raised by the hand-over (s_apAuto), not by hand (s_wantAp)
@@ -841,6 +959,7 @@ static DWORD WINAPI WifiThread(LPVOID)
             n.ch = ChannelOf(list[i]);
         }
         qsort(w.nets, w.count, sizeof(WifiNet), CmpRssi);
+        LogBeacons(w, NULL);
         {   // how many in sight and how weak the weakest (the user 2026-11-03: dozens around, only the nearest seen)
             static int s_loggedNets = -1;
             if (w.count != s_loggedNets && (!w.count || s_loggedNets <= 0 || abs(w.count - s_loggedNets) >= 3)) {
@@ -929,7 +1048,12 @@ static DWORD WINAPI WifiThread(LPVOID)
                 linkTick = now;
                 hadIp = false;
                 Log(L"wifi: связь с %s есть, жду адрес", w.ssid);
+                LogBeacons(w, w.ssid);   // (its beacon now)
+                LogAssoc();
+                encLogged = (DWORD)-1;
             }
+            if (connected && !hadIp && now - linkTick <= 15000)
+                LogEncryption(&encLogged, now - linkTick);
             if (connected && !hadIp && w.ip[0]) {
                 hadIp = true;
                 Log(L"wifi: адрес %S получен за %u с", w.ip, (unsigned)((now - linkTick) / 1000));
@@ -980,7 +1104,9 @@ static DWORD WINAPI WifiThread(LPVOID)
             w.msg[0] = 0;   // done
         w.scanning = scan;
         Publish(w);
-        WaitForSingleObject(s_wake, scan ? 3000 : connectTick && GetTickCount() - connectTick < 30000 ? 2000 : 5000);
+        bool watch = linkTick && !hadIp && GetTickCount() - linkTick < 15000;   // the handshake: each second
+        WaitForSingleObject(s_wake, scan ? 3000 : watch ? 1000 : connectTick && GetTickCount() - connectTick < 30000 ?
+                            2000 : 5000);
     }
 #else
     // PC test build: no WZC; three networks to try the screens, "connecting" takes 2 s
