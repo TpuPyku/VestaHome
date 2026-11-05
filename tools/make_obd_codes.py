@@ -9,7 +9,9 @@ dealer lists, filled in by hand).
 
 A code may be claimed by several tables: the unit's own list wins over the community one over the generic
 VAZ one (RANK), and a row whose meaning repeats a row already taken for that code is dropped - the window
-shows only the first kDtcInfoMax (3) lines of a code, so duplicates would hide the useful ones.
+shows only the first kDtcInfoMax (3) lines of a code, so duplicates would hide the useful ones. U-codes are
+the exception: 'no link with X' names the unit's own partner, so lists of different units may keep their own
+wording for one U-code (see the loop below).
 
 Usage: python VestaHome/tools/make_obd_codes.py [table.csv ...]
 """
@@ -23,7 +25,8 @@ SRC = sys.argv[1:] or [os.path.join(MAIN, 'obdII.csv'), os.path.join(MAIN, 'obdI
                        os.path.join(MAIN, 'obdII_vesta_modules.csv')]
 OUT = os.path.join(HERE, '..', 'VestaHome', 'VestaHome', 'obd_codes.txt')
 # the ECU's own (dealer) list first, then the community one, the rest last
-RANK = (('БДФКЭ', 0), ('М86', 1), ('VestaXR', 2))
+RANK = (('БДФКЭ', 0), ('ЦБКЭ', 0), ('HFM', 0), ('БКЭД', 0), ('АБС', 0), ('Приборка', 0), ('УБКЭ', 0),
+        ('ЭРА-ГЛОНАСС', 0), ('М86', 1), ('VestaXR', 2))
 TYPE = re.compile(r'^[0-9A-F]{2} - ')     # "11 - text": the failure type byte of a UDS code B1001-11
 
 
@@ -48,6 +51,10 @@ def meaning_key(code, meaning):
     return (code, m.group(0)) if m else (code, '=' + meaning)
 
 
+def text_key(meaning):
+    return ' '.join(meaning.lower().replace('ё', 'е').split())
+
+
 def main():
     rows = []                                  # (code, rank, seq, rest, meaning)
     for src in SRC:
@@ -62,10 +69,23 @@ def main():
             rows.append((f[0].upper(), rank(f[1]), len(rows), ';'.join(f[1:]), ';'.join(f[3:])))
     rows.sort(key=lambda r: r[:3])             # by code, then by the table's rank, then by the file order
     out = []
-    seen = set()
-    for code, _rk, _seq, rest, meaning in rows:
+    seen = set()                               # the code+type already taken (a repeat would only eat a line)
+    claimed = set()                            # code+type a unit's own list answers for
+    texts = {}                                 # ...and the wordings it already has for them
+    for code, rk, _seq, rest, meaning in rows:
         k = meaning_key(code, meaning)
-        if k in seen:                          # the same code+type: keep the first (best) table's wording
+        if code[0] == 'U' and rk == 0:
+            # U-codes say 'no link with X', and X is the unit's own business: U1001-87 is 'no frame from the
+            # ECM' for БДФКЭ and 'no link with the airbag unit' for the cluster. Different wordings from
+            # different units stay side by side, the same wording twice does not.
+            t = text_key(meaning)
+            if t in texts.get(k, ()):
+                continue
+            texts.setdefault(k, set()).add(t)
+            claimed.add(k)
+            out.append((code, rest))
+            continue
+        if k in claimed or k in seen:          # the unit's list wins over the community text
             continue
         seen.add(k)
         out.append((code, rest))
