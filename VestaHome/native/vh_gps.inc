@@ -924,8 +924,8 @@ static void GpsTimeSync(const Gps& g)
 }
 
 // The clock watched (sheet 22: twice 2007-03-21 at the same time of day - 1024 weeks back, the GPS week's rollover,
-// at a GPS fix; neither VestaHome nor VestaStub set it): a year under 2020 after a good one - the good one plus the
-// time since, put back (the MCU's too).
+// at a GPS fix; 05.11: Navitel each 10 s - its FixupClock with GPSEpoch 1, see NavitelEpoch): a year under 2020
+// after a good one - put back (the MCU's too).
 static void ClockWatchTick()   // once a second
 {
     static SYSTEMTIME s_good;
@@ -945,7 +945,20 @@ static void ClockWatchTick()   // once a second
     FILETIME ft;
     if (!SystemTimeToFileTime(&t, &ft))
         return;
-    *(__int64*)&ft += (__int64)(GetTickCount() - s_goodTick) * 10000;
+    __int64 guess = *(__int64*)&ft + (__int64)(GetTickCount() - s_goodTick) * 10000, back;
+    // GPS week rollovers (1024 weeks, Navitel's GPSEpoch): the rolled time plus those is exact; the guess from the
+    // tick drifted 1-6 s a time (05.11: 16 times in 3 min) - kept only when no rollover comes near it
+    FILETIME nf;
+    if (SystemTimeToFileTime(&now, &nf)) {
+        static const __int64 kRollover = (__int64)1024 * 7 * 24 * 3600 * 10000000;
+        back = *(__int64*)&nf;
+        for (int k = 1; k <= 3; k++) {
+            __int64 d = back + k * kRollover - guess;
+            if (d > -(__int64)3600 * 10000000 && d < (__int64)3600 * 10000000)
+                guess = back + k * kRollover;
+        }
+    }
+    *(__int64*)&ft = guess;
     if (!FileTimeToSystemTime(&ft, &t))
         return;
     VLog(L"часы: откатились на %02u.%02u.%04u %02u:%02u:%02u - возвращаю %02u.%02u.%04u %02u:%02u:%02u", now.wDay,

@@ -32,6 +32,7 @@
 #include "vjson.h"     // VestaCore: JSON (the catalogue's answers, in netcat.cpp)
 #include "video.h"
 #include "wifi.h"
+#include "inikey.h"     // Navitel's GPSEpoch (vh_apps.inc)
 #include "obd.h"
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time

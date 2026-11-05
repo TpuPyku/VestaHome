@@ -359,6 +359,72 @@ static void Remember(const wchar_t* path, HANDLE proc, DWORD pid)
     s_running[k].pid = pid;
 }
 
+// Navitel sets the system clock from its GPS time (Ghidra 2026-11-05: settings FixupClock, on by default, at most
+// each 10 s) and dates that time in its GPSEpoch, 1 by default = 1999-2019: on 05.11.2026 the unit's clock went to
+// 22.03.2007 every 10 s while Navitel ran. Its settings get GPSEpoch = 2 (2019-2038) before it starts (it reads
+// them then; while it runs they are left alone - it writes its own back at its exit). dir: a folder that may be
+// Navitel's (Navitel.exe and Userdata\settings*.ini in it).
+static void NavitelEpochIn(const wchar_t* dir)
+{
+    wchar_t p[MAX_PATH];
+    _snwprintf(p, MAX_PATH, L"%s\\Navitel.exe", dir);
+    p[MAX_PATH - 1] = 0;
+    if (!Exists(p))
+        return;
+    _snwprintf(p, MAX_PATH, L"%s\\Userdata\\settings*.ini", dir);
+    WIN32_FIND_DATA fd;
+    HANDLE f = FindFirstFile(p, &fd);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    do {
+        _snwprintf(p, MAX_PATH, L"%s\\Userdata\\%s", dir, fd.cFileName);
+        DWORD n = 0;
+        char* in = ReadAll(p, &n);
+        char* out = in ? (char*)malloc(n + 64) : NULL;
+        bool changed = false;
+        int m = out ? IniPut(in, (int)n, "GPSEpoch", "2", out, (int)n + 64, &changed) : -1;
+        if (m > 0 && changed) {
+            HANDLE h = CreateFile(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            DWORD put = 0;
+            bool ok = h != INVALID_HANDLE_VALUE && WriteFile(h, out, m, &put, NULL) && put == (DWORD)m;
+            if (h != INVALID_HANDLE_VALUE)
+                CloseHandle(h);
+            VLog(L"навител: GPSEpoch = 2 в %s - %s", p, ok ? L"записано" : L"не записать");
+        }
+        free(out);
+        free(in);
+    } while (FindNextFile(f, &fd));
+    FindClose(f);
+}
+
+// The program's folder and that of a path in its arguments (Navitel started by a MortScript of its folder)
+static void NavitelEpoch(const App& a)
+{
+    wchar_t dir[MAX_PATH];
+    wcsncpy(dir, a.path, MAX_PATH - 1);
+    dir[MAX_PATH - 1] = 0;
+    wchar_t* slash = wcsrchr(dir, L'\\');
+    if (slash) {
+        *slash = 0;
+        NavitelEpochIn(dir);
+    }
+    const wchar_t* q = a.params;
+    while (*q == L' ' || *q == L'"')
+        q++;
+    if (*q != L'\\')
+        return;
+    wcsncpy(dir, q, MAX_PATH - 1);
+    dir[MAX_PATH - 1] = 0;
+    wchar_t* e = wcschr(dir, L'"');
+    if (e)
+        *e = 0;
+    slash = wcsrchr(dir, L'\\');
+    if (slash) {
+        *slash = 0;
+        NavitelEpochIn(dir);
+    }
+}
+
 struct FindApp { HWND found; };
 static BOOL CALLBACK EnumApp(HWND h, LPARAM lp);
 
@@ -378,6 +444,7 @@ static void RunApp(int i)
         return;
     }
     s_waitApp = -1;
+    NavitelEpoch(a);
     PROCESS_INFORMATION pi;
 #ifdef UNDER_CE
     LPSTARTUPINFO si = NULL;          // must be NULL on Windows CE
@@ -496,6 +563,52 @@ static BOOL CALLBACK EnumGuardTop(HWND h, LPARAM lp)   // the guarded process's 
     return TRUE;
 }
 
+// The guarded program's windows into the log, each once: class, title, its controls' texts (the user 2026-11-05:
+// Navitel flashes an error window at its exit, too fast to read).
+struct WinSeen { HWND h[32]; int n; DWORD pid; };
+static WinSeen s_winSeen;
+
+static void WinTexts(HWND w, wchar_t* s)   // its controls' texts (300 chars), " | " before each (CE: no EnumChildWindows)
+{
+    for (HWND h = GetWindow(w, GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT)) {
+        wchar_t t[80];
+        int n = (int)wcslen(s);
+        if (GetWindowText(h, t, 80) > 0 && n < 300 - 84) {
+            _snwprintf(s + n, 300 - n, L" | %s", t);
+            s[299] = 0;
+        }
+    }
+}
+
+static BOOL CALLBACK EnumGuardNew(HWND h, LPARAM)
+{
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (pid != s_guardPid || !IsWindowVisible(h))
+        return TRUE;
+    for (int i = 0; i < s_winSeen.n; i++)
+        if (s_winSeen.h[i] == h)
+            return TRUE;
+    if (s_winSeen.n < 32)
+        s_winSeen.h[s_winSeen.n++] = h;
+    wchar_t cls[48], title[80], text[300];
+    cls[0] = title[0] = text[0] = 0;
+    GetClassName(h, cls, 48);
+    GetWindowText(h, title, 80);
+    WinTexts(h, text);
+    VLog(L"приложения: окно %08X «%s» (%s)%s", pid, title, cls, text);
+    return TRUE;
+}
+
+static void LogNewWindows()
+{
+    if (s_winSeen.pid != s_guardPid) {
+        s_winSeen.n = 0;
+        s_winSeen.pid = s_guardPid;
+    }
+    EnumWindows(EnumGuardNew, 0);
+}
+
 static bool GuardStuck()   // (every 0.5 s, VestaHome not in front) true: just given up on
 {
     static DWORD s_badSince, s_ticks;
@@ -541,6 +654,7 @@ static void OnGuardTimer()
         InvalidateRect(s_wnd, NULL, FALSE);
         return;
     }
+    LogNewWindows();
     if (GetForegroundWindow() == s_wnd || s_rvcWnd)   // (the rear camera's: nothing over it - HU 2026-10-31, OSMapsCE
         return;                                       // raised here covered the camera, not taking the focus)
     if (GuardStuck())
