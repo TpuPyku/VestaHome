@@ -2035,10 +2035,11 @@ static int MediaMask()
 }
 
 // The status marks of the top bar, right to left from `end`: the USB disk and the SD card (only when there),
-// Wi-Fi (orange when connected, dim when not; Settings -> Wi-Fi), Bluetooth (orange with a phone connected), GPS (orange
-// with a fix). The ones that would reach left of minLeft are left out. Returns the left edge.
+// Wi-Fi (orange when connected, dim when not; Settings -> Wi-Fi), Bluetooth (orange with a phone connected, dim
+// without; none while switched off - the user 2026-11-05), GPS (orange with a fix). The ones that would reach left of minLeft are left out. Returns the left edge.
 struct BtState;
 static bool BtGet(BtState* st, LONG* seq);
+static int BtPowerState();   // (vh_screens.inc)
 static Icon PlayingIcon(Screen* to);   // what plays (vh_tasks.inc): its icon and screen, IC_NONE nothing
 
 static int StatusMarks(HDC dc, int end, int minLeft)
@@ -2057,7 +2058,7 @@ static int StatusMarks(HDC dc, int end, int minLeft)
         { IC_USB, kOrange, (s_mediaMask & 2) != 0, A_NONE, 0 },
         { IC_SD, kOrange, (s_mediaMask & 1) != 0, A_NONE, 0 },
         { IC_WIFI, w.state == WIFI_CONNECTED ? kOrange : kDim, w.state >= WIFI_DISCONNECTED, A_NAV, S_SET_WIFI },
-        { IC_BT, btOn ? kOrange : kDim, true, A_NAV, S_PHONE },
+        { IC_BT, btOn ? kOrange : kDim, BtPowerState() != BT_POW_OFF, A_NAV, S_PHONE },
         { IC_NAV, GpsHasFix() ? kOrange : kMuted, true, A_NONE, 0 },
         { play, kOrange, play != IC_NONE, A_NAV, playTo },
         { IC_WARN, RGB(255, 204, 0), dtc, A_SCREEN, S_OBD_DTC } };   // the trouble codes: always yellow (the user)

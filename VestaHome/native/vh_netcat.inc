@@ -37,7 +37,11 @@ static DWORD WINAPI NcThread(LPVOID p)
     // and then, both servers at once - its plain HTTP answered; the catalogue is public, no secret goes there)
     for (int k = 0; k < 4; k++) {
         int h = (s_ncHost + k) % 2;
+        DWORD t0 = GetTickCount();
         j->err = HttpGet(kNcHosts[h], k < 2, j->path, &body, &len, &status);
+        // each try into the log (05.11: one line after 63 s, the link ~150 bytes/s - which try failed how)
+        VLog(L"каталог радио: %S %s - ошибка %d, ответ %d, %d байт за %u мс", kNcHosts[h], k < 2 ? L"HTTPS" : L"HTTP",
+             j->err, status, body ? len : 0, (unsigned)(GetTickCount() - t0));
         if (j->err == NET_OK && status == 200) {
             s_ncHost = h;
             break;
@@ -100,12 +104,8 @@ static void NetCatClick(const char* uuid)   // radio-browser counts a station pl
     NcRequest(NCJ_CLICK, 0, path);
 }
 
-static void NcNearNow();
-
 static void NcOpenCats(int kind)   // Genres / Countries / Languages: the list, asked again when it is not this one
 {
-    if (kind == NC_CIS)
-        NcNearNow();
     if (s_ncCatKind != kind) {
         free(s_ncCats);
         s_ncCats = NULL;
@@ -230,34 +230,7 @@ static const wchar_t* const kNcTile[5][2] = {
 };
 static const Icon kNcTileIc[5] = { IC_STAR, IC_HOME, IC_MUSIC, IC_NETRADIO, IC_USERS };
 
-static void ScrNetCat(HDC dc)   // the catalogue's ways in
-{
-    NetLoadList();
-    Frame(dc, L"Интернет-радио · Каталог");
-    NetListTabs(dc, NL_CAT);
-    for (int i = 0; i < 5; i++) {
-        int x = 16 + (i % 3) * 260, y = 120 + (i / 3) * 132, w = 248, h = 120;
-        bool down = Zone(x, y, w, h, A_NCTILE, i);
-        R(dc, x, y, w, h, 18, down ? kOrange : kPanel);
-        Ico(dc, kNcTileIc[i], x + 18, y + 16, 28, down ? kInk : kOrange);
-        T(dc, x + 18, y + 72, kNcTile[i][0], 19, down ? kInk : kText, 700, AL_START, w - 36);
-        T(dc, x + 18, y + 98, kNcTile[i][1], 14, down ? kInk : kMuted, 400, AL_START, w - 36);
-    }
-    T(dc, 24, 404, s_ncMsg[0] ? s_ncMsg : L"radio-browser.info · свободный каталог, ~50 000 станций", 13,
-      s_ncMsg[0] ? kOrange : kDim, 400);
-    BackButton(dc);
-}
-
-static void NcTile(int i)
-{
-    if (i == 0)
-        NcOpenPage(NC_TOP, NULL, kNcTile[0][0], -1);
-    else
-        NcOpenCats(i == 1 ? NC_CIS : i == 2 ? NC_TAGS : i == 3 ? NC_COUNTRIES : NC_LANGS);
-}
-
-static Scroll s_ncList = { 0, 0, 5 * 62 };
-static char   s_ncNear[3];   // the CIS list's first row: the country by GPS ("" none - no fix, the sea)
+static char s_ncNear[3];   // the country by GPS ("" none - no fix, the sea): the second tile's
 
 static void NcNearNow()   // (the user 2026-11-04: "Россия" was always Russia - the country where the car is)
 {
@@ -266,6 +239,50 @@ static void NcNearNow()   // (the user 2026-11-04: "Россия" was always Rus
     if (!GpsFresh(g, 120000) || !CountryAt(g.lat, g.lon, s_ncNear))
         s_ncNear[0] = 0;
 }
+
+// The catalogue's ways in. The second: the stations of the country by GPS straight away (the user 2026-11-05: not
+// through a list of one country), without a fix the CIS countries.
+static void ScrNetCat(HDC dc)
+{
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {
+        s_seen = s_screenTick;
+        NcNearNow();
+    }
+    wchar_t here[48];
+    here[0] = 0;
+    if (s_ncNear[0])
+        NcName(NC_COUNTRIES, s_ncNear, s_ncNear, here, 48);
+    NetLoadList();
+    Frame(dc, L"Интернет-радио · Каталог");
+    NetListTabs(dc, NL_CAT);
+    for (int i = 0; i < 5; i++) {
+        int x = 16 + (i % 3) * 260, y = 120 + (i / 3) * 132, w = 248, h = 120;
+        bool down = Zone(x, y, w, h, A_NCTILE, i);
+        R(dc, x, y, w, h, 18, down ? kOrange : kPanel);
+        bool gps = i == 1 && here[0];
+        Ico(dc, gps ? IC_NAV : kNcTileIc[i], x + 18, y + 16, 28, down ? kInk : kOrange);
+        T(dc, x + 18, y + 72, gps ? here : kNcTile[i][0], 19, down ? kInk : kText, 700, AL_START, w - 36);
+        T(dc, x + 18, y + 98, gps ? L"рядом, по GPS" : kNcTile[i][1], 14, down ? kInk : kMuted, 400, AL_START, w - 36);
+    }
+    T(dc, 24, 404, s_ncMsg[0] ? s_ncMsg : L"radio-browser.info · свободный каталог, ~50 000 станций", 13,
+      s_ncMsg[0] ? kOrange : kDim, 400);
+    BackButton(dc);
+}
+
+static void NcTile(int i)
+{
+    wchar_t nm[48];
+    if (i == 0)
+        NcOpenPage(NC_TOP, NULL, kNcTile[0][0], -1);
+    else if (i == 1 && s_ncNear[0]) {
+        NcName(NC_COUNTRIES, s_ncNear, s_ncNear, nm, 48);
+        NcOpenPage(NC_COUNTRY, s_ncNear, nm, -1);
+    } else
+        NcOpenCats(i == 1 ? NC_CIS : i == 2 ? NC_TAGS : i == 3 ? NC_COUNTRIES : NC_LANGS);
+}
+
+static Scroll s_ncList = { 0, 0, 5 * 62 };
 
 static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, the most stations first
 {
@@ -279,18 +296,10 @@ static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, 
         s_ncList.pos = 0;
     }
     Panel(dc, 16, 68, 704, 322);
-    int up = s_ncCatKind == NC_CIS && s_ncNear[0] ? 1 : 0;   // "Рядом: ..." above the list
-    s_ncList.content = s_ncCatN > 0 ? (s_ncCatN + up) * 62 + 2 : 0;
+    s_ncList.content = s_ncCatN > 0 ? s_ncCatN * 62 + 2 : 0;
     ScrollBegin(dc, s_ncList, 20, 72, 716, 386);
-    if (up && 76 - s_ncList.pos + 56 > 72) {
-        wchar_t nm[48], t[64];
-        NcName(NC_COUNTRIES, s_ncNear, s_ncNear, nm, 48);
-        _snwprintf(t, 64, L"Рядом: %s", nm);
-        t[63] = 0;
-        ListRow(dc, 24, 76 - s_ncList.pos, 680, 56, t, L"по GPS", L_CUR, IC_NAV, NULL, NULL, A_NCPICK, -2);
-    }
     for (int i = 0; i < s_ncCatN; i++) {
-        int y = 76 + (i + up) * 62 - s_ncList.pos;
+        int y = 76 + i * 62 - s_ncList.pos;
         if (y + 56 <= 72 || y >= 386)
             continue;
         wchar_t n[16];
@@ -305,16 +314,6 @@ static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, 
 
 static void NcPick(int i)
 {
-    if (i == -2 && s_ncNear[0]) {   // "Рядом": the country by GPS, its count if the list has it
-        wchar_t nm[48];
-        NcName(NC_COUNTRIES, s_ncNear, s_ncNear, nm, 48);
-        int n = -1;
-        for (int k = 0; k < s_ncCatN; k++)
-            if (!strcmp(s_ncCats[k].key, s_ncNear))
-                n = s_ncCats[k].count;
-        NcOpenPage(NC_COUNTRY, s_ncNear, nm, n);
-        return;
-    }
     if (i < 0 || i >= s_ncCatN)
         return;
     const NcCat& c = s_ncCats[i];
