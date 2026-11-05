@@ -177,6 +177,17 @@ static void MixSet(bool on, const wchar_t* exe)
     VLog(L"звук вместе с радио: %s%s", on ? L"вкл - " : L"выкл", on ? exe : L"");
 }
 
+// The source back to the radio while the channel is held (HU 2026-11-05: Navitel's prompts not heard on FM - told
+// once at its start, the switch to the radio after it; the MCU sends the tuner's whole state then): told again
+static void MixAgain()
+{
+    if (!s_mixOn)
+        return;
+    McuSend3("SPApi_SendRadioIsNaviSourceCouldIn", 1, 0, 0);
+    McuSend3("SPApi_SendRadioNaviVoiceGuidance", 1, 0, 0);
+    VLog(L"звук вместе с радио: снова - источник радио");
+}
+
 static void MixTick()   // every 2 s
 {
     static TaskInfo s_mixTask;   // (its own: the load log's minute keeps its sample)

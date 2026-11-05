@@ -22,8 +22,8 @@
 #ifdef UNDER_CE
 #include <tapi.h>       // its dialling location (ModemCarLocation)
 #endif
-#include "dialloc.h"    // its number as a local call
 #endif
+#include "dialloc.h"    // its number as a local call; the modem ready to dial
 #include "vhttp.h"     // VestaCore's HTTP(S) client (HttpInit at the start)
 #include "vhap.h"      // VestaCore: the add-ons' protocol
 #include "vfont.h"     // VestaCore: the fonts
@@ -88,7 +88,7 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_BT, IC_USB, IC_LIST, IC_VOL, IC_SEARCH, IC_SHUFFLE, IC_REPEAT, IC_CALL, IC_HANGUP, IC_WIFI,
             IC_STAR, IC_STAR_F, IC_USER, IC_USERS, IC_CLOCK, IC_KEYPAD, IC_MIC_OFF, IC_HANDOVER, IC_PLAY,
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
-            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_NETRADIO, IC_BTMUSIC, IC_RETURN, IC_EYE_OFF, IC_COUNT };
+            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_NETRADIO, IC_BTMUSIC, IC_RETURN, IC_EYE_OFF, IC_SIGNAL, IC_COUNT };
 
 // Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing. Since
 // design 0.6 (2026-10-23) every icon has one: Lucide's, drawn by skin/make_icons.py (the built-in drawing - when the
@@ -99,7 +99,7 @@ static const wchar_t* kIconKey[IC_COUNT] = { NULL, L"map", L"nav", L"radio", L"m
     L"repeat", L"call", L"hangup", L"wifi", L"star", L"star_f", L"user", L"users", L"clock", L"keypad", L"mic_off",
     L"handover", L"play", L"rot_l", L"rot_r", L"warn", L"call_in", L"call_out", L"call_miss", L"lock", L"refresh",
     L"eq", L"disc", L"eye", L"power", L"edit", L"add", L"file", L"up", L"car", L"cloud", L"tasks", L"sd", L"down",
-    L"gallery", L"full", L"unfull", L"netradio", L"btmusic", L"return", L"eye_off" };
+    L"gallery", L"full", L"unfull", L"netradio", L"btmusic", L"return", L"eye_off", L"signal" };
 typedef char kIconKeyCount[sizeof(kIconKey) / sizeof(kIconKey[0]) == IC_COUNT ? 1 : -1];
 
 // A_NAV opens a main screen from the bottom bar (no history), A_SCREEN opens a screen over the current one,
@@ -719,6 +719,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 BtQuiet();
             }
             if (src != s_srcSeen) {
+                if (s_srcSeen != -2 && src == 0)
+                    MixAgain();
                 if (s_srcSeen != -2 && (src == 0 || src == 9) && now - s_srcByUs > 6000) {
                     VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
                     OursQuiet();

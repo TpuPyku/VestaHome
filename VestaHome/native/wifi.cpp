@@ -1078,8 +1078,10 @@ static DWORD WINAPI WifiThread(LPVOID)
             bool knownSeen = false;
             for (int k = 0; k < w.count; k++)
                 knownSeen = knownSeen || w.nets[k].known;
-            if (knownSeen && !handover)
-                staTick = now;   // WZC joins it
+            // WZC joins it; the BT modem online - no access point of ours meanwhile (HU 2026-11-05: the phone
+            // joined it and dropped PAN, which then came back only after pairing anew)
+            if ((knownSeen && !handover) || s_quiet)
+                staTick = now;
             if (now - staTick > (DWORD)(handover ? kStaWaitMs : kAutoIdleMs) && (!giveUp || now - giveUp > kRetryMs)) {
                 if (attempts >= kAttempts) {
                     Log(L"wifi: точка телефона не нашлась после %d попыток — пауза 10 мин", attempts);

@@ -42,3 +42,8 @@ bool DialLocation(const wchar_t* loc, int chars, wchar_t* area, int areaCap, DWO
     *country = v;
     return true;
 }
+
+bool DialReady(int rssi, int mode, int sim)
+{
+    return rssi >= 0 && rssi <= 31 && mode > 0 && sim != 255;
+}

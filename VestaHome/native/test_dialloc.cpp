@@ -52,6 +52,14 @@ int main()
     Check(Parse(kTail, N(kTail) - 2, area, 8, &c) && c == 4, "cut in the number: only the chars counted");
     Check(Parse(kNoName, N(kNoName), area, 8, &c) && !wcscmp(area, L"12") && c == 7, "the name empty");
     Check(Parse(kUnit, N(kUnit), area, 8, &c) && !wcscmp(area, L"095"), "the area whole, its end there");
+    // dialled only with the network found (HU 2026-11-05: at "signal 99, network 0" the dial hung for good)
+    Check(DialReady(26, 5, 1), "a signal, 3G, a SIM: dial");
+    Check(DialReady(0, 3, 1) && DialReady(31, 7, 1), "the signal's ends, 2G and 3G");
+    Check(!DialReady(99, 5, 1) && !DialReady(32, 5, 1) && !DialReady(-1, 5, 1), "no signal known: wait");
+    Check(!DialReady(26, 0, 1) && !DialReady(26, -1, 1), "no network yet: wait");
+    Check(DialReady(26, 1, 1), "any network the modem names (sys_mode 1 and up)");
+    Check(!DialReady(26, 5, 255), "no SIM: never");
+    Check(DialReady(26, 5, -1), "the SIM unknown (an older driver): as before");
     printf("%d of %d checks failed\n", s_failed, s_checks);
     return s_failed;
 }

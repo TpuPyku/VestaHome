@@ -26,6 +26,7 @@ struct ModemInfo {           // (vh_gps.inc ModemGet)
 };
 static volatile LONG s_rasBusy;   // dialing (vh_gps.inc ModemNet)
 static DWORD         s_rasErr;    // the last dial's error
+static bool          s_netWait;   // "Подключить" before the modem found its network: dialled when it does (vh_gps.inc)
 static void ModemGet(ModemInfo* m);
 
 static const wchar_t* ModemNetName(int mode)   // Huawei's sys_mode
@@ -50,6 +51,8 @@ static void ModemLabel(wchar_t* s, int n)
         _snwprintf(s, n, L"USB-модем: вставьте модем");
     else if (m.sim == 255)
         _snwprintf(s, n, L"Модем: нет SIM-карты");
+    else if (!DialReady(m.rssi, m.mode, m.sim))
+        _snwprintf(s, n, s_netWait ? L"Модем ищет сеть… подключится сам" : L"Модем ищет сеть… · подключить");
     else if (s_rasErr)
         _snwprintf(s, n, L"Модем: ошибка %lu · ещё раз", s_rasErr);
     else

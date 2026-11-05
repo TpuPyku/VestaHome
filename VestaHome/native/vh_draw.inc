@@ -527,6 +527,12 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         if (ic == IC_EYE_OFF)
             p.L2(6, 6, 42, 42);
         break;
+    case IC_SIGNAL:   // the USB modem in the top bar: four bars up
+        p.L2(9, 40, 9, 34);
+        p.L2(19, 40, 19, 27);
+        p.L2(29, 40, 29, 19);
+        p.L2(39, 40, 39, 10);
+        break;
     case IC_POWER:
         p.ArcP(24, 24.69, 15, 237.8, -57.8);
         p.L2(24, 5, 24, 23);
@@ -2042,6 +2048,8 @@ static bool BtGet(BtState* st, LONG* seq);
 static int BtPowerState();   // (vh_screens.inc)
 static Icon PlayingIcon(Screen* to);   // what plays (vh_tasks.inc): its icon and screen, IC_NONE nothing
 
+static bool ModemShown(bool* online);   // (vh_gps.inc)
+
 static int StatusMarks(HDC dc, int end, int minLeft)
 {
     BtState bt;
@@ -2054,16 +2062,18 @@ static int StatusMarks(HDC dc, int end, int minLeft)
     ObdInfo obd;   // the engine's trouble codes (OBD): a warning, a tap - their screen
     ObdGet(&obd);
     bool dtc = obd.state == OBD_ON && (obd.dtcs > 0 || obd.mil == 1);
-    Mark m[7] = {
+    bool mdmOn, mdmIn = ModemShown(&mdmOn);   // the USB modem in (the user 2026-11-05): grey, online - the accent
+    Mark m[8] = {
         { IC_USB, kOrange, (s_mediaMask & 2) != 0, A_NONE, 0 },
         { IC_SD, kOrange, (s_mediaMask & 1) != 0, A_NONE, 0 },
         { IC_WIFI, w.state == WIFI_CONNECTED ? kOrange : kDim, w.state >= WIFI_DISCONNECTED, A_NAV, S_SET_WIFI },
         { IC_BT, btOn ? kOrange : kDim, BtPowerState() != BT_POW_OFF, A_NAV, S_PHONE },
+        { IC_SIGNAL, mdmOn ? kOrange : kDim, mdmIn, A_NAV, S_SET_NET },
         { IC_NAV, GpsHasFix() ? kOrange : kMuted, true, A_NONE, 0 },
         { play, kOrange, play != IC_NONE, A_NAV, playTo },
         { IC_WARN, RGB(255, 204, 0), dtc, A_SCREEN, S_OBD_DTC } };   // the trouble codes: always yellow (the user)
     int x = end;
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
         if (!m[i].shown)
             continue;
         if (x - 36 < minLeft)

@@ -450,6 +450,14 @@ static DWORD WINAPI ModemDial(LPVOID)
 
 static bool s_netHeld;   // hung up by hand: not dialled by itself till the modem is out and in again
 
+static bool ModemShown(bool* online)   // the top bar's mark: the modem in (its COM port), online
+{
+    ModemInfo m;
+    ModemGet(&m);
+    *online = m.online;
+    return m.port[0] != 0;
+}
+
 static void ModemNet()   // the diagnostics' button: the driver registered, then dial / hang up
 {
     if (s_modemState <= 0) {
@@ -472,6 +480,12 @@ static void ModemNet()   // the diagnostics' button: the driver registered, then
         VLog(L"модем: нет COM-порта модема (вставлен? см. VestaModem.log)");
         return;
     }
+    if (!DialReady(m.rssi, m.mode, m.sim)) {   // (HU 2026-11-05: dialled at "99, 0" - hung for good)
+        s_netWait = m.sim != 255;
+        VLog(L"модем: ищет сеть (сигнал %d, сеть %d, SIM %d) - подключу, когда найдёт", m.rssi, m.mode, m.sim);
+        return;
+    }
+    s_netWait = false;
     VLog(L"модем: дозвон через %s (сигнал %d, сеть %d, SIM %d)", m.port, m.rssi, m.mode, m.sim);
     s_netHeld = false;
     wcsncpy(s_modemPort, m.port, 15);
@@ -1053,6 +1067,10 @@ static bool NetPhone(BtState* bt)   // a phone connected by Bluetooth (calls or 
     return BtGet(bt, NULL) && bt->devAddr[0] && (bt->hf == 2 || bt->av >= 1);
 }
 
+// connects the phone left unanswered in a row (HU 2026-11-05: then every later one too, till paired anew - its
+// "Bluetooth-модем" off): after two no more by itself, the hint instead; a tap tries again
+static int   s_panMiss;
+
 static void NetPanLabel(const BtState& bt, bool phone, wchar_t* s, int cap)   // (40 characters at most: the button)
 {
     if (!phone)
@@ -1063,6 +1081,8 @@ static void NetPanLabel(const BtState& bt, bool phone, wchar_t* s, int cap)   //
         wcsncpy(s, L"подключено, ждём адрес…", cap);
     else if (bt.pan == BT_PAN_CONNECTING)
         wcsncpy(s, L"подключение…", cap);
+    else if (s_panMiss >= 2)
+        wcsncpy(s, L"нет ответа: включите «Bluetooth-модем»", cap);
     else if (bt.pan == BT_PAN_FAILED)
         wcsncpy(s, L"не вышло: включён ли «Bluetooth-модем»?", cap);
     else
@@ -1097,6 +1117,7 @@ static void NetPanTap()
     bool on = bt.pan == BT_PAN_ONLINE || bt.pan == BT_PAN_CONNECTING;
     s_panHeld = on;
     s_panWait = 60000;
+    s_panMiss = 0;
     PanSend(bt, !on);
 }
 
@@ -1145,16 +1166,19 @@ static void PanAuto(const BtState& bt)   // every second while a phone is connec
     if (!s_panPhone)
         s_panPhone = now | 1;
     if (bt.pan == BT_PAN_CONNECTING && s_panConn && now - s_panConn > 20000) {   // no answer: let it go
+        s_panMiss++;
         PanSend(bt, false);
         s_panNext = now + s_panWait;
         return;
     }
     if (bt.pan == BT_PAN_ONLINE) {
         s_panWait = 60000;
+        s_panMiss = 0;
+        s_panNext = now + 10000;   // dropped by the phone: not again at once (HU 05.11: 0.27 s after - no answer)
         PanHealth(bt);
         return;
     }
-    if (!s_cfg.netAuto || s_panHeld || s_cfg.btOwner == BTO_OBD || bt.pan == BT_PAN_CONNECTING || bt.call[0] != BT_CALL_NONE ||
+    if (!s_cfg.netAuto || s_panHeld || s_panMiss >= 2 || s_cfg.btOwner == BTO_OBD || bt.pan == BT_PAN_CONNECTING || bt.call[0] != BT_CALL_NONE ||
         now - s_panPhone < 10000 || (LONG)(now - s_panNext) < 0 || NetOther())
         return;
     s_panNext = now + s_panWait;
@@ -1186,6 +1210,7 @@ static void NetPanWatch()
     } else {   // the phone gone: by itself again next time
         s_panPhone = 0;
         s_panHeld = false;
+        s_panMiss = 0;
     }
 }
 
@@ -1236,7 +1261,7 @@ static void NetAutoStep()   // every second
     NetPanWatch();
 #ifdef UNDER_CE
     static DWORD s_next, s_wait = 30000;
-    if (!s_cfg.netAuto || s_modemState < 0 || s_rasBusy)
+    if ((!s_cfg.netAuto && !s_netWait) || s_modemState < 0 || s_rasBusy)
         return;
     if (!s_modemState) {
         ModemUsbSet();
@@ -1246,10 +1271,18 @@ static void NetAutoStep()   // every second
     ModemGet(&m);
     if (!m.port[0] || m.online) {   // out (the next one in dials), or online
         s_netHeld = s_netHeld && m.port[0];
+        s_netWait = s_netWait && m.port[0];
         s_wait = 30000;
         return;
     }
-    if (s_netHeld || m.sim == 255 || (LONG)(GetTickCount() - s_next) < 0)
+    if (!DialReady(m.rssi, m.mode, m.sim))   // the network not found yet (its LED blinking): no dial, no wait
+        return;
+    if (s_netWait) {   // asked by hand meanwhile: now
+        VLog(L"модем: сеть найдена");
+        ModemNet();
+        return;
+    }
+    if (s_netHeld || (LONG)(GetTickCount() - s_next) < 0)
         return;
     s_next = GetTickCount() + s_wait;
     s_wait = s_wait < 150000 ? s_wait * 2 : 300000;
