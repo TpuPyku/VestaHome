@@ -19,6 +19,9 @@
 
 - `SDMemory\SafeMode\` — безопасный режим (флаг `…Mainflg` + `Cancle60s.exe`): включается на каждой
   загрузке, пока файлы в корне, — после разбора убрать;
+- `SDMemory\Updater\` — её папку `UPDATE` скопировать в корень карты (`\SDMemory\UPDATE\`): на штатной оболочке
+  кнопка «Навигация» запускает `Updater.exe` (MortScript из пакета CityGuide) → наш `Updater.mscr` → по очереди
+  `VestaHomeInstall.exe` и `LaunchInstall.exe`, что лежит рядом (ненужный — удалить из папки);
 - `SDMemory\SPIPower_rescue\` — аварийный пакет `SwDnl.upg` + `SwDnl.cfg`, только перед установкой proxy.
 
 Где что:
