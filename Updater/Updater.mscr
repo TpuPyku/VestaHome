@@ -1,0 +1,19 @@
+ErrorLevel("syntax")
+# VestaHome / VestaLaunch installers through the stock shell's update hook (the user 2026-11-05).
+# The stock shell runs \SDMemory\UPDATE\Updater.exe (CityGuide's MortScript launcher: it runs this Updater.mscr)
+# when "Navigation" is pressed and no navigator runs, waits for it, then starts the navigator (ExternNavi.cfg).
+# Here: the installers lying next to this script, each waited for. Only under the stock shell.
+
+If(FileExists(SystemPath("ScriptPath") \ "VestaHomeInstall.exe"))
+	RunWait(SystemPath("ScriptPath") \ "VestaHomeInstall.exe")
+EndIf
+
+If(FileExists(SystemPath("ScriptPath") \ "LaunchInstall.exe"))
+	RunWait(SystemPath("ScriptPath") \ "LaunchInstall.exe")
+EndIf
+
+If(WndExists("RadioCommWindow"))
+	Show("RadioCommWindow")
+EndIf
+
+Exit

@@ -51,6 +51,17 @@ PLAN = (
         ('VestaWidgets',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\LaunchInstall',
         ('LaunchInstall.exe',)),
+    # the installers through the stock shell's "Navigation" (it runs exactly \SDMemory\UPDATE\Updater.exe): the
+    # CONTENTS of SDMemory\Updater go to the card's root. Updater.exe + MortScript.exe + mortzip.dll - CityGuide's
+    # MortScript (third-party, MAIN\UPDATE), the script ours (VestaHome\Updater\Updater.mscr)
+    (os.path.join(ROOT, 'MAIN', 'UPDATE'), r'SDMemory\Updater\UPDATE',
+        ('Updater.exe', 'MortScript.exe', 'mortzip.dll')),
+    (os.path.join(V, 'Updater'), r'SDMemory\Updater\UPDATE',
+        ('Updater.mscr',)),
+    (os.path.join(V, 'SPIPower', 'out'), r'SDMemory\Updater\UPDATE',
+        ('VestaHomeInstall.exe',)),
+    (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\Updater\UPDATE',
+        ('LaunchInstall.exe',)),
     # the sample add-on (VestaCore/plugins/sample): VestaHome starts Plugins\<Name>\<Name>.exe next to itself
     (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'ResidentFlash\VestaHome\Plugins\Sample',
         ('Sample.exe',)),
