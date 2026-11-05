@@ -120,7 +120,7 @@ struct Dev {
     WORD             lines;       // DTR 1, RTS 2 (SET_CONTROL_LINE_STATE)
     volatile LONG    opens;       // the COM port's handles
     volatile LONG    busy;        // COM calls inside (the detach waits for them)
-    volatile LONG    maskSeq;     // a new mask, a purge, a close: the WaitCommEvent going on ends
+    volatile LONG    abortSeq;    // PURGE_RXABORT, a close: the reads going on end
     volatile LONG    trace;       // the serial calls still to log after a dial (sheet 22: RAS 619 7 ms after CONNECT,
                                   // the host hung up - which call it read wrong was unseen)
 };
@@ -701,6 +701,9 @@ struct Open {   // one CreateFile of it
     COMMTIMEOUTS  to;
     DWORD         mask;      // SetCommMask
     volatile bool closing;
+    bool          query;     // opened with no access: no reads, not an open (Unimodem waits for the carrier on it)
+    volatile LONG maskSeq;   // its new mask: its WaitCommEvent going on ends (each handle its own, as CE's serial
+                             // driver: RAS's mask on its handle must not end Unimodem's wait for the carrier, HU 2026-11-05)
     int           logged[2];   // the stream's bytes logged: read, written (LogStream)
     bool          ppp[2];      // PPP began that way: no more logged
     bool          pppSaid[2];  // its beginning logged
@@ -752,7 +755,7 @@ DWORD COM_Open(DWORD dev, DWORD access, DWORD)
         }
         Log(L"COM: открыт (%d)", d->opens);
     } else {
-        o->closing = true;   // (a query handle: no reads)
+        o->query = true;
         if (d->trace > 0)
             Log(L"COM: открыт для запросов (доступ 0x%X)", access);
     }
@@ -765,10 +768,10 @@ BOOL COM_Close(DWORD h)
     if (!o)
         return FALSE;
     Dev* d = o->d;
-    if (!o->closing) {
-        o->closing = true;
-        InterlockedIncrement((LONG*)&d->maskSeq);
-        SetEvent(d->rxEv);
+    o->closing = true;   // its wait (a query handle's too) ends
+    SetEvent(d->rxEv);
+    if (!o->query) {
+        InterlockedIncrement((LONG*)&d->abortSeq);
         if (!InterlockedDecrement((LONG*)&d->opens) && !d->gone)
             Lines(d, 0);   // the last one: the modem hangs up, as a real port's DTR going down
         Log(L"COM: закрыт (%d)", d->opens);
@@ -793,13 +796,13 @@ static int ReadSome(Open* o, BYTE* buf, DWORD len)   // what waits, or what come
 {
     Dev* d = o->d;
     DWORD limit = ReadLimit(o->to, len), t0 = GetTickCount();
-    LONG mseq = d->maskSeq;
+    LONG aseq = d->abortSeq;
     for (;;) {
         EnterCriticalSection(&d->cs);
         int got = FifoGet(&d->rx, buf, (int)len);
         LeaveCriticalSection(&d->cs);
         DWORD spent = GetTickCount() - t0;
-        if (got || spent >= limit || d->gone || o->closing || d->maskSeq != mseq)
+        if (got || spent >= limit || d->gone || o->closing || d->abortSeq != aseq)
             return got;
         WaitForSingleObject(d->rxEv, limit - spent > 50 ? 50 : limit - spent);
     }
@@ -850,7 +853,7 @@ static DWORD WriteAll(Dev* d, const BYTE* buf, DWORD len);
 static DWORD Transfer(DWORD h, void* buf, DWORD len, bool write)   // ReadFile / WriteFile: the bytes, -1 - failed
 {
     Open* o = (Open*)h;
-    if (!o || !buf || (write && o->d->gone))
+    if (!o || !buf || o->query || (write && o->d->gone))   // (a query handle: neither, as CE's serial driver)
         return (DWORD)-1;
     InterlockedIncrement((LONG*)&o->d->busy);
     DWORD n = write ? WriteAll(o->d, (const BYTE*)buf, len) : (DWORD)ReadSome(o, (BYTE*)buf, len);
@@ -906,8 +909,8 @@ static void CommProps(COMMPROP* cp)
 static DWORD WaitOnMask(Open* o)   // WaitCommEvent: EV_RXCHAR when bytes wait; 0 when the mask changed or it closed
 {
     Dev* d = o->d;
-    LONG mseq = d->maskSeq;
-    while (!o->closing && !d->gone && d->maskSeq == mseq && o->mask) {
+    LONG mseq = o->maskSeq;
+    while (!o->closing && !d->gone && o->maskSeq == mseq && o->mask) {
         if ((o->mask & EV_RXCHAR) && Waiting(d) > 0)
             return EV_RXCHAR;
         WaitForSingleObject(d->rxEv, 50);
@@ -923,7 +926,12 @@ static bool IoValue(Open* o, DWORD code, BYTE* v, DWORD* n)
     case IOCTL_SER_GET_TIMEOUTS: *n = sizeof(COMMTIMEOUTS); memcpy(v, &o->to, *n); return true;
     case IOCTL_SER_GET_DCB:      *n = sizeof(DCB); memcpy(v, &d->dcb, *n); return true;
     case IOCTL_SER_GET_WAIT_MASK: *n = sizeof(DWORD); *(DWORD*)v = o->mask; return true;
-    case IOCTL_SER_WAIT_ON_MASK: *n = sizeof(DWORD); *(DWORD*)v = WaitOnMask(o); return true;
+    case IOCTL_SER_WAIT_ON_MASK:   // (busy: a close waits for it to end)
+        InterlockedIncrement((LONG*)&d->busy);
+        *n = sizeof(DWORD);
+        *(DWORD*)v = WaitOnMask(o);
+        InterlockedDecrement((LONG*)&d->busy);
+        return true;
     case IOCTL_SER_GET_MODEMSTATUS: *n = sizeof(DWORD); *(DWORD*)v = MS_CTS_ON | MS_DSR_ON | MS_RLSD_ON; return true;
     case IOCTL_SER_GET_COMMSTATUS:   // ClearCommError: no errors, the bytes waiting
         *n = sizeof(SerialDevStatus);
@@ -935,7 +943,7 @@ static bool IoValue(Open* o, DWORD code, BYTE* v, DWORD* n)
     return false;
 }
 
-static void Purge(Dev* d, DWORD how)   // PURGE_RXCLEAR: what waits goes; PURGE_RXABORT: the reads / waits going on end
+static void Purge(Dev* d, DWORD how)   // PURGE_RXCLEAR: what waits goes; PURGE_RXABORT: the reads going on end
 {
     if (how & PURGE_RXCLEAR) {
         EnterCriticalSection(&d->cs);
@@ -943,7 +951,7 @@ static void Purge(Dev* d, DWORD how)   // PURGE_RXCLEAR: what waits goes; PURGE_
         LeaveCriticalSection(&d->cs);
     }
     if (how & PURGE_RXABORT)
-        InterlockedIncrement((LONG*)&d->maskSeq);
+        InterlockedIncrement((LONG*)&d->abortSeq);
 }
 
 // The calls that set something (in: inLen bytes, at least what each needs - checked by the caller)
@@ -958,7 +966,7 @@ static void IoSet(Open* o, DWORD code, const BYTE* in)
         break;
     case IOCTL_SER_SET_WAIT_MASK:
         o->mask = *(const DWORD*)in;
-        InterlockedIncrement((LONG*)&d->maskSeq);   // ends a WaitCommEvent going on
+        InterlockedIncrement((LONG*)&o->maskSeq);   // ends its WaitCommEvent going on
         break;
     case IOCTL_SER_PURGE: Purge(d, *(const DWORD*)in); break;
     }
@@ -1019,7 +1027,7 @@ BOOL COM_IOControl(DWORD h, DWORD code, PBYTE in, DWORD inLen, PBYTE out, DWORD 
         DWORD val = in && inLen >= 4 ? *(const DWORD*)in : out && actual && *actual >= 4 ? *(const DWORD*)out : 0;
         if (code == IOCTL_SER_SET_DCB && in && inLen >= sizeof(DCB))
             val = ((const DCB*)in)->BaudRate | ((const DCB*)in)->fDtrControl << 28 | ((const DCB*)in)->fRtsControl << 30;
-        Log(L"COM io %c 0x%08X (%u) in %u out %u -> %d, %u Б, знач. 0x%X, %u мс", o->closing ? L'q' : L'h', code,
+        Log(L"COM io %c 0x%08X (%u) in %u out %u -> %d, %u Б, знач. 0x%X, %u мс", o->query ? L'q' : L'h', code,
             (code >> 2) & 0xFFF, inLen, outLen, ok, actual ? *actual : 0, val, GetTickCount() - t0);
     }
     if (!ok)   // (after the log: it would reset the error)

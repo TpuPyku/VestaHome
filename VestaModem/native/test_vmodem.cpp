@@ -443,6 +443,13 @@ static DWORD WINAPI LateMask(LPVOID)
     return 0;
 }
 
+static DWORD WINAPI LateClose(LPVOID h)
+{
+    Sleep(500);
+    COM_Close((DWORD)h);
+    return 0;
+}
+
 static BOOL Attach(WORD pid, WORD vid = kHuawei)
 {
     MakeDevice(pid);
@@ -553,6 +560,9 @@ int main()
     DWORD dev = (DWORD)s_dev;
     DWORD q = COM_Open(dev, 0, 0);
     Check(q != 0 && s_dev->opens == 0, "COM: a query handle - not an open");
+    char qb[4];
+    Check(COM_Read(q, qb, sizeof(qb)) == (DWORD)-1 && COM_Write(q, "AT\r", 3) == (DWORD)-1,
+          "COM: a query handle neither reads nor writes");
     COM_Close(q);
     int before = s_ctlCount;
     DWORD h = COM_Open(dev, GENERIC_READ | GENERIC_WRITE, 0);
@@ -595,6 +605,27 @@ int main()
     CloseHandle(CreateThread(NULL, 0, LateMask, NULL, 0, NULL));
     Ctl(h, IOCTL_SER_WAIT_ON_MASK, NULL, 0, &ev, sizeof(ev));
     Check(ev == 0, "COM: a new mask ends the wait with 0");
+    // Unimodem after CONNECT: EV_RLSD waited on a query handle (HU 2026-11-05, RAS 619: it came back at once, 0 -
+    // "the carrier gone" - and the call was hung up before PPP)
+    DWORD q2 = COM_Open(dev, 0, 0);
+    DWORD rlsd = EV_RLSD;
+    Ctl(q2, IOCTL_SER_SET_WAIT_MASK, &rlsd, sizeof(rlsd), NULL, 0);
+    s_waitCom = q2;
+    ev = 1;
+    t0 = GetTickCount();
+    CloseHandle(CreateThread(NULL, 0, LateMask, NULL, 0, NULL));
+    Ctl(q2, IOCTL_SER_WAIT_ON_MASK, NULL, 0, &ev, sizeof(ev));
+    Check(ev == 0 && GetTickCount() - t0 >= 150, "COM: a query handle's wait for the carrier - till its mask changes");
+    Ctl(q2, IOCTL_SER_SET_WAIT_MASK, &rlsd, sizeof(rlsd), NULL, 0);
+    ev = 1;
+    t0 = GetTickCount();
+    s_waitCom = h;   // RAS's SetCommMask on the open handle 14 ms later (the same log): not the query handle's wait
+    CloseHandle(CreateThread(NULL, 0, LateMask, NULL, 0, NULL));
+    CloseHandle(CreateThread(NULL, 0, LateClose, (LPVOID)q2, 0, NULL));
+    Ctl(q2, IOCTL_SER_WAIT_ON_MASK, NULL, 0, &ev, sizeof(ev));
+    Check(ev == 0 && GetTickCount() - t0 >= 450 && GetTickCount() - t0 < 1500 && s_dev->opens == 1,
+          "COM: another handle's mask goes by; closing the query handle ends its wait (the open one stays)");
+    s_waitCom = h;
     DWORD ms = 0;
     Ctl(h, IOCTL_SER_GET_MODEMSTATUS, NULL, 0, &ms, sizeof(ms));
     Check((ms & MS_RLSD_ON) && (ms & MS_CTS_ON), "COM: the other end there (RLSD, CTS)");
