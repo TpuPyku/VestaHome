@@ -80,7 +80,8 @@ SHOTS = [
     ('netradio_cis', [MEDIA, TAB['net'], TAB['list'], (572, 84), ('sleep', 2)]),   # (the GPS country's tile)
     ('settings_bt_off', [SETTINGS, SET['bt'], (720, 85), ('sleep', 3)]),   # (off; on - the next, from off)
     ('settings_bt_on', [SETTINGS, SET['bt'], (720, 85), ('sleep', 4)]),
-    ('netradio_cis_ru', [MEDIA, TAB['net'], TAB['list'], (572, 84), ('sleep', 2), (400, 180), ('sleep', 8)]),
+    ('saver_pick', [SETTINGS, SET['screen'], (600, 316), (680, 372), ('sleep', 4)]),   # (thumbnails without a tap)
+    ('netradio_cis_ru',[MEDIA, TAB['net'], TAB['list'], (572, 84), ('sleep', 2), (400, 180), ('sleep', 8)]),
 ]
 
 if os.environ.get('VH_SHOTS'):   # only these (comma-separated names), from a fresh start

@@ -894,7 +894,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             s_uw[u].readTick = 0;
         return 0;
     case WM_APP_PHOTO:   // a picture or a thumbnail decoded
-        if ((s_screen == S_PHOTO || s_screen == S_PHOTO_VIEW) && IsWindowVisible(hwnd) && !s_drag)
+        if ((s_screen == S_PHOTO || s_screen == S_PHOTO_VIEW || s_screen == S_SAVER_PICK) && IsWindowVisible(hwnd) &&
+            !s_drag)   // (the saver's pick: the same tiles, HU 2026-11-05 - the thumbnails only after a tap)
             Redraw();
         return 0;
     case WM_APP_NETCAT:   // the radio catalogue's answer
