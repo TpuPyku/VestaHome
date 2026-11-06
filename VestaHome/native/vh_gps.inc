@@ -1093,7 +1093,7 @@ static void NetPanLabel(const BtState& bt, bool phone, wchar_t* s, int cap)   //
 // HU 2026-10-31: connected only by hand; under load (traffic, internet radio) the link stood still with no event -
 // off and on again brought it back in 0.2 s. So: by itself (Автоподключение) 10 s after the phone is there, no other
 // internet, not in a call, not after the user's "Отключить" (till the phone goes); "подключение" at most 20 s; while
-// online a check every minute (DNS) - two failed: off, and on again in 3 s; Wi-Fi hands no networks meanwhile.
+// online a check every minute (a TCP handshake) - two failed: off, and on again in 3 s; Wi-Fi hands no networks meanwhile.
 static bool  s_panHeld;               // switched off by hand
 static DWORD s_panPhone, s_panNext, s_panWait = 60000, s_panConn, s_panCheck;
 static volatile LONG s_panProbe;      // the check: 0 running / none, 1 ok, -1 failed
@@ -1121,9 +1121,49 @@ static void NetPanTap()
     PanSend(bt, !on);
 }
 
-static DWORD WINAPI PanProbeThread(LPVOID)   // the link through the phone: a name resolved
+// HU 2026-11-06: the old check resolved "ya.ru" and lied - a name answers from the cache while no byte goes
+// through (28 min "online" with no data). Now a TCP handshake to a number, no resolver in the way: the phone's
+// internet works if the SYN gets an ACK. Two places: an operator or a VPN may close one port, and a false "dead" means
+// taking the link down for nothing.
+#define PAN_PROBE_SEC  4
+
+static bool PanReach(const char* ip, int port)   // a TCP handshake to a number, PAN_PROBE_SEC at most
 {
-    s_panProbe = gethostbyname("ya.ru") ? 1 : -1;
+    bool ok = false;
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s != INVALID_SOCKET) {
+        sockaddr_in sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sin_family = AF_INET;
+        sa.sin_port = htons((u_short)port);
+        sa.sin_addr.s_addr = inet_addr(ip);
+        u_long nb = 1;
+        ioctlsocket(s, FIONBIO, &nb);
+        if (connect(s, (sockaddr*)&sa, sizeof(sa)) == 0) {
+            ok = true;   // connected at once
+        } else if (WSAGetLastError() == WSAEWOULDBLOCK) {
+            fd_set set, err;
+            FD_ZERO(&set);
+            FD_ZERO(&err);
+            FD_SET(s, &set);
+            FD_SET(s, &err);
+            timeval tv;
+            tv.tv_sec = PAN_PROBE_SEC;
+            tv.tv_usec = 0;
+            if (select(0, NULL, &set, &err, &tv) > 0 && FD_ISSET(s, &set)) {
+                int so = 0, len = sizeof(so);   // writable also when refused: the real answer is the error
+                if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&so, &len) == 0 && so == 0)
+                    ok = true;
+            }
+        }
+        closesocket(s);
+    }
+    return ok;
+}
+
+static DWORD WINAPI PanProbeThread(LPVOID)   // the link through the phone: Yandex's DNS, else Cloudflare's HTTPS
+{
+    s_panProbe = PanReach("77.88.8.8", 53) || PanReach("1.1.1.1", 443) ? 1 : -1;
     return 0;
 }
 

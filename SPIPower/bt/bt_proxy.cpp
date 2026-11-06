@@ -10,6 +10,7 @@
 #include <string.h>
 #include "g_btproxy.h"
 #include "btshm.h"
+#include "panstate.h"
 
 extern "C" void* g_real[PROXY_COUNT] = {0};
 
@@ -359,12 +360,16 @@ static bool PbEvent(int* ev)
 }
 
 static HANDLE s_powEv;   // the stack's 0x01 / 0x02 seen: Init / Deinit done (BT_CMD_POWER)
+static HANDLE s_panEv;   // the stack's 0x46 seen: PAN disconnected (BT_CMD_PAN)
+static DWORD s_panAsked;  // the last connect / disconnect asked of the stack, its tick
 
 static void ProxyCb(int* ev)
 {
     Publish(ev);
     if (ev[0] == 0x01 || ev[0] == 0x02)
         SetEvent(s_powEv);
+    if (ev[0] == 0x46)
+        SetEvent(s_panEv);
     LogEvent(ev);
     PairWatch(ev);
     bool hide = ev[0] >= 0x38 && ev[0] <= 0x3E && PbEvent(ev);
@@ -458,6 +463,43 @@ static void StateOff()   // what the stack no longer has: no phone, no call, no 
     InterlockedIncrement((LONG*)&s_shm->seq);
 }
 
+// The stack's PAN state variable, if this DLL is the known build (panstate.h); NULL otherwise: nothing is touched.
+static volatile LONG* PanStateVar()
+{
+    static bool s_looked;
+    static volatile LONG* s_var;
+    if (s_looked)
+        return s_var;
+    s_looked = true;
+    DWORD base = (DWORD)s_orig[IDX_Flc_Bluetooth_PanServer_Connect] - kPanConnectRva;
+    bool known = false;
+    __try {
+        known = PanLayoutOk((const unsigned char*)base, base);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    if (known)
+        s_var = (volatile LONG*)(base + kPanStateRva);
+    wchar_t b[80];
+    wsprintfW(b, L"PAN state: %s (base %08X)", known ? L"known build" : L"unknown build, left alone", base);
+    LogLine(b);
+    return s_var;
+}
+
+// A request the stack will never answer: "ready" again, so the next connect goes out (panstate.h).
+static void PanUnstick(const wchar_t* why)
+{
+    volatile LONG* v = PanStateVar();
+    if (!v)
+        return;
+    LONG was = *v;
+    if (!PanWaiting(was))
+        return;
+    InterlockedCompareExchange((LONG*)v, PAN_ST_READY, was);
+    wchar_t b[96];
+    wsprintfW(b, L"PAN state: %d -> ready (%s, asked %u ms ago)", was, why, GetTickCount() - s_panAsked);
+    LogLine(b);
+}
+
 static int PowerCmd(bool on)
 {
     if (s_shm->power == (on ? BT_POW_ON : BT_POW_OFF))
@@ -470,6 +512,9 @@ static int PowerCmd(bool on)
         s_shm->power = BT_POW_GOING_OFF;
         if (s_pairOn)
             PairEnd();   // (the shell's PIN back while the stack still runs)
+        // Flc_Bluetooth_Deinit's worker calls PanServer_Disconnect and PanServer_Deinit itself, but that Deinit
+        // resets the state only from "ready": a request stuck in it would survive the off and on (panstate.h).
+        PanUnstick(L"power off");
         r = ((FlcFn0)s_orig[IDX_Flc_Bluetooth_Deinit])();   // 2: on its way (its thread), the end - event 0x02
         bool going = r == 0 || r == 2;
         if (going) {
@@ -589,23 +634,38 @@ static DWORD WINAPI CmdThread(LPVOID)
         } else if (cmd == BT_CMD_PAN) {   // the phone's internet: connect to its NAP (0x1116), or let it go
             char a[40];
             CopyText(a, s_shm->cmdText, 18);
+            bool busy = false;
             if (a[0]) {
+                volatile LONG* v = PanStateVar();
+                if (v && PanDeadRequest(*v, GetTickCount() - s_panAsked))
+                    PanUnstick(L"connect");
+                s_panAsked = GetTickCount();
                 r = ((int (*)(char*, unsigned short))g_real[IDX_Flc_Bluetooth_PanServer_Connect])(a, 0x1116);
-                InterlockedIncrement((LONG*)&s_shm->seq);   // (0 / 2: on its way - the event tells the end)
-                s_shm->st.pan = r == 0 || r == 2 ? BT_PAN_CONNECTING : BT_PAN_FAILED;
+                // 0 / 2: on its way - the event tells the end; but 0 is also the SDK's silent "not ready": nothing
+                // went out then, and the state tells which
+                busy = r == 0 && v && *v != PAN_ST_CONNECTING;
+                InterlockedIncrement((LONG*)&s_shm->seq);
+                s_shm->st.pan = (r == 0 || r == 2) && !busy ? BT_PAN_CONNECTING : BT_PAN_FAILED;
                 s_shm->st.panTick = GetTickCount();
                 InterlockedIncrement((LONG*)&s_shm->seq);
             } else {   // (sheet 22: a phone gone quiet sends no event - the state stayed "online", VestaHome never
+                ResetEvent(s_panEv);
+                bool online = s_shm->st.pan == BT_PAN_ONLINE;
+                s_panAsked = GetTickCount();
                 r = ((FlcFn0)g_real[IDX_Flc_Bluetooth_PanServer_Disconnect])();   // connected again)
-                if (r == 0) {
+                bool sent = r == 0 || r == 2;   // (from "connected" it answers 2 and its end is 0x46: logs 2026-11-05)
+                if (sent && online && WaitForSingleObject(s_panEv, 3000) != WAIT_OBJECT_0)
+                    LogLine(L"PAN off: no 0x46 in 3 s");
+                PanUnstick(L"off");   // (no answer to a connect, a silent phone: the stack waits for ever)
+                if (sent) {
                     InterlockedIncrement((LONG*)&s_shm->seq);
                     s_shm->st.pan = BT_PAN_IDLE;
                     s_shm->st.panTick = GetTickCount();
                     InterlockedIncrement((LONG*)&s_shm->seq);
                 }
             }
-            wchar_t b[64];
-            wsprintfW(b, L"PAN %S -> %d", a[0] ? a : "off", r);
+            wchar_t b[80];
+            wsprintfW(b, L"PAN %S -> %d%s", a[0] ? a : "off", r, busy ? L" (not ready: nothing sent)" : L"");
             LogLine(b);
         } else if (cmd == BT_CMD_PHONE) {   // the phone off for the OBD adapter / the stack's connects back
             if (s_shm->cmdText[0] == '0') {
@@ -704,6 +764,7 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
             s_orig[i] = g_real[i];
         }
         s_powEv = CreateEventW(NULL, FALSE, FALSE, NULL);
+        s_panEv = CreateEventW(NULL, FALSE, FALSE, NULL);
         s_map = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(BtShm), BT_SHM_NAME);
         if (s_map) {
             s_shm = (BtShm*)MapViewOfFile(s_map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(BtShm));
