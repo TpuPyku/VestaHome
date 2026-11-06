@@ -1161,9 +1161,9 @@ static bool PanReach(const char* ip, int port)   // a TCP handshake to a number,
     return ok;
 }
 
-static DWORD WINAPI PanProbeThread(LPVOID)   // the link through the phone: Yandex's DNS, else Cloudflare's HTTPS
+static DWORD WINAPI PanProbeThread(LPVOID)   // the link through the phone: Yandex's DNS, else Cisco's OpenDNS on 443 (the user 2026-11-06: 1.1.1.1 is blocked in Russia)
 {
-    s_panProbe = PanReach("77.88.8.8", 53) || PanReach("1.1.1.1", 443) ? 1 : -1;
+    s_panProbe = PanReach("77.88.8.8", 53) || PanReach("208.67.222.222", 443) ? 1 : -1;
     return 0;
 }
 
