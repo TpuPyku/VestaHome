@@ -506,13 +506,20 @@ static void WSpeed(HDC dc, int x, int y)
         _snwprintf(v, 8, L"%d", (int)(g.speedKmh + 0.5));
     else
         wcscpy(v, L"—");
-    int end = T(dc, x + 16, y + 112, v, 72, fix || car ? kText : kDim, 700);
-    if (s_camNear >= 0) {
-        SpeedSign(dc, x + 204, y + 80, 30, s_cams[s_camNear].speed);   // (the real sign's colours, the user 2026-10-26)
-        _snwprintf(v, 16, L"%d м", s_camNearDist);
-        T(dc, x + 204, y + 130, v, 14, CamOver() ? kStop : kOrange, 700, AL_MID);
-    } else {
-        T(dc, end + 8, y + 112, L"км/ч", 18, kMuted, 600);
+    int end = T(dc, x + 16, y + 108, v, 64, fix || car ? kText : kDim, 700);
+    bool cam = s_camNear >= 0;
+    int limit = cam ? s_cams[s_camNear].speed : 0, camDist = s_camNearDist;
+    if (cam)
+        SpeedSign(dc, x + 204, y + 84, 30, limit);   // (the real sign's colours, the user 2026-10-26)
+    if (!cam || end + 8 + TextWidth(dc, L"км/ч", 18, 600) <= x + 170)   // (three digits and the sign: no room)
+        T(dc, end + 8, y + 108, L"км/ч", 18, kMuted, 600);
+    if (cam) {
+        if (limit > 0)
+            _snwprintf(v, 64, L"камера %d · %d м", limit, camDist);
+        else
+            _snwprintf(v, 64, L"камера · %d м", camDist);
+        T(dc, x + 16, y + 144, v, 15, CamOver() ? kStop : kOrange, 700, AL_START, 216);
+        return;
     }
     if (fix)
         _snwprintf(v, 64, L"%s · %d м · спутников %d", kHeadings[((int)(g.course + 22.5) / 45) % 8], (int)g.alt, g.sats);
@@ -584,17 +591,14 @@ static void WWeather(HDC dc, int x, int y)
         TWrap(dc, x + 16, y + 108, w.ok < 0 ? w.err : L"нажмите, чтобы обновить", 14, mg, 400, 216, 3, 18);
         return;
     }
-    WxIcon(dc, w.kind, x + 16, y + 44, fg);
-    _snwprintf(s, 16, L"%+d°", w.temp);
-    T(dc, x + 96, y + 96, s, 44, fg, 700);
-    _snwprintf(s, 100, L"%s, ветер %d м/с", w.desc, w.wind);
-    CharUpperBuff(s, 1);
-    TWrap(dc, x + 16, y + 126, s, 15, mg, 400, 216, 1, 0);
+    _snwprintf(s, 16, L"%+d°", w.temp);   // one main number (ideas 0.7): the degrees, under them the sky and the wind
+    T(dc, x + 16, y + 108, s, 64, fg, 700);
     if (w.ok < 0)
         _snwprintf(s, 100, L"не обновилась: %s", w.err);
     else
-        _snwprintf(s, 100, L"днём %+d°, ночью %+d° · %02d:%02d", w.tmax, w.tmin, w.at.wHour, w.at.wMinute);
-    TWrap(dc, x + 16, y + 146, s, 14, d ? kInk : kDim, 400, 216, 1, 0);
+        _snwprintf(s, 100, L"%s · ветер %d м/с", w.desc, w.wind);
+    CharUpperBuff(s, 1);
+    TWrap(dc, x + 16, y + 144, s, 14, w.ok < 0 ? kDim : mg, 400, 216, 1, 0);
 }
 
 // The screen saver's weather, centred on cx: the picture and the temperature (the car's sensor first), below them
