@@ -27,7 +27,7 @@ VL    = os.path.join(ROOT, 'VestaLaunch')   # its own repo since 2026-10-13, wit
 # or (source name, name in Tests).
 PLAN = (
     (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDCard\OSMapsCE',
-        ('OSMapsCE.exe', 'Images', 'Fonts')),   # toolhelp.dll: the firmware's own (\Windows) is used; Fonts: Golos (OFL)
+        ('OSMapsCE.exe', 'Images', 'Fonts', 'Lang')),   # toolhelp.dll: the firmware's own (\Windows) is used; Fonts: Golos (OFL)
     # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
