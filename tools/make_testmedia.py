@@ -2,7 +2,7 @@
 """make_testmedia.py - short test files for VestaHome's players (music, video) and its photo viewer.
 
 Writes VestaHome\\VestaHome\\VestaHome\\TestMedia\\ (the build output folder; make_tests.py copies it to
-Tests\\SDMemory\\TestMedia; VestaHomePC finds it next to the exe):
+Tests\\SDCard\\TestMedia; VestaHomePC finds it next to the exe):
     lr.mp3      9 s: 3 s left only (440 Hz), 3 s right only (660 Hz), 3 s both (550 Hz) - balance
     sweep.mp3   12 s: a sine from 40 Hz to 12 kHz - equalizer (low / mid / high)
     test.mp3 / test.m4a (AAC) / test.flac / test.wav   10 s: a tone stepping each second, with tags

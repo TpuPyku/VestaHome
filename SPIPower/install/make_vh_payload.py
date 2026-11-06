@@ -6,7 +6,7 @@ Format (the same as LaunchInstall's payload.bin):
 Names are relative to \\SDMMC\\VestaHome: "VestaHome.exe", "Skin/home.png", "bass/bass.dll", ...; "sd/..." go to
 \\SDMemory\\... and only when not there yet (the user widget example: VestaHome reads its widgets from the card).
 The installer refuses a payload whose CRC does not match (a damaged copy of the installer).
-The files are the ones make_tests.py puts into Tests\\SDMemory\\VestaHome; the user's files (VestaHome.ini, apps.txt,
+The files are the ones make_tests.py puts into Tests\\SDCard\\VestaHome; the user's files (VestaHome.ini, apps.txt,
 speedcam\\) are never in it.
 
     python make_vh_payload.py        (after VestaHome\\native\\build.bat; install\\build.bat runs it)

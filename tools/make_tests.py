@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
-"""Lay out <root>\\Tests: the files to try on the head unit, one folder per HU volume.
+"""Lay out <root>\\Tests: the files to try on the head unit.
 
-    Tests\\SDMemory\\<App>\\     ->  \\SDMemory\\<App>\\  (external SD card: experiments go here)
-    Tests\\SDMMC\\<App>\\        ->  \\SDMMC\\<App>\\     (built-in card: only what the shell itself starts)
-    Tests\\ResidentFlash\\...   ->  \\ResidentFlash\\... (built-in partition, the shell's home)
-    Tests\\StorageFlash\\...    ->  \\StorageFlash\\...  (built-in memory; nothing of ours yet)
-    Tests\\USBDevice\\...       ->  \\USBDevice\\...     (USB flash drive; nothing of ours yet)
+    Tests\\SDCard\\<App>\\      ->  a memory card: \\SDMemory\\<App>\\ (the external one) by default
+    Tests\\ResidentFlash\\...  ->  \\ResidentFlash\\... (the built-in partition: only paths fixed by a program)
 
-The repositories stay as they are: each build.bat still writes into its own output folder (YaMapsCE\\,
-VestaHome\\VestaHome\\ ...), and this script copies the CE exe and what it needs from there. PC builds,
-*.ini (API keys), logs, caches and test tracks are not copied. SDMemory\\SafeMode and
-SDMemory\\SPIPower_rescue hold files for the ROOT of the card, not a folder (see Tests\\README.md).
-The SPIPower set is laid out by VestaHome/SPIPower/tools/make_deploy.py (md5-checked), called from here.
-Large third-party payloads that have no build ("GpsGate 2.0") live only in Tests:
-only our own files are copied over them.
+The repositories stay as they are: each build.bat still writes into its own output folder, and this script copies
+the CE exe and what it needs from there. PC builds, *.ini (API keys), logs, caches and test tracks are not copied.
+SDCard\\SafeMode, SDCard\\SPIPower_rescue and SDCard\\Updater hold files for the ROOT of the card, not a folder (see
+Tests\\README.md). The SPIPower set is laid out by VestaHome/SPIPower/tools/make_deploy.py (md5-checked), called from here.
+Everything in Tests is generated: the old places are removed, nothing is kept by hand.
 
 Usage: python VestaHome/tools/make_tests.py
 """
@@ -31,36 +26,27 @@ VL    = os.path.join(ROOT, 'VestaLaunch')   # its own repo since 2026-10-13, wit
 # (source folder, Tests subfolder, (entries)); an entry is a file or folder name in the source folder,
 # or (source name, name in Tests).
 PLAN = (
-    (os.path.join(ROOT, 'YaMaps', 'YaMapsCE'), r'SDMMC\YaMapsCE',
-        ('YaMapsCE.exe', 'toolhelp.dll', 'Images', 'GpsGate')),
-    (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDMMC\OSMapsCE',
+    (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDCard\OSMapsCE',
         ('OSMapsCE.exe', 'Images', 'Fonts')),   # toolhelp.dll: the firmware's own (\Windows) is used; Fonts: Golos (OFL)
-    # the vector tiles speed test (OSMapsCE/native_vtest; its tiles from get_tiles.py), run from the SD card
-    (os.path.join(ROOT, 'OSMapsCE', 'VTileTest'), r'SDMemory\VTileTest',
-        ('VTileTest.exe', 'tiles')),
-    # ExternNavi.cfg points the shell's "Navigation" at \SDMMC\VestaLaunch: without the SD card the shell would
-    # lose it, so VestaLaunch stays on the built-in card
-    (os.path.join(VL, 'VestaLaunch'), r'SDMMC\VestaLaunch',
-        ('VestaLaunch.exe', 'Skin')),
-    # VestaHome itself is installed by VestaHomeInstall (SDMemory\VestaHomeInstall, from make_deploy.py)
+    # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
-    (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDMemory',
+    (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
         ('TestMedia',)),
     # the user widgets' examples and their guide (VestaHome reads \SDMemory\VestaWidgets\*.ini)
-    (os.path.join(V, 'VestaHome'), r'SDMemory',
+    (os.path.join(V, 'VestaHome'), r'SDCard',
         ('VestaWidgets',)),
-    (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\LaunchInstall',
+    (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDCard\LaunchInstall',
         ('LaunchInstall.exe',)),
     # the installers through the stock shell's "Navigation" (it runs exactly \SDMemory\UPDATE\Updater.exe): the
-    # CONTENTS of SDMemory\Updater go to the card's root. Updater.exe + MortScript.exe + mortzip.dll - CityGuide's
+    # CONTENTS of SDCard\Updater go to the card's root. Updater.exe + MortScript.exe + mortzip.dll - CityGuide's
     # MortScript (third-party, MAIN\UPDATE), the script ours (VestaHome\Updater\Updater.mscr)
-    (os.path.join(ROOT, 'MAIN', 'UPDATE'), r'SDMemory\Updater\UPDATE',
+    (os.path.join(ROOT, 'MAIN', 'UPDATE'), r'SDCard\Updater\UPDATE',
         ('Updater.exe', 'MortScript.exe', 'mortzip.dll')),
-    (os.path.join(V, 'Updater'), r'SDMemory\Updater\UPDATE',
+    (os.path.join(V, 'Updater'), r'SDCard\Updater\UPDATE',
         ('Updater.mscr',)),
-    (os.path.join(V, 'SPIPower', 'out'), r'SDMemory\Updater\UPDATE',
+    (os.path.join(V, 'SPIPower', 'out'), r'SDCard\Updater\UPDATE',
         ('VestaHomeInstall.exe',)),
-    (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDMemory\Updater\UPDATE',
+    (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDCard\Updater\UPDATE',
         ('LaunchInstall.exe',)),
     # the sample add-on (VestaCore/plugins/sample): VestaHome starts Plugins\<Name>\<Name>.exe next to itself
     (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'ResidentFlash\VestaHome\Plugins\Sample',
@@ -78,10 +64,10 @@ def copy(src, dst):
     return os.path.getsize(dst)
 
 
-# places of Tests no longer made (a program moved): removed, so the folder has no stale copies
-RETIRED = (r'SDMMC\VestaHome',     # VestaHome moved to \ResidentFlash (2026-10-27)
-           r'SDMemory\OSMapsData')   # the maps: written by the PC app / downloaded by OSMapsCE itself (2026-10-30: a
-                                       # stale copy here held graphs from before the barriers and the toll flags)
+# places of Tests no longer made: removed, so the folder has no stale copies (the user 2026-11-06: one SDCard for the
+# two cards; gone with them: GpsGate 2.0 - an old GPS test, MAIN has it; YaMapsCE - finished, its archive in build\;
+# VestaLaunch - inside LaunchInstall)
+RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice')
 
 
 def main():

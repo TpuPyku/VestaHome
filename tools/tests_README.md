@@ -4,28 +4,24 @@
 `build.bat` нужного проекта). Вручную здесь ничего не править — перезапишется. ПК-версии (`*PC.exe`)
 сюда не копируются: они остаются в папках сборки репозиториев.
 
-Первая папка = том ГУ, куда копировать:
-
-| Папка | Том на ГУ | Что это |
+| Папка | Куда на ГУ | Что это |
 |---|---|---|
-| `SDMemory\` | `\SDMemory` — внешняя SD-карта | **все эксперименты** |
-| `SDMMC\` | `\SDMMC` — встроенная карта | только то, что запускает сама оболочка или что жёстко прописано на `\SDMMC` |
-| `ResidentFlash\` | `\ResidentFlash` — встроенный раздел (дом оболочки) | только набор SPIPower |
-| `StorageFlash\` | `\StorageFlash` — встроенная память | пока ничего |
-| `USBDevice\` | `\USBDevice` — флешка в USB | пока ничего |
+| `SDCard\` | карта памяти: `\SDMemory` (внешняя), для OSMapsCE можно и `\SDMMC` | всё для проверок |
+| `ResidentFlash\` | `\ResidentFlash` — встроенный раздел | только пример дополнения: путь задан программой |
 
-Обычная папка программы копируется **целиком** (`SDMemory\VestaHome\` → `\SDMemory\VestaHome\`).
-Исключения — папки с файлами для **корня** карты, их **содержимое** кладётся в `\SDMemory\`:
+Обычная папка программы копируется **целиком** (`SDCard\OSMapsCE\` → `\SDMemory\OSMapsCE\`).
 
-- `SDMemory\SafeMode\` — безопасный режим (флаг `…Mainflg` + `Cancle60s.exe`): включается на каждой
-  загрузке, пока файлы в корне, — после разбора убрать;
-- `SDMemory\Updater\` — её папку `UPDATE` скопировать в корень карты (`\SDMemory\UPDATE\`): на штатной оболочке
-  кнопка «Навигация» запускает `Updater.exe` (MortScript из пакета CityGuide) → наш `Updater.mscr` → по очереди
-  `VestaHomeInstall.exe` и `LaunchInstall.exe`, что лежит рядом (ненужный — удалить из папки);
-- `SDMemory\SPIPower_rescue\` — аварийный пакет `SwDnl.upg` + `SwDnl.cfg`, только перед установкой proxy.
+- `VestaHomeInstall` — установщик VestaHome + proxy MCU и Bluetooth + пустышки вместо оболочки (кнопка 3);
+- `LaunchInstall` — установщик VestaLaunch, сам кладёт его в `\SDMMC\VestaLaunch`;
+- `OSMapsCE` — программа; карты ставятся из неё или загрузчиком для ПК;
+- `TestMedia` — короткие аудио, видео и фото для плееров и «Диагностика → Звук и видео»;
+- `VestaWidgets` — примеры своих виджетов, работают только из `\SDMemory\VestaWidgets`.
 
-Где что:
+Папки с файлами для **корня внешней карты** — их **содержимое** кладётся в `\SDMemory\`:
 
-- `TestMedia` (короткие аудио/видео для «Диагностика → Звук и видео»), `LaunchInstall`, `GpsGate 2.0` (тест GPS);
-- `SDMMC\VestaLaunch` (на него указывает `ExternNavi.cfg`: без SD оболочка его не потеряет), `YaMapsCE`, `OSMapsCE`;
-- `SDMemory\VestaHomeInstall` — установщик VestaHome + proxy MCU + пустышки вместо оболочки (кнопка 3; отключить её — пустой `VestaStub.off` в корне SD/USB): один файл `VestaHomeInstall.exe` (запускать откуда угодно) + `help.txt`.
+- `SDCard\SafeMode\` — безопасный режим (флаг `…Mainflg` + `Cancle60s.exe`): включается на каждой загрузке,
+  пока файлы в корне, — после разбора убрать;
+- `SDCard\Updater\` — папка `UPDATE` для штатной оболочки: кнопка «Навигация» запускает `Updater.exe`
+  (MortScript из пакета CityGuide) → наш `Updater.mscr` → по очереди `VestaHomeInstall.exe` и `LaunchInstall.exe`,
+  что лежит рядом (ненужный — удалить из папки);
+- `SDCard\SPIPower_rescue\` — аварийный пакет `SwDnl.upg` + `SwDnl.cfg`, только перед установкой proxy.
