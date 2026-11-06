@@ -46,6 +46,7 @@ struct Cfg {
     wchar_t weatherKey[W_COUNT][64];   // API key per provider (Open-Meteo needs none)
     bool    weatherGps;                // the place where the car is; without a fix the home point
     wchar_t homeName[48];
+    int btAutoConnect, btAutoAnswer;   // the stack's options, -1 never set (VestaStub applies them at each boot)
     wchar_t btName[32];                // the unit's Bluetooth name (VestaStub writes it before the stack starts)
     double  homeLat, homeLon;          // both 0 = not set
     wchar_t gpsPort[16];               // the shell's NMEA port, only read
@@ -130,6 +131,7 @@ static void CfgDefaults()
     s_cfg.weatherGps = true;
     wcscpy(s_cfg.gpsPort, L"COM4:");   // the car's GPS (vh_gps.inc GpsPortNow: COM4 without the stock shell, COM5 with it)
     s_cfg.gpsTime = true;
+    s_cfg.btAutoConnect = s_cfg.btAutoAnswer = -1;
     s_cfg.tzMin = 180;                            // Moscow
     s_cfg.camAlert = s_cfg.camSound = true;
     s_cfg.camOver = -1;
@@ -400,6 +402,10 @@ static void LoadCfg()
             }
         } else if (!wcscmp(k, L"weather.gps")) {
             s_cfg.weatherGps = CfgBool(v);
+        } else if (!wcscmp(k, L"bt.autoconnect")) {
+            s_cfg.btAutoConnect = _wtoi(v);
+        } else if (!wcscmp(k, L"bt.autoanswer")) {
+            s_cfg.btAutoAnswer = _wtoi(v);
         } else if (!wcscmp(k, L"bt.name")) {
             wcsncpy(s_cfg.btName, v, 31);
             s_cfg.btName[31] = 0;
@@ -639,7 +645,7 @@ static void SaveCfg()
         L"# Yandex requests made that day (its free tariff: 30 a day)\r\nweather.yandex.day=%d\r\nweather.yandex.count=%d\r\n"
         L"weather.gps=%d\r\nhome.name=%s\r\nhome.lat=%.5f\r\nhome.lon=%.5f\r\n"
         L"# bt.name: the unit's name seen by phones (VestaStub sets it at the boot, before Bluetooth starts)\r\n"
-        L"bt.name=%s\r\n"
+        L"bt.name=%s\r\nbt.autoconnect=%d\r\nbt.autoanswer=%d\r\n"
         L"# gps.baud: 0 = leave the port's speed as the shell set it\r\n"
         L"gps.port=%s\r\ngps.baud=%u\r\ngps.time=%d\r\n"
         L"# time.tz: local time = UTC + minutes (180 = Moscow)\r\ntime.tz=%d\r\n"
@@ -691,7 +697,7 @@ static void SaveCfg()
         L"# sound.mix: the programs (exe names, ';' between) whose sound goes with the radio (a shortcut's switch)\r\n"
         L"sound.mix=%s\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
-        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName,
+        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
         s_cfg.camOver, s_cfg.camOverBy, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,

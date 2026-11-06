@@ -558,9 +558,12 @@ static void DoAction(const Btn& b)
             LogsSet(s_on[T_LOGS]);
         if (b.arg == T_BT)
             BtPowerSet(s_on[T_BT]);
-        if (b.arg == T_AUTOCONNECT || b.arg == T_AUTOANSWER)   // the stack's options (the proxy)
+        if (b.arg == T_AUTOCONNECT || b.arg == T_AUTOANSWER) {   // the stack's options (the proxy), kept for the next boot
             BtCmdText(BT_CMD_SETOPT, b.arg == T_AUTOCONNECT ? (s_on[b.arg] ? L"c 1" : L"c 0")
                                                             : (s_on[b.arg] ? L"a 1" : L"a 0"));
+            (b.arg == T_AUTOCONNECT ? s_cfg.btAutoConnect : s_cfg.btAutoAnswer) = s_on[b.arg] ? 1 : 0;
+            SaveCfg();
+        }
         if (b.arg == T_LOUDNESS)   // the shell's loudness keys (CAudioEffectDlg, Ghidra 2026-10-22; to verify)
             McuKey(s_on[T_LOUDNESS] ? 0x93 : 0x94, false);
         break;

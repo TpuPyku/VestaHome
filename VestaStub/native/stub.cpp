@@ -33,6 +33,7 @@
 #define STBI_NO_THREAD_LOCALS
 #define STBI_ASSERT(x) ((void)0)
 #define STB_IMAGE_IMPLEMENTATION
+#include "callroute.h"
 #include "stb_image.h"
 
 static const int kMaxFails = 3;
@@ -505,6 +506,10 @@ static bool DirThere(const wchar_t* hu)
 
 // What the shell itself does on a message (the rest only fed its screens). p[3] is the data's first byte (almost
 // always 00), p[4] the second.
+static int s_dial = CALL_IDLE;   // the call's state (BtCb)
+static bool s_hfAudio;           // the call's sound is in the car (BtCb)
+static int s_btRoute = 2;        // the route asked for with the channel
+
 static void SkelHandle(void* self, unsigned char* p)
 {
     int code = p[0] << 8 | p[1];
@@ -586,12 +591,27 @@ static void SkelHandle(void* self, unsigned char* p)
             s_btPause();
         Log(L"mcu: источник Bluetooth-музыка %d", p[4]);
         break;
+    case 0x8905: {   // the MCU's answer to the phone's status: the shell asks for the channel here (Ghidra 2026-11-06,
+                     // CBtPhone::MsgDecode; never sent before: no 0x8906 in any log, the radio played on through a call)
+        if (p[5])
+            break;
+        int route = p[4] == 0 ? CallRouteTarget(s_dial, s_hfAudio) : p[4] == 1 ? CallRouteIncoming(s_hfAudio) : 0;
+        if (!route)
+            break;
+        if (p[4] == 0 && s_dial == CALL_OUT)
+            Sleep(500);   // (as the shell)
+        s_btRoute = route;
+        if (s_spBtChan)
+            s_spBtChan(0);
+        Log(L"mcu: звонок: запрос канала Bluetooth, маршрут %d", route);
+        break;
+    }
     case 0x8906:   // "the BT channel may be taken": the shell routes the sound to Bluetooth's and says so
         if (s_svRoute)
-            s_svRoute(2);
+            s_svRoute(s_btRoute);
         if (s_spBtChan)
             s_spBtChan(1);
-        Log(L"mcu: канал Bluetooth -> маршрут 2");
+        Log(L"mcu: канал Bluetooth -> маршрут %d", s_btRoute);
         break;
     }
 }
@@ -673,10 +693,12 @@ static void BtCb(int* ev)   // the shell's handler's place: the proxy has publis
     if (!ev)
         return;
     int type = -1, state = 0;
+    bool matchDown = false;
     switch (ev[0]) {
     case 0x10:
         if (ev[2] != 1)
             break;
+        s_dial = CallDial(ev[1], s_callOut);
         switch (ev[1]) {
         case 0: type = 0; state = 0; s_callOut = false; break;
         case 1: type = 0; state = 1; s_callOut = false; break;
@@ -688,17 +710,19 @@ static void BtCb(int* ev)   // the shell's handler's place: the proxy has publis
     case 0x11:
         if (ev[1] == 2 || ev[1] == 0) {
             int up = ev[1] == 2;
-            if (s_spMatch)
-                s_spMatch(up);
+            if (up && s_spMatch)
+                s_spMatch(1);   // (down: after the phone's status, as the shell)
+            matchDown = !up;
             type = up;
             state = up;
         }
         break;
     case 0x12:
-        if (ev[1] == 1 && s_spBtRoute)
-            s_spBtRoute();
+        s_hfAudio = ev[1] == 1;
         if ((ev[1] == 0 || ev[1] == 1) && (s_callType == 4 || s_callType == 5) && s_spPrivacy)
             s_spPrivacy(ev[1] ? 0 : 1);
+        if (ev[1] == 1 && s_spBtRoute)
+            s_spBtRoute();
         Log(L"bt: звук звонка %s", ev[1] == 1 ? L"в машине" : L"нет");
         break;
     }
@@ -707,6 +731,8 @@ static void BtCb(int* ev)   // the shell's handler's place: the proxy has publis
     if (s_spPhone)
         s_spPhone(type, state);
     s_callType = state && type >= 4 ? type : -1;
+    if (matchDown && s_spMatch)
+        s_spMatch(0);
     Log(L"bt: телефон -> MCU (%d, %d)", type, state);
 }
 
@@ -714,10 +740,12 @@ static void BtCb(int* ev)   // the shell's handler's place: the proxy has publis
 // BTApi_ChangeName writes there, Ghidra 2026-10-27). The registry comes from the firmware at each boot ("FLC WINCE");
 // with the stock shell it was "VESTA" (MAIN/Backup/WindowsCE.reg) - something of the shell's set it. Now: VestaHome's
 // bt.name (its VestaHome.ini), "VESTA" without one.
-static void BtName()
+// VestaHome's setting from its ini ("\nkey=": UTF-8); empty - none
+static void CfgValue(const char* key, char* v, int cap)
 {
-    wchar_t name[40] = L"VESTA", path[MAX_PATH];
+    wchar_t path[MAX_PATH];
     static const wchar_t* kIni[2] = { L"\\ResidentFlash\\VestaHome\\VestaHome.ini", L"\\SDMMC\\VestaHome\\VestaHome.ini" };
+    v[0] = 0;
     for (int f = 0; f < 2; f++) {
         HuPath(path, kIni[f]);
         HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
@@ -728,21 +756,27 @@ static void BtName()
         ReadFile(h, buf, sizeof(buf) - 1, &got, NULL);
         CloseHandle(h);
         buf[got] = 0;
-        const char* k = strstr(buf, "\nbt.name=");
+        const char* k = strstr(buf, key);
         if (k) {
-            k += 9;
-            char v[64];
+            k += strlen(key);
             int n = 0;
-            while (k[n] && k[n] != '\r' && k[n] != '\n' && n < 63) {
+            while (k[n] && k[n] != '\r' && k[n] != '\n' && n < cap - 1) {
                 v[n] = k[n];
                 n++;
             }
             v[n] = 0;
-            if (n)
-                MultiByteToWideChar(CP_UTF8, 0, v, -1, name, 40);   // (VestaHome's ini is UTF-8)
         }
-        break;
+        return;
     }
+}
+
+static void BtName()
+{
+    wchar_t name[40] = L"VESTA";
+    char v[64];
+    CfgValue("\nbt.name=", v, 64);
+    if (v[0])
+        MultiByteToWideChar(CP_UTF8, 0, v, -1, name, 40);   // (VestaHome's ini is UTF-8)
     name[39] = 0;
 #ifdef UNDER_CE
     HKEY key;
@@ -754,6 +788,26 @@ static void BtName()
 #else
     Log(L"bt: имя ГУ «%s» (ПК: не записывается)", name);
 #endif
+}
+
+// The stack's options live in its memory only: the shell sets them at each start (FUN_0041a4a4, LAB_0041a794), from now
+// on here, as VestaHome's settings have them (bt.autoconnect, bt.autoanswer; none - never touched by the user)
+static void BtOptions(HMODULE m)
+{
+    typedef int (*BtFn2)(int, int);
+    BtFn1 connect = (BtFn1)Proc(m, "Flc_Bluetooth_Conn_EnablePowerOnConnect");
+    BtFn2 answer = (BtFn2)Proc(m, "Flc_Bluetooth_Conn_EnableAutoAnswerIncomingCall");
+    char v[8];
+    CfgValue("\nbt.autoconnect=", v, 8);
+    if (connect && (v[0] == '0' || v[0] == '1')) {
+        connect(v[0] == '1');
+        Log(L"bt: автосоединение %c", v[0]);
+    }
+    CfgValue("\nbt.autoanswer=", v, 8);
+    if (answer && (v[0] == '0' || v[0] == '1')) {
+        answer(v[0] == '1', 5);
+        Log(L"bt: автоответ %c", v[0]);
+    }
 }
 
 static void BtHostStart()
@@ -786,6 +840,8 @@ static void BtHostStart()
     int r = on ? init(BtCb) : -1;
     if (r == 0 && pairInd)
         pairInd(1);
+    if (r == 0)
+        BtOptions(m);
     s_btUp = r == 0;
     Log(L"bt: стек %s (PowerOn %d, Init %d)", s_btUp ? L"запущен" : L"НЕ запущен", on, r);
 }
