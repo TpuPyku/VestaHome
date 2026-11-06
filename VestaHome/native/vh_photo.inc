@@ -400,6 +400,7 @@ static void DoAction(const Btn& b)
     case A_TASKSORT:   TaskSort(&s_task, b.arg); s_taskPage = 0; break;
     case A_TASKKILL:   TaskEnd((DWORD)b.arg); break;
     case A_TASKSWITCH: TaskSwitch((HWND)(INT_PTR)b.arg); break;
+    case A_NAVCHIP: NavChipTap(); break;
     case A_TASKCLOSE:  TaskClose((HWND)(INT_PTR)b.arg); break;
     case A_CLIPCOPY:   ClipCopy(); break;
     case A_CLIPPASTE:  ClipPaste(); break;

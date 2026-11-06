@@ -25,6 +25,8 @@ struct Plugin {
     PlugWidget wg[kPlugWidgets];
 };
 static Plugin s_plug[kPlugMax];
+static VNav   s_nav;             // the route's next manoeuvre, from add-on s_navPlug ("nav")
+static int    s_navPlug = -1;
 static int    s_plugN;
 static int    s_plugCur = -1, s_plugScr = -1, s_plugPage;   // the add-on screen shown (S_PLUGIN)
 static int    s_plugOpenP = -1, s_plugOpenS = -1;           // the one told "screen.open" (for its "screen.close")
@@ -538,6 +540,26 @@ static bool PlugWidgetDraw(HDC dc, const UserWg& w, int x, int y, int ww, int hh
     return true;
 }
 
+// The manoeuvre to show in the top bar: not when its navigator is gone, nor while its own picture is on the screen -
+// the widget says the same.
+static bool NavChipGet(VNav* n)
+{
+    if (!s_nav.on || s_navPlug < 0 || !s_plug[s_navPlug].hwnd || !IsWindow(s_plug[s_navPlug].hwnd))
+        return false;
+    const Plugin& p = s_plug[s_navPlug];
+    for (int k = 0; k < p.nw; k++)
+        if (p.wg[k].image && p.wg[k].shown)
+            return false;
+    *n = s_nav;
+    return true;
+}
+
+static void NavChipTap()
+{
+    if (s_navPlug >= 0 && s_plug[s_navPlug].hwnd)
+        PlugSend(s_plug[s_navPlug], L"nav.tap");
+}
+
 // A command from an add-on's window from (WM_COPYDATA). Unknown commands and fields are passed over.
 static void PlugReceive(HWND from, const wchar_t* cmd)
 {
@@ -582,8 +604,15 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         p = PlugById(id);
     if (!p)
         return;   // not said hello
-    if (!wcscmp(verb, L"bye")) {
+    if (!wcscmp(verb, L"nav")) {
+        VNavParse(cmd, &s_nav);
+        s_navPlug = (int)(p - s_plug);
+        if (IsWindowVisible(s_wnd))
+            RedrawArea(0, 0, 800, 56);
+    } else if (!wcscmp(verb, L"bye")) {
         VLog(L"дополнение: %s отключилось", p->id);
+        if (s_navPlug == (int)(p - s_plug))
+            s_navPlug = -1;
         for (int k = 0; k < p->nw; k++)
             PlugWidgetFree(p->wg[k]);
         p->hwnd = NULL;

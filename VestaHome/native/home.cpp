@@ -26,6 +26,7 @@
 #include "dialloc.h"    // its number as a local call; the modem ready to dial
 #include "vhttp.h"     // VestaCore's HTTP(S) client (HttpInit at the start)
 #include "vhap.h"      // VestaCore: the add-ons' protocol
+#include "vnav.h"      // VestaCore: the route's next manoeuvre from OSMapsCE, its sign
 #include "vfont.h"     // VestaCore: the fonts
 #include "netcat.h"    // the internet radio's lines and catalogue
 #include "country.h"   // the country by GPS (the catalogue's "Рядом")
@@ -111,7 +112,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
               A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RLISTPAGE, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_SCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH,
+              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_SCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,

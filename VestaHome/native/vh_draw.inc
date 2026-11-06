@@ -2089,6 +2089,27 @@ static int StatusMarks(HDC dc, int end, int minLeft)
 
 static Action s_frameBack = A_NONE;   // this frame's "back" (Frame sets it, BackButton draws it at the bottom)
 
+// The route's manoeuvre in the top bar (ideas 0.7, item 2): the sign in the accent's disc, the distance, the street and
+// the arrival as far as there is room; a tap brings the navigator up. Its data: vh_plugins.inc.
+static bool NavChipGet(VNav* n);
+enum { kChipMin = 120, kChipMax = 320 };
+
+static void NavChip(HDC dc, int x, int right, const VNav& n)
+{
+    int w = right - x > kChipMax ? kChipMax : right - x;
+    bool d = Zone(x, 8, w, 40, A_NAVCHIP);
+    R(dc, x, 8, w, 40, 20, d ? kPanel2 : kPanel);
+    Disc(dc, x + 20, 28, 16, kOrange);
+    RECT sign = { x + 6, 14, x + 34, 42 };
+    VNavDrawTurn(dc, sign, n.turn, C(kInk));
+    int end = T(dc, x + 44, 34, n.dist, 15, kText, 700, AL_START, w - 52);
+    wchar_t s[80];
+    _snwprintf(s, 80, L"%s · %s", n.street, n.eta);
+    s[79] = 0;
+    if (x + w - 14 - (end + 10) >= 40)
+        T(dc, end + 10, 33, s, 13, kMuted, 400, AL_START, x + w - 14 - (end + 10));
+}
+
 static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act = IC_NONE, Action a = A_NONE,
                   bool sel = false, Icon act2 = IC_NONE, Action a2 = A_NONE, int arg2 = 0)
 {
@@ -2147,8 +2168,12 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
             s_frameBack = back;   // drawn at the bottom left over the screen (BackButton, the user 2026-10-24)
         }
     }
-    int end = title[0] ? T(dc, x, 37, title, 22, kText, 600, AL_START, s_status[0] ? 300 : right - x) : x;
-    if (s_status[0])
+    VNav nav;
+    bool chip = NavChipGet(&nav);
+    int end = title[0] ? T(dc, x, 37, title, 22, kText, 600, AL_START, s_status[0] || chip ? 300 : right - x) : x;
+    if (chip && right - end - 12 >= kChipMin)
+        NavChip(dc, end + 12, right, nav);
+    else if (s_status[0])
         T(dc, end + 16, 36, s_status, 15, kMuted, 400, AL_START, right - end - 16);
 }
 
