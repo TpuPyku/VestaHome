@@ -48,6 +48,8 @@ PLAN = (
         ('VestaHomeInstall.exe',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDCard\Updater\UPDATE',
         ('LaunchInstall.exe',)),
+    (os.path.join(V, 'VestaTether', 'VestaTether'), r'SDCard\TetherProbe',
+        ('TetherProbe.exe', 'VestaTether.dll')),
     # the sample add-on (VestaCore/plugins/sample): VestaHome starts VHContent\VHPlugins\<Name>\<Name>.exe
     (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'ResidentFlash\VHContent\VHPlugins\Sample',
         ('Sample.exe',)),
