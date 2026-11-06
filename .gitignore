@@ -14,6 +14,7 @@ VestaHome/VestaHome/radio_recent.txt
 VestaHome/VestaHome/VestaHome.ini
 VestaHome/VestaHome/*.tmp
 VestaHome/VestaHome/*.nmea
+VestaHome/VestaHome/RadioCache/
 VestaHome/VestaHome/speedcam/*
 # the user widgets next to the PC build (a test copy of VestaWidgets/ with its fetched data)
 VestaHome/VestaHome/VestaWidgets/

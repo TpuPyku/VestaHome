@@ -113,6 +113,7 @@ static UINT       s_msg;
 static WifiLogFn  s_log;
 static wchar_t    s_guid[64];          // the adapter
 static volatile bool s_wantOn = true;  // WifiEnable
+static volatile bool s_restart;        // WifiRestart
 static volatile bool s_wantAp, s_apAuto;   // WifiApManual, WifiApSetup
 static char       s_apSsid[33], s_apPass[65];   // under s_cs
 static wchar_t    s_apSsidW[33], s_apPassW[65]; // the same for the screens
@@ -147,6 +148,16 @@ static DkGetModeFn s_dkGetMode;
 static DkApFn      s_dkApGetDef, s_dkApSetDef, s_dkApSetCur;
 static DkAssocFn   s_dkAssoc;
 static DelArrFn    s_delArr;      // coredll's operator delete[]: the association list is the DLL's new[]
+// The scanner's switch and the driver's own verdict (Ghidra 2026-11-06 on WifiDKCore.dll and on the stock tools
+// that call them: the shell's start - WIFI_STA_GetScannerEnabled(&on), then WIFI_STA_SetScannerEnabled(1) when it
+// was off; WdkStaCtrl.exe - WDK_DMW_GetStaConnFailReason(2, buf), printed as "sta connect status"; wfdtool.exe -
+// WDK_DMW_ResetDriver(0)). WIFI_STA_SetBackgroundScannerEnabled also exists, but no module of the unit calls it.
+typedef LONG (*DkFailFn)(int, BYTE*);   // the client's mode (2), the reason: one byte
+typedef LONG (*DkScanFn)(int);          // the scanner on (1) / off (0)
+typedef LONG (*DkResetFn)(int);         // 0, as wfdtool does
+static DkFailFn    s_dkFail;
+static DkScanFn    s_dkScan;
+static DkResetFn   s_dkReset;
 enum { DK_OFF = 0, DK_AP = 1, DK_STA = 2,
        APS_SIZE = 0x140, APS_SSID = 0x04, APS_BEACON = 0x28, APS_CHANNEL = 0x30, APS_CIPHER = 0x34, APS_WPA = 0x38,
        APS_WEPKEYID = 0x40, APS_KEY = 0xB0, APS_HIDE = 0x134, APS_AUTHTO = 0x138, APS_ASSOCTO = 0x13C,
@@ -155,7 +166,8 @@ enum { DK_OFF = 0, DK_AP = 1, DK_STA = 2,
        kApWaitMs = 180000,     // no phone joins it: back to a client
        kHandoverMs = 20000,    // a phone joined: time for it to raise its hotspot (on 2.4 GHz now)
        kStaWaitMs = 40000,     // back as a client: the phone's hotspot not joined that long - again
-       kAttempts = 3, kRetryMs = 600000 };
+       kAttempts = 3, kRetryMs = 600000,
+       kQuietMs = 30000 };   // the periodic scan held off while a connection is made (RefreshQuiet)
 
 static void Log(const wchar_t* fmt, ...)
 {
@@ -514,6 +526,9 @@ static bool LoadDk()
     s_dkJoin = (DkNameFn)PROC(m, "WDK_STA_ConnectToPreferredApByName");
     s_dkDrop = (DkNameFn)PROC(m, "WDK_STA_RemovePreferredApByName");
     s_dkPrefs = (DkListFn)PROC(m, "WDK_STA_GetPreferredApList");
+    s_dkFail = (DkFailFn)PROC(m, "WDK_DMW_GetStaConnFailReason");
+    s_dkScan = (DkScanFn)PROC(m, "WIFI_STA_SetScannerEnabled");
+    s_dkReset = (DkResetFn)PROC(m, "WDK_DMW_ResetDriver");
     if (!s_dkList || !s_dkAdd || !s_dkJoin || !s_dkDrop)
         s_dkAdd = NULL;   // (the client through WZC then)
     if (!init || !s_dkSetMode || !s_dkGetMode || !s_dkApGetDef || !s_dkApSetDef || !s_dkApSetCur || !s_dkAssoc) {
@@ -529,6 +544,14 @@ static bool LoadDk()
     s_dkBootMode = mode;
     return s_dkSetMode != NULL;
 }
+
+// A phone's hotspot with SAE beside PSK (Galaxy A24, sheet 24): the SDK lists it as open (its security 2/1/0) and the
+// unit associates with no encryption: the hotspot drops it in a second. Its beacon says what it is; the values are those
+// the SDK itself gives a WPA2 hotspot (MRNote13P, 2/3/7 with the same beacon without SAE, its key set up).
+enum { DK_AUTH_WPA2 = 2, DK_CIPHER_AES = 3, DK_PRIV_WPA2 = 7 };
+#ifdef UNDER_CE
+static bool BeaconWpa2Psk(const wchar_t* ssid);
+#endif
 
 // A network joined as the shell joins it (see DkListFn); false: not in sight or refused (why: the message)
 static bool DkJoin(const wchar_t* ssid, const wchar_t* pass, wchar_t* why, int cap)
@@ -550,6 +573,14 @@ static bool DkJoin(const wchar_t* ssid, const wchar_t* pass, wchar_t* why, int c
     memset(sec, 0, sizeof(sec));
     wcsncpy((wchar_t*)(sec + DKSEC_KEY), pass, 255);
     *(DWORD*)(sec + DKSEC_KEYID) = 1;
+#ifdef UNDER_CE
+    if (!*(DWORD*)(ap + DKAP_PRIV) && BeaconWpa2Psk(ssid)) {
+        Log(L"wifi: SDK: %s открыта, в маяке WPA2 - защита из маяка", ssid);
+        *(DWORD*)(ap + DKAP_AUTH) = DK_AUTH_WPA2;
+        *(DWORD*)(ap + DKAP_CIPHER) = DK_CIPHER_AES;
+        *(DWORD*)(ap + DKAP_PRIV) = DK_PRIV_WPA2;
+    }
+#endif
     LONG drop = s_dkDrop(ssid);   // (a stale one with an older password)
     LONG add = s_dkAdd(ap, sec, 0);
     LONG join = add >= 0 ? s_dkJoin(ssid) : add;
@@ -669,6 +700,89 @@ static void RadioPower(bool on)
 #endif
 }
 
+// The driver's answer can take long or never come (the SDK's mode change, 2026-11-05: BT's off took 12 s): the switch on
+// a thread of its own, its wait bounded, so a restart always ends and the radio's state is in the log.
+static DWORD WINAPI RadioThread(LPVOID on)
+{
+    RadioPower(on != NULL);
+    return 0;
+}
+
+static void RadioGuarded(bool on)
+{
+    enum { kRadioWaitMs = 10000 };
+    HANDLE h = CreateThread(NULL, 0, RadioThread, on ? (LPVOID)1 : NULL, 0, NULL);
+    if (!h) {
+        RadioPower(on);
+        return;
+    }
+    if (WaitForSingleObject(h, kRadioWaitMs) != WAIT_OBJECT_0)
+        Log(L"wifi: перезапуск: драйвер не ответил за %d с (%s)", kRadioWaitMs / 1000, on ? L"вкл." : L"выкл.");
+    CloseHandle(h);
+}
+
+// The radio off for a while and on again: the driver forgets its state, as after the power cut (sheet 24: an address
+// came only right after one).
+static void RadioRestart()
+{
+    enum { kOffMs = 30000, kStepMs = 500 };
+    Log(L"wifi: перезапуск: радио выключается на %d с", kOffMs / 1000);
+    RadioGuarded(false);
+    for (DWORD t0 = GetTickCount(); !s_stop && GetTickCount() - t0 < kOffMs;)
+        Sleep(kStepMs);
+    RadioGuarded(true);
+    Log(L"wifi: перезапуск: радио снова включено");
+}
+
+#ifdef UNDER_CE
+// The WdkHealthSvc's WzcRefresh rescans the networks every 6 s while the client is not associated (its
+// ScanOnRefresh=1, RefreshFast=6000; the service's loop is WIFI_STA_GetRawScanResults, #310, next to InitApi and
+// GetAdapterName in its import table): the radio leaves the channel in the middle of the 4-way handshake or of the
+// DHCP exchange, and the link drops 1-2 s after the association (sheet 24, p. 6-7). While a connection is being made
+// that scan is held off (PLAN.md, the Wi-Fi item, step 3) through two switches - the SDK's own WIFI_STA_SetScannerEnabled
+// (the one the shell sets at its start) and the service's registry values - and put back once the address is there or
+// the attempt is over. Never the service's stop (WHE1: answers a stop with a reboot, 2026-11-01).
+static void RefreshQuiet(bool quiet)
+{
+    static int s_quietNow = -1;   // what was written last (-1: nothing yet)
+    if (s_quietNow == (int)quiet)
+        return;
+    s_quietNow = (int)quiet;
+    // The SDK's own switch first: the one the shell sets at its start, and it acts at once (WIFI_STA_SetScannerEnabled,
+    // one int - Ghidra 2026-11-06). WzcRefresh's 6 s round asks WIFI_STA_GetRawScanResults, and that scan is what the
+    // driver takes the radio away for; the registry below is what the service re-reads on its own next round.
+    wchar_t api[48];
+    if (s_dkScan)
+        _snwprintf(api, 48, L"0x%08X", (unsigned)s_dkScan(quiet ? 0 : 1));
+    else
+        wcscpy(api, L"нет");
+    HKEY key;
+    DWORD disp = 0, scan = quiet ? 0 : 1, fast = quiet ? kQuietMs : 6000, wasScan = 0, wasFast = 0, size = 4;
+    LONG rr = RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Qualnetics\\WdkHealthSvc\\WzcRefresh", 0, NULL, 0, 0, NULL,
+                             &key, &disp);
+    if (rr != ERROR_SUCCESS) {
+        Log(L"wifi: WzcRefresh: ключ не открылся (%ld), скан SDK %s", rr, api);
+        return;
+    }
+    RegQueryValueEx(key, L"ScanOnRefresh", NULL, NULL, (LPBYTE)&wasScan, &size);
+    size = 4;
+    RegQueryValueEx(key, L"RefreshFast", NULL, NULL, (LPBYTE)&wasFast, &size);
+    LONG a = RegSetValueEx(key, L"ScanOnRefresh", 0, REG_DWORD, (const BYTE*)&scan, 4);
+    LONG b = RegSetValueEx(key, L"RefreshFast", 0, REG_DWORD, (const BYTE*)&fast, 4);
+    RegCloseKey(key);
+    Log(L"wifi: WzcRefresh: сканирование %s (SDK %s, ScanOnRefresh %u -> %u, RefreshFast %u -> %u, %ld/%ld)",
+        quiet ? L"приглушено на время подключения" : L"как было", api, (unsigned)wasScan, (unsigned)scan,
+        (unsigned)wasFast, (unsigned)fast, a, b);
+}
+
+// An attempt to connect starts: the periodic scan off, the tick of its start kept (0: already held off)
+static DWORD QuietStart(DWORD tick)
+{
+    RefreshQuiet(true);
+    return tick ? tick : GetTickCount();
+}
+#endif
+
 #ifdef UNDER_CE
 // What WZC and the SDK do not show (sheet 22: MRNote13P's link drops in 2-10 s without an address, MiNote3's holds;
 // the SDK shows both as 2/3/7): the beacons' IEs, what the unit's driver sent at the association, whether the
@@ -726,6 +840,29 @@ static bool BeaconLogged(const wchar_t* ssid)
     return false;
 }
 
+// A network's name from the driver's list
+static void BssName(const BssEntry& b, wchar_t* ssid)
+{
+    if (!MultiByteToWideChar(CP_UTF8, 0, b.ssid, -1, ssid, 33))
+        MultiByteToWideChar(CP_ACP, 0, b.ssid, -1, ssid, 33);
+    ssid[32] = 0;
+}
+
+static bool BeaconWpa2Psk(const wchar_t* ssid)
+{
+    const BYTE* d;
+    int n = UioQuery(OID_BSSID_LIST, &d);
+    BssEntry b[kWifiNets];
+    int m = n > 0 ? BssList(d, n, b, kWifiNets) : 0;
+    for (int i = 0; i < m; i++) {
+        wchar_t name[33];
+        BssName(b[i], name);
+        if (!wcscmp(name, ssid))
+            return IeWpa2Psk(b[i].ies, b[i].ieLen);
+    }
+    return false;
+}
+
 // The beacons of the networks in sight not logged yet (or of one again: again = its name), one line each
 static void LogBeacons(const WifiInfo& w, const wchar_t* again)
 {
@@ -738,9 +875,7 @@ static void LogBeacons(const WifiInfo& w, const wchar_t* again)
     int m = n > 0 ? BssList(d, n, b, kWifiNets) : 0;
     for (int i = 0; i < m; i++) {
         wchar_t ssid[33];
-        if (!MultiByteToWideChar(CP_UTF8, 0, b[i].ssid, -1, ssid, 33))
-            MultiByteToWideChar(CP_ACP, 0, b[i].ssid, -1, ssid, 33);
-        ssid[32] = 0;
+        BssName(b[i], ssid);
         bool want = again ? !wcscmp(ssid, again) : !BeaconLogged(ssid);
         if (!ssid[0] || !want)
             continue;
@@ -810,8 +945,26 @@ static DWORD WINAPI WifiThread(LPVOID)
     // the access point: ap = it is up; autoAp = raised by the hand-over (s_apAuto), not by hand (s_wantAp)
     bool ap = false, autoAp = false, handover = false;
     DWORD apTick = 0, assocTick = 0, staTick = GetTickCount(), giveUp = 0;
+    DWORD quietTick = 0;   // the periodic scan held off since then (RefreshQuiet), 0: scanning as usual
     int attempts = 0;
     while (!s_stop) {
+        if (s_restart) {
+            s_restart = false;
+            if (radioOn && s_wantOn) {
+                w.state = WIFI_OFF;
+                w.count = 0;
+                w.ssid[0] = 0;
+                w.ip[0] = 0;
+                wcscpy(w.msg, L"перезапуск Wi-Fi: 30 с…");
+                Publish(w);
+                RadioRestart();
+                w.msg[0] = 0;
+                haveAdapter = false;
+                connectTick = lastAuto = 0;
+                ap = autoAp = handover = false;
+                staTick = GetTickCount();
+            }
+        }
         if (s_wantOn != radioOn) {
             radioOn = s_wantOn;
             RadioPower(radioOn);
@@ -993,6 +1146,7 @@ static DWORD WINAPI WifiThread(LPVOID)
                 if (DkJoin(cs, cp, w.msg, 96)) {
                     _snwprintf(w.msg, 96, L"подключение к %s…", cs);
                     connectTick = GetTickCount();
+                    quietTick = QuietStart(quietTick);
                     wcscpy(w.ssid, cs);
                 }
             } else if (i == seen) {
@@ -1001,6 +1155,7 @@ static DWORD WINAPI WifiThread(LPVOID)
                 _snwprintf(w.msg, 96, L"подключение к %s…", cs);
                 Log(L"wifi: подключение к %s", cs);
                 connectTick = GetTickCount();
+                quietTick = QuietStart(quietTick);
                 wcscpy(w.ssid, cs);
             }
         }
@@ -1010,8 +1165,10 @@ static DWORD WINAPI WifiThread(LPVOID)
             for (int k = 0; k < w.count; k++)
                 if (w.nets[k].known && IsKnown(w.nets[k].ssid, pass)) {
                     lastAuto = GetTickCount();
-                    if (DkJoin(w.nets[k].ssid, pass, why, 96))
+                    if (DkJoin(w.nets[k].ssid, pass, why, 96)) {
                         connectTick = lastAuto;
+                        quietTick = QuietStart(quietTick);
+                    }
                     break;
                 }
         } else if (!connected && !conn && seen && !s_quiet && (!lastAuto || GetTickCount() - lastAuto > 60000)) {
@@ -1033,6 +1190,7 @@ static DWORD WINAPI WifiThread(LPVOID)
                 lastAuto = GetTickCount();
                 if (SetPrefs(e, add, na, NULL)) {
                     connectTick = lastAuto;
+                    quietTick = QuietStart(quietTick);
                     Log(L"wifi: известные сети отданы WZC: %d (auth %u, шифр %u / %u, 802.1X %d, флаги %X)", na,
                         add[0].authMode, add[0].privacy, add[0].wpaMCastCipher, add[0].enable8021x, add[0].ctlFlags);
                 }
@@ -1059,9 +1217,24 @@ static DWORD WINAPI WifiThread(LPVOID)
                 Log(L"wifi: адрес %S получен за %u с", w.ip, (unsigned)((now - linkTick) / 1000));
             }
             if (!connected && linkTick) {
-                Log(L"wifi: связь потеряна через %u с%s", (unsigned)((now - linkTick) / 1000),
-                    hadIp ? L"" : L", адреса не было");
+                // The driver's own verdict at the drop (WDK_DMW_GetStaConnFailReason: the client's mode, one byte
+                // - Ghidra 2026-11-06) and the key's state at the same moment: a failed 4-way handshake has no
+                // key, a scan that took the radio away has it
+                wchar_t why[48];
+                if (s_dkFail) {
+                    BYTE code = 0;
+                    LONG hr = s_dkFail(DK_STA, &code);
+                    _snwprintf(why, 48, L", причина %u (0x%08X)", (unsigned)code, (unsigned)hr);
+                } else
+                    why[0] = 0;
+                Log(L"wifi: связь потеряна через %u с%s (уровень %d дБм%s)", (unsigned)((now - linkTick) / 1000),
+                    hadIp ? L"" : L", адреса не было", w.rssi, why);
+                LogEncryption(&encLogged, now - linkTick);
                 linkTick = 0;
+            }
+            if (quietTick && (hadIp || now - quietTick > kQuietMs)) {
+                RefreshQuiet(false);   // the address is there (or the attempt is over): the periodic scan back
+                quietTick = 0;
             }
         }
         w.state = connected ? WIFI_CONNECTED : connectTick && GetTickCount() - connectTick < 30000 ?
@@ -1209,6 +1382,13 @@ void WifiApSetup(const wchar_t* ssid, const wchar_t* pass, bool autoOn)
 void WifiApManual(bool on)
 {
     s_wantAp = on;
+    if (s_thread)
+        SetEvent(s_wake);
+}
+
+void WifiRestart()
+{
+    s_restart = true;
     if (s_thread)
         SetEvent(s_wake);
 }

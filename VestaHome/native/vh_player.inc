@@ -51,7 +51,7 @@ static struct {
 // Only one of the music, the internet radio and the video plays: each one starting stops / pauses the others.
 static void NetStop();
 static void VidPauseForAudio();
-static void Redraw();
+static void RedrawFrom(const char* file, int line);
 static void RedrawArea(int l, int t, int r, int b);
 
 static DWORD    s_chan;                    // the stream playing (0 = none)

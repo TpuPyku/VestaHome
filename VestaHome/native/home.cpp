@@ -26,9 +26,12 @@
 #include "dialloc.h"    // its number as a local call; the modem ready to dial
 #include "vhttp.h"     // VestaCore's HTTP(S) client (HttpInit at the start)
 #include "vhap.h"      // VestaCore: the add-ons' protocol
+#include "drawwhy.h"   // who asks for the full frames (the load line)
+#define Redraw() RedrawFrom(__FILE__, __LINE__)
 #include "vnav.h"      // VestaCore: the route's next manoeuvre from OSMapsCE, its sign
 #include "vfont.h"     // VestaCore: the fonts
 #include "netcat.h"    // the internet radio's lines and catalogue
+#include "netcache.h"  // its lists kept in files
 #include "country.h"   // the country by GPS (the catalogue's "Рядом")
 #include "vjson.h"     // VestaCore: JSON (the catalogue's answers, in netcat.cpp)
 #include "video.h"
@@ -115,7 +118,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_SCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
-              A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
+              A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIRESTART, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
               A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_MIXTOGGLE,
               A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH };

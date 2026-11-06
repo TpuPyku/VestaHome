@@ -197,8 +197,48 @@ static void TestEnc()
     Check(!wcscmp(EncText(8), L"?") && !wcscmp(EncText(0xFFFFFFFF), L"?"), "out of range");
 }
 
+static void TestWpa2Psk()
+{
+    // the Galaxy A24's hotspot (sheet 24): RSN, CCMP/CCMP, PSK and SAE; before it SSID and the rates, after it WMM
+    static const BYTE kBoth[] = { 0, 1, 'x', 1, 1, 0x82, 48, 24, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 4, 2, 0,
+                                  0, 0x0F, 0xAC, 2, 0, 0x0F, 0xAC, 8, 0x8C, 0, 221, 2, 1, 2 };
+    Check(IeWpa2Psk(kBoth, sizeof(kBoth)), "PSK and SAE: WPA2 with a password");
+    static const BYTE kPsk[] = { 48, 20, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 2, 0, 0 };
+    Check(IeWpa2Psk(kPsk, sizeof(kPsk)), "PSK alone");
+    static const BYTE kSae[] = { 48, 20, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 8, 0, 0 };
+    Check(!IeWpa2Psk(kSae, sizeof(kSae)), "SAE alone: the chip cannot");
+    static const BYTE kEnt[] = { 48, 20, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 1, 0, 0 };
+    Check(!IeWpa2Psk(kEnt, sizeof(kEnt)), "802.1X: no password of this kind");
+    static const BYTE kTkip[] = { 48, 20, 1, 0, 0, 0x0F, 0xAC, 2, 1, 0, 0, 0x0F, 0xAC, 2, 1, 0, 0, 0x0F, 0xAC, 2, 0, 0 };
+    Check(!IeWpa2Psk(kTkip, sizeof(kTkip)), "TKIP only: another cipher");
+    static const BYTE kTwo[] = { 48, 24, 1, 0, 0, 0x0F, 0xAC, 2, 2, 0, 0, 0x0F, 0xAC, 2, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F,
+                                 0xAC, 2, 0, 0 };
+    Check(IeWpa2Psk(kTwo, sizeof(kTwo)), "CCMP second among the ciphers");
+    static const BYTE kOui[] = { 48, 20, 1, 0, 0, 0x50, 0xF2, 4, 1, 0, 0, 0x50, 0xF2, 4, 1, 0, 0, 0x50, 0xF2, 2, 0, 0 };
+    Check(!IeWpa2Psk(kOui, sizeof(kOui)), "another vendor's numbers are not RSN's");
+    static const BYTE kOpen[] = { 0, 1, 'x', 221, 2, 1, 2 };
+    Check(!IeWpa2Psk(kOpen, sizeof(kOpen)), "no RSN: open");
+    Check(!IeWpa2Psk(kOpen, 0) && !IeWpa2Psk(NULL, 0), "nothing at all");
+    for (int n = 0; n < (int)sizeof(kPsk) - 2; n++)
+        Check(!IeWpa2Psk(kPsk, n), "cut anywhere: no reading past the end");
+    static const BYTE kBig[] = { 48, 20, 1, 0, 0, 0x0F, 0xAC, 4, 200, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 2, 0, 0 };
+    Check(!IeWpa2Psk(kBig, sizeof(kBig)), "a count past the element's end");
+    static const BYTE kAfterLong[] = { 221, 8, 0, 0x50, 0xF2, 1, 2, 3, 4, 5, 48, 20, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F,
+                                       0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 2, 0, 0 };
+    Check(IeWpa2Psk(kAfterLong, sizeof(kAfterLong)), "another long element before RSN: passed over");
+    static const BYTE kNoCaps[] = { 48, 18, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 2 };
+    Check(IeWpa2Psk(kNoCaps, sizeof(kNoCaps)), "no capabilities: the lists end exactly at the element's end");
+    static const BYTE kNoAkm[] = { 48, 12, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 4 };
+    Check(!IeWpa2Psk(kNoAkm, sizeof(kNoAkm)), "no key managements: not PSK");
+    static const BYTE kOver[] = { 48, 14, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 4, 1, 0, 0, 0x0F, 0xAC, 2 };
+    Check(!IeWpa2Psk(kOver, sizeof(kOver)), "PSK just past the element's end is not its");
+    static const BYTE kShort[] = { 48, 4, 1, 0, 0, 0x0F };
+    Check(!IeWpa2Psk(kShort, sizeof(kShort)), "an RSN too short");
+}
+
 int main()
 {
+    TestWpa2Psk();
     TestIeText();
     TestBssList();
     TestAssoc();

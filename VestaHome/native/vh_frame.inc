@@ -119,10 +119,11 @@ static int   s_drawMaxScreen = -1;               // the slowest one's screen and
 static DWORD s_drawMaxText;
 static DWORD s_areaCount, s_areaMs, s_areaShown;  // the partial ones: drawn, their time, how many went out
 
-static void Redraw()
+static void RedrawFrom(const char* file, int line)
 {
     if (s_drag)
         return;
+    WhyCount(file, line);
     SYSTEMTIME t;
     GetLocalTime(&t);
     s_drawnMinute = t.wMinute;
@@ -318,13 +319,15 @@ static void LogLoad(HWND hwnd)
     }
     wchar_t thr[160];
     OwnThreadsLoad(thr, 160);
+    wchar_t why[96];
+    WhyTake(why, 96);
     DWORD n = s_drawCount ? s_drawCount : 1;
     VLog(L"нагрузка: ЦП %d%%; %s; кадров %u, в среднем %u мс (фон %u, экран %u, панели %u, вывод %u), макс %u мс "
-         L"(экран %d, измерений текста %u); частичных %u (%u на экран), в среднем %u мс; потоки VH: %s",
+         L"(экран %d, измерений текста %u); от: %s; частичных %u (%u на экран), в среднем %u мс; потоки VH: %s",
          s_task.cpu10 >= 0 ? (s_task.cpu10 + 5) / 10 : -1, top[0] ? top : L"процессы не видны", (unsigned)s_drawCount,
          (unsigned)(s_drawMs / n), (unsigned)(s_partMs[0] / n), (unsigned)(s_partMs[1] / n),
          (unsigned)(s_partMs[2] / n), (unsigned)(s_partMs[3] / n), (unsigned)s_drawMax, s_drawMaxScreen,
-         (unsigned)s_drawMaxText, (unsigned)s_areaCount, (unsigned)s_areaShown,
+         (unsigned)s_drawMaxText, why, (unsigned)s_areaCount, (unsigned)s_areaShown,
          (unsigned)(s_areaCount ? s_areaMs / s_areaCount : 0), thr);
     s_drawCount = s_drawMs = s_drawMax = s_areaCount = s_areaMs = s_areaShown = 0;
     memset(s_partMs, 0, sizeof(s_partMs));

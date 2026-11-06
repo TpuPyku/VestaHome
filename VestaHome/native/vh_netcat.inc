@@ -14,7 +14,12 @@ struct NcJob {
     NcCat*    cats;
     NcStation* st;
     int       err;            // NET_* or -1 for an HTTP status other than 200
+    bool      stale;          // no link: an older list from the cache
 };
+
+// How long a list kept (netcache.h) is taken without asking: the categories hardly change, the pages' order does.
+// With no link any age will do.
+enum { kNcFreshCats = 7 * 24 * 3600, kNcFreshPage = 24 * 3600 };
 
 static const char* const kNcHosts[2] = { "de1.api.radio-browser.info", "de2.api.radio-browser.info" };
 static int     s_ncHost;               // the server that answered last
@@ -32,10 +37,17 @@ static DWORD WINAPI NcThread(LPVOID p)
     NcJob* j = (NcJob*)p;
     unsigned char* body = NULL;
     int len = 0, status = 0;
-    j->err = NET_CONNECT;
+    wchar_t cache[MAX_PATH];
+    _snwprintf(cache, MAX_PATH, L"%sRadioCache", s_dir);
+    cache[MAX_PATH - 1] = 0;
+    bool kept = j->what != NCJ_CLICK &&
+                NcCacheRead(cache, j->path, j->what == NCJ_CATS ? kNcFreshCats : kNcFreshPage, &body, &len);
+    j->err = kept ? NET_OK : NET_CONNECT;
+    if (kept)
+        VLog(L"каталог радио: из кэша, %d байт", len);
     // this server, then the other; HTTPS, then plain HTTP (2026-11-04: a provider resets TLS to radio-browser now
     // and then, both servers at once - its plain HTTP answered; the catalogue is public, no secret goes there)
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < 4 && !kept; k++) {
         if (j->what != NCJ_CLICK && j->gen != s_ncGen)   // another asked meanwhile: no more tries on the link
             break;                                        // (05.11: two at once over BT, each up to 4 x 16 s)
         int h = (s_ncHost + k) % 2;
@@ -58,6 +70,11 @@ static DWORD WINAPI NcThread(LPVOID p)
         free(j);
         return 0;
     }
+    if (!body && NcCacheRead(cache, j->path, 0, &body, &len)) {
+        kept = j->stale = true;
+        j->err = NET_OK;
+        VLog(L"каталог радио: нет связи, из кэша, %d байт", len);
+    }
     if (body) {
         if (j->what == NCJ_CATS) {
             j->cats = (NcCat*)malloc(300 * sizeof(NcCat));
@@ -68,6 +85,8 @@ static DWORD WINAPI NcThread(LPVOID p)
             for (const char* it = JFirst((const char*)body); it; it = JNext(it))
                 j->raw++;
         }
+        if (!kept && (j->n > 0 || j->raw > 0))   // (a list, not an empty answer: 05.11, "200, 0 bytes")
+            NcCacheWrite(cache, j->path, body, len);
         free(body);
     }
     if (!PostMessage(s_wnd, WM_APP_NETCAT, 0, (LPARAM)j)) {
@@ -201,6 +220,8 @@ static void OnNetCat(NcJob* j)
             if (s_netWhich == NL_CAT && s_netNow.url[0])
                 s_netCur = NetFind(NL_CAT, s_netNow.url);
         }
+        if (j->stale)
+            wcscpy(s_ncMsg, L"Нет связи: сохранённый список");
         VLog(L"каталог радио: %d (%s)", j->n, j->err == NET_OK ? L"ok" : s_ncMsg);
     }
     free(j->cats);

@@ -90,7 +90,7 @@ static void BtQuiet()   // the phone's music paused (inaudible under another sou
 // The same change opens the volume window first (a screen over the one left: HU 2026-10-29 - the screen stayed), so
 // then the screen under it follows, the window closing onto the new one.
 static void BuildButtons();
-static void Redraw();
+static void RedrawFrom(const char* file, int line);
 
 static void FollowSource(int src)
 {

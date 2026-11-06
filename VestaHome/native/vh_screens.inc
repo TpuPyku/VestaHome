@@ -520,7 +520,7 @@ static void RadioScanTick()
 // 24 = FM1..FM3; УКВ: 8) - each tuned from the list (0, row, 0), then saved where it plays (1, n, 1), as a long press
 // does. A step waits for the MCU: the frequency, then the preset's new value (or a timeout - noted in the log).
 enum { TIMER_RFILL = 22 };
-static void Redraw();
+static void RedrawFrom(const char* file, int line);
 
 static void RadioFill()
 {
@@ -646,7 +646,7 @@ static int   s_btSoon;        // quick asks left after a key: each second (the p
 static int   s_btWant = -1;   // the play state a key asked for, shown till the phone tells it (3 s at most: the user
 static DWORD s_btWantTick;    // 2026-11-03 - play / pause turned 2-3 s late)
 static bool HomeMediaRect(RECT* rc);   // (vh_userwidgets.inc)
-static void Redraw();
+static void RedrawFrom(const char* file, int line);
 static void RedrawArea(int l, int t, int r, int b);
 
 static bool BtPlayingNow(const BtState& bt)   // playing, as the screen shows it: a key's wish till the phone agrees
@@ -885,7 +885,7 @@ static void ScrPhone(HDC dc)
 // ---- the phone book and the call log (PBAP through the proxy Bluetooth, btshm.h BtPb): pulled from the connected
 // phone when their screen opens (once per phone, "ОБНОВИТЬ" again), kept in memory only (never on the flash). A pull
 // the shell made itself (its book, when PBAP connects) is taken too.
-static void Redraw();
+static void RedrawFrom(const char* file, int line);
 static void Go(Screen s, bool push);
 static BtPb*      s_pbShm;
 static BtPbEntry* s_book;           // the phone book, s_bookN entries (-1: not pulled yet)
@@ -1797,6 +1797,9 @@ static void ScrSetWifi(HDC dc)
         T(dc, 466, 378, L"Фикс Xiaomi", 14, kMuted, 600);
         Toggle(dc, 572, 354, T_WIFI_AP_AUTO);
     }
+    if (w.state == WIFI_DISCONNECTED)   // (no link - the driver stuck: what a full power cut cures, sheet 24; the row's
+                                        // longer texts, with a link, would reach it)
+        Button(dc, 424, 70, 124, 44, L"Перезапустить", B_N, IC_NONE, 14, 0, A_WIFIRESTART);
     if (WifiSavedCount()) {   // all the remembered ones, in sight or not: to see and to forget (the user 2026-10-26)
         _snwprintf(s, 120, L"Сохранённые (%d)", WifiSavedCount());
         Button(dc, 652, 352, 116, 40, s, B_N, IC_NONE, 13, 0, A_SCREEN, S_WIFI_SAVED);

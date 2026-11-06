@@ -811,6 +811,7 @@ static void DoAction(const Btn& b)
         }
         break;
     case A_WIFISCAN: WifiScan(); break;
+    case A_WIFIRESTART: WifiRestart(); break;
     case A_OBDSCAN:   // the stack's search; its devices are read from the proxy's events from now on
         s_obdFoundN = 0;
         s_obdEvSeen = BtShmGet() ? BtShmGet()->evSeq : -1;

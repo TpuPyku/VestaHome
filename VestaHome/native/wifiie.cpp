@@ -213,6 +213,37 @@ bool AssocIes(const BYTE* data, int len, const BYTE** req, int* reqLen, const BY
     return true;
 }
 
+// A list of RSN's suites (count, then 4 bytes each): is the one with this number there; moves past it. False: cut.
+static bool RsnHas(const BYTE** p, const BYTE* end, BYTE number, bool* has)
+{
+    if (end - *p < 2)
+        return false;
+    int n = Le16(*p);
+    *p += 2;
+    if (n > (end - *p) / 4)
+        return false;
+    *has = false;
+    for (int i = 0; i < n; i++, *p += 4)
+        if (!memcmp(*p, kRsnOui, 3) && (*p)[3] == number)
+            *has = true;
+    return true;
+}
+
+bool IeWpa2Psk(const BYTE* ies, int len)
+{
+    enum { kCcmp = 4, kPsk = 2, kRsnHead = 6 };   // (the head: the version and the group's cipher)
+    const BYTE* end = ies + len;
+    for (const BYTE* e = ies; end - e >= 2 && e[1] <= end - e - 2; e += 2 + e[1]) {
+        if (e[0] != IE_RSN || e[1] < kRsnHead)
+            continue;
+        const BYTE* p = e + 2 + kRsnHead;
+        const BYTE* rsnEnd = e + 2 + e[1];
+        bool ccmp, psk;
+        return RsnHas(&p, rsnEnd, kCcmp, &ccmp) && RsnHas(&p, rsnEnd, kPsk, &psk) && ccmp && psk;
+    }
+    return false;
+}
+
 const wchar_t* EncText(DWORD status)
 {
     static const wchar_t* kText[] = { L"WEP, ключ есть", L"без шифрования", L"WEP, ключа нет", L"не поддерживается",
