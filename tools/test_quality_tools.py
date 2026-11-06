@@ -208,6 +208,19 @@ class Tools(unittest.TestCase):
         self.assertLess(time.time() - t, 15)
         self.assertEqual(mutator.run('"%s" -c "pass"' % sys.executable, 10), 0)
 
+    def test_mutator_leaves_indented_logs_alone(self):
+        lines = ['    Log(L"try %d", i + 1);', '    printf("%d", i + 1);', '    x = i + 1;']
+        self.assertEqual(sorted({i for i, _, _ in mutator.mutants(lines, None)}), [2])
+
+    def test_mutator_builds_without_incremental_links(self):
+        """VS2005's /DEBUG links incrementally and takes an .obj of the same second for unchanged (2026-11-06: 4 of 12
+        quick rebuilds ran the mutant before): every command gets the linker's option, whatever LINK held."""
+        check = "import os, sys; sys.exit(os.environ.get('LINK') != '/X /INCREMENTAL:NO')"
+        os.environ['LINK'] = '/X'
+        self.addCleanup(os.environ.pop, 'LINK', None)
+        self.assertEqual(mutator.run('"%s" -c "%s"' % (sys.executable, check), 10), 0)
+        self.assertEqual(os.environ['LINK'], '/X')
+
     def test_mutator_restores_a_left_original_first(self):
         path = self.write('f.py', 'broken by a crash\n')
         with open(path + '.mutator-orig', 'w', encoding='utf-8', newline='\n') as f:

@@ -58,7 +58,7 @@ def mutants(lines, wanted):
     """(line index, new line, what) for each mutation of the wanted lines (1-based numbers)."""
     text = in_text(lines)
     for i, line in enumerate(lines):
-        if (wanted is not None and i + 1 not in wanted) or SKIP.match(line) or i in text:
+        if (wanted is not None and i + 1 not in wanted) or SKIP.search(line) or i in text:
             continue
         m_line = masked(line)
         for pat, rep in OPS:
@@ -69,9 +69,12 @@ def mutants(lines, wanted):
 
 def run(cmd, timeout):
     """The command's exit code, or 'timeout': then its whole tree stopped (the shell's children too - killing only
-    the shell left a looping test running, its pipes open, for hours; 2026-10-28). Its output is not wanted."""
+    the shell left a looping test running, its pipes open, for hours; 2026-10-28). Its output is not wanted.
+    No incremental links: VS2005's takes an .obj of the same second for unchanged, the program stays the last mutant's
+    (2026-11-06: 4 of 12 quick rebuilds)."""
+    env = dict(os.environ, LINK=(os.environ.get('LINK', '') + ' /INCREMENTAL:NO').strip())
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=os.name != 'nt')
+                         start_new_session=os.name != 'nt', env=env)
     try:
         return p.wait(timeout)
     except subprocess.TimeoutExpired:
