@@ -416,7 +416,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         CfgToControls();
         s_bootTick = GetTickCount();
         UserWidgetsScan();   // (after the ini: their places in the order)
-        PluginsStart();      // the add-ons (Plugins\*): they say hello when ready
+        PluginsStart();      // the add-ons (VHContent\VHPlugins): they say hello when ready
         ResumeScreen();
         WaveDevsLog();
         {
@@ -830,6 +830,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (m != s_mediaMask) {
                 s_mediaMask = m;
                 UserWidgetsScan();   // the card came or went: its widgets
+                PluginsStart();      // (and its add-ons: the ones running are left alone)
                 if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
                     Redraw();
             }

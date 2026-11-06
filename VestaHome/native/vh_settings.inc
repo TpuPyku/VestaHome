@@ -14,7 +14,7 @@ enum { WG_MEDIA, WG_SPEED, WG_RADIO, WG_WEATHER, WG_APPS, WG_TRIP, WG_CLIMATE, W
 static const wchar_t* kWgKey[WG_COUNT] = { L"media", L"speed", L"radio", L"weather", L"apps", L"trip", L"climate",
                                            L"date", L"phone", L"car", L"navi", L"media2" };
 
-// The user's widgets (VestaWidgets\*.ini on the SD card, UserWidgetsScan): ids after the built-in ones, keys
+// The user's widgets (VHContent\VHWidgets\*.ini, UserWidgetsScan): ids after the built-in ones, keys
 // "u.<file name>". A script (MortScript) writes the data file, VestaHome only reads and draws it.
 enum { kWgUser = 8, kWgMax = WG_COUNT + kWgUser };
 struct UserWg {

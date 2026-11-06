@@ -39,7 +39,7 @@ def main():
         entries.append(('bass/' + name, os.path.join(BASS, name)))
     widgets = os.path.join(VH, '..', 'VestaWidgets')   # the example: the traffic score and the guide
     for name in ('probki.ini', 'README.txt'):
-        entries.append(('sd/VestaWidgets/' + name, os.path.join(widgets, name)))
+        entries.append(('vhc/VHWidgets/' + name, os.path.join(widgets, name)))
     out = bytearray(struct.pack('<I', len(entries)))
     for name, path in entries:
         data = open(path, 'rb').read()

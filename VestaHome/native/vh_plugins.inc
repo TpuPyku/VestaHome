@@ -1,5 +1,5 @@
 ﻿// vh_plugins.inc - part of home.cpp (included there, in order): add-ons (docs/plugin-api.md, API 1). An add-on is
-// a program of its own: VestaHome starts the ones in Plugins\<Name>\<Name>.exe (not switched off - the file
+// a program of its own: VestaHome starts the ones in VHContent\VHPlugins\<Name>\<Name>.exe (not switched off - the file
 // "disabled" in its folder), it says hello by WM_COPYDATA ("VHAP": one command a message, "verb\tkey=value..."
 // in UTF-16) and declares widgets and screens; VestaHome draws them in its own style and sends the taps back.
 // VestaHome stays free: whatever an add-on does lives in its own program (the user's decision, 2026-10-26).
@@ -760,23 +760,24 @@ static void PlugScreenWatch()
         PlugSend(s_plug[p], L"screen.open\tid=%s", s_plug[p].sc[s].id);
 }
 
-// The add-ons' folders: Plugins\<Name>\<Name>.exe next to VestaHome; the ones not switched off are started.
-static void PluginsStart()
+// The add-ons of one folder: <Name>\<Name>.exe; the ones not switched off are started, the ones known already passed over.
+static void PluginsIn(const wchar_t* dir)
 {
     wchar_t pat[MAX_PATH];
-    _snwprintf(pat, MAX_PATH, L"%sPlugins\\*", s_dir);
+    _snwprintf(pat, MAX_PATH, L"%s*", dir);
     WIN32_FIND_DATA fd;
     HANDLE f = FindFirstFile(pat, &fd);
     if (f == INVALID_HANDLE_VALUE)
         return;
     do {
-        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.' || s_plugN == kPlugMax)
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.' || s_plugN == kPlugMax ||
+            PlugById(fd.cFileName))
             continue;
         Plugin& p = s_plug[s_plugN];
         memset(&p, 0, sizeof(p));
         wcsncpy(p.id, fd.cFileName, 23);
         wcscpy(p.name, p.id);
-        _snwprintf(p.dir, MAX_PATH, L"%sPlugins\\%s\\", s_dir, fd.cFileName);
+        _snwprintf(p.dir, MAX_PATH, L"%s%s\\", dir, fd.cFileName);
         wchar_t exe[MAX_PATH], off[MAX_PATH];
         _snwprintf(exe, MAX_PATH, L"%s%s.exe", p.dir, fd.cFileName);
         if (GetFileAttributes(exe) == 0xFFFFFFFF)
@@ -802,6 +803,15 @@ static void PluginsStart()
         VLog(L"дополнение: %s %s", exe, ok ? L"запущено" : L"не запустилось");
     } while (FindNextFile(f, &fd));
     FindClose(f);
+}
+
+// VHContent\VHPlugins on the partition, then on the SD card. Again when a card comes (it can be late for VestaHome's start).
+static void PluginsStart()
+{
+    wchar_t dirs[kContentDirs][MAX_PATH];
+    int n = VhContentDirs(L"VHPlugins", dirs);
+    for (int i = 0; i < n; i++)
+        PluginsIn(dirs[i]);
 }
 
 static void PluginsQuit()   // VestaHome closes: the add-ons too
@@ -842,7 +852,7 @@ static void ScrSetPlugins(HDC dc)
 {
     Settings(dc, S_SET_PLUGINS);
     if (!s_plugN) {
-        SetRow(dc, 64, L"Дополнений нет", L"программы дополнений — в папке VestaHome\\Plugins", true);
+        SetRow(dc, 64, L"Дополнений нет", L"программы дополнений — в VHContent\\VHPlugins на \\ResidentFlash или SD", true);
         return;
     }
     for (int i = 0; i < s_plugN && i < 6; i++) {

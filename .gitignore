@@ -17,7 +17,8 @@ VestaHome/VestaHome/*.nmea
 VestaHome/VestaHome/RadioCache/
 VestaHome/VestaHome/speedcam/*
 # the user widgets next to the PC build (a test copy of VestaWidgets/ with its fetched data)
-VestaHome/VestaHome/VestaWidgets/
+VestaHome/VestaHome/VHContent/
+VestaHome/VestaHome/SDMemory/
 # third-party BASS (un4seen) next to the PC build: x86 DLLs for VestaHomePC.exe, not ours;
 # the HU's ARM set comes from MAIN/SinglePlayer through make_tests.py
 VestaHome/VestaHome/bass/
@@ -78,7 +79,6 @@ docs/shots/
 VestaHome/VestaHome/Temp/
 
 # add-ons put next to the PC build for testing (VestaCore/plugins/*)
-VestaHome/VestaHome/Plugins/
 
 # the head unit check sheets: working papers, kept locally only (the user 2026-10-31)
 docs/checklist-*

@@ -7,15 +7,14 @@
 | Папка | Куда на ГУ | Что это |
 |---|---|---|
 | `SDCard\` | карта памяти: `\SDMemory` (внешняя), для OSMapsCE можно и `\SDMMC` | всё для проверок |
-| `ResidentFlash\` | `\ResidentFlash` — встроенный раздел | только пример дополнения: путь задан программой |
+| `ResidentFlash\` | `\ResidentFlash` — встроенный раздел | `VHContent`: виджеты (`VHWidgets`) и дополнения (`VHPlugins`) VestaHome |
 
 Обычная папка программы копируется **целиком** (`SDCard\OSMapsCE\` → `\SDMemory\OSMapsCE\`).
 
 - `VestaHomeInstall` — установщик VestaHome + proxy MCU и Bluetooth + пустышки вместо оболочки (кнопка 3);
 - `LaunchInstall` — установщик VestaLaunch, сам кладёт его в `\SDMMC\VestaLaunch`;
 - `OSMapsCE` — программа; карты ставятся из неё или загрузчиком для ПК;
-- `TestMedia` — короткие аудио, видео и фото для плееров и «Диагностика → Звук и видео»;
-- `VestaWidgets` — примеры своих виджетов, работают только из `\SDMemory\VestaWidgets`.
+- `TestMedia` — короткие аудио, видео и фото для плееров и «Диагностика → Звук и видео».
 
 Папки с файлами для **корня внешней карты** — их **содержимое** кладётся в `\SDMemory\`:
 

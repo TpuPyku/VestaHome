@@ -1130,6 +1130,8 @@ static const wchar_t* kVhDir   = L"\\ResidentFlash\\VestaHome";
 static const wchar_t* kVhOld   = L"\\SDMMC\\VestaHome";   // where it was until 2026-10-27
 static const wchar_t* kVhExe   = L"VestaHome.exe";
 static const wchar_t* kVhClass = L"VestaHome_Wnd";
+static const char kVhcPrefix[] = "vhc/";   // a payload entry for \\ResidentFlash\\VHContent\\ (examples: step 4)
+enum { kVhcLen = 4 };
 static const char*    kVhKeep  = "radio.txt";   // the user's once it exists
 
 struct VhPayload { const unsigned char* base; DWORD size; };
@@ -1354,7 +1356,7 @@ static int DoVhInstall()
     unsigned long i;
     for (i = 0; i < n && !fail; i++) {
         if (!VhEntry(pl, i, name, MAX_PATH, &data, &len)) { fail = 1; break; }
-        if (!_strnicmp(name, "sd/", 3)) continue;   // for the SD card: step 4
+        if (!_strnicmp(name, kVhcPrefix, kVhcLen)) continue;   // VHContent: step 4
         VhPath(p, name, L"");
         if (!_stricmp(name, kVhKeep) && FileExists(p)) { keep = 1; continue; }
         VhDirsFor(name);
@@ -1377,7 +1379,7 @@ static int DoVhInstall()
     unsigned long done = 0;
     for (i = 0; i < n && !fail; i++, done = i) {
         VhEntry(pl, i, name, MAX_PATH, &data, &len);
-        if (!_strnicmp(name, "sd/", 3)) continue;
+        if (!_strnicmp(name, kVhcPrefix, kVhcLen)) continue;
         VhPath(p, name, L"");
         VhPath(pn, name, L".new");
         VhPath(pb, name, L".bak");
@@ -1402,50 +1404,46 @@ static int DoVhInstall()
 
     // 3. the old copies go
     for (i = 0; i < n; i++)
-        if (VhEntry(pl, i, name, MAX_PATH, &data, &len) && _strnicmp(name, "sd/", 3)) {
+        if (VhEntry(pl, i, name, MAX_PATH, &data, &len) && _strnicmp(name, kVhcPrefix, kVhcLen)) {
             VhPath(pb, name, L".bak");
             DeleteFile(pb);
         }
 
-    // 4. the examples for the SD card ("sd/..." -> \SDMemory\..., a user widget): only the files not there yet -
-    //    the user's edits stay; no card - none (VestaHome reads its widgets from the card only: they write often)
-    int sdNew = 0, sdKept = 0, sdAll = 0;
+    // 4. the examples for VHContent ("vhc/..." -> \ResidentFlash\VHContent\..., a user widget): only the files not there
+    //    yet - the user's edits stay
+    int exNew = 0, exKept = 0, exAll = 0;
     for (i = 0; i < n; i++) {
-        if (!VhEntry(pl, i, name, MAX_PATH, &data, &len) || _strnicmp(name, "sd/", 3))
+        if (!VhEntry(pl, i, name, MAX_PATH, &data, &len) || _strnicmp(name, kVhcPrefix, kVhcLen))
             continue;
-        sdAll++;
-        if (!FileExists(L"\\SDMemory"))
-            continue;
+        exAll++;
         wchar_t rel[MAX_PATH], t[MAX_PATH], d[MAX_PATH];
-        MultiByteToWideChar(CP_UTF8, 0, name + 3, -1, rel, MAX_PATH);
+        MultiByteToWideChar(CP_UTF8, 0, name + kVhcLen, -1, rel, MAX_PATH);
         for (wchar_t* c = rel; *c; c++)
             if (*c == L'/')
                 *c = L'\\';
-        _snwprintf(t, MAX_PATH, L"\\SDMemory\\%s", rel);
+        _snwprintf(t, MAX_PATH, L"\\ResidentFlash\\VHContent\\%s", rel);
         t[MAX_PATH - 1] = 0;
         if (FileExists(t)) {
-            sdKept++;
+            exKept++;
             continue;
         }
         wcscpy(d, t);
-        for (wchar_t* c = d + 10; *c; c++)   // its folders (after "\SDMemory\")
+        for (wchar_t* c = d + 15; *c; c++)   // its folders (after "\ResidentFlash\")
             if (*c == L'\\') {
                 *c = 0;
                 EnsureDir(d);
                 *c = L'\\';
             }
         if (WriteBytes(t, data, len))
-            sdNew++;
+            exNew++;
     }
-    wchar_t sdLine[160] = L"";
-    if (sdAll && FileExists(L"\\SDMemory"))
-        _snwprintf(sdLine, 160, L"Пример своего виджета (пробки) — \\SDMemory\\VestaWidgets: новых файлов %d, "
-                   L"ваших оставлено %d.\n", sdNew, sdKept);
-    else if (sdAll)
-        wcscpy(sdLine, L"Пример своего виджета не поставлен: нет SD-карты.\n");
+    wchar_t exLine[160] = L"";
+    if (exAll)
+        _snwprintf(exLine, 160, L"Пример своего виджета (пробки) — \\ResidentFlash\\VHContent\\VHWidgets: новых файлов %d, "
+                   L"ваших оставлено %d.\n", exNew, exKept);
     {
         wchar_t m[200];
-        _snwprintf(m, 200, L"vh: sd examples: %d new, %d kept, %d in the payload", sdNew, sdKept, sdAll);
+        _snwprintf(m, 200, L"vh: content examples: %d new, %d kept, %d in the payload", exNew, exKept, exAll);
         LogMsg(m);
     }
     bool oldGone = false;
@@ -1455,7 +1453,7 @@ static int DoVhInstall()
     }
     _snwprintf(g_status, 4096, L"VestaHome установлен в %s: %u файлов.\n%s%s%s"
                L"Настройки (VestaHome.ini, пароли Wi-Fi), apps.txt и база камер не тронуты.",
-               kVhDir, (unsigned)(n - sdAll - (keep ? 1 : 0)), keep ? L"Свой radio.txt оставлен.\n" : L"", sdLine,
+               kVhDir, (unsigned)(n - exAll - (keep ? 1 : 0)), keep ? L"Свой radio.txt оставлен.\n" : L"", exLine,
                moved ? (oldGone ? L"Перенесён с \\SDMMC\\VestaHome вместе с настройками, старая папка удалена.\n"
                                 : L"Перенесён с \\SDMMC\\VestaHome; старую папку удалить не удалось.\n") : L"");
     LogMsg(g_status);

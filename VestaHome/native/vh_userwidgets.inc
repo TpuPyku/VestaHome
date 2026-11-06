@@ -1,6 +1,6 @@
 ﻿// vh_userwidgets.inc - part of home.cpp (included there, in order): the user's widgets and their HTTPS.
 
-// ---- the user's widgets: VestaWidgets\*.ini on the SD card (the PC: next to the exe), one a widget:
+// ---- the user's widgets: VHContent\VHWidgets\*.ini on the built-in partition (the PC: next to the exe), one a widget:
 // (and the HTTPS that VestaHome lends them: url= every= save=, value.from= ... - see UserWgFetch)
 //     title=FUEL  icon=car  wide=0  data=fuel.txt  refresh=10  start=fuel.mscr  tap=fuel.mscr
 // data (default <name>.txt beside the ini) is written by a script (MortScript); VestaHome reads it every refresh
@@ -16,23 +16,41 @@ static const struct { const wchar_t* name; Icon ic; } kIconNames[] = {
     { L"warn", IC_WARN }, { L"eye", IC_EYE }, { L"power", IC_POWER }, { L"folder", IC_FOLDER },
     { L"tasks", IC_TASKS }, { L"star", IC_STAR }, { L"lock", IC_LOCK }, { L"file", IC_FILE } };
 
-// The widgets' folders (2026-10-22, the user: widgets without the card too): the SD card's, then the built-in
-// card's (a name in both - the SD card's). UserWgDir: the first there is (the text editor's start).
-static int UserWgDirs(wchar_t (*dirs)[MAX_PATH])
+// VestaHome's content, widgets and add-ons (the user 2026-11-06): on the built-in partition, ready as VestaHome starts,
+// no waiting for a card; or on the SD card, for what writes often (flash wears). Outside VestaHome's folder: an update
+// leaves it alone. The PC: the same two next to the exe.
+enum { kContentDirs = 2 };
+
+static int VhContentDirs(const wchar_t* sub, wchar_t (*dirs)[MAX_PATH])
 {
 #ifdef UNDER_CE
-    wcscpy(dirs[0], L"\\SDMemory\\VestaWidgets\\");
-    wcscpy(dirs[1], L"\\SDMMC\\VestaWidgets\\");
-    return 2;
+    _snwprintf(dirs[0], MAX_PATH, L"\\ResidentFlash\\VHContent\\%s\\", sub);
+    _snwprintf(dirs[1], MAX_PATH, L"\\SDMemory\\VHContent\\%s\\", sub);
 #else
-    _snwprintf(dirs[0], MAX_PATH, L"%sVestaWidgets\\", s_dir);
-    return 1;
+    _snwprintf(dirs[0], MAX_PATH, L"%sVHContent\\%s\\", s_dir, sub);
+    _snwprintf(dirs[1], MAX_PATH, L"%sSDMemory\\VHContent\\%s\\", s_dir, sub);
 #endif
+    dirs[0][MAX_PATH - 1] = dirs[1][MAX_PATH - 1] = 0;
+    return kContentDirs;
+}
+
+enum { kWgDirs = kContentDirs + 2 };
+
+// The widgets' folders: VHWidgets, then the old ones on the cards, still read so that widgets made there stay (a name
+// in several - the first one's). UserWgDir: the first there is (the text editor's start).
+static int UserWgDirs(wchar_t (*dirs)[MAX_PATH])
+{
+    int n = VhContentDirs(L"VHWidgets", dirs);
+#ifdef UNDER_CE
+    wcscpy(dirs[n++], L"\\SDMemory\\VestaWidgets\\");
+    wcscpy(dirs[n++], L"\\SDMMC\\VestaWidgets\\");
+#endif
+    return n;
 }
 
 static void UserWgDir(wchar_t* dir)
 {
-    wchar_t d[2][MAX_PATH];
+    wchar_t d[kWgDirs][MAX_PATH];
     int n = UserWgDirs(d);
     wcscpy(dir, d[0]);
     for (int i = 0; i < n; i++)
@@ -551,13 +569,13 @@ static void PlugWidgetsAppend();   // (vh_plugins.inc: the add-ons' widgets join
 
 static void UserWidgetsScan()
 {
-    wchar_t dirs[2][MAX_PATH], pat[MAX_PATH];
+    wchar_t dirs[kWgDirs][MAX_PATH], pat[MAX_PATH];
     int nd = UserWgDirs(dirs);
     if (!s_uwThread)
         InitializeCriticalSection(&s_uwCs);
     EnterCriticalSection(&s_uwCs);
     s_uwCount = 0;
-    for (int d = 0; d < nd && s_uwCount < kWgUser; d++) {   // the SD card's first: a name in both - its
+    for (int d = 0; d < nd && s_uwCount < kWgUser; d++) {   // a name in several - the first one's
         _snwprintf(pat, MAX_PATH, L"%s*.ini", dirs[d]);
         WIN32_FIND_DATA fd;
         HANDLE f = FindFirstFile(pat, &fd);
@@ -583,7 +601,7 @@ static void UserWidgetsScan()
     if (net && !s_uwThread)
         s_uwThread = CreateThread(NULL, 0, UserWgThread, NULL, 0, NULL);
     if (s_uwCount)
-        VLog(L"виджеты пользователя: %d (%s, %s)", s_uwCount, dirs[0], nd > 1 ? dirs[1] : L"-");
+        VLog(L"виджеты пользователя: %d (%s, %s)", s_uwCount, dirs[0], dirs[1]);
     HomeWidgetsLoad(s_cfg.homeRaw);   // the hidden ones known from here
     for (int i = 0; i < s_uwCount; i++)
         if (WgShown(WG_COUNT + i)) {
@@ -793,7 +811,7 @@ static void ScrSetHome(HDC dc)
                id);   // hidden: the eye crossed out (the user 2026-10-24)
     }
     T(dc, 96, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
-                   L"VestaWidgets\\*.ini на SD или \\SDMMC", 13, kDim, 400, AL_START, 490);   // (to the page buttons)
+                   L"VHContent\\VHWidgets\\*.ini на \\ResidentFlash или SD", 13, kDim, 400, AL_START, 490);   // (to the page buttons)
     if (pages > 1) {
         wchar_t pg[16];
         _snwprintf(pg, 16, L"%d / %d", s_setHomePage + 1, pages);

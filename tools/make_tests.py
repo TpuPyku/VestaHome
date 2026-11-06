@@ -2,7 +2,7 @@
 """Lay out <root>\\Tests: the files to try on the head unit.
 
     Tests\\SDCard\\<App>\\      ->  a memory card: \\SDMemory\\<App>\\ (the external one) by default
-    Tests\\ResidentFlash\\...  ->  \\ResidentFlash\\... (the built-in partition: only paths fixed by a program)
+    Tests\\ResidentFlash\\...  ->  \\ResidentFlash\\... (the built-in partition: VHContent, VestaHome's widgets and add-ons)
 
 The repositories stay as they are: each build.bat still writes into its own output folder, and this script copies
 the CE exe and what it needs from there. PC builds, *.ini (API keys), logs, caches and test tracks are not copied.
@@ -32,9 +32,9 @@ PLAN = (
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
         ('TestMedia',)),
-    # the user widgets' examples and their guide (VestaHome reads \SDMemory\VestaWidgets\*.ini)
-    (os.path.join(V, 'VestaHome'), r'SDCard',
-        ('VestaWidgets',)),
+    # the user widgets' examples and their guide (VestaHome reads \ResidentFlash\VHContent\VHWidgets\*.ini)
+    (os.path.join(V, 'VestaHome', 'VestaWidgets'), r'ResidentFlash\VHContent\VHWidgets',
+        ('README.txt', 'demo.ini', 'demo.txt', 'navi.ini', 'navi.mscr', 'probki.ini')),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDCard\LaunchInstall',
         ('LaunchInstall.exe',)),
     # the installers through the stock shell's "Navigation" (it runs exactly \SDMemory\UPDATE\Updater.exe): the
@@ -48,8 +48,8 @@ PLAN = (
         ('VestaHomeInstall.exe',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDCard\Updater\UPDATE',
         ('LaunchInstall.exe',)),
-    # the sample add-on (VestaCore/plugins/sample): VestaHome starts Plugins\<Name>\<Name>.exe next to itself
-    (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'ResidentFlash\VestaHome\Plugins\Sample',
+    # the sample add-on (VestaCore/plugins/sample): VestaHome starts VHContent\VHPlugins\<Name>\<Name>.exe
+    (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'ResidentFlash\VHContent\VHPlugins\Sample',
         ('Sample.exe',)),
 )
 
@@ -67,7 +67,7 @@ def copy(src, dst):
 # places of Tests no longer made: removed, so the folder has no stale copies (the user 2026-11-06: one SDCard for the
 # two cards; gone with them: GpsGate 2.0 - an old GPS test, MAIN has it; YaMapsCE - finished, its archive in build\;
 # VestaLaunch - inside LaunchInstall)
-RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice')
+RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets', r'ResidentFlash\VestaHome')
 
 
 def main():
