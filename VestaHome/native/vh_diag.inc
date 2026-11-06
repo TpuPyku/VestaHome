@@ -310,22 +310,35 @@ static void Under(HDC dc, int alpha)
     Shade(0, 56, 800, 424, alpha, alpha);
 }
 
+// A window as a sheet (design 0.7): a card over the bottom bar, the whole width, a soft shadow above and below - the
+// driver's finger is near the bottom of the screen. The main action is on the right. Returns the sheet's top.
+enum { kSheetX = 16, kSheetW = 768, kSheetBottom = 408, kSheetShadow = 14, kSheetDark = 120,
+       kSheetInX = 40, kSheetInW = 720, kSheetBtnY = 318, kSheetBtnH = 66, kSheetGap = 16 };
+
+static int Sheet(HDC dc, int h)
+{
+    int top = kSheetBottom - h;
+    Shade(kSheetX, top - kSheetShadow, kSheetW, kSheetShadow, 0, kSheetDark);
+    Shade(kSheetX, kSheetBottom, kSheetW, kSheetShadow, kSheetDark, 0);
+    Panel(dc, kSheetX, top, kSheetW, h, 22);
+    return top;
+}
+
 // The power button of "About the system": exit or minimize VestaHome; both bring up Explorer. The stock shell
 // and started programs keep running.
 static void ScrExit(HDC dc)
 {
     Under(dc, 184);
-    Panel(dc, 110, 110, 580, 260, 16);
-    Ico(dc, IC_POWER, 142, 140, 48, kText);
-    T(dc, 206, 176, L"VESTAHOME", 24, kText, 700, AL_START, 440);
-    T(dc, 142, 220, L"Свернуть — останется открытым позади, появится рабочий стол.", 16, kMuted, 400, AL_START,
-      520);
-    T(dc, 142, 242, L"Штатная — закроется, на экране штатная оболочка.", 16, kMuted, 400, AL_START, 520);
-    T(dc, 142, 264, L"Выход — закроется, появится рабочий стол.", 16, kMuted, 400, AL_START, 520);
-    Button(dc, 134, 284, 124, 60, L"Отмена", B_N, IC_NONE, 16, 0, A_BACK);
-    Button(dc, 266, 284, 124, 60, L"Свернуть", B_N, IC_NONE, 16, 0, A_MINIMIZE);
-    Button(dc, 398, 284, 124, 60, L"Штатная", B_N, IC_NONE, 16, 0, A_SHELL);
-    Button(dc, 530, 284, 136, 60, L"Выход", B_PRI, IC_POWER, 16, 24, A_EXIT);
+    int top = Sheet(dc, 208);
+    Ico(dc, IC_POWER, kSheetInX, top + 14, 48, kText);
+    T(dc, kSheetInX + 60, top + 48, L"VestaHome", 24, kText, 700, AL_START, 600);
+    T(dc, kSheetInX, top + 88, L"Свернуть — останется позади.  Штатная — вернётся штатная оболочка.  Выход — закроется.",
+      15, kMuted, 400, AL_START, kSheetInW);
+    int w = (kSheetInW - 3 * kSheetGap) / 4;
+    Button(dc, kSheetInX, kSheetBtnY, w, kSheetBtnH, L"Отмена", B_N, IC_NONE, 16, 0, A_BACK);
+    Button(dc, kSheetInX + w + kSheetGap, kSheetBtnY, w, kSheetBtnH, L"Свернуть", B_N, IC_NONE, 16, 0, A_MINIMIZE);
+    Button(dc, kSheetInX + 2 * (w + kSheetGap), kSheetBtnY, w, kSheetBtnH, L"Штатная", B_N, IC_NONE, 16, 0, A_SHELL);
+    Button(dc, kSheetInX + 3 * (w + kSheetGap), kSheetBtnY, w, kSheetBtnH, L"Выход", B_PRI, IC_NONE, 16, 0, A_EXIT);
 }
 
 // The knob held 5 s (MCU 0x1102 18): the MCU reboots the unit 5 s later. The stock shell shows its own window
@@ -335,14 +348,14 @@ static DWORD s_rebootTick;
 static void ScrReboot(HDC dc)
 {
     Under(dc, 184);
-    Panel(dc, 150, 130, 500, 220, 16);
-    Ico(dc, IC_POWER, 182, 162, 48, kOrange);
+    int top = Sheet(dc, 208);
+    Ico(dc, IC_POWER, kSheetInX, top + 14, 48, kOrange);
     int left = 5 - (int)((GetTickCount() - s_rebootTick) / 1000);
     wchar_t s[48];
-    _snwprintf(s, 48, L"ПЕРЕЗАГРУЗКА ЧЕРЕЗ %d С", left < 0 ? 0 : left);
-    T(dc, 246, 198, s, 24, kText, 700, AL_START, 380);
-    T(dc, 182, 250, L"Крутилка громкости удержана. Отменить?", 17, kMuted, 400, AL_START, 440);
-    Button(dc, 250, 274, 300, 60, L"Отмена", B_PRI, IC_NONE, 18, 0, A_REBOOTNO);
+    _snwprintf(s, 48, L"Перезагрузка через %d с", left < 0 ? 0 : left);
+    T(dc, kSheetInX + 60, top + 48, s, 24, kText, 700, AL_START, 600);
+    T(dc, kSheetInX, top + 88, L"Крутилка громкости удержана. Отменить?", 15, kMuted, 400, AL_START, kSheetInW);
+    Button(dc, kSheetInX + kSheetInW - 240, kSheetBtnY, 240, kSheetBtnH, L"Отмена", B_PRI, IC_NONE, 18, 0, A_REBOOTNO);
 }
 
 static void ScrIncoming(HDC dc)
@@ -352,17 +365,19 @@ static void ScrIncoming(HDC dc)
     wchar_t num[40];
     BtText(bt.callNumber, num, 40);
     Under(dc, 184);
-    Panel(dc, 100, 84, 600, 340, 16);
-    Disc(dc, 196, 184, 64, kPanel2);
-    Ico(dc, IC_CALL, 172, 160, 48, kOk);
-    T(dc, 286, 150, L"Входящий вызов", 14, kMuted, 700);
-    T(dc, 286, 200, num[0] ? num : L"номер скрыт", 32, kText, 700, AL_START, 400);
-    bool d = Zone(124, 300, 266, 92, A_PHONEANS);   // green and red: here the colour carries the meaning
-    R(dc, 124, 300, 266, 92, 12, d ? Mix(kOk, kInk, 160) : kOk);
-    Ico(dc, IC_CALL, 233, 322, 48, kInk);
-    d = Zone(410, 300, 266, 92, A_PHONEEND);
-    R(dc, 410, 300, 266, 92, 12, d ? Mix(kStop, kInk, 160) : kStop);
-    Ico(dc, IC_HANGUP, 519, 322, 48, kInk);
+    int top = Sheet(dc, 236);
+    Disc(dc, kSheetInX + 36, top + 62, 36, kPanel2);
+    Ico(dc, IC_CALL, kSheetInX + 12, top + 38, 48, kOk);
+    T(dc, kSheetInX + 96, top + 36, L"Входящий вызов", 14, kMuted, 700);
+    T(dc, kSheetInX + 96, top + 80, num[0] ? num : L"номер скрыт", 32, kText, 700, AL_START, 600);
+    enum { kW = (kSheetInW - kSheetGap) / 2, kY = 296, kH = 88 };
+    int xEnd = kSheetInX, xAns = kSheetInX + kW + kSheetGap;   // the main action on the right, as in every sheet
+    bool d = Zone(xEnd, kY, kW, kH, A_PHONEEND);   // green and red: here the colour carries the meaning
+    R(dc, xEnd, kY, kW, kH, 12, d ? Mix(kStop, kInk, 160) : kStop);
+    Ico(dc, IC_HANGUP, xEnd + kW / 2 - 24, kY + 20, 48, kInk);
+    d = Zone(xAns, kY, kW, kH, A_PHONEANS);
+    R(dc, xAns, kY, kW, kH, 12, d ? Mix(kOk, kInk, 160) : kOk);
+    Ico(dc, IC_CALL, xAns + kW / 2 - 24, kY + 20, 48, kInk);
 }
 
 enum { kVolTop = 30 };   // the shell's volume scale (user 2026-10-19)

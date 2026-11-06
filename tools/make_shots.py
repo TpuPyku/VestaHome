@@ -61,6 +61,7 @@ SHOTS = [
     ('info_more', [SETTINGS, SET['info'], (355, 355)]), ('diagnostics', [SETTINGS, SET['info'], (590, 355)]),
     ('licenses', [SETTINGS, SET['info'], (355, 355), (627, 433)]),
     ('power', [SETTINGS, SET['info'], (728, 356)]),
+    ('incoming', [HOME, ('call', 1)]),
     ('car_sensors', [HOME, ('swipeback',), ('sleep', 2), (130, 330)]),   # from page 3 to 2: the car widget
     ('car_widget_set', [HOME, ('sleep', 2), (240, 256)]),
     ('speed_set', [HOME, (760, 86)]),   # (home's page 1: run alone - VH_SHOTS=speed_set,weather_set,camdl)
@@ -138,6 +139,18 @@ def mapping(cls, name):
 
 NAMES = ['Алексей Петров', 'Анна', 'Борис Иванович', 'Вера Сергеевна', 'Гараж', 'Дмитрий', 'Евгения', 'Игорь',
          'Катя', 'Лена', 'Мама', 'Николай', 'Ольга', 'Папа', 'Сервис', 'Такси']
+
+
+def set_call(state):   # the proxy's call state; VestaHome looks at it once a second
+    u32 = ctypes.windll.user32
+    u32.keybd_event(0x12, 0, 0, 0)   # (Alt: Windows lets a program take the foreground then; the window opens only there)
+    u32.SetForegroundWindow(u32.FindWindowW('VestaHome_Wnd', None))
+    u32.keybd_event(0x12, 0, 2, 0)
+    m = mapping(BtShm, 'VestaBT5')
+    m.st.callNumber = b'+79001234567' if state else b''
+    m.st.call[0] = state
+    m.seq += 2
+    time.sleep(1.5)
 
 
 def bluetooth():   # the proxy's stand-in: a phone connected, playing; the book and the calls when asked
@@ -317,6 +330,8 @@ def main():
                     time.sleep(st[1])
                     u32.InvalidateRect(h, None, False)
                     u32.UpdateWindow(h)
+                elif st[0] == 'call':   # the phone's call state (1: incoming), as the proxy shows it
+                    set_call(st[1])
                 elif st[0] == 'type':   # the keyboard screen: the text, then Enter (the PC build's WM_CHAR)
                     for ch in st[1] + '\r':
                         u32.SendMessageW(h, 0x102, ord(ch), 0)
@@ -336,7 +351,9 @@ def main():
             grab(h, os.path.join(OUT, '%02d_%s.png' % (n + 1, name)))
             print('%02d %s' % (n + 1, name))
             if name == 'power':
-                tap(194, 314)   # "ОТМЕНА"
+                tap(120, 350)   # "Отмена"
+            if name == 'incoming':
+                set_call(0)
             for i in range(4):   # back to a main screen ("back" at the bottom left of the nested ones), then home
                 tap(44, 446)
             if u32.IsIconic(h):
