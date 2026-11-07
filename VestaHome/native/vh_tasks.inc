@@ -593,12 +593,14 @@ static void WWeather(HDC dc, int x, int y)
     }
     _snwprintf(s, 16, L"%+d°", w.temp);   // one main number (ideas 0.7): the degrees, under them the sky and the wind
     T(dc, x + 16, y + 108, s, 64, fg, 700);
+    _snwprintf(s, 100, L"%s · ветер %d м/с", w.desc, w.wind);
+    CharUpperBuff(s, 1);
+    TWrap(dc, x + 16, y + 126, s, 14, mg, 400, 216, 1, 0);
     if (w.ok < 0)
         _snwprintf(s, 100, L"не обновилась: %s", w.err);
     else
-        _snwprintf(s, 100, L"%s · ветер %d м/с", w.desc, w.wind);
-    CharUpperBuff(s, 1);
-    TWrap(dc, x + 16, y + 144, s, 14, w.ok < 0 ? kDim : mg, 400, 216, 1, 0);
+        _snwprintf(s, 100, L"днём %+d°, ночью %+d° · %02d:%02d", w.tmax, w.tmin, w.at.wHour, w.at.wMinute);   // (the user 2026-11-06: back)
+    TWrap(dc, x + 16, y + 146, s, 14, d ? kInk : kDim, 400, 216, 1, 0);
 }
 
 // The screen saver's weather, centred on cx: the picture and the temperature (the car's sensor first), below them
