@@ -853,7 +853,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         RECT wr;
         if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
             if (t.wMinute != s_drawnMinute || tasks || s_screen == S_CALL || s_screen == S_TEST_CAN ||
-                s_screen == S_TEST_MCU || s_screen == S_SET_WIFI)   // (Wi-Fi: its state shown at once, HU 2026-10-24)
+                s_screen == S_TEST_MCU)   // (Wi-Fi: not each second - WM_APP_WIFI comes with every change, sheet 26)
                 Redraw();
             else if (s_screen == S_AUDIO && PlayerPlaying())
                 RedrawArea(256, 130, 800, 300);   // the track's position (the knob, r 11, from x 261)
@@ -936,8 +936,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         WifiGet(&w);
         bool mark = w.state != s_lastState;
         s_lastState = w.state;
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd && (mark || s_screen == S_SET_WIFI))
+        if (!IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd)
+            return 0;
+        if (s_screen == S_SET_WIFI || s_screen == S_WIFI_SAVED)
             Redraw();
+        else if (mark)   // elsewhere it is the top bar's mark only (sheet 26: whole frames as the link dropped)
+            RedrawArea(0, 0, 800, 56);
         return 0;
     }
     case WM_APP_OBD:   // the OBD thread's step or values
@@ -968,9 +972,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RadioBandStep(t);
             RadioNameLearn(t.f10, t.ps);
             s_radioDirty = true;
-            if (IsWindowVisible(hwnd) && (s_screen == S_RADIO || s_screen == S_HOME || s_screen == S_SET_RADIO ||
-                                          s_screen == S_RADIO_LIST))
+            RECT wr;
+            if (!IsWindowVisible(hwnd))
+                return 0;
+            if (s_screen == S_RADIO || s_screen == S_SET_RADIO || s_screen == S_RADIO_LIST) {
                 Redraw();
+            } else if (s_screen == S_HOME) {   // only its widgets that show the tuner (sheet 26: the whole frame
+                if (HomeMediaRect(&wr))         // each tuner message - a third of the full frames)
+                    RedrawArea(wr.left, wr.top, wr.right, wr.bottom);
+                if (HomeRect(WG_RADIO, &wr))
+                    RedrawArea(wr.left, wr.top, wr.right, wr.bottom);
+            }
             return 0;
         }
         if (wp == WP_MCU_DAYNIGHT) {   // the backlight's day / night and brightness: the settings' lines
@@ -1056,7 +1068,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (s_screen == S_VOLUME)
                 s_screenTick = GetTickCount();   // kept open while it keeps changing
             BuildButtons();
-            Redraw();   // the window, or the level in the top bar
+            static int s_srcDrawn = -2;   // the source changes what plays (widgets, screens): the whole frame then;
+            bool srcMoved = src != s_srcDrawn;   // the level alone is the top bar's (sheet 26: the knob's steps
+            s_srcDrawn = src;                    // were whole frames)
+            if (srcMoved || s_screen == S_VOLUME || s_screen == S_CALL)
+                Redraw();   // the window, the call's level
+            else
+                RedrawArea(0, 0, 800, 56);
             return 0;
         }
         Hvac h;
