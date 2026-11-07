@@ -41,6 +41,7 @@
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "soundmix.h"  // the programs whose sound goes with the radio
+#include "trackend.h"  // a track ended: the next one only while the sound is ours
 #include "secret.h"
 #include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
@@ -890,9 +891,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_VESTA_NIGHT:
         return s_night ? 1 : 0;
-    case WM_APP_PLAYER:   // the track ended (BASS's sync): the next one - unless paused meanwhile
-        if (!s_holdNext)
-            PlayerStep(1, true);
+    case WM_APP_PLAYER:   // the track ended (BASS's sync): the next one - unless paused meanwhile or the source not ours
+        if (!s_holdNext) {
+            int vol, mute, src;
+            VolGet(&vol, &mute, &src);
+            if (NextTrackPlays(src, s_mediaAsk || s_btPathTick))
+                PlayerStep(1, true);
+            else   // (a play again - MODE to the media, the play key - starts the track ended)
+                VLog(L"плеер: трек кончился, источник %d не наш - следующий не начинаю", src);
+        }
         if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
             Redraw();
         return 0;
