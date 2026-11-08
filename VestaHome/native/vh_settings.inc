@@ -96,7 +96,6 @@ struct Cfg {
     wchar_t btLast[18];                // the phone connected last, "A4:E2:87:98:D6:9F"
     int     btOwner;                   // Bluetooth's one device (btowner.h): BTO_PHONE / BTO_OBD
     bool    btPower;                   // Bluetooth on (the proxy's BT_CMD_POWER; ini bt.power)
-    wchar_t soundMix[kMixList];        // the programs whose sound goes with the radio (soundmix.h): exe names
     wchar_t favs[640];                 // the phone's favourites: "name|number;" each (Phone -> Favourites)
     wchar_t photoDir[MAX_PATH];        // the photos' folder last opened
     wchar_t photoFile[MAX_PATH];       // the picture last viewed there (the start goes back to it)
@@ -575,9 +574,6 @@ static void LoadCfg()
             wcsncpy(s_cfg.netPass, v, 31);
         } else if (!wcscmp(k, L"net.auto")) {
             s_cfg.netAuto = CfgBool(v);
-        } else if (!wcscmp(k, L"sound.mix")) {
-            wcsncpy(s_cfg.soundMix, v, kMixList - 1);
-            s_cfg.soundMix[kMixList - 1] = 0;
         } else if (!wcscmp(k, L"wifi.ap.ssid") && v[0]) {
             wcsncpy(s_cfg.wifiApSsid, v, 32);
         } else if (!wcscmp(k, L"wifi.ap.pass") && wcslen(v) >= 8) {
@@ -693,9 +689,7 @@ static void SaveCfg()
         L"wifi.ap.ssid=%s\r\nwifi.ap.pass=%s\r\nwifi.ap.auto=%d\r\n"
         L"# net.*: the USB modem (Settings -> Network): the operator (0 by the SIM, then the presets, then own), APN,\r\n"
         L"# login, password; net.auto: dial when it is in\r\n"
-        L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\n"
-        L"# sound.mix: the programs (exe names, ';' between) whose sound goes with the radio (a shortcut's switch)\r\n"
-        L"sound.mix=%s\r\n",
+        L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
         s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
@@ -706,7 +700,7 @@ static void SaveCfg()
         s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.btPower ? 1 : 0, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto, s_cfg.netOp, s_cfg.netApn, s_cfg.netUser,
-        s_cfg.netPass, s_cfg.netAuto, s_cfg.soundMix);
+        s_cfg.netPass, s_cfg.netAuto);
     if (n < 0)
         return;
     n += RadioCacheText(text + n, 12000 - n);

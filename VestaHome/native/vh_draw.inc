@@ -2123,7 +2123,10 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
             wcscpy(s, L"×");
         else
             _snwprintf(s, 8, L"%d", vol);
-        int w = TextWidth(dc, s, 18, 600);
+        // its width that of two digits whatever it shows (the user 2026-11-08: 9 -> 10 moved the marks left of it)
+        int w = TextWidth(dc, L"00", 18, 600), ws = TextWidth(dc, s, 18, 600);
+        if (ws > w)
+            w = ws;
         int x0 = 700 - w - 30;
         bool dv = Zone(x0 - 4, 4, w + 38, 48, A_SCREEN, S_VOLUME);
         if (dv)

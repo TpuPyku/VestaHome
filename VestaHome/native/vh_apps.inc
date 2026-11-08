@@ -52,7 +52,6 @@ static bool  s_editMode;          // apps screen: a tile opens its editor instea
 static int   s_editIdx;           // index in s_apps, -1 = new shortcut
 static App   s_edit;
 static bool  s_delArmed;          // "Delete" was pressed once; the second press deletes
-static bool  s_editMix;           // its sound with the radio (sound.mix), written on "Save"
 
 static wchar_t*       s_keysTarget;   // the text being typed: a shortcut's field or a setting
 static const wchar_t* s_keysTitle;
@@ -710,7 +709,6 @@ static void OpenEditor(int i)
         s_edit = s_apps[i];
     else
         memset(&s_edit, 0, sizeof(s_edit));
-    s_editMix = s_edit.path[0] && MixListHas(s_cfg.soundMix, MixExeOf(s_edit.path));
     s_edit.icon = NULL;   // the icons stay owned by s_apps
     s_edit.img.px = NULL;
     s_delArmed = false;
@@ -738,13 +736,6 @@ static void SaveEdit()
         wcscpy(s_status, L"нужны название и программа");
         return;
     }
-    if (s_editIdx >= 0)   // the program changed: the old one's switch goes
-        MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_apps[s_editIdx].path), false);
-    if (!MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_edit.path), s_editMix))
-        VLog(L"звук вместе с радио: список полон, %s не добавлена", MixExeOf(s_edit.path));
-    VLog(L"ярлык «%s»: звук вместе с радио %s (%s), список: %s", s_edit.name, s_editMix ? L"вкл" : L"выкл",
-         MixExeOf(s_edit.path), s_cfg.soundMix[0] ? s_cfg.soundMix : L"пуст");
-    SaveCfg();
     if (s_editIdx < 0) {
         s_apps[s_appCount++] = s_edit;
     } else {
@@ -759,10 +750,6 @@ static void SaveEdit()
 
 static void DeleteEdit()
 {
-    if (MixListHas(s_cfg.soundMix, MixExeOf(s_apps[s_editIdx].path))) {   // its switch goes with it
-        MixListSet(s_cfg.soundMix, kMixList, MixExeOf(s_apps[s_editIdx].path), false);
-        SaveCfg();
-    }
     FreeAppIcon(s_apps[s_editIdx]);
     memmove(&s_apps[s_editIdx], &s_apps[s_editIdx + 1], (s_appCount - s_editIdx - 1) * sizeof(App));
     s_appCount--;
@@ -1092,9 +1079,9 @@ static const wchar_t* kFieldCaption[4] = { L"Название", L"Програм
 static const wchar_t* kFieldEmpty[4] = { L"нажмите, чтобы ввести", L"нажмите, чтобы выбрать exe", L"нет",
     L"своя у программы; нажмите, чтобы выбрать png, ico или exe" };
 
-// One shortcut: four fields (keyboard or file browser behind each), the sound's checkbox, cancel / delete / save.
-// A chosen icon has a "reset" button at the end of its field. (The sound was a button at the bottom left until
-// sheet 22: "back" over its left part cancelled the editor - the user 2026-11-04: a row with a checkbox.)
+// One shortcut: four fields (keyboard or file browser behind each), cancel / delete / save. A chosen icon has a
+// "reset" button at the end of its field. (Its "sound with the radio" checkbox was removed 2026-11-08: the user -
+// the card's music played together with Bluetooth's; prompts per prompt only, as CityGuide's and OSMapsCE's.)
 enum { kEditH = 62, kEditStep = 68 };
 static void DrawEdit(HDC dc)
 {
@@ -1116,17 +1103,6 @@ static void DrawEdit(HDC dc)
         if (reset)
             Button(dc, 668, y, 116, kEditH, L"Сброс", B_N, IC_NONE, 17, 0, A_NOICON);
     }
-    int y = 68 + 4 * kEditStep;   // the checkbox row: its whole width a tap
-    bool d = Zone(16, y, 768, 52, A_MIXTOGGLE);
-    R(dc, 16, y, 768, 52, 16, d ? kOrange : kPanel);
-    R(dc, 32, y + 12, 28, 28, 7, s_editMix ? kOrange : kPanel2);
-    if (s_editMix) {   // the tick
-        Line(dc, 39, y + 26, 44, y + 32, 3, kInk);
-        Line(dc, 44, y + 32, 53, y + 19, 3, kInk);
-    }
-    T(dc, 76, y + 33, L"Звук вместе с радио", 18, d ? kInk : kText, 700);
-    T(dc, 290, y + 33, L"подсказки программы слышны, радио не выключается", 14, d ? kInk : kMuted, 400, AL_START,
-      480);
     Dock(dc);
     if (s_editIdx >= 0)   // the second press deletes
         Button(dc, 330, 410, 220, 58, s_delArmed ? L"Точно удалить?" : L"Удалить", s_delArmed ? B_FILL : B_N,

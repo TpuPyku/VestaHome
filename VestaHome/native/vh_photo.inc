@@ -1004,7 +1004,6 @@ static void DoAction(const Btn& b)
     case A_FIELD:    if (b.arg == F_PATH || b.arg == F_ICON) OpenFiles(b.arg); else OpenKeys(b.arg); break;
     case A_NOICON:   s_edit.iconPath[0] = 0; break;
     case A_SAVE:     SaveEdit(); break;
-    case A_MIXTOGGLE: s_editMix = !s_editMix; break;
     case A_DELETE:   if (s_delArmed) DeleteEdit(); else s_delArmed = true; break;
     case A_CANCEL:   // editor -> apps, keyboard -> where it was opened from, browser -> editor / cameras
         if (s_screen == S_EDIT) {

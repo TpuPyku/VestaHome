@@ -40,7 +40,6 @@
 #include "obd.h"
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
-#include "soundmix.h"  // the programs whose sound goes with the radio
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
 #include "secret.h"
 #include "rvc.h"
@@ -121,7 +120,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIRESTART, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
-              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_MIXTOGGLE,
+              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV,
               A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
@@ -638,9 +637,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             PairTick();
             BtOwnerTick();
             ClockWatchTick();
-            static int s_mixTicks;
-            if (++s_mixTicks % 2 == 0)
-                MixTick();
             TripTick();
             SpeedVolTick();
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)
@@ -724,8 +720,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 BtQuiet();
             }
             if (src != s_srcSeen) {
-                if (s_srcSeen != -2 && src == 0)
-                    MixAgain();
                 if (s_srcSeen != -2 && (src == 0 || src == 9) && now - s_srcByUs > 6000) {
                     VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
                     OursQuiet();
@@ -1338,7 +1332,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (s_voice || s_plugVoice)
             NaviVoice(false);
-        MixSet(false, NULL);
         if (s_rvcWnd)
             RvcHide();
         VideoStop();

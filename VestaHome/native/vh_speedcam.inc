@@ -145,10 +145,10 @@ enum { TIMER_VOICE = 9, WM_NAVIGATION_VOICE = 0x101D, kVoiceLeadMs = 1000, kVoic
 static int s_voice;   // 0 idle, 1 waiting to play, 2 playing, 3 waiting to end
 static bool s_plugVoice;   // an add-on's prompt on (its "voice", vh_plugins.inc): the beep's end leaves the radio down
 
-static bool s_mixOn;   // a program whose sound goes with the radio runs: the navigation channel held open (MixTick)
-
 // No shell window (VestaStub in its place, HU 2026-11-03: "окна оболочки нет — сразу", nothing told the MCU): the
-// MCU told straight, as the shell would (SPApi_SendRadioNaviVoiceGuidance); "0" not while a program holds it.
+// MCU told straight, as the shell would (SPApi_SendRadioNaviVoiceGuidance). Only per prompt: the channel held open
+// for a whole navigator (the "sound with the radio" of a shortcut, removed 2026-11-08) let our player's sound
+// through over any source - the card's music played together with Bluetooth's.
 static bool NaviVoice(bool on)
 {
     HWND h = FindWindow(NULL, L"RadioCommWindow");
@@ -156,61 +156,13 @@ static bool NaviVoice(bool on)
     if (h)
         PostMessage(h, WM_NAVIGATION_VOICE, on ? 1 : 0, 0);
     else
-        sent = s_mixOn || McuSend3("SPApi_SendRadioNaviVoiceGuidance", on ? 1 : 0, 0, 0);
+        sent = McuSend3("SPApi_SendRadioNaviVoiceGuidance", on ? 1 : 0, 0, 0);
     static int s_logged = -1;
     if (s_logged != (h != NULL)) {
         s_logged = h != NULL;
         VLog(L"звук поверх радио: %s", h ? L"через оболочку (RadioCommWindow, 0x101D)" : L"окна оболочки нет — MCU напрямую");
     }
     return sent;
-}
-
-// The navigation channel held open while a program of sound.mix runs (the stock shell: IsNaviSourceCouldIn(1) when
-// its navigator starts, NaviVoiceGuidance per prompt; HU 2026-10-31: these let the unit's sound through over the
-// radio without turning it down - so the program's sound goes with the radio). With the shell it is the shell's.
-static void MixSet(bool on, const wchar_t* exe)
-{
-    if (on == s_mixOn)
-        return;
-    s_mixOn = on;
-    McuSend3("SPApi_SendRadioIsNaviSourceCouldIn", on ? 1 : 0, 0, 0);
-    McuSend3("SPApi_SendRadioNaviVoiceGuidance", on ? 1 : 0, 0, 0);
-    VLog(L"звук вместе с радио: %s%s", on ? L"вкл - " : L"выкл", on ? exe : L"");
-}
-
-// The source back to the radio while the channel is held (HU 2026-11-05: Navitel's prompts not heard on FM - told
-// once at its start, the switch to the radio after it; the MCU sends the tuner's whole state then): told again
-static void MixAgain()
-{
-    if (!s_mixOn)
-        return;
-    McuSend3("SPApi_SendRadioIsNaviSourceCouldIn", 1, 0, 0);
-    McuSend3("SPApi_SendRadioNaviVoiceGuidance", 1, 0, 0);
-    VLog(L"звук вместе с радио: снова - источник радио");
-}
-
-static void MixTick()   // every 2 s
-{
-    static TaskInfo s_mixTask;   // (its own: the load log's minute keeps its sample)
-    static wchar_t s_names[TASK_PROC_MAX][kMixProcName];
-    static int s_why = -1;   // why it is off, logged when it changes (sheet 22: it never came on, nothing said why)
-    int why = !s_cfg.soundMix[0] ? 0 : FindWindow(NULL, L"RadioCommWindow") ? 1 : 2;
-    int at = -1, n = 0;
-    if (why == 2) {
-        TaskSample(&s_mixTask, s_wnd);
-        n = s_mixTask.procOk ? s_mixTask.procCount : 0;
-        for (int i = 0; i < n; i++)
-            wcscpy(s_names[i], s_mixTask.proc[i].name);
-        at = MixRunning(s_cfg.soundMix, s_names, n);
-        why = !s_mixTask.procOk ? 3 : at >= 0 ? 4 : 2;
-    }
-    if (why != s_why) {
-        static const wchar_t* const kWhy[5] = { L"список пуст", L"есть окно оболочки - звук её", L"программ из списка нет",
-                                               L"список процессов не прочитать", L"программа запущена" };
-        s_why = why;
-        VLog(L"звук вместе с радио: %s (список: %s)", kWhy[why], s_cfg.soundMix);
-    }
-    MixSet(at >= 0, at >= 0 ? s_names[at] : NULL);
 }
 
 static HWAVEOUT s_beepOut;
