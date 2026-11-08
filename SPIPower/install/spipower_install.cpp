@@ -1855,7 +1855,9 @@ static int IsStubFile(const wchar_t* path)
 {
     HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (h == INVALID_HANDLE_VALUE) return 0;
-    static unsigned char buf[65536];
+    // (HU 2026-11-08-2: the stub grew to 66 048 B, past a 64 KB buffer - "G3NavHMI.exe не загрузчик", its update
+    // refused; the shell itself is 4 MB, never read)
+    static unsigned char buf[262144];
     DWORD got = 0, size = GetFileSize(h, NULL);
     int ours = 0;
     if (size < sizeof(buf) && ReadFile(h, buf, size, &got, NULL)) {
