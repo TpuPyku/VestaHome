@@ -9,6 +9,8 @@
 #include <math.h>
 #include "vgps.h"
 #include "simnmea.h"
+#include "simdrive.h"
+#include "vroute.h"   // VestaCore: OSMapsCE's route line
 #include "route.inc"
 
 static const int kCount = sizeof(kRoute) / sizeof(kRoute[0]);
@@ -20,7 +22,16 @@ static HWND          s_wnd;
 static volatile LONG s_paused, s_mul = 1, s_restart;
 static volatile LONG s_idx;            // the point last sent
 static DWORD         s_vt;             // ms into the drive (the module's thread)
-static float*        s_km;             // km from the start at each point
+// The drive: the built-in one, or one along OSMapsCE's route (the user 2026-11-08) - swapped under s_rcs (the module's
+// thread reads it)
+static CRITICAL_SECTION s_rcs;
+static const SimPoint* s_route = kRoute;
+static int            s_count = kCount;
+static SimPoint*      s_own;            // OSMapsCE's (NULL: the built-in one)
+static float*         s_km;             // km from the start at each point
+static wchar_t        s_name[96];
+static const wchar_t* s_msg;            // a line for a while (no route in OSMapsCE)
+static DWORD          s_msgUntil;
 
 // The module's thread, every ~100 ms: the drive's time goes on (x1, x2, x4; not while paused), the point's lines
 // once a second of real time or when the point changed. Paused: standing where it is.
@@ -33,12 +44,14 @@ static int Source(char* buf, int cap)
     if (s_last && !s_paused)
         s_vt += (now - s_last) * (DWORD)s_mul;
     s_last = now;
-    int i = SimAt(s_vt, kCount);
+    EnterCriticalSection(&s_rcs);
+    int i = SimAt(s_vt, s_count);
+    SimPoint p = s_route[i];
+    LeaveCriticalSection(&s_rcs);
     if (i == s_idx && now - s_sent < 1000)
         return 0;
     s_sent = now;
     InterlockedExchange((LONG*)&s_idx, i);
-    SimPoint p = kRoute[i];
     if (s_paused)
         p.kmh10 = p.wheel10 = 0;
     SYSTEMTIME utc;
@@ -51,6 +64,61 @@ static float Metres(const SimPoint& a, const SimPoint& b)
     double k = cos((a.lat + b.lat) / 2e6 * 3.14159265 / 180);
     double dx = (b.lon - a.lon) * k, dy = b.lat - a.lat;
     return (float)(sqrt(dx * dx + dy * dy) / 1e6 * 111320);
+}
+
+// Another drive (own: malloc'ed, kept until the next one; NULL - the built-in one): from its start.
+static void SetRoute(const SimPoint* r, int n, SimPoint* own, const wchar_t* name)
+{
+    float* km = (float*)malloc(n * sizeof(float));
+    if (!km) {
+        free(own);
+        return;
+    }
+    km[0] = 0;
+    for (int i = 1; i < n; i++)
+        km[i] = km[i - 1] + Metres(r[i - 1], r[i]) / 1000;
+    EnterCriticalSection(&s_rcs);
+    SimPoint* oldOwn = s_own;
+    float* oldKm = s_km;
+    s_route = r;
+    s_count = n;
+    s_own = own;
+    s_km = km;
+    s_idx = 0;
+    wcsncpy(s_name, name, 95);
+    s_name[95] = 0;
+    LeaveCriticalSection(&s_rcs);
+    free(oldOwn);
+    free(oldKm);
+    InterlockedExchange((LONG*)&s_restart, 1);
+}
+
+// The route built in OSMapsCE now (VestaCore vroute): driven along from its start
+static void LoadOsm()
+{
+    int* lat = (int*)malloc(VROUTE_MAX * sizeof(int));
+    int* lon = (int*)malloc(VROUTE_MAX * sizeof(int));
+    int n = lat && lon ? VRouteRead(lat, lon, VROUTE_MAX, NULL) : 0;
+    double m = 0;
+    for (int i = 1; i < n; i++) {
+        SimPoint a = { lat[i - 1], lon[i - 1], 0, 0, 0 }, b = { lat[i], lon[i], 0, 0, 0 };
+        m += Metres(a, b);
+    }
+    int cap = (int)(m / 2) + kSimStand0 + kSimStand1 + 600;   // (at 2 m/s: it averages far more)
+    SimPoint* d = n >= 2 ? (SimPoint*)malloc(cap * sizeof(SimPoint)) : NULL;
+    int k = d ? SimDrive(lat, lon, n, d, cap) : 0;
+    free(lat);
+    free(lon);
+    if (k < 2) {
+        free(d);
+        s_msg = L"В OSMapsCE нет маршрута: постройте его и нажмите снова";
+        s_msgUntil = GetTickCount() + 4000;
+        return;
+    }
+    wchar_t name[96];
+    int km10 = (int)(m / 100 + 0.5);
+    _snwprintf(name, 96, L"Маршрут из OSMapsCE · %d,%d км", km10 / 10, km10 % 10);
+    SetRoute(d, k, d, name);
 }
 
 // ---- drawing. The fonts made once and kept (the user 2026-11-08: slow in front on the unit - each frame made a
@@ -99,6 +167,7 @@ static void Box(HDC dc, int x, int y, int w, int h, COLORREF c)
 enum { B_PAUSE, B_SPEED, B_RESTART, B_HIDE, B_EXIT, B_COUNT };
 static const RECT kBtn[B_COUNT] = { { 16, 400, 166, 464 }, { 172, 400, 322, 464 }, { 328, 400, 478, 464 },
                                     { 484, 400, 634, 464 }, { 640, 400, 784, 464 } };
+static const RECT kRouteBtn = { 584, 74, 768, 114 };   // the drive: OSMapsCE's route / the built-in one
 
 static void Clock(wchar_t* s, int cap, DWORD sec)
 {
@@ -122,17 +191,24 @@ static void Paint(HDC dc)
     Box(dc, 0, 0, kW, kH, kInk);
     Text(dc, 20, 0, 500, 56, L"Имитатор GPS", 26, true, kText, DT_LEFT);
     Box(dc, 16, 64, kW - 32, 320, kPanel);
-    Text(dc, 36, 72, kW - 72, 32, kRouteName, 17, false, kMuted, DT_LEFT);
-    int i = s_idx;
-    const SimPoint& p = kRoute[i];
+    EnterCriticalSection(&s_rcs);
+    int n = s_count, i = s_idx < n ? s_idx : 0;
+    const SimPoint p = s_route[i];
+    float km0 = s_km[i], km1 = s_km[n - 1];
+    bool own = s_own != NULL;
+    Text(dc, 36, 72, 540, 32, s_name, 17, false, kMuted, DT_LEFT);
+    LeaveCriticalSection(&s_rcs);
+    Box(dc, kRouteBtn.left, kRouteBtn.top, kRouteBtn.right - kRouteBtn.left, kRouteBtn.bottom - kRouteBtn.top, kInk);
+    Text(dc, kRouteBtn.left, kRouteBtn.top, kRouteBtn.right - kRouteBtn.left, kRouteBtn.bottom - kRouteBtn.top,
+         own ? L"Встроенный" : L"Маршрут OSM", 17, true, kOrange, DT_CENTER);
     wchar_t s[160], a[16], b[16];
     Clock(a, 16, i);
-    Clock(b, 16, kCount);
-    int k0 = (int)(s_km[i] * 10 + 0.5), k1 = (int)(s_km[kCount - 1] * 10 + 0.5);   // (a decimal comma)
+    Clock(b, 16, n);
+    int k0 = (int)(km0 * 10 + 0.5), k1 = (int)(km1 * 10 + 0.5);   // (a decimal comma)
     _snwprintf(s, 160, L"%s из %s · %d,%d из %d,%d км", a, b, k0 / 10, k0 % 10, k1 / 10, k1 % 10);
     Text(dc, 36, 104, kW - 72, 32, s, 19, false, kText, DT_LEFT);
     Box(dc, 36, 142, kW - 72, 10, RGB(55, 60, 70));
-    Box(dc, 36, 142, (kW - 72) * (i + 1) / kCount, 10, kOrange);
+    Box(dc, 36, 142, (kW - 72) * (i + 1) / n, 10, kOrange);
     _snwprintf(s, 160, L"%d", s_paused ? 0 : (p.kmh10 + 5) / 10);
     Text(dc, 36, 166, 220, 110, s, 96, true, kText, DT_LEFT);
     Text(dc, 36, 276, 220, 30, L"км/ч", 20, false, kMuted, DT_LEFT);
@@ -143,6 +219,10 @@ static void Paint(HDC dc)
     Text(dc, 300, 222, 450, 32, s, 18, false, kMuted, DT_LEFT);
     COLORREF c;
     PortLine(s, 160, &c);
+    if (s_msg && GetTickCount() < s_msgUntil) {
+        wcscpy(s, s_msg);
+        c = kOrange;
+    }
     Text(dc, 36, 330, kW - 72, 40, s, 18, true, c, DT_LEFT);
     static const wchar_t* const kSpeed[5] = { L"", L"×1", L"×2", L"", L"×4" };
     const wchar_t* label[B_COUNT] = { s_paused ? L"Поехали" : L"Пауза", kSpeed[s_mul], L"Сначала", L"Свернуть", L"Выход" };
@@ -157,7 +237,12 @@ static void Paint(HDC dc)
 static void Tap(int x, int y)
 {
     POINT pt = { x, y };
-    if (PtInRect(&kBtn[B_PAUSE], pt))
+    if (PtInRect(&kRouteBtn, pt)) {
+        if (s_own)
+            SetRoute(kRoute, kCount, NULL, kRouteName);
+        else
+            LoadOsm();
+    } else if (PtInRect(&kBtn[B_PAUSE], pt))
         InterlockedExchange((LONG*)&s_paused, !s_paused);
     else if (PtInRect(&kBtn[B_SPEED], pt))
         InterlockedExchange((LONG*)&s_mul, s_mul == 4 ? 1 : s_mul * 2);
@@ -280,12 +365,10 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int)
         _wcslwr(own);
         s_osmMode = wcsstr(name ? name : own, L"osm") != NULL;
     }
-    s_km = (float*)malloc(kCount * sizeof(float));
+    InitializeCriticalSection(&s_rcs);
+    SetRoute(kRoute, kCount, NULL, kRouteName);
     if (!s_km)
         return 1;
-    s_km[0] = 0;
-    for (int i = 1; i < kCount; i++)
-        s_km[i] = s_km[i - 1] + Metres(kRoute[i - 1], kRoute[i]) / 1000;
     WNDCLASS wc;
     memset(&wc, 0, sizeof(wc));
     wc.lpfnWndProc = WndProc;
@@ -319,5 +402,6 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int)
     }
     GpsStop();   // the port given back: the others take it over
     free(s_km);
+    free(s_own);
     return 0;
 }

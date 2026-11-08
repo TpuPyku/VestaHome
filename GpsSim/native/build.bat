@@ -12,7 +12,7 @@ rem VestaCore: a working copy of the VestaCore repo next to this repo if there i
 set CORE=%~dp0..\..\..\VestaCore
 if not exist "%CORE%\vgps.cpp" set CORE=%~dp0..\..\core
 if not exist "%CORE%\vgps.cpp" (echo === no VestaCore & exit /b 1)
-set SRC=gpssim.cpp simnmea.cpp "%CORE%\vgps.cpp"
+set SRC=gpssim.cpp simnmea.cpp simdrive.cpp "%CORE%\vgps.cpp" "%CORE%\vroute.cpp"
 
 cd /d "%~dp0"
 if not exist obj\arm mkdir obj\arm

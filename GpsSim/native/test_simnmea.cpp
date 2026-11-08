@@ -1,6 +1,8 @@
 // test_simnmea.cpp - GpsSim's lines (simnmea.cpp) on the PC (test_simnmea.bat); exit code: the failed checks.
 #include "simnmea.h"
+#include "simdrive.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int s_checks, s_failed;
@@ -65,10 +67,50 @@ static void TestAt()
     Check(SimAt(12345, 0) == 0, "at: no drive - 0");
 }
 
+static SimPoint s_d[4000];
+
+static void TestDrive()
+{
+    // 1 km north (0.009 degrees of latitude): stands, speeds up to 60, slows to a stop at the end
+    int lat[2] = { 55000000, 55009000 }, lon[2] = { 37000000, 37000000 };
+    int n = SimDrive(lat, lon, 2, s_d, 4000), top = 0;
+    for (int i = 0; i < n; i++)
+        top = s_d[i].kmh10 > top ? s_d[i].kmh10 : top;
+    Check(n > kSimStand0 + 60 + kSimStand1 && n < kSimStand0 + 120 + kSimStand1, "drive: 1 km in about a minute and more");
+    Check(s_d[0].kmh10 == 0 && s_d[kSimStand0 - 1].kmh10 == 0 && s_d[n - 1].kmh10 == 0, "drive: standing at both ends");
+    Check(top >= 590 && top <= 600, "drive: up to 60 km/h");
+    Check(s_d[n - 1].lat == 55009000 && s_d[0].lat == 55000000, "drive: from the first point to the last");
+    Check(s_d[kSimStand0 + 5].course10 == 0, "drive: course north");
+    bool smooth = true;
+    for (int i = 1; i < n; i++)
+        if (s_d[i].kmh10 - s_d[i - 1].kmh10 > 1.5 * 36 + 1)
+            smooth = false;
+    Check(smooth, "drive: speeds up 1.5 m/s2 at most");
+    // 500 m north, then right (east) 500 m: slow at the corner, the wheel to the right there
+    int la[3] = { 55000000, 55004500, 55004500 }, lo[3] = { 37000000, 37000000, 37007850 };
+    n = SimDrive(la, lo, 3, s_d, 4000);
+    int at = 0, best = 1 << 30;
+    for (int i = 0; i < n; i++) {
+        int d = abs(s_d[i].lat - 55004500) + abs(s_d[i].lon - 37000000);
+        if (d < best) {
+            best = d;
+            at = i;
+        }
+    }
+    int wmax = 0;
+    for (int i = at - 2; i <= at + 2; i++)
+        wmax = s_d[i].wheel10 > wmax ? s_d[i].wheel10 : wmax;
+    Check(s_d[at].kmh10 < 250, "drive: slow at a right-angled corner");
+    Check(wmax > 0, "drive: the wheel to the right at a right turn");
+    Check(SimDrive(lat, lon, 2, s_d, 50) == 50, "drive: no more than cap");
+    Check(SimDrive(lat, lon, 1, s_d, 4000) == 0, "drive: one point - none");
+}
+
 int main()
 {
     TestLines();
     TestAt();
+    TestDrive();
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

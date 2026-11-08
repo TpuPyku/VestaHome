@@ -7,7 +7,7 @@ set PATH=%VS8%\Common7\IDE;%VC%\bin;%PATH%
 set OPT=/Od /Zi
 cd /d "%~dp0"
 if not exist obj mkdir obj
-"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_simnmea.cpp simnmea.cpp /Foobj\ /Fdobj\ /Feobj\test_simnmea.exe ^
+"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_simnmea.cpp simnmea.cpp simdrive.cpp /Foobj\ /Fdobj\ /Feobj\test_simnmea.exe ^
   /DWIN32 /D_CRT_SECURE_NO_WARNINGS /I"%VC%\include" /I"%VC%\PlatformSDK\Include" ^
   /link /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" kernel32.lib >obj\build_test.log || (type obj\build_test.log & exit /b 1)
 if "%1"=="build" exit /b 0
