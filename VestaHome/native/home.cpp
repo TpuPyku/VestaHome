@@ -439,7 +439,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SaveCfg();
         }
         WifiEnable(s_cfg.wifiOn);
-        WifiApSetup(s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto);
+        WifiApSetup(s_cfg.wifiApSsid, s_cfg.wifiApPass, false);   // (no automatic access point: the user 2026-11-08)
         WifiStart(hwnd, WM_APP_WIFI, VLog);
         ObdInit(hwnd, WM_APP_OBD, VLog);
         if (s_cfg.nmeaPort)   // the navigators' COM port (the registry is new at every boot)

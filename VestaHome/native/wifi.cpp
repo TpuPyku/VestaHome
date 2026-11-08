@@ -115,6 +115,7 @@ static wchar_t    s_guid[64];          // the adapter
 static volatile bool s_wantOn = true;  // WifiEnable
 static volatile bool s_restart;        // WifiRestart
 static volatile bool s_wantAp, s_apAuto;   // WifiApManual, WifiApSetup
+static wchar_t s_joined[33];               // the network the SDK was last told to join (the worker's thread)
 static char       s_apSsid[33], s_apPass[65];   // under s_cs
 static wchar_t    s_apSsidW[33], s_apPassW[65]; // the same for the screens
 
@@ -1075,6 +1076,17 @@ static DWORD WINAPI WifiThread(LPVOID)
             memcpy(cs.ssid, e.ssid.data, cs.len);
             SsidText(cs, w.ssid);
         }
+        // WZC lost track of a link the SDK made (HU 2026-11-08-2: after a tap on another network and back, Xperia's
+        // link carried the internet, WZC said none - "подключение к Xperia…" stayed, the icon grey, a new join each
+        // minute): the adapter's own address says it is up
+        if (!connected && s_joined[0]) {
+            char ip[20];
+            ReadIp(ip);
+            if (ip[0] && strcmp(ip, "0.0.0.0") && strncmp(ip, "169.254.", 8)) {
+                connected = true;
+                wcscpy(w.ssid, s_joined);
+            }
+        }
         int seen = 0;
         WlanConfig* list = ListItems(e.bssidList, &seen);
         w.count = 0;
@@ -1144,6 +1156,7 @@ static DWORD WINAPI WifiThread(LPVOID)
             WlanConfig c;
             if (s_dkAdd) {
                 if (DkJoin(cs, cp, w.msg, 96)) {
+                    wcscpy(s_joined, cs);
                     _snwprintf(w.msg, 96, L"подключение к %s…", cs);
                     connectTick = GetTickCount();
                     quietTick = QuietStart(quietTick);
@@ -1166,6 +1179,7 @@ static DWORD WINAPI WifiThread(LPVOID)
                 if (w.nets[k].known && IsKnown(w.nets[k].ssid, pass)) {
                     lastAuto = GetTickCount();
                     if (DkJoin(w.nets[k].ssid, pass, why, 96)) {
+                        wcscpy(s_joined, w.nets[k].ssid);
                         connectTick = lastAuto;
                         quietTick = QuietStart(quietTick);
                     }

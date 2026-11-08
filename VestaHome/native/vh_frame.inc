@@ -479,9 +479,12 @@ static bool PageStep(const Pager& p, int dir, int* to)
     return *to >= 0 && *to < n;
 }
 
+// A finger's drag turns the page - not in the settings (the user 2026-11-08: in Wi-Fi's a drag anywhere, the sections'
+// column too, turned the list's page; "the settings have no turning of pages"): there their arrows only
 static bool CanSwipe()
 {
-    return PagerOf(s_screen) != NULL;
+    return PagerOf(s_screen) != NULL && s_screen != S_SET_WIFI && s_screen != S_WIFI_SAVED &&
+           s_screen != S_BT_PAIRED && s_screen != S_CAMREG;
 }
 
 // The page beside (dir) drawn into s_back without turning to it (no side effects: the radio's band is not

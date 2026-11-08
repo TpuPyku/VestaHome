@@ -1793,9 +1793,7 @@ static void ScrSetWifi(HDC dc)
     if (w.state >= WIFI_AP) {
         bool apOn = w.state == WIFI_AP && !w.apAuto;
         Button(dc, 256, 352, 196, 40, apOn ? L"Точка доступа: вкл" : L"Точка доступа", apOn ? B_SEL : B_N, IC_NONE,
-               14, 0, A_WIFIAP);
-        T(dc, 466, 378, L"Фикс Xiaomi", 14, kMuted, 600);
-        Toggle(dc, 572, 354, T_WIFI_AP_AUTO);
+               14, 0, A_WIFIAP);   // (its automatic start, "Фикс Xiaomi", removed: the user 2026-11-08)
     }
     if (w.state == WIFI_DISCONNECTED)   // (no link - the driver stuck: what a full power cut cures, sheet 24; the row's
                                         // longer texts, with a link, would reach it)
