@@ -29,7 +29,7 @@ PLAN = (
     (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDCard\OSMapsCE',
         ('OSMapsCE.exe', 'Images', 'Fonts', 'Lang', 'Voice')),   # toolhelp.dll: the firmware's own (\Windows) is used; Fonts: Golos (OFL); Voice: the prompts
     # GpsSim: a drive in place of the GPS (a unit on a desk; a Shturmann's OSMapsCE too), run from the card
-    (os.path.join(ROOT, 'VestaHome', 'GpsSim', 'GpsSim'), r'SDCard\GpsSim', ('GpsSim.exe',)),
+    (os.path.join(ROOT, 'VestaHome', 'GpsSim', 'GpsSim'), r'SDCard\GpsSim', ('GpsSim.exe', 'GpsSimOSM.exe')),
     # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',

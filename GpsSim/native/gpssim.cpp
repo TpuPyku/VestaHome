@@ -12,7 +12,7 @@
 #include "route.inc"
 
 static const int kCount = sizeof(kRoute) / sizeof(kRoute[0]);
-enum { kW = 800, kH = 480, TIMER_DRAW = 1 };
+enum { kW = 800, kH = 480, TIMER_DRAW = 1, TIMER_OSM = 2 };
 static const COLORREF kInk = RGB(18, 20, 25), kPanel = RGB(30, 33, 40), kText = RGB(235, 235, 235),
                       kMuted = RGB(150, 155, 165), kOrange = RGB(255, 107, 26), kGreen = RGB(110, 210, 120);
 
@@ -96,9 +96,9 @@ static void Box(HDC dc, int x, int y, int w, int h, COLORREF c)
     DeleteObject(b);
 }
 
-enum { B_PAUSE, B_SPEED, B_RESTART, B_EXIT, B_COUNT };
-static const RECT kBtn[B_COUNT] = { { 16, 400, 206, 464 }, { 214, 400, 404, 464 }, { 412, 400, 602, 464 },
-                                    { 610, 400, 784, 464 } };
+enum { B_PAUSE, B_SPEED, B_RESTART, B_HIDE, B_EXIT, B_COUNT };
+static const RECT kBtn[B_COUNT] = { { 16, 400, 166, 464 }, { 172, 400, 322, 464 }, { 328, 400, 478, 464 },
+                                    { 484, 400, 634, 464 }, { 640, 400, 784, 464 } };
 
 static void Clock(wchar_t* s, int cap, DWORD sec)
 {
@@ -144,8 +144,8 @@ static void Paint(HDC dc)
     COLORREF c;
     PortLine(s, 160, &c);
     Text(dc, 36, 330, kW - 72, 40, s, 18, true, c, DT_LEFT);
-    static const wchar_t* const kSpeed[5] = { L"", L"Скорость ×1", L"Скорость ×2", L"", L"Скорость ×4" };
-    const wchar_t* label[B_COUNT] = { s_paused ? L"Поехали" : L"Пауза", kSpeed[s_mul], L"Сначала", L"Выход" };
+    static const wchar_t* const kSpeed[5] = { L"", L"×1", L"×2", L"", L"×4" };
+    const wchar_t* label[B_COUNT] = { s_paused ? L"Поехали" : L"Пауза", kSpeed[s_mul], L"Сначала", L"Свернуть", L"Выход" };
     for (int k = 0; k < B_COUNT; k++) {
         const RECT& r = kBtn[k];
         Box(dc, r.left, r.top, r.right - r.left, r.bottom - r.top, k == B_PAUSE && s_paused ? kOrange : kPanel);
@@ -163,9 +163,53 @@ static void Tap(int x, int y)
         InterlockedExchange((LONG*)&s_mul, s_mul == 4 ? 1 : s_mul * 2);
     else if (PtInRect(&kBtn[B_RESTART], pt))
         InterlockedExchange((LONG*)&s_restart, 1);
+    else if (PtInRect(&kBtn[B_HIDE], pt))
+        ShowWindow(s_wnd, SW_HIDE);   // (it drives on; started again - back in front)
     else if (PtInRect(&kBtn[B_EXIT], pt))
         DestroyWindow(s_wnd);
     InvalidateRect(s_wnd, NULL, FALSE);
+}
+
+// GpsSimOSM.exe (this program by another name; or "/osm"): a device that starts one program (a Shturmann, the user
+// 2026-11-08) gets both - OSMapsCE started once the port is ours, this one out of its way. OSMapsCE looked for beside
+// this folder, then on the usual volumes.
+static bool s_osmMode;
+
+static void StartOsm()
+{
+#ifdef UNDER_CE
+    static const wchar_t* const kExe = L"OSMapsCE.exe";
+#else
+    static const wchar_t* const kExe = L"OSMapsPC.exe";
+#endif
+    wchar_t own[MAX_PATH], path[MAX_PATH];
+    GetModuleFileName(NULL, own, MAX_PATH);
+    for (int k = 0; k < 2; k++) {   // the exe's name off, then its folder: <card>\GpsSim -> <card>, its OSMapsCE
+        wchar_t* sl = wcsrchr(own, L'\\');
+        if (sl)
+            *sl = 0;
+    }
+    const wchar_t* dirs[5] = { own, L"\\SDMMC", L"\\ResidentFlash", L"\\Storage Card", L"\\SDMemory" };
+    for (int i = 0; i < 5; i++) {
+        _snwprintf(path, MAX_PATH, L"%s\\OSMapsCE\\%s", dirs[i], kExe);
+        path[MAX_PATH - 1] = 0;
+        PROCESS_INFORMATION pi;
+#ifdef UNDER_CE
+        LPSTARTUPINFO si = NULL;   // (CE: none)
+#else
+        STARTUPINFO st;
+        memset(&st, 0, sizeof(st));
+        st.cb = sizeof(st);
+        LPSTARTUPINFO si = &st;
+#endif
+        if (GetFileAttributes(path) != 0xFFFFFFFF &&
+            CreateProcess(path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            ShowWindow(s_wnd, SW_HIDE);
+            return;
+        }
+    }
 }
 
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
@@ -187,6 +231,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND:
         return 1;
     case WM_TIMER: {   // drawn again only when it shows something else: another point, the port's line
+        if (wp == TIMER_OSM) {
+            KillTimer(h, TIMER_OSM);
+            StartOsm();
+            return 0;
+        }
         static LONG s_drawn = -1;
         static int s_owner = -1;
         GpsState g;
@@ -219,9 +268,17 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int)
 #endif
 {
     HWND other = FindWindow(L"GpsSim_Wnd", NULL);
-    if (other) {   // one is enough: it comes to the front
+    if (other) {   // one is enough: it comes to the front (hidden by "Свернуть" too)
+        ShowWindow(other, SW_SHOW);
         SetForegroundWindow(other);
         return 0;
+    }
+    {   // "...OSM..." in its name: OSMapsCE started too
+        wchar_t own[MAX_PATH];
+        GetModuleFileName(NULL, own, MAX_PATH);
+        const wchar_t* name = wcsrchr(own, L'\\');
+        _wcslwr(own);
+        s_osmMode = wcsstr(name ? name : own, L"osm") != NULL;
     }
     s_km = (float*)malloc(kCount * sizeof(float));
     if (!s_km)
@@ -253,6 +310,8 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE, LPSTR, int)
     c.takeOver = true;
     GpsStart(&c);
     SetTimer(s_wnd, TIMER_DRAW, 500, NULL);
+    if (s_osmMode)
+        SetTimer(s_wnd, TIMER_OSM, 3000, NULL);   // (the port taken over first: OSMapsCE follows it then)
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);

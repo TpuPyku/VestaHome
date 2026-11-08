@@ -38,6 +38,10 @@ if errorlevel 1 goto fail
   /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" user32.lib gdi32.lib kernel32.lib
 if errorlevel 1 goto fail
 
+rem the same program as GpsSimOSM: it starts OSMapsCE too (a device that starts one program: a Shturmann)
+copy /y "%OUT%\GpsSim.exe" "%OUT%\GpsSimOSM.exe" >nul
+copy /y "%OUT%\GpsSimPC.exe" "%OUT%\GpsSimOSMPC.exe" >nul
+
 echo === OK
 exit /b 0
 :fail
