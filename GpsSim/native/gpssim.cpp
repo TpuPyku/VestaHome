@@ -53,27 +53,39 @@ static float Metres(const SimPoint& a, const SimPoint& b)
     return (float)(sqrt(dx * dx + dy * dy) / 1e6 * 111320);
 }
 
-// ---- drawing
+// ---- drawing. The fonts made once and kept (the user 2026-11-08: slow in front on the unit - each frame made a
+// dozen smoothed fonts, the 96 px one too)
+struct FontSlot { int size; bool bold; HFONT f; };
+static FontSlot s_fonts[12];
+static int      s_nFonts;
+
 static HFONT Font(int h, bool bold)
 {
+    for (int i = 0; i < s_nFonts; i++)
+        if (s_fonts[i].size == h && s_fonts[i].bold == bold)
+            return s_fonts[i].f;
     LOGFONT lf;
     memset(&lf, 0, sizeof(lf));
     lf.lfHeight = -h;
     lf.lfWeight = bold ? FW_BOLD : FW_NORMAL;
     lf.lfQuality = ANTIALIASED_QUALITY;
     wcscpy(lf.lfFaceName, L"Tahoma");
-    return CreateFontIndirect(&lf);
+    HFONT f = CreateFontIndirect(&lf);
+    if (s_nFonts < 12) {
+        FontSlot slot = { h, bold, f };
+        s_fonts[s_nFonts++] = slot;
+    }
+    return f;   // (a 13th one would leak: there are 8 sizes)
 }
 
 static void Text(HDC dc, int x, int y, int w, int h, const wchar_t* s, int size, bool bold, COLORREF c, UINT al)
 {
-    HFONT f = Font(size, bold), old = (HFONT)SelectObject(dc, f);
+    HFONT old = (HFONT)SelectObject(dc, Font(size, bold));
     SetTextColor(dc, c);
     SetBkMode(dc, TRANSPARENT);
     RECT r = { x, y, x + w, y + h };
     DrawText(dc, s, -1, &r, al | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     SelectObject(dc, old);
-    DeleteObject(f);
 }
 
 static void Box(HDC dc, int x, int y, int w, int h, COLORREF c)
@@ -159,23 +171,33 @@ static void Tap(int x, int y)
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp)
 {
     switch (m) {
-    case WM_PAINT: {
+    case WM_PAINT: {   // into a frame kept for the window's life, then onto the screen
+        static HDC s_mem;
         PAINTSTRUCT ps;
-        HDC dc = BeginPaint(h, &ps), mem = CreateCompatibleDC(dc);
-        HBITMAP bmp = CreateCompatibleBitmap(dc, kW, kH), old = (HBITMAP)SelectObject(mem, bmp);
-        Paint(mem);
-        BitBlt(dc, 0, 0, kW, kH, mem, 0, 0, SRCCOPY);
-        SelectObject(mem, old);
-        DeleteObject(bmp);
-        DeleteDC(mem);
+        HDC dc = BeginPaint(h, &ps);
+        if (!s_mem) {
+            s_mem = CreateCompatibleDC(dc);
+            SelectObject(s_mem, CreateCompatibleBitmap(dc, kW, kH));
+        }
+        Paint(s_mem);
+        BitBlt(dc, 0, 0, kW, kH, s_mem, 0, 0, SRCCOPY);
         EndPaint(h, &ps);
         return 0;
     }
     case WM_ERASEBKGND:
         return 1;
-    case WM_TIMER:
-        InvalidateRect(h, NULL, FALSE);
+    case WM_TIMER: {   // drawn again only when it shows something else: another point, the port's line
+        static LONG s_drawn = -1;
+        static int s_owner = -1;
+        GpsState g;
+        GpsGet(&g);
+        if (s_idx != s_drawn || g.owner != s_owner) {
+            s_drawn = s_idx;
+            s_owner = g.owner;
+            InvalidateRect(h, NULL, FALSE);
+        }
         return 0;
+    }
     case WM_LBUTTONUP:
         Tap((short)LOWORD(lp), (short)HIWORD(lp));
         return 0;
