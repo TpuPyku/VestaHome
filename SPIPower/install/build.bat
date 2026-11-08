@@ -12,6 +12,9 @@ cd /d "%~dp0"
 if not exist obj\arm mkdir obj\arm
 if not exist "%OUT%" mkdir "%OUT%"
 
+rem the proxies packed in are the ones fingerprints.h names (else the installer refuses them on the unit)
+python check_fingerprints.py
+if errorlevel 1 goto fail
 rem VestaHome (exe, Skin, radio.txt, bass) -> vh_payload.bin -> a resource
 python make_vh_payload.py
 if errorlevel 1 goto fail

@@ -373,6 +373,8 @@ static void WriteCount(int c)
     DWORD n = 0;
     _itoa(c, b, 10);
     WriteFile(f, b, strlen(b), &n, NULL);
+    // onto the flash now (HU logs 2026-11-08: the power cut 9 s after "3" - the next boot read 2 and tried a 4th time)
+    FlushFileBuffers(f);
     CloseHandle(f);
 }
 
