@@ -170,17 +170,12 @@ static void ScrSetCar(HDC dc)
 
 // Settings -> Wi-Fi -> saved: every network kept in VestaHome.ini (and given to WZC at the start), in sight or not;
 // "Забыть" asks once more ("Точно?"), then WifiKnownSet(ssid, NULL) - out of the ini and of WZC.
-enum { kWifiSavedRows = 6 };
-static int s_wsPage, s_wsAsk = -1;   // s_wsAsk: the row whose removal waits for the second press
+static Scroll s_wsList = { 0, 0, 6 * 44 };   // a list the finger scrolls (the user 2026-11-08: no pages in the settings)
+static int s_wsAsk = -1;   // s_wsAsk: the row whose removal waits for the second press
 
 static int WifiSavedCount()
 {
     return s_cfg.wifiCount;
-}
-
-static int WifiSavedPages()   // (kPagers)
-{
-    return s_cfg.wifiCount ? (s_cfg.wifiCount + kWifiSavedRows - 1) / kWifiSavedRows : 1;
 }
 
 static void ScrWifiSaved(HDC dc)
@@ -193,15 +188,15 @@ static void ScrWifiSaved(HDC dc)
     }
     WifiInfo w;
     WifiGet(&w);
-    int n = s_cfg.wifiCount, pages = WifiSavedPages();
-    if (s_wsPage >= pages)
-        s_wsPage = 0;
+    int n = s_cfg.wifiCount;
     if (!n)
         SetRow(dc, 64, L"Сохранённых сетей нет", L"сеть запоминается при подключении с паролем", true);
-    for (int k = 0; k < kWifiSavedRows; k++) {
-        int i = s_wsPage * kWifiSavedRows + k, y = 64 + k * 44;
-        if (i >= n)
-            break;
+    s_wsList.content = n * 44;
+    ScrollBegin(dc, s_wsList, 256, 64, 712, 328);
+    for (int i = 0; i < n; i++) {
+        int y = 64 + i * 44 - s_wsList.pos;
+        if (y + 44 <= 64 || y >= 328)
+            continue;
         bool cur = (w.state == WIFI_CONNECTED || w.state == WIFI_CONNECTING) && !wcscmp(s_cfg.wifiSsid[i], w.ssid);
         int rssi = 0;
         bool seen = false;
@@ -219,13 +214,12 @@ static void ScrWifiSaved(HDC dc)
             _snwprintf(sub, 64, L"рядом · %d дБм", rssi);
         else
             wcscpy(sub, L"не видна");
-        T(dc, 264, y + 20, s_cfg.wifiSsid[i], 17, kText, 700, AL_START, 360);
-        T(dc, 264, y + 38, sub, 13, cur ? kOrange : s_cfg.wifiLocked[i] ? kStop : kMuted, 400, AL_START, 360);
-        Button(dc, 640, y + 4, 128, 36, s_wsAsk == i ? L"Точно?" : L"Забыть", s_wsAsk == i ? B_SEL : B_N, IC_NONE, 14,
+        T(dc, 264, y + 20, s_cfg.wifiSsid[i], 17, kText, 700, AL_START, 310);
+        T(dc, 264, y + 38, sub, 13, cur ? kOrange : s_cfg.wifiLocked[i] ? kStop : kMuted, 400, AL_START, 310);
+        Button(dc, 584, y + 4, 120, 36, s_wsAsk == i ? L"Точно?" : L"Забыть", s_wsAsk == i ? B_SEL : B_N, IC_NONE, 14,
                0, A_WIFIDEL, i);
     }
-    if (pages > 1)
-        PageDots(dc, s_wsPage, pages, 512, 360);
+    ScrollEnd(dc, s_wsList, 720, 64, 48, 264, 52);
 }
 
 // MCU monitor ("Car -> MCU data", "Diagnostics -> keys"): the proxy's state, every message id with its count,

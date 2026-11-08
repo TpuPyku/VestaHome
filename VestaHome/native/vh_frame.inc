@@ -452,10 +452,7 @@ static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true },
                                  { S_SAVER_PICK, &s_phPage, PhotoPages, false },
                                  { S_AUDIO_LIST, &s_musPage, MusPages, false },
                                  { S_VIDEO, &s_vidPage, VidPages, false },
-                                 { S_BT_PAIRED, &s_pairedPage, PairedPages, true },
-                                 { S_WIFI_SAVED, &s_wsPage, WifiSavedPages, true },
-                                 { S_SET_WIFI, &s_wifiPage, WifiPages, false }, { S_TASKS, &s_taskPage, TaskPages, false },
-                                 { S_CAMREG, &s_regPage, RegPages, true } };
+                                 { S_TASKS, &s_taskPage, TaskPages, false } };
 
 static const Pager* PagerOf(Screen s)
 {
@@ -479,12 +476,10 @@ static bool PageStep(const Pager& p, int dir, int* to)
     return *to >= 0 && *to < n;
 }
 
-// A finger's drag turns the page - not in the settings (the user 2026-11-08: in Wi-Fi's a drag anywhere, the sections'
-// column too, turned the list's page; "the settings have no turning of pages"): there their arrows only
+// A finger's drag turns the page (the settings' lists scroll instead: the user 2026-11-08, "no turning of pages")
 static bool CanSwipe()
 {
-    return PagerOf(s_screen) != NULL && s_screen != S_SET_WIFI && s_screen != S_WIFI_SAVED &&
-           s_screen != S_BT_PAIRED && s_screen != S_CAMREG;
+    return PagerOf(s_screen) != NULL;
 }
 
 // The page beside (dir) drawn into s_back without turning to it (no side effects: the radio's band is not

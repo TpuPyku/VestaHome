@@ -38,18 +38,12 @@ static const CamRegion kCamRegions[] = {
     { "75", L"Забайкальский кр." }, { "76", L"Ярославская" }, { "79", L"Еврейская АО" }, { "82", L"Крым" },
     { "83", L"Ненецкий АО" }, { "86", L"ХМАО — Югра" }, { "89", L"ЯНАО" }, { "92", L"Севастополь" },
     { "95", L"Чечня" } };
-enum { kCamRegionCount = sizeof(kCamRegions) / sizeof(kCamRegions[0]), kRegionsPerPage = 24 };
+enum { kCamRegionCount = sizeof(kCamRegions) / sizeof(kCamRegions[0]) };
 
 #define WM_APP_CAM (WM_APP + 12)
 static volatile LONG s_dlBusy;
 static wchar_t       s_dlStatus[100];   // the download's progress or result
 static DWORD         s_dlTry;           // tick of the last automatic attempt
-static int           s_regPage;
-
-static int RegPages()   // (kPagers)
-{
-    return (kCamRegionCount + kRegionsPerPage - 1) / kRegionsPerPage;
-}
 
 // Comma lists of the settings ("63,73"): membership and toggling of one item.
 static bool InList(const wchar_t* list, const wchar_t* item)
@@ -305,29 +299,27 @@ static void ScrCamDl(HDC dc)
            s_dlBusy ? A_NONE : A_CAMDL);
 }
 
+// The regions: four in a row, a list the finger scrolls (the user 2026-11-08: as the settings' lists - the bottom bar
+// stays, no pages); its arrows at the right
+static Scroll s_regList = { 0, 0, 3 * 55 };
+
 static void ScrCamReg(HDC dc)
 {
-    int pages = (kCamRegionCount + kRegionsPerPage - 1) / kRegionsPerPage;
-    if (s_regPage >= pages)
-        s_regPage = 0;
     Frame(dc, L"Регионы камер");
-    for (int k = 0; k < kRegionsPerPage; k++) {
-        int i = s_regPage * kRegionsPerPage + k;
-        if (i >= kCamRegionCount)
-            break;
+    s_regList.content = (kCamRegionCount + 3) / 4 * 55;
+    ScrollBegin(dc, s_regList, 16, 64, 712, 400);
+    for (int i = 0; i < kCamRegionCount; i++) {
+        int y = 64 + i / 4 * 55 - s_regList.pos;
+        if (y + 48 <= 64 || y >= 400)
+            continue;
         wchar_t s[48];
         if (i == 0)
             wcscpy(s, kCamRegions[0].name);
         else
             _snwprintf(s, 48, L"%S  %s", kCamRegions[i].code, kCamRegions[i].name);
-        Button(dc, 16 + (k % 4) * 194, 64 + (k / 4) * 55, 184, 48, s, RegionOn(i) ? B_SEL : B_FILL, IC_NONE, 14, 0,
-               A_REGION, i);
+        Button(dc, 16 + (i % 4) * 176, y, 168, 48, s, RegionOn(i) ? B_SEL : B_FILL, IC_NONE, 14, 0, A_REGION, i);
     }
+    ScrollEnd(dc, s_regList, 720, 64, 48, 336, 64);
     Dock(dc);
-    Button(dc, 96, 410, 120, 58, NULL, B_N, IC_BACK, 18, 0, A_PAGESTEP, -1);   // (right of "back")
-    wchar_t s[16];
-    _snwprintf(s, 16, L"%d / %d", s_regPage + 1, pages);
-    T(dc, 290, 448, s, 22, kText, 700, AL_MID);
-    Button(dc, 364, 410, 120, 58, NULL, B_N, IC_NEXT, 18, 0, A_PAGESTEP, 1);
     Button(dc, 584, 410, 200, 58, L"Готово", B_PRI, IC_NONE, 18, 0, A_BACK);
 }

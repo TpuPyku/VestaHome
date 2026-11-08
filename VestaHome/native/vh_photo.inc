@@ -926,7 +926,7 @@ static void DoAction(const Btn& b)
         WifiApManual(!(w.state == WIFI_AP && !w.apAuto));
         break;
     }
-    case A_PAGESTEP: {   // a paged list's arrows (kPagers: Wi-Fi, tasks, the cameras' regions)
+    case A_PAGESTEP: {   // a paged list's arrows (kPagers: the tasks)
         const Pager* p = PagerOf(s_screen);
         int to;
         if (p && PageStep(*p, b.arg, &to)) {

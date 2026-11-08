@@ -1354,8 +1354,8 @@ static void ScrSetBt(HDC dc)
 
 // Settings -> Bluetooth -> paired: the stack's list (asked anew on opening: the proxy's BT_CMD_LISTPAIRED), 7 a
 // page (the dots turn it); "УДАЛИТЬ" asks once more ("ТОЧНО?"), then Conn_Delete_Paired (BT_CMD_UNPAIR).
-enum { kPairedRows = 6 };   // under them: "+ НОВЫЙ ТЕЛЕФОН"
-static int s_pairedPage, s_pairedAsk = -1;   // s_pairedAsk: the row whose removal waits for the second press
+static Scroll s_pairedList = { 0, 0, 6 * 44 };   // a list the finger scrolls (under it: "+ НОВЫЙ ТЕЛЕФОН")
+static int s_pairedAsk = -1;   // s_pairedAsk: the row whose removal waits for the second press
 
 static void ScrBtPaired(HDC dc)
 {
@@ -1371,36 +1371,29 @@ static void ScrBtPaired(HDC dc)
         SetRow(dc, 64, L"Сопряжённые", L"нужен proxy Bluetooth (VestaHomeInstall, кнопка 2)", true);
         return;
     }
-    int n = bt.paired < BT_PAIRED ? bt.paired : BT_PAIRED, pages = (n + kPairedRows - 1) / kPairedRows;
-    if (s_pairedPage >= pages)
-        s_pairedPage = 0;   // (the dots go round)
+    int n = bt.paired < BT_PAIRED ? bt.paired : BT_PAIRED;
     if (!n)
         SetRow(dc, 64, L"Сопряжённых нет", L"новый телефон — кнопка ниже", true);
     Button(dc, 256, 340, 220, 40, L"+ Новый телефон", B_N, IC_NONE, 15, 0, A_SCREEN, S_BT_PAIRNEW);
-    for (int k = 0; k < kPairedRows; k++) {
-        int i = s_pairedPage * kPairedRows + k, y = 64 + k * 44;
-        if (i >= n)
-            break;
+    s_pairedList.content = n * 44;
+    ScrollBegin(dc, s_pairedList, 256, 64, 712, 328);
+    for (int i = 0; i < n; i++) {
+        int y = 64 + i * 44 - s_pairedList.pos;
+        if (y + 44 <= 64 || y >= 328)
+            continue;
         wchar_t nm[48], sub[64];
         BtText(bt.pairedName[i], nm, 48);
         bool on = !strcmp(bt.pairedAddr[i], bt.devAddr) && bt.hf >= 1;
         _snwprintf(sub, 64, L"%S%s", bt.pairedAddr[i], on ? L" · подключён" : L"");
         sub[63] = 0;
-        T(dc, 264, y + 20, nm[0] ? nm : L"без имени", 17, kText, 700, AL_START, 360);
-        T(dc, 264, y + 38, sub, 13, on ? kOrange : kMuted, 400, AL_START, 360);
-        Button(dc, 640, y + 4, 128, 36, s_pairedAsk == i ? L"Точно?" : L"Удалить", s_pairedAsk == i ? B_SEL : B_N,
+        T(dc, 264, y + 20, nm[0] ? nm : L"без имени", 17, kText, 700, AL_START, 310);
+        T(dc, 264, y + 38, sub, 13, on ? kOrange : kMuted, 400, AL_START, 310);
+        Button(dc, 584, y + 4, 120, 36, s_pairedAsk == i ? L"Точно?" : L"Удалить", s_pairedAsk == i ? B_SEL : B_N,
                IC_NONE, 14, 0, A_BTUNPAIR, i);
-        if (k + 1 < kPairedRows && i + 1 < n)
-            Sep(dc, 256, y + 43, 512);
+        if (i + 1 < n)
+            Sep(dc, 256, y + 43, 456);
     }
-    PageDots(dc, s_pairedPage, pages, 512, 386);
-}
-
-static int PairedPages()
-{
-    BtState bt;
-    int n = BtGet(&bt, NULL) ? (bt.paired < BT_PAIRED ? bt.paired : BT_PAIRED) : 0;
-    return n ? (n + kPairedRows - 1) / kPairedRows : 1;
+    ScrollEnd(dc, s_pairedList, 720, 64, 48, 264, 52);
 }
 
 // Settings -> Bluetooth -> OBD (a test, 2026-10-20): an ELM327 adapter found by the stack's search (the proxy's
@@ -1700,15 +1693,7 @@ static void ScrBtPairNew(HDC dc)
 // Settings -> Wi-Fi (wifi.cpp: Windows CE's WZC): the state, the networks in sight (strongest first, kWifiRows a
 // page) with their signal and security; a tap connects (a new secured one asks its password on the keyboard),
 // "Забыть" drops a known one. The known networks live in VestaHome.ini: WZC forgets them on every boot.
-enum { kWifiRows = 3 };   // under them: the message and the access point's controls
-static int     s_wifiPage;
-
-static int WifiPages()   // (kPagers)
-{
-    WifiInfo w;
-    WifiGet(&w);
-    return w.count ? (w.count + kWifiRows - 1) / kWifiRows : 1;
-}
+static Scroll s_wifiList = { 0, 0, 3 * 56 };   // the networks (under them: the message, the access point)
 static wchar_t s_wifiPass[64];     // typed on the keyboard
 static wchar_t s_wifiTarget[33];   // the network it is for
 static wchar_t s_wifiTitle[64];
@@ -1754,22 +1739,21 @@ static void ScrSetWifi(HDC dc)
         _snwprintf(s, 120, L"Подключено телефонов: %d (2,4 ГГц, канал 6)", w.apClients < 0 ? 0 : w.apClients);
         T(dc, 276, 270, s, 15, w.apClients > 0 ? kOrange : kMuted, 600, AL_START, 470);
     }
-    int pages = (w.count + kWifiRows - 1) / kWifiRows;
-    if (s_wifiPage >= pages)
-        s_wifiPage = pages ? pages - 1 : 0;
-    for (int r = 0; r < kWifiRows; r++) {
-        int i = s_wifiPage * kWifiRows + r;
-        if (i >= w.count)
-            break;
+    // the networks: a list the finger scrolls (the user 2026-11-08: no pages in the settings), its arrows at the right
+    s_wifiList.content = w.count * 56;
+    ScrollBegin(dc, s_wifiList, 256, 124, 712, 300);
+    for (int i = 0; i < w.count; i++) {
         const WifiNet& n = w.nets[i];
-        int y = 124 + r * 56;
+        int y = 124 + i * 56 - s_wifiList.pos;
+        if (y + 52 <= 124 || y >= 300)
+            continue;
         bool cur = (w.state == WIFI_CONNECTED || w.state == WIFI_CONNECTING) && !wcscmp(n.ssid, w.ssid);
-        bool down = Zone(256, y, 512, 52, A_WIFINET, i);
+        bool down = Zone(256, y, 456, 52, A_WIFINET, i);
         bool hl = down || cur;
-        R(dc, 256, y, 512, 52, 10, hl ? kOrange : kPanel2);
+        R(dc, 256, y, 456, 52, 10, hl ? kOrange : kPanel2);
         int bars = WifiBars(n.rssi);
         Ico(dc, IC_WIFI, 268, y + 10, 32, hl ? kInk : bars >= 3 ? kText : bars >= 2 ? kMuted : kDim);
-        T(dc, 312, y + 23, n.ssid, 18, hl ? kInk : kText, 700, AL_START, 280);
+        T(dc, 312, y + 23, n.ssid, 18, hl ? kInk : kText, 700, AL_START, 228);
         wchar_t ch[16] = L"";   // the channel (the unit's radio: 2.4 GHz only, channels 1..14)
         if (n.ch)
             _snwprintf(ch, 16, L" · кан. %d", n.ch);
@@ -1779,16 +1763,17 @@ static void ScrSetWifi(HDC dc)
             _snwprintf(s, 120, L"подключение…%s", ch);
         else
             _snwprintf(s, 120, L"%s%s · %d дБм%s", n.known ? L"сохр. · " : L"", kSec[n.sec & 3], n.rssi, ch);
-        T(dc, 312, y + 44, s, 14, hl ? kInk : kMuted, 400, AL_START, 280);
+        T(dc, 312, y + 44, s, 14, hl ? kInk : kMuted, 400, AL_START, 228);
         if (n.sec != WSEC_OPEN)
-            Ico(dc, IC_LOCK, 724, y + 12, 28, hl ? kInk : kDim);
+            Ico(dc, IC_LOCK, 672, y + 12, 28, hl ? kInk : kDim);
         if (n.known)   // drawn last: its button wins over the row's
-            Button(dc, 604, y + 9, 108, 34, L"Забыть", hl ? B_FILL : B_N, IC_NONE, 13, 0, A_WIFIFORGET, i);
+            Button(dc, 548, y + 9, 112, 34, L"Забыть", hl ? B_FILL : B_N, IC_NONE, 13, 0, A_WIFIFORGET, i);
     }
+    ScrollEnd(dc, s_wifiList, 720, 124, 48, 176, 52);
     if (!w.count && w.state >= WIFI_DISCONNECTED)
         T(dc, 272, 160, w.scanning ? L"Ищу сети…" : L"Сетей не видно — нажмите «НАЙТИ»", 16, kMuted, 400);
     if (w.msg[0] && w.state != WIFI_NOWZC)
-        T(dc, 256, 312, w.msg, 14, kDim, 400, AL_START, 370);
+        T(dc, 256, 326, w.msg, 14, kDim, 400, AL_START, 370);
     // the unit's own access point: by hand, or automatically when no known network is in sight
     if (w.state >= WIFI_AP) {
         bool apOn = w.state == WIFI_AP && !w.apAuto;
@@ -1801,12 +1786,6 @@ static void ScrSetWifi(HDC dc)
     if (WifiSavedCount()) {   // all the remembered ones, in sight or not: to see and to forget (the user 2026-10-26)
         _snwprintf(s, 120, L"Сохранённые (%d)", WifiSavedCount());
         Button(dc, 652, 352, 116, 40, s, B_N, IC_NONE, 13, 0, A_SCREEN, S_WIFI_SAVED);
-    }
-    if (pages > 1) {
-        _snwprintf(s, 16, L"%d/%d", s_wifiPage + 1, pages);
-        Button(dc, 644, 298, 56, 40, NULL, s_wifiPage ? B_N : B_DIS, IC_BACK, 18, 26, A_PAGESTEP, -1);
-        T(dc, 638, 324, s, 14, kMuted, 600, AL_END);
-        Button(dc, 708, 298, 56, 40, NULL, s_wifiPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 18, 26, A_PAGESTEP, 1);
     }
 }
 
