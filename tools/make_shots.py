@@ -28,7 +28,8 @@ EXE = os.path.join(VH, 'VestaHomePC.exe')
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'docs', 'shots')
 
 # the nav bar and the settings' sections (800 x 480)
-HOME, RADIO, MEDIA, PHONE, APPS, SETTINGS = (60, 440), (170, 440), (282, 440), (394, 440), (506, 440), (618, 440)
+# (8 buttons with the sample add-on's: APPS at 448 - 506 hit the add-on's, 2026-11-08)
+HOME, RADIO, MEDIA, PHONE, APPS, SETTINGS = (60, 440), (170, 440), (282, 440), (394, 440), (448, 440), (618, 440)
 SET = {'general': (60, 90), 'sound': (170, 90), 'screen': (60, 160), 'radio': (170, 160), 'bt': (60, 230),
        'wifi': (170, 230), 'video': (60, 300), 'net': (170, 300), 'car': (60, 370), 'info': (170, 370)}   # (video:
        # "Медиа" - video and photo; net: "Сеть", 2026-10-30)
@@ -62,10 +63,10 @@ SHOTS = [
     ('licenses', [SETTINGS, SET['info'], (355, 355), (627, 433)]),
     ('power', [SETTINGS, SET['info'], (728, 356)]),
     ('incoming', [HOME, ('call', 1)]),
-    ('car_sensors', [HOME, ('swipeback',), ('sleep', 2), (130, 330)]),   # from page 3 to 2: the car widget
-    ('car_widget_set', [HOME, ('sleep', 2), (240, 256)]),
-    ('speed_set', [HOME, (760, 86)]),   # (home's page 1: run alone - VH_SHOTS=speed_set,weather_set,camdl)
-    ('weather_set', [HOME, (760, 256)]), ('camdl', [HOME, (760, 86), (400, 440)]),
+    ('car_sensors', [HOME, ('swipeback',), ('sleep', 2), (660, 168)]),   # from page 3 to 2: the car widget (top right)
+    ('car_widget_set', [HOME, ('sleep', 2), (760, 88)]),   # (its gear)
+    ('speed_set', [HOME, ('swipeback',), ('sleep', 2), (760, 86)]),   # (page 2 to 1)
+    ('weather_set', [HOME, (760, 256)]), ('camdl', [HOME, (760, 86), (400, 458)]),   # (its row's middle)
     # the internet radio's catalogue (radio-browser.info: needs the internet), the list's tab "Каталог"
     ('netradio_catalog', [MEDIA, TAB['net'], TAB['list'], (572, 84)]),
     ('netradio_genres', [MEDIA, TAB['net'], TAB['list'], (572, 84), (660, 180), ('sleep', 6)]),
