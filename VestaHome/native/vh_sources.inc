@@ -139,8 +139,11 @@ static void MediaSource()   // one of our players starts
     BtQuiet();
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
-    if (src == 6 || src == 7 || src == 9)
-        return;   // media, or Bluetooth's path: ours sound
+    // media: ours sound; Bluetooth's path too, but under our host the media asked for all the same (the user
+    // 2026-11-08: BT -> SD music, the phone's went on for seconds over ours - the pause reaches it late; the media
+    // source takes the channel from Bluetooth at once)
+    if (src == 6 || src == 7 || (src == 9 && !McuHostOn()))
+        return;
     if (McuHostOn()) {   // no shell: its main menu's "Media" (FUN_005f7cdc, Ghidra 2026-10-27) - the MCU knows the
         VLog(L"источник: медиа для нашего звука (было %d)", src);   // cards from our host now, MODE turns it 07
         MediaAskSignal(true);

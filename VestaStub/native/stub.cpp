@@ -554,7 +554,7 @@ static void SkelHandle(void* self, unsigned char* p)
         int dev = p[4];
         if (dev > 1)
             break;
-        int has = DirThere(dev ? L"\\USBDevice" : L"\\SDMemory") ? 1 : 0;
+        int has = dev == 0 || DirThere(L"\\USBDevice") ? 1 : 0;   // (the SD: always - CardsTell)
         if (s_spMedia)
             s_spMedia(dev, has, 3);   // (3: the music - as the shell's card managers send it; 0 is no type)
         Log(L"mcu: медиа %s -> %d", dev ? L"USB" : L"SD", has);
@@ -578,8 +578,8 @@ static void SkelHandle(void* self, unsigned char* p)
                 ResetEvent(ask);
             CloseHandle(ask);
         }
-        int dev = DirThere(L"\\SDMemory") ? 0 : DirThere(L"\\USBDevice") ? 1 : -1;
-        if (ours && dev >= 0 && s_spSelDev)
+        int dev = 0;   // the SD - always "in" for the MCU (CardsTell): a USB disk pulled out takes nothing away
+        if (ours && s_spSelDev)
             s_spSelDev(dev);
         Log(L"mcu: плеер медиа (%02X %02X) -> %s %d", p[4], p[5], ours ? L"устройство" : L"не наш запрос, без ответа",
             dev);
@@ -626,11 +626,14 @@ static void SkelHandle(void* self, unsigned char* p)
 // 1 = \USBDevice. Looked at each second by the host; sent at the start and on each change.
 static int s_cardWas[2] = { -1, -1 };
 
+// The SD card always "in" (the user 2026-11-08: with no card the media source never came - the internet radio had no
+// sound; with only a USB disk, pulling it out took the source away mid-stream): VestaHome's sound needs the source,
+// not the card's files (VestaHome plays them itself), and the SD is the device it asks for (0x9101 below).
 static void CardsTell()
 {
     static const wchar_t* kVol[2] = { L"\\SDMemory", L"\\USBDevice" };
     for (int dev = 0; dev < 2; dev++) {
-        int has = DirThere(kVol[dev]) ? 1 : 0;
+        int has = dev == 0 || DirThere(kVol[dev]) ? 1 : 0;
         if (has == s_cardWas[dev])
             continue;
         s_cardWas[dev] = has;
