@@ -54,6 +54,13 @@ SPIPower\install\build.bat        → установщик VestaHomeInstall.exe 
 
 Общие модули — подмодуль `core` ([VestaCore](https://github.com/TpuPyku/VestaCore)).
 
+## Поддержать проект
+
+VestaHome бесплатен. Если программа вам понравилась:
+
+- поставьте ⭐ звезду репозиторию (кнопка **Star** вверху страницы) — так VestaHome проще найти другим владельцам Весты;
+- поддержите разработку на [Boosty](https://boosty.to/vesta_home) — добровольно, всё в VestaHome остаётся бесплатным.
+
 ## Другие программы
 
 - [OSMapsCE](https://github.com/TpuPyku/OSMapsCE) — карта OpenStreetMap с пробками и офлайн-маршрутами.

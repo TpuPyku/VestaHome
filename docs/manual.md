@@ -450,3 +450,7 @@ CAN и GPS, проба USB-модема, выключатель журналов
 - **YaMapsCE** — карта Яндекса с пробками. [github.com/TpuPyku/YaMaps](https://github.com/TpuPyku/YaMaps)
 - **VestaLaunch** — запуск программ с кнопки «Навигация» штатной оболочки.
   [github.com/TpuPyku/VestaLaunch](https://github.com/TpuPyku/VestaLaunch)
+
+**Поддержать проект.** Поставьте ⭐ звезду репозиторию [VestaHome](https://github.com/TpuPyku/VestaHome) — так его
+проще найти другим. Поддержать разработку можно на [Boosty](https://boosty.to/vesta_home): это добровольно, всё
+в VestaHome остаётся бесплатным.
