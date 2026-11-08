@@ -143,6 +143,7 @@ static void LoadCams(double lat, double lon)
 // 2026-10-18: the "1" stayed on, the knob then set the navigation's volume) is cut after kVoiceMaxMs.
 enum { TIMER_VOICE = 9, WM_NAVIGATION_VOICE = 0x101D, kVoiceLeadMs = 1000, kVoiceTailMs = 800, kVoiceMaxMs = 2000 };
 static int s_voice;   // 0 idle, 1 waiting to play, 2 playing, 3 waiting to end
+static bool s_plugVoice;   // an add-on's prompt on (its "voice", vh_plugins.inc): the beep's end leaves the radio down
 
 static bool s_mixOn;   // a program whose sound goes with the radio runs: the navigation channel held open (MixTick)
 
@@ -296,7 +297,8 @@ static void VoiceTimer()
         SetTimer(s_wnd, TIMER_VOICE, kVoiceTailMs, NULL);
     } else if (s_voice == 3) {
         s_voice = 0;
-        NaviVoice(false);
+        if (!s_plugVoice)
+            NaviVoice(false);
     }
 }
 

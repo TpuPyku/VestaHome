@@ -604,7 +604,12 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         p = PlugById(id);
     if (!p)
         return;   // not said hello
-    if (!wcscmp(verb, L"nav")) {
+    if (!wcscmp(verb, L"voice")) {   // an add-on's voice prompt: the radio down while it speaks (as the beep's)
+        VhapField(cmd, L"on", v, 4);
+        s_plugVoice = v[0] == L'1';
+        if (s_plugVoice || !s_voice)
+            NaviVoice(s_plugVoice);
+    } else if (!wcscmp(verb, L"nav")) {
         VNavParse(cmd, &s_nav);
         s_navPlug = (int)(p - s_plug);
         if (IsWindowVisible(s_wnd))
@@ -613,6 +618,9 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         VLog(L"дополнение: %s отключилось", p->id);
         if (s_navPlug == (int)(p - s_plug))
             s_navPlug = -1;
+        if (s_plugVoice && !s_voice)   // (gone mid-prompt: the radio back)
+            NaviVoice(false);
+        s_plugVoice = false;
         for (int k = 0; k < p->nw; k++)
             PlugWidgetFree(p->wg[k]);
         p->hwnd = NULL;

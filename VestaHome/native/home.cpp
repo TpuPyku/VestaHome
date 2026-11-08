@@ -1336,7 +1336,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             s_cfgSoon = false;
             SaveCfg();
         }
-        if (s_voice)
+        if (s_voice || s_plugVoice)
             NaviVoice(false);
         MixSet(false, NULL);
         if (s_rvcWnd)
