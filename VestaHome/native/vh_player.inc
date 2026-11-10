@@ -312,6 +312,7 @@ static void PlayerReadTags()
 // the end already posted (s_holdNext), and a tap just after a track ended is a pause, not a start from the beginning.
 static volatile DWORD s_endTick;   // a track ended (BASS's thread)
 static bool           s_holdNext;  // paused by the user: the next track not taken
+static bool           s_musicHeld; // paused by the radio / Bluetooth taking over (OursQuiet), not by the user
 
 static void CALLBACK PlayerEnd(DWORD, DWORD, DWORD, void*)
 {
@@ -426,6 +427,7 @@ static void PlayerToggle()
             Go(S_AUDIO_LIST, true);
         return;
     }
+    s_musicHeld = false;   // the user's own play or pause from now on
     DWORD a = s_bass.active(s_chan);
     if (a == BASS_ACTIVE_PLAYING_F) {
         s_bass.pause(s_chan);

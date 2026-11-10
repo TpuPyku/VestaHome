@@ -303,6 +303,7 @@ static void Under(HDC dc, int alpha)
     s_pressed = pressed;
     if (s_partial) {   // the screen under the window has no buttons (nor list)
         s_zoneIdx = 0;
+        s_zoneMoved = false;
     } else {
         kBtnCount = 0;
         s_scroll = NULL;

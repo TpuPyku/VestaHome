@@ -388,7 +388,21 @@ static void ScrSetVideo(HDC dc)
     Toggle(dc, 688, 354, T_AUTOROTATE);
 }
 
+static void DoActionOn(const Btn& b);
+
+// A button's action; "Music" opened by it while our music waits under the radio: it goes on (sheet 28 p. 1-2)
 static void DoAction(const Btn& b)
+{
+    Screen was = s_screen;
+    DoActionOn(b);
+    if (s_screen == S_AUDIO && was != S_AUDIO && MusicBackOnTab(s_musicHeld, PlayerPlaying())) {
+        VLog(L"плеер: «Музыка» открыта - продолжаю после паузы источником");
+        PlayerToggle();
+        BuildButtons();
+    }
+}
+
+static void DoActionOn(const Btn& b)
 {
     if (b.action != A_DELETE)
         s_delArmed = false;

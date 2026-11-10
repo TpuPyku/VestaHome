@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 from crapper import cobertura_hits, norm, show
 
@@ -86,18 +87,35 @@ def run(cmd, timeout):
         return 'timeout'
 
 
+def patient(fn, tries=20):
+    """fn() again while the file is held a moment (an editor reading it: "access denied" - 2026-11-10, the run died
+    with a mutant left in), for up to ~10 s; then its error."""
+    for k in range(tries):
+        try:
+            return fn()
+        except PermissionError:
+            if k == tries - 1:
+                raise
+            time.sleep(0.5)
+
+
 def restore(path):
     orig = path + '.mutator-orig'
     if os.path.exists(orig):
-        os.replace(orig, path)
+        patient(lambda: os.replace(orig, path))
+
+
+def put(path, data):
+    with open(path, 'wb') as f:
+        f.write(data)
 
 
 def write_mutant(path, lines, bom, k, i, new):
     """The file with line i replaced; its time moved on by k + 1 s: a same-size change in the same second would
     otherwise look unchanged (Python's .pyc cache trusts size and time)."""
     changed = lines[:i] + [new] + lines[i + 1:]
-    with open(path, 'wb') as f:
-        f.write((b'\xef\xbb\xbf' if bom else b'') + '\n'.join(changed).encode('utf-8'))
+    data = (b'\xef\xbb\xbf' if bom else b'') + '\n'.join(changed).encode('utf-8')
+    patient(lambda: put(path, data))
     stamp = os.path.getmtime(path + '.mutator-orig') + k + 1
     os.utime(path, (stamp, stamp))
 

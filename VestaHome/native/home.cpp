@@ -41,6 +41,7 @@
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
+#include "zonepart.h"  // a partial frame's buttons against the full frame's
 #include "secret.h"
 #include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
@@ -202,6 +203,7 @@ static int     s_mcuNight = -1, s_bright = -1;   // the backlight: 0x4105 day / 
 static RECT    s_clip = { 0, 0, 800, 480 };
 static bool    s_partial;
 static int     s_zoneIdx;   // the buttons counted during a partial frame (for the pressed look)
+static bool    s_zoneMoved; // a partial frame's button not where the full frame had it: the whole frame
 static wchar_t s_dir[MAX_PATH];
 
 // Events log VestaHome.log - on the unit only on the SD card / USB disk (VestaCore LogDir: VestaLogs folder), never
@@ -823,6 +825,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         {   // an SD card or a USB disk in or out: the marks of the top bar
             int m = MediaMask();
             if (m != s_mediaMask) {
+                int vol, mute, src;
+                if ((s_mediaMask & 1) && !(m & 1) && VolGet(&vol, &mute, &src) && CardOutRadio(src, s_netOn)) {
+                    VLog(L"SD-карта вынута при источнике %d - радио", src);
+                    RadioOn();
+                }
                 s_mediaMask = m;
                 UserWidgetsScan();   // the card came or went: its widgets
                 PluginsStart();      // (and its add-ons: the ones running are left alone)

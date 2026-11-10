@@ -8,6 +8,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stdout
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -228,6 +229,41 @@ class Tools(unittest.TestCase):
         mutator.restore(path)
         self.assertEqual(open(path, encoding='utf-8').read(), 'x = 1 + 2\n')
         self.assertFalse(os.path.exists(path + '.mutator-orig'))
+
+    def test_mutator_restore_waits_for_a_file_held(self):
+        # 2026-11-10: the editor held offline.cpp for a moment - "access denied", the run died with a mutant in it
+        path = self.write('f.py', 'mutant\n')
+        with open(path + '.mutator-orig', 'w', encoding='utf-8', newline='\n') as f:
+            f.write('x = 1 + 2\n')
+        real, calls = os.replace, []
+
+        def held_twice(a, b):
+            calls.append(a)
+            if len(calls) <= 2:
+                raise PermissionError('held')
+            real(a, b)
+        with mock.patch('os.replace', held_twice), mock.patch('time.sleep') as nap:
+            mutator.restore(path)
+        self.assertEqual((len(calls), nap.call_count), (3, 2))
+        self.assertEqual(open(path, encoding='utf-8').read(), 'x = 1 + 2\n')
+        with mock.patch('os.replace', side_effect=PermissionError('held')), mock.patch('time.sleep'):
+            with open(path + '.mutator-orig', 'w', encoding='utf-8') as f:
+                f.write('y\n')
+            self.assertRaises(PermissionError, mutator.restore, path)   # held for good: still told
+
+    def test_mutator_writes_a_mutant_to_a_file_held(self):
+        path = self.write('f.py', 'x = 1 + 2\n')
+        shutil.copyfile(path, path + '.mutator-orig')
+        real, calls = mutator.put, []
+
+        def held_once(p, data):
+            calls.append(p)
+            if len(calls) == 1:
+                raise PermissionError('held')
+            real(p, data)
+        with mock.patch.object(mutator, 'put', held_once), mock.patch('time.sleep'):
+            mutator.write_mutant(path, ['x = 1 - 2'], False, 0, 0, 'x = 1 - 2')
+        self.assertEqual((len(calls), open(path, encoding='utf-8').read()), (2, 'x = 1 - 2'))
 
 
 if __name__ == '__main__':

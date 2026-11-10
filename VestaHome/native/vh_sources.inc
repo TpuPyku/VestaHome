@@ -72,8 +72,10 @@ static void MediaAskSignal(bool on)
 static void OursQuiet()   // the radio or Bluetooth takes over: our players stop (pause)
 {
     NetStop();
-    if (PlayerPlaying())
+    if (PlayerPlaying()) {
         s_bass.pause(s_chan);
+        s_musicHeld = true;   // "Music" opened again: it goes on (MusicBackOnTab)
+    }
     VidPauseForAudio();
 }
 

@@ -177,6 +177,7 @@ static void RedrawArea(int l, int t, int r, int b)
         memcpy(was + (y - t) * w, s_backBits + (479 - y) * 800 + l, w * sizeof(Pix));
     s_partial = true;
     s_zoneIdx = 0;
+    s_zoneMoved = false;
     s_clip.left = l;
     s_clip.top = t;
     s_clip.right = r;
@@ -207,6 +208,8 @@ static void RedrawArea(int l, int t, int r, int b)
     s_areaMs += ms;
     if (changed)
         s_areaShown++;
+    if (s_zoneMoved || s_zoneIdx != kBtnCount)
+        Redraw();   // the layout changed under the area (the media widget: the music became the radio): its buttons
 }
 
 // Our own threads' share of the CPU since the last call, the 4 busiest: "<id> NN%" (2026-10-18: VestaHome showed

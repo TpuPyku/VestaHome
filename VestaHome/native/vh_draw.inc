@@ -1586,8 +1586,16 @@ static void RSel(HDC dc, int x, int y, int w, int h, int rx, bool sel, bool down
 // Registers a button of the current screen; true while it is pressed.
 static bool Zone(int x, int y, int w, int h, Action a, int arg = 0)
 {
-    if (s_partial)   // the buttons of the full frame stay; only the pressed look is told
-        return s_zoneIdx++ == s_pressed;
+    if (s_partial) {   // the buttons of the full frame stay, taking the actions drawn now (the presets' arrows: the
+        int i = s_zoneIdx++;   // next preset, HU sheet 28 p. 35); another layout - the whole frame (RedrawArea)
+        if (ZoneSame(i < kBtnCount ? &s_btns[i].rc : NULL, x, y, w, h)) {
+            s_btns[i].action = a;
+            s_btns[i].arg = arg;
+        } else {
+            s_zoneMoved = true;
+        }
+        return i == s_pressed;
+    }
     if (kBtnCount >= kMaxBtns)
         return false;
     Btn& b = s_btns[kBtnCount];

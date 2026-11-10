@@ -24,6 +24,15 @@ int main()
     Check(!NextTrackPlays(8, false), "the source after the media's: not on");
     Check(NextTrackPlays(0, true), "our own switch to the media still going: on");
     Check(NextTrackPlays(-1, false), "the source not known (the PC, no MCU): on, as before");
+    Check(CardOutRadio(7, false), "the card out, the media on (sheet 28): the radio");
+    Check(CardOutRadio(6, false), "the card out, the media (06): the radio");
+    Check(!CardOutRadio(7, true), "the card out under the internet radio (it needs no card): kept");
+    Check(!CardOutRadio(0, false), "the card out on the radio: nothing to do");
+    Check(!CardOutRadio(9, false), "the card out under Bluetooth: kept");
+    Check(!CardOutRadio(-1, false), "the source not known (the PC): kept");
+    Check(MusicBackOnTab(true, false), "our music paused by the radio, Music opened (sheet 28 p. 1-2): it plays");
+    Check(!MusicBackOnTab(false, false), "paused by the user: stays paused");
+    Check(!MusicBackOnTab(true, true), "already playing: left alone");
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }
