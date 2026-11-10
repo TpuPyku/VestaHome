@@ -32,7 +32,7 @@ static const wchar_t* UiSourceKey()
     int vol, mute, src;
     if (!VolGet(&vol, &mute, &src) || src < 0)
         return NULL;
-    return src == 0 ? L"radio" : src == 9 ? L"bt" : L"";
+    return src == 0 ? L"radio" : src == 9 ? L"bt" : src == s_auxSrc ? L"aux" : L"";
 }
 
 // The start's screen (the user, 2026-10-21): the settings and the programs -> the main screen; the music, video
@@ -264,6 +264,9 @@ static void ResumeSourceTick()
         VLog(L"запуск: интернет-радио «%s»", s_cfg.radioStation);
         if (NetCur())
             NetPlayNow();
+    } else if (!wcscmp(s_cfg.uiSource, L"aux")) {   // (its number learned: AuxOn)
+        VLog(L"запуск: AUX (источник MCU %d)", src);
+        AuxOn();
     } else if (!wcscmp(s_cfg.uiSource, L"music")) {
         VLog(L"запуск: музыка «%s»", s_cfg.musicFile);
         if (!s_chan && s_cfg.musicDir[0])

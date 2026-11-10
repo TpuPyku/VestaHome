@@ -220,7 +220,7 @@ static void ScrPhoto(HDC dc)
         Frame(dc, L"Медиа · Фото");
         MediaTabs(dc, S_PHOTO, IC_NONE, A_NONE, 0);
     }
-    DirPath(dc, s_phDir, A_PHFILE, -1, -3, 784);
+    DirPath(dc, s_phDir, A_PHFILE, -1, -3, PhotoPages() > 1 ? 608 : 784);
     PhotoWantThumbs();
     for (int t = 0; t < kPhTiles; t++) {   // design 0.6: 4 x 2, the picture without a frame, its name under it
         int k = PhotoTileEntry(t), x = 22 + (t % 4) * 194, y = 160 + (t / 4) * 118;
@@ -253,9 +253,8 @@ static void ScrPhoto(HDC dc)
           kThW);
     }
     if (!s_phCount)
-        T(dc, 400, 250, s_phDir[0] ? L"Здесь нет папок и фото (JPG, PNG, BMP)" : L"Нет носителей", 18, kMuted, 400,
-          AL_MID);
-    PageDots(dc, s_phPage, PhotoPages());
+        EmptyList(dc, 40, 190, 720, s_phDir[0] ? L"Здесь нет папок и фото (JPG, PNG, BMP)" : L"Нет носителей");
+    ListPages(dc, s_phPage, PhotoPages(), 112, 40);   // (a main screen: the arrows on the path line, as the video's)
 }
 
 // The viewer: picture i of the folder asked for (its own turn reset), the slide show's timer as set.
@@ -390,12 +389,15 @@ static void ScrSetVideo(HDC dc)
 
 static void DoActionOn(const Btn& b);
 
-// A button's action; "Music" opened by it while our music waits under the radio: it goes on (sheet 28 p. 1-2)
+// A button's action; "Music" opened by it while our music waits under the radio: it goes on (sheet 28 p. 1-2);
+// AUX opened: the MCU's AUX input (AuxOn)
 static void DoAction(const Btn& b)
 {
     Screen was = s_screen;
     DoActionOn(b);
-    if (s_screen == S_AUDIO && was != S_AUDIO && MusicBackOnTab(s_musicHeld, PlayerPlaying())) {
+    if (TabOpened(was, s_screen, S_AUX))
+        AuxOn();
+    if (TabOpened(was, s_screen, S_AUDIO) && MusicBackOnTab(s_musicHeld, PlayerPlaying())) {
         VLog(L"плеер: «Музыка» открыта - продолжаю после паузы источником");
         PlayerToggle();
         BuildButtons();
@@ -479,16 +481,6 @@ static void DoActionOn(const Btn& b)
             PhotoShow(s_cfg.photoSlides);
         }
         break;
-    case A_PHPLAY:   // the tab's play: the slide show from the picture viewed (or the first)
-        if (s_phCur < 0)
-            PhotoStep(1);
-        else
-            PhotoView(s_phCur);
-        if (s_phCur >= 0) {
-            Go(S_PHOTO_VIEW, true);
-            PhotoShow(true);
-        }
-        break;
     case A_PHSTEP:   PhotoStep(b.arg); break;
     case A_SCROLL:   if (s_scroll) ScrollTo(*s_scroll, s_scroll->pos + b.arg * s_scroll->step); break;
     case A_PHROT:    s_phRot = (s_phRot + b.arg + 4) % 4; PhotoView(s_phCur); break;
@@ -529,7 +521,6 @@ static void DoActionOn(const Btn& b)
         if (b.arg >= 0 && b.arg < s_uwCount && s_uw[b.arg].tap[0])
             UserWgRun(s_uw[b.arg], s_uw[b.arg].tap, L"нажатие");
         break;
-    case A_SHPAGE:   s_setHomePage += b.arg; break;
     case A_WGVIS:
         s_cfg.homeHidden ^= 1 << b.arg;
         SaveCfg();
@@ -544,7 +535,9 @@ static void DoActionOn(const Btn& b)
         int i = 0;
         while (i < WgCount() && s_cfg.homeOrder[i] != b.arg / 2)
             i++;
-        int j = b.arg % 2 ? i + 1 : i - 1;
+        int dir = b.arg % 2 ? 1 : -1, j = i + dir;
+        while (j >= 0 && j < WgCount() && !WgListed(s_cfg.homeOrder[j]))   // over the ones not in the list
+            j += dir;
         if (i < WgCount() && j >= 0 && j < WgCount()) {
             int t = s_cfg.homeOrder[i];
             s_cfg.homeOrder[i] = s_cfg.homeOrder[j];
@@ -578,8 +571,10 @@ static void DoActionOn(const Btn& b)
             (b.arg == T_AUTOCONNECT ? s_cfg.btAutoConnect : s_cfg.btAutoAnswer) = s_on[b.arg] ? 1 : 0;
             SaveCfg();
         }
-        if (b.arg == T_LOUDNESS)   // the shell's loudness keys (CAudioEffectDlg, Ghidra 2026-10-22; to verify)
+        if (b.arg == T_LOUDNESS)   // the shell's loudness keys (CAudioEffectDlg ON / OFF, Ghidra 2026-11-10)
             McuKey(s_on[T_LOUDNESS] ? 0x93 : 0x94, false);
+        if (b.arg == T_VOLALGO)    // "Алгоритм изменения громкости" (CAudioFieldDlg's list: VolData(2, on))
+            McuSend3("SPApi_SendRadioAudioVolData", 2, s_on[T_VOLALGO] ? 1 : 0, 0);
         break;
     case A_SEG:
         s_seg[b.arg / 16] = b.arg % 16;
@@ -675,7 +670,6 @@ static void DoActionOn(const Btn& b)
     case A_RKEY:     RadioKey(b.arg); break;
     case A_RPAGE:    RadioPageTo(s_radioPage + 1); break;   // the band button: the next page, round
     case A_RLIST:    McuSend3("SPApi_SendListItemControl", 0, b.arg, 0); break;
-    case A_RLISTPAGE: s_rlistPage += b.arg; if (s_rlistPage < 0) s_rlistPage = 0; break;
     case A_RSCAN:    RadioScan(); break;
     case A_RFILL:    RadioFill(); break;
     case A_MODEMTEST: ModemNet(); break;
@@ -706,7 +700,6 @@ static void DoActionOn(const Btn& b)
         BtCmdText(BT_CMD_DIAL, s_dial);
         Go(S_CALL, true);
         break;
-    case A_PHONECLR: s_dial[0] = 0; break;
     case A_PBCONTACT:
         s_pbContact = b.arg;
         Go(S_CONTACT, true);
@@ -718,13 +711,13 @@ static void DoActionOn(const Btn& b)
             PbDial(s_book[b.arg / 4].num[b.arg % 4]);
         break;
     case A_PBRELOAD: PbAsk(b.arg); break;
-    case A_PBFIND:   OpenKeysFor(s_pbFind, 23, L"Поиск контакта", S_CONTACTS); s_bookList.pos = 0; break;
+    case A_PBFIND:   OpenKeysFor(s_pbFind, 23, L"Поиск контакта", S_CONTACTS); s_bookPage = 0; break;
     case A_PBSIM:    // the other book: pulled anew
         s_pbStorage ^= 1;
         free(s_book);
         s_book = NULL;
         s_bookN = -1;
-        s_bookList.pos = 0;
+        s_bookPage = 0;
         PbAsk(BT_PB_PB);
         break;
     case A_PBFAV:    // the contact's first number in / out of the favourites
@@ -964,6 +957,11 @@ static void DoActionOn(const Btn& b)
             McuSend3("SPApi_SendRadioKeyVolData", s_cfg.keyVol, 0, 0);
             McuKey(0x9E, true);
             SaveCfg();
+        } else if (row >= 1 && row <= 3 && McuSoundGet().vols[row - 1] >= 0) {   // its value known: set as the shell
+            static const int kType[3] = { 0, 3, 5 };   // (CAudioVolumeDlg: the start's, the phone's, TA's)
+            int v = McuSoundGet().vols[row - 1] + (up ? 1 : -1);
+            v = v < 0 ? 0 : v > 30 ? 30 : v;
+            McuSend3("SPApi_SendRadioAudioVolData", kType[row - 1], v, 0);
         } else if (row == 1) {
             McuKey(up ? 0x52 : 0x53, true);
         } else if (row == 2) {
@@ -1039,7 +1037,6 @@ static void DoActionOn(const Btn& b)
     case A_UP:       UpDir(); break;
     case A_MINIMIZE: MinimizeHome(); break;
     case A_CALIBRATE: Calibrate(); break;
-    case A_SOON:     wcscpy(s_status, b.arg ? L"нужно чтение GPS (NMEA)" : L"нужен протокол MCU"); break;
     case A_TEST:     if (++s_testStep >= kTestSteps) Back(); break;
     case A_EXIT:     StartExplorer(); DestroyWindow(s_wnd); return;
     default:         break;

@@ -100,9 +100,10 @@ static void FollowSource(int src)
         return;
     bool over = s_screen == S_VOLUME && s_histLen > 0;
     Screen* at = over ? &s_hist[s_histLen - 1] : &s_screen;
-    if (*at != S_RADIO && *at != S_AUDIO && *at != S_AUDIO_BT)
+    if (*at != S_RADIO && *at != S_AUDIO && *at != S_AUDIO_BT && *at != S_AUX)
         return;
-    Screen to = src == 6 || src == 7 ? S_AUDIO : src == 9 ? S_AUDIO_BT : src == 0 ? S_RADIO : *at;
+    Screen to = src == 6 || src == 7 ? S_AUDIO : src == 9 ? S_AUDIO_BT : src == 0 ? S_RADIO
+              : src == s_auxSrc ? S_AUX : *at;
     if (to == *at)
         return;
     VLog(L"источник %d: экран следом%s", src, over ? L" (под окном громкости)" : L"");
@@ -240,10 +241,10 @@ static void ScrVideo(HDC dc)
     MediaTabs(dc, S_VIDEO, IC_NONE, A_NONE, 0);
     if (s_vidPage >= VidPages())
         s_vidPage = VidPages() - 1;
-    DirPath(dc, s_vidDir, A_VUP, 0, 1, 784);
+    DirPath(dc, s_vidDir, A_VUP, 0, 1, VidPages() > 1 ? 608 : 784);
     DirEntries(dc, s_vidDir, s_vids, s_vidCount, s_vidPage, kVidRows, kVidCols, A_VFILE, IC_VIDEO,
                s_vpCur >= 0 && !_wcsicmp(s_vpDir, s_vidDir) ? s_vp[s_vpCur] : NULL, L"Здесь нет папок и видео");
-    PageDots(dc, s_vidPage, VidPages(), 400, 396);
+    ListPages(dc, s_vidPage, VidPages(), 112, 40);   // (a main screen: the bottom bar below - its arrows on the path line)
 }
 
 // The player: the picture (our child window) between the top bar and the dock: the bar (a tap seeks), the
@@ -270,17 +271,17 @@ static void ScrVideoPlay(HDC dc)
     bool have = (s_vidState == VID_PLAYING || s_vidState == VID_PAUSED || s_vidState == VID_ENDED) &&
                 VideoTimes(&pos, &len);
     int k = len > 0 ? (int)(pos * 640 / len) : 0;
-    R(dc, 80, 404, 640, 6, 3, kLine);
+    R(dc, 80, 414, 640, 6, 3, kLine);
     if (have) {
-        R(dc, 80, 404, k > 6 ? k : 6, 6, 3, kOrange);
-        Disc(dc, 80 + k, 407, 8, kText);
+        R(dc, 80, 414, k > 6 ? k : 6, 6, 3, kOrange);
+        Disc(dc, 80 + k, 417, 8, kText);
         for (int z = 0; z < 20; z++)
-            Zone(80 + z * 32, 392, 33, 28, A_VSEEK, z);
+            Zone(80 + z * 32, 408, 33, 22, A_VSEEK, z);
     }
     Mmss(s, 16, pos);
-    T(dc, 16, 414, s, 15, kMuted, 600);
+    T(dc, 16, 422, s, 15, kMuted, 600);
     Mmss(s, 16, len);
-    T(dc, 784, 414, s, 15, kMuted, 600, AL_END);
+    T(dc, 784, 422, s, 15, kMuted, 600, AL_END);
     IconBtn(dc, IC_LIST, 124, 430, 40, kText, A_BACK);
     IconBtn(dc, IC_PREV, 236, 430, 40, kText, A_VPREV);
     bool down = Zone(376, 426, 48, 48, A_VPLAY);
@@ -288,5 +289,5 @@ static void ScrVideoPlay(HDC dc)
     Ico(dc, s_vidState == VID_PLAYING ? IC_PAUSE : IC_PLAY, 384, 434, 32, kInk);
     IconBtn(dc, IC_FWD, 524, 430, 40, kText, A_VNEXT);
     IconBtn(dc, s_vidFull ? IC_UNFULL : IC_FULL, 632, 430, 40, s_vidFull ? kOrange : kText, A_VFULL);
-    IconBtn(dc, IC_GEAR, 736, 430, 40, kText, A_SCREEN, S_SET_VIDEO);
+    // no settings button: they are in "Настройки -> Медиа" (the bottom bars - common buttons only, the user)
 }

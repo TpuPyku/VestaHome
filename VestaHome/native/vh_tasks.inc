@@ -167,7 +167,7 @@ static void DrawTasks(HDC dc)
     Button(dc, 744, 176, 40, 48, NULL, B_N, IC_NEXT, 18, 24, A_PAGESTEP, 1);
 
     if (s_taskTab == 0 && !s_task.procOk) {
-        T(dc, 400, 350, L"Список процессов недоступен: нет toolhelp.dll", 18, kMuted, 600, AL_MID, 760);
+        EmptyList(dc, 40, 350, 720, L"Список процессов недоступен: нет toolhelp.dll");
         return;
     }
     for (int k = 0; k < kTaskRows; k++) {
@@ -208,7 +208,7 @@ static void DrawTasks(HDC dc)
         }
     }
     if (s_taskTab == 1 && !s_task.winCount)
-        T(dc, 400, 350, L"Других окон нет", 18, kMuted, 600, AL_MID);
+        EmptyList(dc, 40, 350, 720, L"Других окон нет");
 }
 
 static int s_homePage;
@@ -265,6 +265,10 @@ static Icon PlayingIcon(Screen* to)
     if (src == 0) {
         *to = S_RADIO;
         return IC_RADIO;
+    }
+    if (src == s_auxSrc) {   // (its number learned: AuxOn)
+        *to = S_AUX;
+        return IC_AUX;
     }
     return IC_NONE;
 }
@@ -836,7 +840,7 @@ static void WPhone(HDC dc, int x, int y)
     bool d = Widget(dc, x, y, 248, 158, title, IC_PHONE, A_NAV, S_PHONE);
     COLORREF big = d ? kInk : kText, mut = d ? kInk : kMuted;
     if (!proxy) {
-        TWrap(dc, x + 16, y + 92, L"нужен proxy Bluetooth (VestaHomeInstall, кнопка 2)", 15, mut, 400, 216, 2, 20);
+        TWrap(dc, x + 16, y + 92, L"нужен proxy Bluetooth (VestaHomeInstall)", 15, mut, 400, 216, 2, 20);
         return;
     }
     if (!on) {

@@ -268,7 +268,7 @@ static void ScrTextEdit(HDC dc)
     }
     ScrollEnd(dc, s_teList, 740, 68, 40, 322, 60);
     if (!s_teCount)
-        T(dc, 400, 220, L"Файл пуст — «+ СТРОКА» добавит первую", 18, kMuted, 400, AL_MID);
+        EmptyList(dc, 40, 110, 680, L"Файл пуст", L"«+ Строка» добавит первую");
     Dock(dc);
     bool ro = TeReadOnly();
     Button(dc, 88, 410, 168, 58, L"+ Строка", ro || s_teCount >= kTeMax ? B_DIS : B_N, IC_NONE, 17, 0,   // (right of

@@ -9,16 +9,9 @@ static wchar_t s_coordText[48];   // the home point's coordinates while they are
 static void WRow(HDC dc, int y, const wchar_t* label, const wchar_t* sub, Action a = A_NONE, int arg = 0,
                  int right = 520, bool last = false)
 {
-    bool down = a != A_NONE && Zone(24, y + 2, right - 24, 52, a, arg);
-    if (down)
-        R(dc, 24, y + 2, right - 24, 52, 10, kOrange);
-    T(dc, 36, y + (sub ? 26 : 35), label, 19, down ? kInk : kText, 700, AL_START, right - 52);
-    if (sub)
-        T(dc, 36, y + 47, sub, 15, down ? kInk : kMuted, 400, AL_START, right - 52);
+    bool down = RowCore(dc, 24, y, 56, right - 24, 752, right - 52, label, sub, a, arg, last);   // (the settings')
     if (a != A_NONE)
         Ico(dc, IC_NEXT, right - 36, y + 14, 28, down ? kInk : kDim);
-    if (!last)
-        Sep(dc, 24, y + 55, 752);
 }
 
 static void ScrWSetWeather(HDC dc)
@@ -125,19 +118,19 @@ static void CanStatusText(wchar_t* s, int n)
 // the CAN stream gives, its monitor. CAN settings gather here as they are decoded.
 static void ScrSetCar(HDC dc)
 {
-    enum { H = 48 };
+    enum { H = kSetH };   // six rows: they fit
     wchar_t port[16], baud[16], gps[160], can[64];
     GpsPortText(port, 16);
     GpsBaudText(baud, 16);
     GpsStatusText(gps, 160, true);
     CanStatusText(can, 64);
     Settings(dc, S_SET_CAR);
-    SetRow(dc, 64, L"Порт GPS · CAN", gps, false, A_NONE, 0, H);
-    Stepper(dc, 512, 68, 248, port, 40, 19, A_GPSPORT);
-    SetRow(dc, 112, L"Скорость порта", L"по умолчанию 115200", false, A_NONE, 0, H);
-    Stepper(dc, 512, 116, 248, baud, 40, 19, A_GPSBAUD);
-    SetRow(dc, 160, L"Данные CAN", can, false, A_SCREEN, S_TEST_CAN, H);
-    Chevron(dc, 728, 168);
+    SetRow(dc, 64, L"Порт GPS · CAN", gps);
+    Stepper(dc, 512, 70, 248, port, 44, 19, A_GPSPORT);
+    SetRow(dc, 64 + H, L"Скорость порта", L"по умолчанию 115200");
+    Stepper(dc, 512, 70 + H, 248, baud, 44, 19, A_GPSBAUD);
+    SetRow(dc, 64 + 2 * H, L"Данные CAN", can, false, A_SCREEN, S_TEST_CAN);
+    Chevron(dc, 728, 76 + 2 * H);
     wchar_t mcu[80];
     LONG attach, wraps;
     int st = McuState(&attach, &wraps);
@@ -147,12 +140,12 @@ static void ScrSetCar(HDC dc)
         wcscpy(mcu, L"proxy SPIPowerMgr не установлен или старый");
     else
         _snwprintf(mcu, 80, L"proxy работает · сообщений %u", (unsigned)s_mcuTotal);
-    SetRow(dc, 208, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU, H);
-    Chevron(dc, 728, 216);
+    SetRow(dc, 64 + 3 * H, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU);
+    Chevron(dc, 728, 76 + 3 * H);
     wchar_t tank[16];   // (the camera: always ours - the user 2026-10-29; shown by hand from "Diagnostics")
     _snwprintf(tank, 16, L"%d Л", s_cfg.tank);
-    SetRow(dc, 256, L"Объём бака", L"для запаса хода", false, A_NONE, 0, H);
-    Stepper(dc, 560, 260, 200, tank, 40, 19, A_TANK);
+    SetRow(dc, 64 + 4 * H, L"Объём бака", L"для запаса хода");
+    Stepper(dc, 560, 70 + 4 * H, 200, tank, 44, 19, A_TANK);
     wchar_t nm[64], com[8];   // the navigators' port (vh_gps.inc), its number by the arrows
     if (s_nmeaBusy)
         wcscpy(nm, L"загружается…");
@@ -162,15 +155,15 @@ static void ScrSetCar(HDC dc)
         _snwprintf(nm, 64, L"не загрузился (ошибка %lu)", s_nmeaErr);
     else
         _snwprintf(nm, 64, L"только NMEA%s", s_nmeaState > 0 ? L" · работает" : L"");
-    SetRow(dc, 304, L"Порт для навигаторов", nm, true, A_NONE, 0, H);
+    SetRow(dc, 64 + 5 * H, L"Порт для навигаторов", nm, true);
     _snwprintf(com, 8, L"COM%d", s_cfg.nmeaCom);
-    Stepper(dc, 508, 308, 164, com, 40, 19, A_NMEACOM);
-    Toggle(dc, 688, 310, T_NMEA_PORT);
+    Stepper(dc, 508, 70 + 5 * H, 164, com, 44, 19, A_NMEACOM);
+    Toggle(dc, 688, 74 + 5 * H, T_NMEA_PORT);
 }
 
 // Settings -> Wi-Fi -> saved: every network kept in VestaHome.ini (and given to WZC at the start), in sight or not;
 // "Забыть" asks once more ("Точно?"), then WifiKnownSet(ssid, NULL) - out of the ini and of WZC.
-static Scroll s_wsList = { 0, 0, 6 * 44 };   // a list the finger scrolls (the user 2026-11-08: no pages in the settings)
+static Scroll s_wsList = { 0, 0, 4 * kRowStep };   // a list the finger scrolls (the user 2026-11-08: no pages in the settings)
 static int s_wsAsk = -1;   // s_wsAsk: the row whose removal waits for the second press
 
 static int WifiSavedCount()
@@ -190,12 +183,12 @@ static void ScrWifiSaved(HDC dc)
     WifiGet(&w);
     int n = s_cfg.wifiCount;
     if (!n)
-        SetRow(dc, 64, L"Сохранённых сетей нет", L"сеть запоминается при подключении с паролем", true);
-    s_wsList.content = n * 44;
-    ScrollBegin(dc, s_wsList, 256, 64, 712, 328);
-    for (int i = 0; i < n; i++) {
-        int y = 64 + i * 44 - s_wsList.pos;
-        if (y + 44 <= 64 || y >= 328)
+        EmptyList(dc, 264, 100, 500, L"Сохранённых сетей нет", L"сеть запоминается при подключении с паролем");
+    s_wsList.content = n * kRowStep;
+    ScrollBegin(dc, s_wsList, 256, 72, 712, 392);
+    for (int i = 0; i < n; i++) {   // the rows as every list's: plates of kRowH (the paired phones')
+        int y = 72 + i * kRowStep - s_wsList.pos;
+        if (y + kRowH <= 72 || y >= 392)
             continue;
         bool cur = (w.state == WIFI_CONNECTED || w.state == WIFI_CONNECTING) && !wcscmp(s_cfg.wifiSsid[i], w.ssid);
         int rssi = 0;
@@ -214,12 +207,13 @@ static void ScrWifiSaved(HDC dc)
             _snwprintf(sub, 64, L"рядом · %d дБм", rssi);
         else
             wcscpy(sub, L"не видна");
-        T(dc, 264, y + 20, s_cfg.wifiSsid[i], 17, kText, 700, AL_START, 310);
-        T(dc, 264, y + 38, sub, 13, cur ? kOrange : s_cfg.wifiLocked[i] ? kStop : kMuted, 400, AL_START, 310);
-        Button(dc, 584, y + 4, 120, 36, s_wsAsk == i ? L"Точно?" : L"Забыть", s_wsAsk == i ? B_SEL : B_N, IC_NONE, 14,
+        RSel(dc, 256, y, 456, kRowH, 10, cur, false, kPanel2);
+        T(dc, 272, y + 23, s_cfg.wifiSsid[i], 18, cur ? kOrange : kText, 700, AL_START, 296);
+        T(dc, 272, y + 44, sub, 14, cur ? kOrange : s_cfg.wifiLocked[i] ? kStop : kMuted, 400, AL_START, 296);
+        Button(dc, 584, y + 9, 112, 34, s_wsAsk == i ? L"Точно?" : L"Забыть", s_wsAsk == i ? B_SEL : B_N, IC_NONE, 13,
                0, A_WIFIDEL, i);
     }
-    ScrollEnd(dc, s_wsList, 720, 64, 48, 264, 52);
+    ScrollEnd(dc, s_wsList, 720, 72, 48, 320, 52);
 }
 
 // MCU monitor ("Car -> MCU data", "Diagnostics -> keys"): the proxy's state, every message id with its count,

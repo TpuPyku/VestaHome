@@ -11,6 +11,17 @@ bool CardOutRadio(int src, bool netOn)
     return (src == 6 || src == 7) && !netOn;
 }
 
+int LearnSource(int known, unsigned askedAgoMs, int was, int now)
+{
+    bool other = now > 0 && now != 6 && now != 7 && now != 9;   // (0 radio, 6 / 7 media, 9 Bluetooth)
+    return askedAgoMs < 6000 && other && now != was ? now : known;
+}
+
+bool TabOpened(int was, int now, int tab)
+{
+    return now == tab && was != tab;
+}
+
 bool MusicBackOnTab(bool heldBySource, bool playing)
 {
     return heldBySource && !playing;

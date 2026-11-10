@@ -305,7 +305,14 @@ static void NcTile(int i)
         NcOpenCats(i == 1 ? NC_CIS : i == 2 ? NC_TAGS : i == 3 ? NC_COUNTRIES : NC_LANGS);
 }
 
-static Scroll s_ncList = { 0, 0, 5 * 62 };
+// A long list: pages of five rows (ListPages; a swipe - kPagers)
+enum { kNcCatPer = 5 };
+static int s_ncCatPage;
+
+static int NcCatPages()
+{
+    return s_ncCatN > 0 ? (s_ncCatN + kNcCatPer - 1) / kNcCatPer : 1;
+}
 
 static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, the most stations first
 {
@@ -316,22 +323,19 @@ static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, 
     static DWORD s_seen;
     if (s_seen != s_screenTick) {
         s_seen = s_screenTick;
-        s_ncList.pos = 0;
+        s_ncCatPage = 0;
     }
-    Panel(dc, 16, 68, 704, 322);
-    s_ncList.content = s_ncCatN > 0 ? s_ncCatN * 62 + 2 : 0;
-    ScrollBegin(dc, s_ncList, 20, 72, 716, 386);
-    for (int i = 0; i < s_ncCatN; i++) {
-        int y = 76 + i * 62 - s_ncList.pos;
-        if (y + 56 <= 72 || y >= 386)
-            continue;
+    if (s_ncCatPage >= NcCatPages())
+        s_ncCatPage = NcCatPages() - 1;
+    for (int r = 0, i = s_ncCatPage * kNcCatPer; r < kNcCatPer && i < s_ncCatN; r++, i++) {
         wchar_t n[16];
         _snwprintf(n, 16, L"%d", s_ncCats[i].count);
-        ListRow(dc, 24, y, 680, 56, s_ncCats[i].name, n, L_N, IC_NONE, NULL, NULL, A_NCPICK, i);
+        ListRow(dc, 16, 68 + r * kRowStep, 768, kRowH, s_ncCats[i].name, n, L_N, IC_NONE, NULL, NULL, A_NCPICK, i);
     }
-    ScrollEnd(dc, s_ncList, 728, 68, 56, 322, 96);
     if (!s_ncCatN)
-        T(dc, 40, 114, s_ncBusy ? L"Загрузка…" : s_ncMsg[0] ? s_ncMsg : L"Пусто", 18, s_ncMsg[0] ? kOrange : kMuted, 400);
+        EmptyList(dc, 40, 100, 720, s_ncBusy ? L"Загрузка…" : s_ncMsg[0] ? s_ncMsg : L"Пусто", NULL,
+                  s_ncMsg[0] ? kOrange : CLR_INVALID);
+    ListPages(dc, s_ncCatPage, NcCatPages());
     BackButton(dc);
 }
 
@@ -402,19 +406,24 @@ static void ScrNetRadio(HDC dc)
 
 // A list of stations (ours, the favourites, a catalogue page) that scrolls; a star on each row; the station
 // playing orange. The catalogue's page: its place instead of the tabs, "Ещё 20" and the sort below.
-enum { kNetPitch = 62 };
-static Scroll s_netList = { 0, 0, kNetRows * kNetPitch };
+// Pages of four rows under the tabs (ListPages; a swipe - kPagers).
+enum { kNetPer = 4 };
+static int s_netListPage;
 
-static void NetListOpenAt(int top, int bottom)   // opened: the station playing in view
+static int NetListPages()
+{
+    int n = s_nl[s_netView].n;
+    return n > 0 ? (n + kNetPer - 1) / kNetPer : 1;
+}
+
+static void NetListOpenAt()   // opened: the station playing's page
 {
     static DWORD s_seen;
     if (s_seen == s_screenTick)
         return;
     s_seen = s_screenTick;
     int at = s_netWhich == s_netView ? s_netCur : -1;
-    s_netList.pos = 0;
-    if (at >= 0 && at * kNetPitch + kNetPitch > bottom - top)
-        s_netList.pos = (at - 2) * kNetPitch;
+    s_netListPage = at >= 0 ? at / kNetPer : 0;
 }
 
 static void ScrNetRadioList(HDC dc)
@@ -422,8 +431,10 @@ static void ScrNetRadioList(HDC dc)
     NetLoadList();
     const NetList& l = s_nl[s_netView];
     bool cat = s_netView == NL_CAT;
-    int top = 116, bottom = 392;
-    NetListOpenAt(top, bottom);
+    int top = 116;
+    NetListOpenAt();
+    if (s_netListPage >= NetListPages())
+        s_netListPage = NetListPages() - 1;
     wchar_t s[120];
     _snwprintf(s, 120, L"Интернет-радио · %s", cat ? L"Каталог" : kNetListName[s_netView]);
     Frame(dc, s);
@@ -442,39 +453,31 @@ static void ScrNetRadioList(HDC dc)
     } else {
         NetListTabs(dc, s_netView);
     }
-    Panel(dc, 16, top - 4, 704, bottom - top + 8);
-    s_netList.content = l.n > 0 ? l.n * kNetPitch + 2 : 0;
-    ScrollBegin(dc, s_netList, 20, top, 716, bottom);
-    for (int i = 0; i < l.n; i++) {
-        int y = top + 4 + i * kNetPitch - s_netList.pos;
-        if (y + 56 <= top || y >= bottom)
-            continue;
+    for (int r = 0, i = s_netListPage * kNetPer; r < kNetPer && i < l.n; r++, i++) {
+        int y = top + r * kRowStep;
         bool cur = s_netView == s_netWhich && i == s_netCur;
-        ListRow(dc, 24, y, 620, 56, l.st[i].name, NULL, cur ? L_CUR : L_N, IC_RADIO, l.st[i].sub[0] ? l.st[i].sub : NULL,
+        ListRow(dc, 16, y, 700, kRowH, l.st[i].name, NULL, cur ? L_CUR : L_N, IC_RADIO, l.st[i].sub[0] ? l.st[i].sub : NULL,
                 NULL, A_NRPICK, i);
-        bool fav = s_netView == NL_FAV || NetIsFav(l.st[i]);
-        IconBtn(dc, fav ? IC_STAR_F : IC_STAR, 660, y + 14, 28, fav ? kOrange : kMuted, A_NRFAV, i);
+        bool fav = s_netView == NL_FAV || NetIsFav(l.st[i]);   // the star beside the row
+        IconBtn(dc, fav ? IC_STAR_F : IC_STAR, 738, y + 12, 28, fav ? kOrange : kMuted, A_NRFAV, i);
     }
-    ScrollEnd(dc, s_netList, 728, top - 4, 56, bottom - top + 8, 96);
     if (!l.n) {
         const wchar_t* why = cat ? (s_ncBusy ? L"Загрузка…" : s_ncMsg[0] ? s_ncMsg : L"Пусто")
                            : s_netView == NL_FAV    ? L"Пусто: звёздочка у станции добавляет её сюда"
                            : s_netView == NL_RECENT ? L"Пусто: здесь будут станции, которые вы включали"
                                                     : L"Нет станций: radio.txt рядом с VestaHome";
-        T(dc, 40, top + 44, why, 17, cat && s_ncMsg[0] ? kOrange : kMuted, 400, AL_START, 660);
+        EmptyList(dc, 40, top + 32, 720, why, NULL, cat && s_ncMsg[0] ? kOrange : CLR_INVALID);
     }
     Dock(dc);
-    if (cat) {
+    if (cat) {   // (left of the pages' arrows)
         if (s_ncPage.offset > 0)
-            Button(dc, 330, 412, 120, 52, L"Назад 50", B_N, IC_NONE, 15, 0, A_NCMORE, -1);
+            Button(dc, 88, 412, 120, 52, L"Назад 50", B_N, IC_NONE, 15, 0, A_NCMORE, -1);
         if (s_ncPage.raw >= kNcPage)
-            Button(dc, 460, 412, 120, 52, L"Ещё 20", B_N, IC_NONE, 15, 0, A_NCMORE, 1);
-        Button(dc, 590, 412, 194, 52, s_ncPage.byName ? L"Сорт.: название" : L"Сорт.: популярные", B_N, IC_NONE, 15,
+            Button(dc, 216, 412, 120, 52, L"Ещё 20", B_N, IC_NONE, 15, 0, A_NCMORE, 1);
+        Button(dc, 344, 412, 194, 52, s_ncPage.byName ? L"Сорт.: название" : L"Сорт.: популярные", B_N, IC_NONE, 15,
                0, A_NCSORT);
-    } else {
-        IconBtn(dc, IC_RADIO, 600, 417, 44, kText, A_BACK);
-        IconBtn(dc, IC_GEAR, 712, 417, 44, kText, A_SCREEN, S_SET_SOUND);
-    }
+    }   // the lists: only their "back" (no settings or player buttons - as the radio list's, the user 2026-11-10)
+    ListPages(dc, s_netListPage, NetListPages());
 }
 
 // The list action: a list's tab (the catalogue: its ways in), or the player's line of its list.

@@ -42,9 +42,9 @@ SHOTS = [
     ('netradio', [MEDIA, TAB['net']]), ('netradio_list', [MEDIA, TAB['net'], TAB['list']]),
     ('bt_music', [MEDIA, TAB['bt']]), ('aux', [MEDIA, TAB['aux']]), ('video', [MEDIA, TAB['video']]),
     ('photo', [MEDIA, TAB['photo']]),
-    ('phone', [PHONE]), ('contacts', [PHONE, (100, 376), ('sleep', 3)]),
-    ('contact', [PHONE, (100, 376), ('sleep', 3), (400, 150)]), ('favourites', [PHONE, (100, 376), (88, 260)]),
-    ('calls', [PHONE, (285, 376), ('sleep', 3)]),
+    ('phone', [PHONE]), ('contacts', [PHONE, (163, 88), ('sleep', 3)]),   # (the phone's pills on top, 2026-11-10)
+    ('contact', [PHONE, (163, 88), ('sleep', 3), (200, 190)]), ('favourites', [PHONE, (288, 88)]),
+    ('calls', [PHONE, (405, 88), ('sleep', 3)]),
     ('apps', [APPS]), ('tasks', [APPS, (445, 28), ('sleep', 2)]),
 ] + [('settings_' + k, [SETTINGS, v]) for k, v in SET.items()] + [
     ('settings_bt_paired', [SETTINGS, SET['bt'], (400, 372)]),

@@ -8,7 +8,7 @@
 // after 3, 6 ... 60 s while the radio is on.
 #define WM_APP_NET (WM_APP + 22)
 #define WM_APP_WIFI (WM_APP + 24)
-enum { NET_READY = 1, NET_FAILED, NET_ENDED, NET_META, NET_STALL, kNetMax = 100, kNetRows = 5 };
+enum { NET_READY = 1, NET_FAILED, NET_ENDED, NET_META, NET_STALL, kNetMax = 100 };
 enum { NR_OFF, NR_CONNECT, NR_PLAY, NR_STALL, NR_WAIT, NR_ERROR };
 
 // The stations come in lists the player steps through (the user 2026-11-04: switched like playlists): ours

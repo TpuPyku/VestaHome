@@ -450,12 +450,19 @@ struct Pager {
 };
 static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true },
                                  { S_RADIO, &s_radioPage, RadioPages, false },   // (no round: СВ -> FM1 left СВ on, HU 2026-10-24-2)
+                                 { S_RADIO_LIST, &s_rlistPage, RadioListPages, false },
                                  { S_APPS, &s_page, AppsPages, false }, { S_FILES, &s_filePage, FilePages, false },
                                  { S_PHOTO, &s_phPage, PhotoPages, false },
                                  { S_SAVER_PICK, &s_phPage, PhotoPages, false },
                                  { S_AUDIO_LIST, &s_musPage, MusPages, false },
                                  { S_VIDEO, &s_vidPage, VidPages, false },
-                                 { S_TASKS, &s_taskPage, TaskPages, false } };
+                                 { S_TASKS, &s_taskPage, TaskPages, false },
+                                 { S_SET_HOME, &s_setHomePage, SetHomePages, false },
+                                 { S_NETRADIO_LIST, &s_netListPage, NetListPages, false },
+                                 { S_NETCATS, &s_ncCatPage, NcCatPages, false },
+                                 { S_CONTACTS, &s_bookPage, BookPages, false },
+                                 { S_CALLS, &s_callPage, CallPages, false },
+                                 { S_FAVS, &s_favPage, FavPages, false } };
 
 static const Pager* PagerOf(Screen s)
 {

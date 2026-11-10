@@ -33,6 +33,22 @@ int main()
     Check(MusicBackOnTab(true, false), "our music paused by the radio, Music opened (sheet 28 p. 1-2): it plays");
     Check(!MusicBackOnTab(false, false), "paused by the user: stays paused");
     Check(!MusicBackOnTab(true, true), "already playing: left alone");
+    Check(TabOpened(1, 7, 7), "another screen -> the tab: opened");
+    Check(!TabOpened(7, 7, 7), "the tab again (its own button): not opened anew");
+    Check(!TabOpened(7, 1, 7), "the tab left: not opened");
+    Check(!TabOpened(1, 2, 7), "another screen: not the tab");
+    Check(LearnSource(-1, 1500, 0, 11) == 11, "the source changed 1.5 s after the key: its number");
+    Check(LearnSource(-1, 7000, 0, 11) == -1, "changed long after the key: not its");
+    Check(LearnSource(5, 7000, 0, 11) == 5, "long after: the number known stays");
+    Check(LearnSource(-1, 500, 11, 11) == -1, "no change (already on it): nothing learned");
+    Check(LearnSource(-1, 500, 0, -1) == -1, "the source not known: nothing learned");
+    Check(LearnSource(-1, 5999, 0, 11) == 11, "within 6 s: its");
+    Check(LearnSource(-1, 6000, 0, 11) == -1, "6 s: too late");
+    Check(LearnSource(-1, 500, 11, 0) == -1, "the radio (0) after the key: not AUX's");
+    Check(LearnSource(-1, 500, 0, 6) == -1, "the media (6) after the key: not AUX's");
+    Check(LearnSource(-1, 500, 0, 7) == -1, "the media (7) after the key: not AUX's");
+    Check(LearnSource(-1, 500, 0, 9) == -1, "Bluetooth (9) after the key: not AUX's");
+    Check(LearnSource(-1, 500, 0, 1) == 1, "1: an unknown number - learned");
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

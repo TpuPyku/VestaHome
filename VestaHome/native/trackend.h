@@ -12,3 +12,12 @@ bool CardOutRadio(int src, bool netOn);
 // "Music" opened: our music goes on if the radio or Bluetooth paused it (OursQuiet; sheet 28 p. 1-2: from the menu it
 // stayed paused, MODE resumed it); a pause by the user stays.
 bool MusicBackOnTab(bool heldBySource, bool playing);
+
+// A tab (screen) opened by a button: it was not on before (its own button again - not opened anew)
+bool TabOpened(int was, int now, int tab);
+
+// The MCU's number of a source switched by a key, learned on the unit (AUX: not in the shell's code, Ghidra
+// 2026-11-10): the first change of the source (was -> now) within 6 s after the key (askedAgoMs), not to one of the
+// numbers known (0 radio, 6 / 7 media, 9 Bluetooth: the user went on, or the MCU refused); otherwise the number known
+// stays (-1 none).
+int LearnSource(int known, unsigned askedAgoMs, int was, int now);

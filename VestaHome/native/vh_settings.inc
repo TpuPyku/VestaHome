@@ -826,21 +826,30 @@ static void FavToggle(const wchar_t* name, const wchar_t* num)
     SaveCfg();
 }
 
+static int s_favPage;
+
+static int FavPages()   // pages of two columns of four rows (kRowStep), from y 116
+{
+    wchar_t names[kFavMax][48], nums[kFavMax][24];
+    int n = FavCount(names, nums);
+    return n > 0 ? (n + 7) / 8 : 1;
+}
+
 static void ScrFavs(HDC dc)
 {
     Frame(dc, L"Телефон · Избранное");
-    PhoneNav(dc, 2);
-    Panel(dc, 192, 68, 592, 322);
+    PhoneTabs(dc, S_FAVS);
     wchar_t names[kFavMax][48], nums[kFavMax][24];
-    int n = FavCount(names, nums);
+    int n = FavCount(names, nums), pages = FavPages();
     if (!n) {
-        T(dc, 216, 140, L"Избранных нет", 20, kText, 700, AL_START, 540);
-        T(dc, 216, 172, L"Звёздочка в карточке контакта добавляет его сюда.", 16, kMuted, 400, AL_START, 540);
+        EmptyList(dc, 24, 150, 752, L"Избранных нет", L"Звёздочка в карточке контакта добавляет его сюда");
         return;
     }
-    for (int i = 0; i < n && i < 10; i++)   // two columns of five
-        ListRow(dc, 200 + i / 5 * 292, 76 + i % 5 * 62, 284, 56, names[i][0] ? names[i] : nums[i],
+    s_favPage = s_favPage >= pages ? pages - 1 : s_favPage;
+    for (int k = 0, i = s_favPage * 8; k < 8 && i < n; k++, i++)
+        ListRow(dc, 16 + k / 4 * 388, 116 + k % 4 * kRowStep, 380, kRowH, names[i][0] ? names[i] : nums[i],
                 NULL, L_N, IC_STAR_F, names[i][0] ? nums[i] : NULL, NULL, A_FAVDIAL, i, kOrange);
+    ListPages(dc, s_favPage, pages, 68, 40);
 }
 
 static const wchar_t* BtUnitName()

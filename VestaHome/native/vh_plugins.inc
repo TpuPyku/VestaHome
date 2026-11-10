@@ -860,7 +860,7 @@ static void ScrSetPlugins(HDC dc)
 {
     Settings(dc, S_SET_PLUGINS);
     if (!s_plugN) {
-        SetRow(dc, 64, L"Дополнений нет", L"программы дополнений — в VHContent\\VHPlugins на \\ResidentFlash или SD", true);
+        EmptyList(dc, 264, 100, 500, L"Дополнений нет", L"программы дополнений — в VHContent\\VHPlugins на \\ResidentFlash или SD");
         return;
     }
     for (int i = 0; i < s_plugN && i < 6; i++) {

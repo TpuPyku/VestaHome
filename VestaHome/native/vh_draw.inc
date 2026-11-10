@@ -1453,23 +1453,6 @@ static void Line(HDC dc, int x0, int y0, int x1, int y1, int width, COLORREF c)
     SelectObject(dc, op);
 }
 
-static void PolyD(HDC dc, const double* xy, int n, COLORREF c)
-{
-    POINT p[8];
-    for (int i = 0; i < n; i++) {
-        p[i].x = (int)(xy[2 * i] + 0.5);
-        p[i].y = (int)(xy[2 * i + 1] + 0.5);
-    }
-    Poly(dc, p, n, c);
-}
-
-static void Clip(HDC dc, int x, int y, int w, int h)
-{
-    HRGN rgn = CreateRectRgn(x, y, x + w, y + h);
-    SelectClipRgn(dc, rgn);
-    DeleteObject(rgn);
-}
-
 // ---- pixels: the pattern, translucency (the back buffer is 32-bit and reachable)
 
 static Pix Px(COLORREF c)
@@ -1627,9 +1610,9 @@ static void Ico(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         PaintIcon(dc, ic, x, y, size, c);
 }
 
-static void Sep(HDC dc, int x, int y, int w)
+static void Sep(HDC dc, int x, int y, int w)   // design 0.6: 1 px
 {
-    Fill(dc, x, y, x + w, y + 2, kLine);
+    Fill(dc, x, y, x + w, y + 1, kLine);
 }
 
 // A card (design 0.6): a surface a shade lighter than the background, no border.
@@ -1688,25 +1671,14 @@ static void IconBtn(HDC dc, Icon ic, int x, int y, int size, COLORREF c, Action 
     Ico(dc, ic, x, y, size, down ? kInk : c);
 }
 
-// The orange "pause" circle of the players.
-static void PauseBtn(HDC dc, int cx, int cy, int r, int isz)
-{
-    bool down = Zone(cx - r, cy - r, 2 * r, 2 * r, A_NONE);
-    Disc(dc, cx, cy, r, down ? kFacet : kOrange);
-    Ico(dc, IC_PAUSE, cx - isz / 2, cy - isz / 2, isz, kInk);
-}
-
-// Switch s_on[id].
+// A switch (design 0.6: 52 x 30) centred in the 72 x 36 box at x, y the screens place it by; the tap area around it.
 static void Toggle(HDC dc, int x, int y, int id)
 {
     bool on = s_on[id] != Zone(x - 10, y - 10, 92, 56, A_TOGGLE, id);   // pressed shows the new state
-    if (on) {
-        R(dc, x, y, 72, 36, 18, kOrange);
-        Disc(dc, x + 54, y + 18, 14, kInk);
-    } else {
-        R(dc, x, y, 72, 36, 18, kPanel2);
-        Disc(dc, x + 18, y + 18, 13, kDim);
-    }
+    x += 10;
+    y += 3;
+    R(dc, x, y, 52, 30, 15, on ? kOrange : kPanel2);
+    Disc(dc, on ? x + 37 : x + 15, y + 15, 11, on ? kInk : kDim);
 }
 
 // Segmented choice s_seg[id] among n options.
@@ -1721,16 +1693,6 @@ static void Seg(HDC dc, int x, int y, int w, int h, const wchar_t* const* opts, 
             R(dc, cx, y + 2, cw, h - 4, (h - 4) / 2, kOrange);
         T(dc, cx + cw / 2, y + h / 2 + size * 36 / 100, opts[i], size, on ? kInk : kMuted, 700, AL_MID, cw - 6);
     }
-}
-
-static void Slider(HDC dc, int x, int y, int w, int pct, const wchar_t* val)
-{
-    int k = w * pct / 100;
-    R(dc, x, y, w, 8, 4, kLine);
-    R(dc, x, y, k > 8 ? k : 8, 8, 4, kOrange);
-    Disc(dc, x + k, y + 4, 13, kText);
-    if (val)
-        T(dc, x + w + 64, y + 12, val, 22, kText, 700, AL_END);
 }
 
 static void VSlider(HDC dc, int x, int y, int h, int pct, const wchar_t* label, const wchar_t* val)
@@ -1757,23 +1719,15 @@ static void Stepper(HDC dc, int x, int y, int w, const wchar_t* value, int h = 4
     T(dc, x + w / 2, y + h / 2 + size * 36 / 100, value, size, kText, 700, AL_MID, w - 96);
 }
 
-static void Scrollbar(HDC dc, int x, int y, int h, int pos, int len)   // pos, len in % of h
-{
-    R(dc, x, y, 6, h, 3, kLine);
-    R(dc, x, y + h * pos / 100, 6, h * len / 100, 3, kDim);
-}
+enum { kRowH = 52, kRowStep = 58 };   // every list's row: its height, the next one's offset (ListPages)
 
-static void Avatar(HDC dc, int cx, int cy, int r, const wchar_t* initials, int size)
+// An empty list's lines, the same everywhere: what is (not) there, then what to do (hint, NULL none).
+static void EmptyList(HDC dc, int x, int y, int w, const wchar_t* text, const wchar_t* hint = NULL,
+                      COLORREF c = CLR_INVALID)
 {
-    Disc(dc, cx, cy, r, kPanel2);
-    T(dc, cx, cy + size * 36 / 100, initials, size, kMuted, 700, AL_MID);
-}
-
-static void AvatarOr(HDC dc, int cx, int cy, int r, const wchar_t* initials)
-{
-    TriFill(cx - r, cy - r, 2 * r, 2 * r, r);
-    Disc(dc, cx, cy, r, CLR_INVALID, kLine);
-    T(dc, cx, cy + r * 3 / 10, initials, r * 8 / 10, Mix(kInk, kTriOr[1], 191), 700, AL_MID);
+    T(dc, x, y, text, 18, c != CLR_INVALID ? c : kMuted, 400, AL_START, w);
+    if (hint)
+        T(dc, x, y + 30, hint, 16, kDim, 400, AL_START, w);
 }
 
 enum { L_N, L_CUR, L_DIM };
@@ -1923,12 +1877,13 @@ static void DirEntries(HDC dc, const wchar_t* dir, wchar_t* const* names, int co
                 if (*c == L'.' && c[1] >= L'0' && c[1] <= L'9')
                     *c = L',';
         }
-        ListRow(dc, 16 + cell / rows * (cw + 12), 160 + cell % rows * 58, cw, 52, s, NULL,
-                !isDir && curName && !_wcsicmp(n, curName) ? L_CUR : L_N, isDir ? IC_FOLDER : ic, sub[0] ? sub : NULL,
+        bool cur = !isDir && curName && !_wcsicmp(n, curName);   // the one playing: "▶ играет" (design 0.6)
+        ListRow(dc, 16 + cell / rows * (cw + 12), 160 + cell % rows * kRowStep, cw, kRowH, s, cur ? L"▶ играет" : NULL,
+                cur ? L_CUR : L_N, isDir ? IC_FOLDER : ic, sub[0] ? sub : NULL,
                 NULL, pick, i, isDir ? kOrange : CLR_INVALID);   // folders orange, files muted
     }
     if (!count)
-        T(dc, 40, 190, dir[0] ? none : L"Нет носителей", 18, kMuted, 400);
+        EmptyList(dc, 40, 190, 720, dir[0] ? none : L"Нет носителей");
 }
 
 // A list that scrolls by px - the internet radio's stations, the licenses, the contacts, the calls: the finger moves
@@ -2000,9 +1955,9 @@ static void ScrollEnd(HDC dc, Scroll& s, int x, int y, int w, int h, int ah)
            1);
 }
 
-static void Dock(HDC dc)
+static void Dock(HDC dc)   // from y 408, as the bottom bar (NavBar): nothing jumps between them
 {
-    Fill(dc, 0, 398, 800, 480, kInk);
+    Fill(dc, 0, 408, 800, 480, kInk);
 }
 
 static void Now(wchar_t* s, int n)   // the clock: 24 h, or 12 h ("General -> Time format", time.12h)
@@ -2077,20 +2032,20 @@ static int StatusMarks(HDC dc, int end, int minLeft)
         { IC_WIFI, w.state == WIFI_CONNECTED ? kOrange : kDim, w.state >= WIFI_DISCONNECTED, A_NAV, S_SET_WIFI },
         { IC_BT, btOn ? kOrange : kDim, BtPowerState() != BT_POW_OFF, A_NAV, S_PHONE },
         { IC_SIGNAL, mdmOn ? kOrange : kDim, mdmIn, A_NAV, S_SET_NET },
-        { IC_NAV, GpsHasFix() ? kOrange : kMuted, true, A_NONE, 0 },
+        { IC_NAV, GpsHasFix() ? kOrange : kDim, true, A_NONE, 0 },
         { play, kOrange, play != IC_NONE, A_NAV, playTo },
         { IC_WARN, RGB(255, 204, 0), dtc, A_SCREEN, S_OBD_DTC } };   // the trouble codes: always yellow (the user)
     int x = end;
     for (int i = 0; i < 8; i++) {
         if (!m[i].shown)
             continue;
-        if (x - 36 < minLeft)
+        if (x - 34 < minLeft)   // design 0.6: icons of 20, 14 apart
             break;
-        x -= 36;
-        bool d = m[i].a != A_NONE && Zone(x - 4, 4, 38, 48, m[i].a, m[i].arg);
+        x -= 34;
+        bool d = m[i].a != A_NONE && Zone(x - 4, 4, 34, 48, m[i].a, m[i].arg);
         if (d)
-            R(dc, x - 4, 4, 38, 48, 10, kOrange);
-        Ico(dc, m[i].ic, x + 1, 14, 28, d ? kInk : m[i].c);
+            R(dc, x - 4, 4, 34, 48, 10, kOrange);
+        Ico(dc, m[i].ic, x + 3, 18, 20, d ? kInk : m[i].c);
     }
     return x;
 }
@@ -2140,13 +2095,14 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         if (dv)
             R(dc, x0 - 4, 4, w + 38, 48, 10, kOrange);
         COLORREF c = dv ? kInk : have && !mute ? kMuted : kDim;
-        Ico(dc, IC_VOL, x0, 16, 24, c);
+        Ico(dc, IC_VOL, x0 + 4, 18, 20, c);
         T(dc, 700, 36, s, 18, c, 600, AL_END);
         marksEnd = x0 - 8;
     }
     int marksLeft = StatusMarks(dc, marksEnd, act != IC_NONE ? 540 : 0);
     Now(s, 8);
-    T(dc, 784, 38, s, 26, kText, 600, AL_END);   // the clock: no action (the volume opens from the speaker)
+    T(dc, 776, 36, s, 22, kText, 700, AL_END);   // the clock (design 0.6: 22 bold): no action (the volume opens
+                                                 // from the speaker)
     int x = 20, right = act != IC_NONE ? 470 : 530;
     if (right > marksLeft - 12)
         right = marksLeft - 12;
@@ -2165,7 +2121,7 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         right = cx - 8;
     } else if (s_hvacShowTick && GetTickCount() - s_hvacShowTick < 4000 && HvacChip(s, 40)) {
         int cx = right - 196;   // the climate was changed: what it is now, like the stock shell's tip window
-        R(dc, cx, 8, 192, 40, 10, kPanel2, kOrange);
+        R(dc, cx, 8, 192, 40, 10, kPanel2);   // no border (design 0.6)
         T(dc, cx + 96, 34, s, 14, kText, 700, AL_MID, 184);
         right = cx - 8;
     }
@@ -2181,27 +2137,11 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
     }
     VNav nav;
     bool chip = NavChipGet(&nav);
-    int end = title[0] ? T(dc, x, 37, title, 22, kText, 600, AL_START, s_status[0] || chip ? 300 : right - x) : x;
+    int end = title[0] ? T(dc, x + 4, 35, title, 20, kText, 700, AL_START, s_status[0] || chip ? 300 : right - x) : x;
     if (chip && right - end - 12 >= kChipMin)
         NavChip(dc, end + 12, right, nav);
     else if (s_status[0])
         T(dc, end + 16, 36, s_status, 15, kMuted, 400, AL_START, right - end - 16);
-}
-
-static void DirTitle(HDC dc, const wchar_t* prefix, const wchar_t* dir)
-{
-    wchar_t s[MAX_PATH + 32], folder[MAX_PATH];
-    wcscpy(folder, dir);   // the folder's own name, the whole path would not fit
-    int fl = (int)wcslen(folder);
-    if (fl && folder[fl - 1] == L'\\')
-        folder[--fl] = 0;
-    const wchar_t* fn = wcsrchr(folder, L'\\');
-    const wchar_t* rest;
-    const wchar_t* vol = VolName(dir, &rest);
-    _snwprintf(s, MAX_PATH + 32, L"%s · %s", prefix, !dir[0] ? L"Носители" : vol && !*rest ? vol
-               : fn && fn[1] ? fn + 1 : folder);
-    s[MAX_PATH + 31] = 0;
-    Frame(dc, s);
 }
 
 // Sections of the bottom bar; each opens its main screen (media: the source shown last).
@@ -2232,7 +2172,7 @@ static int Section(Screen s)
         return 1;
     case S_AUDIO: case S_NETRADIO: case S_AUDIO_BT: case S_AUX: case S_VIDEO: case S_PHOTO:
         return 2;
-    case S_PHONE:
+    case S_PHONE: case S_CONTACTS: case S_FAVS: case S_CALLS:   // (the pills' screens: the bottom bar, as media's)
         return 3;
     case S_APPS:
         return 4;
@@ -2344,7 +2284,7 @@ static void NavPill(HDC dc, int i, int w)
 // keep their content above y 400.
 static void NavBar(HDC dc, int active)
 {
-    Fill(dc, 0, 408, 800, 480, kInk);
+    Dock(dc);
     int animIc = -1;   // the icon the animation draws itself
     if (s_navFrom >= 0 && s_navTo == active) {
         if (!s_navStart)
@@ -2411,38 +2351,44 @@ static void PageDots(HDC dc, int page, int pages, int cx = 400, int y = 398)
     }
 }
 
-// Audio sources in the dock; the current one is selected, the others switch to their screen.
-static void SourcesDock(HDC dc, const wchar_t* active, Screen local)
+// The lists (the user 2026-11-10): one row - kRowH high, kRowStep apart, each its own plate on the background (no
+// card under them: the music list's look). A long list turns pages: "‹" "›" (the resistive screen's buttons, at the
+// dock's right - y 412, h 52 - or a main screen's path line), a swipe the same (the screen in kPagers, the bars stay),
+// the dots above the bottom bar show where. A short one (Wi-Fi) scrolls (Scroll). The rows: kRowH, kRowStep.
+
+static void ListPages(HDC dc, int page, int pages, int y = 412, int h = 52)
 {
-    static const wchar_t* names[4] = { L"USB", L"SD", L"BT", L"AUX" };
-    Screen to[4] = { local, local, S_AUDIO_BT, S_AUX };
-    Dock(dc);
-    for (int i = 0; i < 4; i++) {
-        bool on = !wcscmp(names[i], active);
-        Button(dc, 16 + i * 120, 410, 112, 58, names[i], on ? B_SEL : B_N, IC_NONE, 18, 0, on ? A_NONE : A_TAB, to[i]);
-    }
+    if (pages < 2)
+        return;
+    bool l = page > 0, r = page + 1 < pages;
+    Button(dc, 624, y, 76, h, NULL, l ? B_N : B_DIS, IC_BACK, 18, 28, l ? A_PAGESTEP : A_NONE, -1);
+    Button(dc, 708, y, 76, h, NULL, r ? B_N : B_DIS, IC_NEXT, 18, 28, r ? A_PAGESTEP : A_NONE, 1);
+    PageDots(dc, page, pages, 400, 396);
 }
 
 struct Tab { Icon ic; const wchar_t* label; Screen to; };
 
-// Column of section buttons on the left (media lists, phone); to = S_NONE: no screen of its own.
-static void SideTabs(HDC dc, const Tab* tabs, int n, int active, int step, int h, int y0 = 68)
+// A section's screens as pills on top (design 0.6: media, phone), each as wide as its name, spread up to `right`;
+// the current one soft orange.
+static void TabPills(HDC dc, const Tab* tabs, int n, Screen active, int right)
 {
-    for (int i = 0; i < n; i++) {
-        int y = y0 + i * step;
-        bool on = i == active, d = Zone(16, y, 160, h, on || tabs[i].to == S_NONE ? A_NONE : A_TAB, tabs[i].to);
-        RSel(dc, 16, y, 160, h, 16, on, d);
-        COLORREF fg = d ? kInk : on ? kOrange : kMuted;
-        Ico(dc, tabs[i].ic, 30, y + (h - 30) / 2, 30, fg);
-        T(dc, 72, y + h / 2 + 6, tabs[i].label, 15, fg, on ? 700 : 400, AL_START, 100);
+    int w[8], sum = 0;
+    for (int i = 0; i < n; i++)
+        sum += w[i] = TextWidth(dc, tabs[i].label, 15, 700) + 36;
+    int gap = (right - 16 - sum) / (n - 1);
+    gap = gap > 10 ? 10 : gap < 2 ? 2 : gap;
+    for (int i = 0, x = 16; i < n; x += w[i] + gap, i++) {
+        bool on = tabs[i].to == active;
+        Button(dc, x, 68, w[i], 40, tabs[i].label, on ? B_SEL : B_N, IC_NONE, 15, 0, on ? A_NONE : A_TAB, tabs[i].to);
     }
 }
 
-static void PhoneNav(HDC dc, int active)
+// The phone's screens (design 0.6: pills on top, no side tabs); its lists' page arrows at the right of them.
+static void PhoneTabs(HDC dc, Screen active)
 {
     static const Tab tabs[4] = { { IC_KEYPAD, L"Набор", S_PHONE }, { IC_USERS, L"Контакты", S_CONTACTS },
                                  { IC_STAR, L"Избранное", S_FAVS }, { IC_CLOCK, L"Журнал", S_CALLS } };
-    SideTabs(dc, tabs, 4, active, 78, 70);
+    TabPills(dc, tabs, 4, active, 600);
 }
 
 // Settings, a main screen: ten sections as a 2 x 5 grid of 102 x 62 tiles on the left (an icon, its name under it;
@@ -2473,19 +2419,31 @@ static void Settings(HDC dc, Screen active)
     Panel(dc, 240, 64, 544, 336, 20);
 }
 
-// Settings row (rows at 64 + i * 56): label (and a second line), separator under it unless last; the control is
-// drawn by the caller. With an action the label part is a button of its own.
-static void SetRow(HDC dc, int y, const wchar_t* label, const wchar_t* sub = NULL, bool last = false,
-                   Action a = A_NONE, int arg = 0, int h = 56)
+// Settings row (rows at 64 + i * kSetH - one height on every page, the user 2026-11-10): label (and a second line),
+// separator under it unless last; the control is drawn by the caller. With an action the label part is a button of
+// its own.
+enum { kSetH = 56 };
+
+// A settings row's own part (the settings' and the widgets' settings' rows): the label 18 and the second line 13
+// (design 0.6), the button of the label part (zoneW, with an action), the separator (sepW) unless last; true pressed.
+static bool RowCore(HDC dc, int x, int y, int h, int zoneW, int sepW, int textW, const wchar_t* label,
+                    const wchar_t* sub, Action a, int arg, bool last)
 {
-    bool down = a != A_NONE && Zone(256, y + 2, 420, h - 4, a, arg);
+    bool down = a != A_NONE && Zone(x, y + 2, zoneW, h - 4, a, arg);
     if (down)
-        R(dc, 256, y + 2, 420, h - 4, 10, kOrange);
-    T(dc, 264, y + h / 2 + (sub ? -2 : 7), label, 19, down ? kInk : kText, 700, AL_START, 400);
+        R(dc, x, y + 2, zoneW, h - 4, 10, kOrange);
+    T(dc, x + 10, y + h / 2 + (sub ? -2 : 7), label, 18, down ? kInk : kText, 400, AL_START, textW);
     if (sub)
-        T(dc, 264, y + h / 2 + 18, sub, 15, down ? kInk : kMuted, 400, AL_START, 400);
+        T(dc, x + 10, y + h / 2 + 17, sub, 13, down ? kInk : kDim, 400, AL_START, textW);
     if (!last)
-        Sep(dc, 256, y + h - 1, 512);
+        Sep(dc, x, y + h - 1, sepW);
+    return down;
+}
+
+static void SetRow(HDC dc, int y, const wchar_t* label, const wchar_t* sub = NULL, bool last = false,
+                   Action a = A_NONE, int arg = 0, int h = kSetH)
+{
+    RowCore(dc, 256, y, h, 420, 512, 400, label, sub, a, arg, last);
 }
 
 static void Chevron(HDC dc, int x, int y)
@@ -2493,25 +2451,28 @@ static void Chevron(HDC dc, int x, int y)
     Ico(dc, IC_NEXT, x, y, 32, kMuted);
 }
 
-// ---- picture placeholders (content, not skin)
+// A settings page of more rows than its card holds (six): they scroll - the finger, the arrows at the card's right
+// (x 720), so their controls end at x 712 (760 on the others). Between them the rows go at the y returned + i * kSetH.
+static Scroll s_setScroll = { 0, 0, 3 * kSetH };
 
-static void Road(HDC dc, int x, int y, int w, int h)   // night road: the video frame
+static int SetScrollBegin(HDC dc, int rows)
 {
-    Clip(dc, x, y, w, h);
-    double hz = y + h * 0.45, cx = x + w / 2.0;
-    double road[] = { cx - 40, hz, cx + 40, hz, x + w * 0.95, y + h, x + w * 0.05, y + h };
-    double mark[] = { cx - 2, hz + 8, cx + 2, hz + 8, cx + 7, y + h, cx - 7, y + h };
-    double hill1[] = { x, hz, x + w * 0.2, hz - 40, x + w * 0.42, hz, x, hz + 10 };
-    double hill2[] = { x + w * 0.58, hz, x + w * 0.8, hz - 50, x + w, hz };
-    Fill(dc, x, y, x + w, y + h, RGB(0x14, 0x1a, 0x26));
-    Fill(dc, x, (int)hz, x + w, y + h, RGB(0x10, 0x11, 0x14));
-    PolyD(dc, road, 4, RGB(0x1f, 0x21, 0x25));
-    PolyD(dc, mark, 4, Mix(RGB(0xc9, 0xbf, 0x8f), RGB(0x1f, 0x21, 0x25), 204));
-    PolyD(dc, hill1, 4, RGB(0x0d, 0x10, 0x18));
-    PolyD(dc, hill2, 3, RGB(0x0d, 0x10, 0x18));
-    Disc(dc, (int)cx + 6, (int)hz + 4, 4, Mix(RGB(0xf3, 0xe3, 0xb0), RGB(0x1f, 0x21, 0x25), 178));
-    SelectClipRgn(dc, NULL);
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {   // opened: from the top
+        s_seen = s_screenTick;
+        s_setScroll.pos = 0;
+    }
+    s_setScroll.content = rows * kSetH;
+    ScrollBegin(dc, s_setScroll, 256, 64, 712, 400);
+    return 64 - s_setScroll.pos;
 }
+
+static void SetScrollEnd(HDC dc)
+{
+    ScrollEnd(dc, s_setScroll, 720, 68, 48, 328, 52);
+}
+
+// ---- picture placeholders (content, not skin)
 
 static void Cover(HDC dc, Icon ic, int x, int y, int s)
 {
@@ -2528,15 +2489,7 @@ static void MediaTabs(HDC dc, Screen active, Icon ic, Action a, int arg)
     static const Tab tabs[6] = { { IC_MUSIC, L"Музыка", S_AUDIO }, { IC_RADIO, L"Интернет", S_NETRADIO },
                                  { IC_BT, L"Bluetooth", S_AUDIO_BT }, { IC_AUX, L"AUX", S_AUX },
                                  { IC_VIDEO, L"Видео", S_VIDEO }, { IC_PHOTO, L"Фото", S_PHOTO } };
-    int w[6], sum = 0;
-    for (int i = 0; i < 6; i++)
-        sum += w[i] = TextWidth(dc, tabs[i].label, 15, 700) + 36;
-    int gap = (704 - sum) / 5;   // up to x 720: the round button after
-    gap = gap > 10 ? 10 : gap < 2 ? 2 : gap;
-    for (int i = 0, x = 16; i < 6; x += w[i] + gap, i++) {
-        bool on = tabs[i].to == active;
-        Button(dc, x, 68, w[i], 40, tabs[i].label, on ? B_SEL : B_N, IC_NONE, 15, 0, on ? A_NONE : A_TAB, tabs[i].to);
-    }
+    TabPills(dc, tabs, 6, active, 720);   // up to x 720: the round button after
     if (ic != IC_NONE)
         Button(dc, 736, 64, 48, 48, NULL, B_N, ic, 18, 26, a, arg);
 }

@@ -776,18 +776,40 @@ static void DrawHome(HDC dc)
 // page), each with "show" (the eye) and up / down (earlier / later); the user's widgets with their file.
 static int s_setHomePage;
 
+// The widgets the list offers, in their order: not the climate (the user 2026-11-10: hidden, not to be switched on -
+// no data from the car yet; its code stays).
+static bool WgListed(int id)
+{
+    return id != WG_CLIMATE;
+}
+
+static int WgListIds(int* ids)
+{
+    int n = 0;
+    for (int i = 0; i < WgCount(); i++)
+        if (WgListed(s_cfg.homeOrder[i]))
+            ids[n++] = s_cfg.homeOrder[i];
+    return n;
+}
+
+enum { kSetHomePer = 10 };   // two columns of five rows (kRowStep)
+
+static int SetHomePages()
+{
+    int ids[kWgMax];
+    return (WgListIds(ids) + kSetHomePer - 1) / kSetHomePer;
+}
+
 static void ScrSetHome(HDC dc)
 {
-    int pages = (WgCount() + 11) / 12;
+    int ids[kWgMax], n = WgListIds(ids), pages = SetHomePages();
     s_setHomePage = s_setHomePage >= pages ? pages - 1 : s_setHomePage;
     Frame(dc, L"Главная · Виджеты");
-    Panel(dc, 16, 64, 768, 336);
-    for (int i = s_setHomePage * 12; i < WgCount() && i < s_setHomePage * 12 + 12; i++) {
-        int id = s_cfg.homeOrder[i], j = i % 12, x = 24 + j / 6 * 380, y = 70 + j % 6 * 54;
+    for (int i = s_setHomePage * kSetHomePer; i < n && i < s_setHomePage * kSetHomePer + kSetHomePer; i++) {
+        int id = ids[i], j = i % kSetHomePer, x = 16 + j / 5 * 388, y = 68 + j % 5 * kRowStep;
         bool shown = !(s_cfg.homeHidden >> id & 1);
-        if (j % 6)
-            Sep(dc, x, y - 2, 368);
-        Ico(dc, WgIcon(id), x + 8, y + 12, 26, shown ? kOrange : kDim);
+        R(dc, x, y, 380, kRowH, 14, kPanel);   // a plate, as every list's row
+        Ico(dc, WgIcon(id), x + 8, y + 11, 26, shown ? kOrange : kDim);
         const wchar_t* sub = WgBig(id) ? L"большой" : WgWide(id) ? L"двойной" : NULL;
         wchar_t usub[48];
         if (id >= WG_COUNT && !wcsncmp(s_uw[id - WG_COUNT].key, L"p:", 2)) {   // an add-on's: nothing to edit
@@ -796,29 +818,20 @@ static void ScrSetHome(HDC dc)
         } else if (id >= WG_COUNT) {
             _snwprintf(usub, 48, L"%s.ini · изменить%s", s_uw[id - WG_COUNT].key + 2, WgWide(id) ? L" · двойной" : L"");
             sub = usub;
-            if (Zone(x, y, 218, 54, A_UWEDIT, id - WG_COUNT))   // its file into the editor
-                R(dc, x, y + 2, 218, 50, 8, kPanel2);
+            if (Zone(x, y, 218, kRowH, A_UWEDIT, id - WG_COUNT))   // its file into the editor
+                R(dc, x, y, 218, kRowH, 14, kPanel2);
         }
-        if (id == WG_CLIMATE)
-            sub = L"выключен: нет данных от машины";
-        T(dc, x + 46, y + (sub ? 24 : 33), WgName(id), 18, shown ? kText : kDim, 700, AL_START, 172);
+        T(dc, x + 46, y + (sub ? 23 : 32), WgName(id), 18, shown ? kText : kDim, 700, AL_START, 172);
         if (sub)
-            T(dc, x + 46, y + 43, sub, 13, kMuted, 400, AL_START, 172);
-        Button(dc, x + 222, y + 7, 44, 40, NULL, i ? B_N : B_DIS, IC_UP, 15, 24, A_WGMOVE, id * 2);
-        Button(dc, x + 270, y + 7, 44, 40, NULL, i < WgCount() - 1 ? B_N : B_DIS, IC_DOWN, 15, 24, A_WGMOVE,
-               id * 2 + 1);
-        Button(dc, x + 318, y + 7, 48, 40, NULL, shown ? B_SEL : B_N, shown ? IC_EYE : IC_EYE_OFF, 15, 24, A_WGVIS,
+            T(dc, x + 46, y + 42, sub, 13, kMuted, 400, AL_START, 172);
+        Button(dc, x + 226, y + 6, 44, 40, NULL, i ? B_N : B_DIS, IC_UP, 15, 24, A_WGMOVE, id * 2);
+        Button(dc, x + 274, y + 6, 44, 40, NULL, i < n - 1 ? B_N : B_DIS, IC_DOWN, 15, 24, A_WGMOVE, id * 2 + 1);
+        Button(dc, x + 322, y + 6, 50, 40, NULL, shown ? B_SEL : B_N, shown ? IC_EYE : IC_EYE_OFF, 15, 24, A_WGVIS,
                id);   // hidden: the eye crossed out (the user 2026-10-24)
     }
     T(dc, 96, 440, L"вверх / вниз — раньше / позже; следующие занимают место скрытых. Свои виджеты — "
-                   L"VHContent\\VHWidgets\\*.ini на \\ResidentFlash или SD", 13, kDim, 400, AL_START, 490);   // (to the page buttons)
-    if (pages > 1) {
-        wchar_t pg[16];
-        _snwprintf(pg, 16, L"%d / %d", s_setHomePage + 1, pages);
-        Button(dc, 600, 412, 56, 52, NULL, s_setHomePage ? B_N : B_DIS, IC_BACK, 15, 26, A_SHPAGE, -1);
-        T(dc, 692, 444, pg, 15, kMuted, 600, AL_MID);
-        Button(dc, 728, 412, 56, 52, NULL, s_setHomePage + 1 < pages ? B_N : B_DIS, IC_NEXT, 15, 26, A_SHPAGE, 1);
-    }
+                   L"VHContent\\VHWidgets\\*.ini на \\ResidentFlash или SD", 13, kDim, 400, AL_START, 510);   // (to the page buttons)
+    ListPages(dc, s_setHomePage, pages);
 }
 
 // The car's systems and the trip, opened from the widgets.

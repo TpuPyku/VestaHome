@@ -67,7 +67,7 @@ static void ScrDiag(HDC dc)
     Panel(dc, 16, 68, 768, 336);   // (above y 404: "back" at the bottom left)
     for (int i = 0; i < 10 && kTests[i].label; i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
-               kTests[i].a == A_SOON ? B_DIS : B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
+               B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
     T(dc, 40, 390, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 600);

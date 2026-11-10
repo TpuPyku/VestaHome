@@ -65,7 +65,7 @@ static bool    s_clipMenu;     // "Copy" / "Paste" shown in place of the text fi
 
 // File browser for the program path: folders and .exe files of s_fdir.
 struct FileEnt { wchar_t name[100]; bool dir; };
-enum { kMaxFiles = 256, kFilesPerPage = 10 };
+enum { kMaxFiles = 256, kFilesPerPage = 8 };   // two columns of four rows (kRowStep)
 static FileEnt s_files[kMaxFiles];
 static int     s_fileCount, s_filePage;
 static wchar_t s_fdir[MAX_PATH];  // ends with a backslash
@@ -1069,8 +1069,7 @@ static void DrawApps(HDC dc)
           d ? 700 : 600, AL_MID, 168);
     }
     if (s_appCount == 0) {
-        T(dc, 400, 270, L"Список программ пуст", 22, kText, 700, AL_MID);
-        T(dc, 400, 302, L"Нажмите «Добавить» или впишите программы в apps.txt", 17, kMuted, 400, AL_MID, 760);
+        EmptyList(dc, 40, 150, 720, L"Список программ пуст", L"Нажмите «Добавить» или впишите программы в apps.txt");
     }
     PageDots(dc, s_page, AppsPages());
 }
@@ -1169,14 +1168,14 @@ static void DrawFiles(HDC dc)
     int first = s_filePage * kFilesPerPage;
     for (int k = 0; k < kFilesPerPage && first + k < s_fileCount; k++) {
         const FileEnt& f = s_files[first + k];   // folders stand out
-        ListRow(dc, 16 + (k / 5) * 388, 108 + (k % 5) * 54, 380, 48, f.name, NULL, L_N, f.dir ? IC_FOLDER : IC_FILE,
-                NULL, NULL, A_FILE, first + k, f.dir ? kOrange : CLR_INVALID);
+        ListRow(dc, 16 + (k / 4) * 388, 116 + (k % 4) * kRowStep, 380, kRowH, f.name, NULL, L_N,
+                f.dir ? IC_FOLDER : IC_FILE, NULL, NULL, A_FILE, first + k, f.dir ? kOrange : CLR_INVALID);
     }
     if (s_fileCount == 0)
-        T(dc, 400, 240, s_filesFor == F_ICON ? L"Здесь нет папок и иконок" : s_filesFor == F_TEXT ?
-          L"Здесь нет папок и текстовых файлов" : s_filesFor == F_CAMS ?
-          L"Здесь нет папок и .txt" : L"Здесь нет папок и программ", 22, kText, 700, AL_MID);
-    PageDots(dc, s_filePage, FilePages(), 400, 386);
+        EmptyList(dc, 40, 150, 720, s_filesFor == F_ICON ? L"Здесь нет папок и иконок" : s_filesFor == F_TEXT ?
+                  L"Здесь нет папок и текстовых файлов" : s_filesFor == F_CAMS ?
+                  L"Здесь нет папок и .txt" : L"Здесь нет папок и программ");
     Dock(dc);
-    Button(dc, 664, 410, 120, 58, L"Отмена", B_N, IC_NONE, 18, 0, A_CANCEL);
+    Button(dc, 488, 412, 120, 52, L"Отмена", B_N, IC_NONE, 17, 0, A_CANCEL);   // (left of the pages' arrows)
+    ListPages(dc, s_filePage, FilePages());
 }

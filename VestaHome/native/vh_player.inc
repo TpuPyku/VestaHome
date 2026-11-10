@@ -590,7 +590,7 @@ static void ScrAudioList(HDC dc)
     DirEntries(dc, s_musDir, s_mus, s_musCount, s_musPage, kMusRows, kMusCols, A_MFILE, IC_MUSIC,
                s_chan && s_plCur >= 0 && !_wcsicmp(s_plDir, s_musDir) ? s_pl[s_plCur] : NULL,
                L"Здесь нет папок и музыки");
-    PageDots(dc, s_musPage, MusPages(), 400, 396);
+    ListPages(dc, s_musPage, MusPages());
 }
 
 // A browser's folder ("X\" form) -> its parent; the volume root ("\SDMemory\" or "C:\") -> "" (the volumes).

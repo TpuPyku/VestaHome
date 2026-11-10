@@ -19,13 +19,6 @@ static double Dist(double lat1, double lon1, double lat2, double lon2)   // m, f
     return sqrt(x * x + y * y) * 6371000;
 }
 
-static double Bearing(double lat1, double lon1, double lat2, double lon2)   // degrees from north
-{
-    double k = 3.14159265 / 180;
-    double b = atan2((lon2 - lon1) * cos(lat1 * k), lat2 - lat1) / k;
-    return b < 0 ? b + 360 : b;
-}
-
 static double AngleDiff(double a, double b)
 {
     double d = fmod(fabs(a - b), 360.0);

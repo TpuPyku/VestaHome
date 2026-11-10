@@ -112,11 +112,11 @@ typedef char kIconKeyCount[sizeof(kIconKey) / sizeof(kIconKey[0]) == IC_COUNT ? 
 // only change the demo values below. A_PAGE and the rest belong to the programs ("Apps", the shortcut editor).
 enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE, A_SEG, A_KEY, A_DEL, A_PAGE,
               A_RUN, A_ADD, A_EDITMODE, A_FIELD, A_SAVE, A_DELETE, A_CANCEL, A_OK, A_CHAR, A_SHIFT, A_LANG,
-              A_BKSP, A_FILE, A_UP, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_SOON, A_TEST,
+              A_BKSP, A_FILE, A_UP, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_TEST,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
-              A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RLISTPAGE, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONECLR, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_PHPLAY, A_SCROLL, A_USERWG, A_SHPAGE, A_MVOL, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
+              A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
+              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_SCROLL, A_USERWG, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIRESTART, A_PAGESTEP, A_WIFIAP,
@@ -150,14 +150,13 @@ struct Btn {
 
 // Values of the screens' switches, segmented choices and two text fields: demo ones, except the settings kept
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
-enum { T_SAVER, T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
-       T_WIFI, T_VIDEO_MOVING, T_SUBTITLES, T_SLIDES_OPEN, T_AUTOROTATE, T_MUTED,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_COUNT };
-static bool s_on[T_COUNT] = { true, true, true, true, false, true, false, true, true, true, true, false,
-                              true, false, true, false, true, true };
-enum { G_PRESET, G_NIGHT, G_TIME_FMT, G_EQ, G_SPEED_VOL, G_VIDEO_SCALE, G_VIDEO_FMT, G_PHOTO_SCALE, G_CALLS,
-       G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
-static int s_seg[G_COUNT] = { 2, 0, 1, 2, 2, 1, 0, 0, 0 };
+enum { T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
+       T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_VOLALGO, T_COUNT };
+static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
+                              true, false, false, true };
+enum { G_TIME_FMT, G_SPEED_VOL, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
+static int s_seg[G_COUNT] = { 1, 2, 1, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
 enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS };   // typed settings (A_KEYS)
 static wchar_t s_dial[20];          // the number typed on the phone's keypad
@@ -722,6 +721,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 BtQuiet();
             }
             if (src != s_srcSeen) {
+                int aux = LearnSource(s_auxSrc, s_auxAsk ? now - s_auxAsk : 0xFFFFFFFF, s_srcSeen, src);
+                if (aux != s_auxSrc) {
+                    VLog(L"источник: AUX у MCU - номер %d", aux);
+                    s_auxSrc = aux;
+                }
                 if (s_srcSeen != -2 && (src == 0 || src == 9) && now - s_srcByUs > 6000) {
                     VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
                     OursQuiet();
@@ -1008,11 +1012,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_cfg.fader = m.fad;
                 changed = true;
             }
-            if (changed) {
+            if (changed)
                 SaveCfg();
-                if (IsWindowVisible(hwnd) && (s_screen == S_SET_SOUND || s_screen == S_SET_BALANCE))
-                    Redraw();
-            }
+            if (IsWindowVisible(hwnd) && (s_screen == S_SET_SOUND || s_screen == S_SET_BALANCE ||
+                                          s_screen == S_SET_VOLUME))
+                Redraw();   // (their switches and volumes show the MCU's values: McuSoundGet)
             return 0;
         }
         if (wp == WP_MCU_HWKEY) {
