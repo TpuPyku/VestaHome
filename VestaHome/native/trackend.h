@@ -22,3 +22,8 @@ bool TabOpened(int was, int now, int tab);
 // numbers known (0 radio, 6 / 7 media, 9 Bluetooth: the user went on, or the MCU refused); otherwise the number known
 // stays (-1 none).
 int LearnSource(int known, unsigned askedAgoMs, int was, int now);
+
+// The phone starts playing by itself while another source sounds: paused at once, as the stock shell does (the user
+// 2026-11-11; sheet 29 p. 34: an SMS notification took the radio to Bluetooth) - not under Bluetooth (src 9), not
+// within 5 s of our own switching (sinceOursMs: to Bluetooth, the source still to come), only under our host.
+bool PhonePaused(int src, unsigned sinceOursMs, bool host);
