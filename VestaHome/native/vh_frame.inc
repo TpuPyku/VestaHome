@@ -212,6 +212,17 @@ static void RedrawArea(int l, int t, int r, int b)
         Redraw();   // the layout changed under the area (the media widget: the music became the radio): its buttons
 }
 
+// One button's look (pressed or let go) drawn again alone: the touches made most of the full frames, three a tap
+// at ~45 ms each on the unit (sheet 29's load lines), the area 6-12 ms. The margin: its glow and frame.
+static void RedrawBtn(int i)
+{
+    if (i < 0 || i >= kBtnCount)
+        return;
+    const RECT& r = s_btns[i].rc;
+    RedrawArea(r.left > 4 ? r.left - 4 : 0, r.top > 4 ? r.top - 4 : 0, r.right < 796 ? r.right + 4 : 800,
+               r.bottom < 476 ? r.bottom + 4 : 480);
+}
+
 // Our own threads' share of the CPU since the last call, the 4 busiest: "<id> NN%" (2026-10-18: VestaHome showed
 // 82-92 % with no frames drawn and minimized - which thread; the threads log their ids as they start).
 static void OwnThreadsLoad(wchar_t* out, int n)

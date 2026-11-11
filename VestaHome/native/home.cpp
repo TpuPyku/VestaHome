@@ -1172,7 +1172,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                                 (s_btns[s_pressed].arg == BT_CMD_NEXT || s_btns[s_pressed].arg == BT_CMD_PREV))))
             SetTimer(hwnd, TIMER_LONG, s_btns[s_pressed].action == A_PRESET ? 1200 : kLongMs, NULL);
         SetCapture(hwnd);
-        Redraw();
+        if (s_pressed >= 0 && s_screen != S_TEST_TOUCH)
+            RedrawBtn(s_pressed);   // (only its pressed look)
+        else
+            Redraw();
         return 0;
     case WM_MOUSEMOVE:   // the touch test and the balance point follow the finger, a swiped page, a scrolled list
         if ((wp & MK_LBUTTON) && s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD) {   // the cursor follows
@@ -1276,10 +1279,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             return 0;
         }
-        Redraw();
         // the same control as pressed - by what it does, not by its place on the list: a redraw between the press and
         // the lift (an add-on's update, a status line) may have rebuilt the list (the first tap was lost, 2026-10-26)
-        if (i >= 0 && was >= 0 && s_btns[i].action == s_pressAct && s_btns[i].arg == s_pressArg) {
+        bool tap = i >= 0 && was >= 0 && s_btns[i].action == s_pressAct && s_btns[i].arg == s_pressArg;
+        if (!tap)
+            RedrawBtn(was);   // only its pressed look off (a tap: the action's own frame below)
+        if (tap) {
             s_slideDir = 0;
             DoAction(s_btns[i]);
             if (IsWindow(hwnd) && IsWindowVisible(hwnd)) {
