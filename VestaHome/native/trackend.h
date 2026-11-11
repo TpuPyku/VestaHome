@@ -5,9 +5,10 @@
 // src: the MCU's source (-1 not known); switching: our own switch to the media still going (MediaSource)
 bool NextTrackPlays(int src, bool switching);
 
-// The SD card taken out: the radio if the media is the source (our music from the card can't go on; the user
-// 2026-11-09), not under the internet radio (the card is not needed - the stub keeps the SD "in" for the MCU).
-bool CardOutRadio(int src, bool netOn);
+// A removable volume taken out (lost: 1 the SD card, 2 the USB disk): the radio if the media is the source and our
+// music or video plays from it (playing: the same bits; the user 2026-11-09, the USB disk too - HU 2026-11-11);
+// not under the internet radio (no volume needed), not for one played from (the built-in card: 0).
+bool CardOutRadio(int src, bool netOn, int lost, int playing);
 
 // "Music" opened: our music goes on if the radio or Bluetooth paused it (OursQuiet; sheet 28 p. 1-2: from the menu it
 // stayed paused, MODE resumed it); a pause by the user stays.

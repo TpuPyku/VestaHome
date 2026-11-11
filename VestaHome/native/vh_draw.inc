@@ -2003,6 +2003,15 @@ static int MediaMask()
     return m;
 }
 
+// The removable volume a path is on: 1 the SD card, 2 a USB disk (MediaMask's bits), 0 none (the built-in card).
+static int VolumeBit(const wchar_t* path)
+{
+    if (!_wcsnicmp(path, L"\\SDMemory\\", 10))
+        return 1;
+    return !_wcsnicmp(path, L"\\USBDisk\\", 9) || !_wcsnicmp(path, L"\\USBDevice\\", 11) ||
+           !_wcsnicmp(path, L"\\USB Disk\\", 10) ? 2 : 0;
+}
+
 // The status marks of the top bar, right to left from `end`: the USB disk and the SD card (only when there),
 // Wi-Fi (orange when connected, dim when not; Settings -> Wi-Fi), Bluetooth (orange with a phone connected, dim
 // without; none while switched off - the user 2026-11-05), GPS (orange with a fix). The ones that would reach left of minLeft are left out. Returns the left edge.

@@ -41,6 +41,7 @@
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
+#include "presetpos.h"  // the preset playing: the MCU names its place on a page only
 #include "zonepart.h"  // a partial frame's buttons against the full frame's
 #include "secret.h"
 #include "rvc.h"
@@ -702,7 +703,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     TunerGet(&t);
                     int n = t.cur >= 0 && t.cur < 24 ? t.cur : 0;
                     VLog(L"радио: источник %d после клавиш - пресет %d", src, n + 1);
-                    McuSend3("SPApi_SendListItemControl", 1, n, 0);
+                    RadioPreset(n);
                     s_srcByUs = now;
                 }
             }
@@ -830,8 +831,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             int m = MediaMask();
             if (m != s_mediaMask) {
                 int vol, mute, src;
-                if ((s_mediaMask & 1) && !(m & 1) && VolGet(&vol, &mute, &src) && CardOutRadio(src, s_netOn)) {
-                    VLog(L"SD-карта вынута при источнике %d - радио", src);
+                int lost = s_mediaMask & ~m;
+                if (lost && VolGet(&vol, &mute, &src) && CardOutRadio(src, s_netOn, lost, PlayingVolumes())) {
+                    VLog(L"%s вынут при источнике %d - радио", lost & 1 ? L"SD-карта:" : L"USB-диск:", src);
                     RadioOn();
                 }
                 s_mediaMask = m;
@@ -1014,9 +1016,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             if (changed)
                 SaveCfg();
-            if (IsWindowVisible(hwnd) && (s_screen == S_SET_SOUND || s_screen == S_SET_BALANCE ||
-                                          s_screen == S_SET_VOLUME))
-                Redraw();   // (their switches and volumes show the MCU's values: McuSoundGet)
+            if (IsWindowVisible(hwnd) && (s_screen == S_SET_SOUND || s_screen == S_SET_BALANCE))
+                Redraw();   // (their switches show the MCU's values: McuSoundGet)
             return 0;
         }
         if (wp == WP_MCU_HWKEY) {

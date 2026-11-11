@@ -151,6 +151,7 @@ static void MediaSource();
 // the MCU sends the whole tuner (SPIPower.log 2026-10-20-2, 36.3 s) - so the same first; then, while the radio
 // is wanted and the tuner has not spoken in this run, 0x30 again every 3 s, for a minute.
 static volatile bool s_tunLive;   // a 0x0901 came since the start
+static volatile int  s_presetSent = -1;   // the preset asked for last, 0..23 (its page for 0x0907: PresetPlaying)
 static volatile LONG s_tun0901;   // 0x0901 replies so far: one a band key press (RadioBandStep)
 static DWORD s_radioAsk;          // the radio wanted (RadioOn, its screen), 0 = not
 
@@ -221,9 +222,9 @@ static void RadioPresetStep(int dir)
 {
     Tuner t;
     TunerGet(&t);
-    int cur = t.cur >= 0 && t.cur < 24 ? t.cur : 0, n = cur / 8 * 8 + (cur % 8 + dir + 8) % 8;
-    VLog(L"радио: пресет %d -> %d (кнопка руля)", cur + 1, n + 1);
-    McuSend3("SPApi_SendListItemControl", 1, n, 0);
+    int n = PresetNext(t.cur, dir, 8);
+    VLog(L"радио: пресет %d -> %d (кнопка руля)", t.cur + 1, n + 1);
+    RadioPreset(n);
 }
 
 static void ScrRadio(HDC dc)
@@ -370,13 +371,16 @@ static void RadioBandStep(const Tuner& t)   // a tuner reply came
 
 static void RadioPresetSave(int i)   // a long press: the station playing goes to preset i (the shell's (1, n, 1))
 {
+    s_presetSent = i;
     if (McuSend3("SPApi_SendListItemControl", 1, i, 1))
         _snwprintf(s_status, 96, L"сохранено в пресет %d", i % 8 + 1);
 }
 
-// A preset of the radio screen or the widget: as CRadioMainDlg::SlotListItemSelect (Ghidra 2026-10-18).
+// A preset of the radio screen or the widget: as CRadioMainDlg::SlotListItemSelect (Ghidra 2026-10-18). Its page
+// is kept: the MCU's reply (0x0907) names only the place on it (PresetPlaying).
 static void RadioPreset(int i)
 {
+    s_presetSent = i;
     McuSend3("SPApi_SendListItemControl", 1, i, 0);
 }
 
@@ -457,19 +461,12 @@ static void RadioKey(int arg)
 // Radio -> list: the MCU's station list. Opening it is the shell's list key 0x3C - the MCU then sends the stations
 // with their names, and only in this mode does the search key 0x3F work (HU 2026-10-18-2). A tap tunes the row
 // (SPApi_SendListItemControl(0, row)); "Автопоиск" sweeps the band, then the list is asked for again.
-static int   s_rlistPage;
+static Scroll s_rlist = { 0, 0, 4 * kRowStep };   // the finger scrolls it (HU 2026-11-11, sheet 29 p. 13: not pages)
 static DWORD s_scanStart;   // the search started (0 = none)
 static int   s_fillI = -1;  // "В пресеты": the station being written (-1 = none), its step, when it began
 static int   s_fillStep, s_fillN, s_fillOk;
 static DWORD s_fillTick, s_fillArm;   // (s_fillArm: the first tap, the second within 4 s writes)
 
-static int RadioListPages()
-{
-    Tuner t;
-    TunerGet(&t);
-    int n = t.listCount < kTunList ? t.listCount : kTunList;
-    return n ? (n + 4) / 5 : 1;
-}
 
 static void ScrRadioList(HDC dc)
 {
@@ -481,9 +478,7 @@ static void ScrRadioList(HDC dc)
     Tuner t;
     TunerGet(&t);
     Frame(dc, L"Радио · Список");
-    int n = t.listCount < kTunList ? t.listCount : kTunList, pages = RadioListPages();
-    if (s_rlistPage >= pages)
-        s_rlistPage = pages ? pages - 1 : 0;
+    int n = t.listCount < kTunList ? t.listCount : kTunList;
     bool scanning = s_scanStart != 0;
     if (scanning) {   // the search: the frequency running, dots moving
         wchar_t f[16], s[40];
@@ -498,15 +493,19 @@ static void ScrRadioList(HDC dc)
     } else if (!n) {
         EmptyList(dc, 40, 100, 560, L"Список пуст или ещё не пришёл", L"«Автопоиск» найдёт станции заново");
     }
-    for (int r = 0; r < 5 && !scanning; r++) {   // the rows as every list's (kRowH), the one on soft orange
-        int i = s_rlistPage * 5 + r;
-        if (i >= n)
-            break;
-        wchar_t f[16];
-        FreqText(t.list[i], f, 16);
-        const wchar_t* nm = t.listName[i][0] ? t.listName[i] : RadioName(t, t.list[i]);
-        ListRow(dc, 16, 68 + r * kRowStep, 600, kRowH, f, nm, t.list[i] == t.f10 ? L_CUR : L_N, IC_NONE, NULL, NULL,
-                A_RLIST, i);
+    if (!scanning) {   // the rows as every list's (kRowH), the one on soft orange; its arrows right of them
+        s_rlist.content = n * kRowStep;
+        ScrollBegin(dc, s_rlist, 16, 68, 560, 400);
+        for (int i = 0; i < n; i++) {
+            int y = 68 + i * kRowStep - s_rlist.pos;
+            if (y + kRowH <= 68 || y >= 400)
+                continue;
+            wchar_t f[16];
+            FreqText(t.list[i], f, 16);
+            const wchar_t* nm = t.listName[i][0] ? t.listName[i] : RadioName(t, t.list[i]);
+            ListRow(dc, 16, y, 544, kRowH, f, nm, t.list[i] == t.f10 ? L_CUR : L_N, IC_NONE, NULL, NULL, A_RLIST, i);
+        }
+        ScrollEnd(dc, s_rlist, 568, 68, 56, 332, 64);
     }
     Button(dc, 632, 68, 152, 72, scanning ? L"Стоп" : L"Автопоиск", scanning ? B_SEL : B_N, IC_SEARCH, 15, 0, A_RSCAN);
     wchar_t fl[24];   // the stations into the presets: the second tap writes, a tap while writing stops
@@ -524,8 +523,6 @@ static void ScrRadioList(HDC dc)
     T(dc, 708, 322, L"Найдено", 13, kMuted, 600, AL_MID);
     T(dc, 708, 362, c, 36, kText, 700, AL_MID);
     RadioDock(dc);
-    if (!scanning)
-        ListPages(dc, s_rlistPage, pages);
 }
 
 static void RadioScan()   // the list's "Автопоиск" (again = stop, the same key)
@@ -544,7 +541,7 @@ static void RadioScanTick()
     DWORD now = GetTickCount();
     if (now - s_scanStart > 3000 && now - t.fTick > 2000) {
         s_scanStart = 0;
-        s_rlistPage = 0;
+        s_rlist.pos = 0;
         McuKey(0x3C, false);
     }
 }
@@ -862,23 +859,25 @@ static void ScrPhone(HDC dc)
     }
     Frame(dc, title);
     PhoneTabs(dc, S_PHONE);
-    int end = T(dc, 24, 146, s_dial, 30, kText, 700, AL_START, 200);   // the number, its caret, "backspace"
+    int end = T(dc, 24, 146, s_dial, 30, kText, 700, AL_START, 240);   // the number, its caret, "backspace"
     R(dc, end + 4, 120, 3, 30, 0, kOrange);
     if (s_dial[0])
-        IconBtn(dc, IC_BKSP, 236, 118, 32, kMuted, A_DEL, K_DIAL);
-    for (int i = 0; i < 12; i++) {   // keypad 3 x 4: round keys of 56 x 52 with air between them
-        int x = 24 + (i % 3) * 78, y = 160 + (i / 3) * 58;
+        IconBtn(dc, IC_BKSP, 280, 118, 32, kMuted, A_DEL, K_DIAL);
+    // keypad 3 x 4: the old one's big keys (the round 56 x 52 of the design were too small to hit - HU 2026-11-11,
+    // sheet 29 p. 15) on the design's left, with air between them
+    for (int i = 0; i < 12; i++) {
+        int x = 16 + (i % 3) * 104, y = 160 + (i / 3) * 60;
         wchar_t k[2] = { keys[i], 0 };
-        bool d = Zone(x - 6, y - 3, 68, 58, A_KEY, K_DIAL * 65536 + keys[i]);
-        R(dc, x, y, 56, 52, 26, d ? kOrange : kPanel2);
-        T(dc, x + 28, y + 35, k, 24, d ? kInk : kText, 700, AL_MID);
+        bool d = Zone(x - 4, y - 2, 104, 60, A_KEY, K_DIAL * 65536 + keys[i]);
+        R(dc, x, y, 96, 54, 16, d ? kOrange : kPanel2);
+        T(dc, x + 48, y + 38, k, 28, d ? kInk : kText, 700, AL_MID);
         if (keys[i] == L'0')   // held: "+"
-            T(dc, x + 46, y + 20, L"+", 12, d ? kInk : kMuted, 700, AL_MID);
+            T(dc, x + 78, y + 22, L"+", 14, d ? kInk : kMuted, 700, AL_MID);
     }
     bool can = on && s_dial[0];   // the call: the one green button (design 0.6)
-    bool d = Zone(292, 237, 72, 72, can ? A_PHONECALL : A_NONE);
-    Disc(dc, 328, 273, 36, !can ? kPanel2 : d ? Mix(kOk, kInk, 160) : kOk);
-    Ico(dc, IC_CALL, 312, 257, 32, can ? kInk : kDim);
+    bool d = Zone(330, 230, 84, 84, can ? A_PHONECALL : A_NONE);
+    Disc(dc, 372, 272, 38, !can ? kPanel2 : d ? Mix(kOk, kInk, 160) : kOk);
+    Ico(dc, IC_CALL, 356, 256, 32, can ? kInk : kDim);
     if (!proxy) {
         EmptyList(dc, 436, 150, 348, L"Нет proxy Bluetooth", L"VestaHomeInstall, «Proxy MCU + Bluetooth»");
     } else if (!on) {   // the phone last connected (bt.last) with its name from the paired list
@@ -1006,9 +1005,17 @@ static void PbTick()   // the 1 s timer: a pull asked for has ended
     if (s_pbWant < 0 || !pb)
         return;
     BtShm* b = BtShmGet();
-    bool busy = b && b->cmd == BT_CMD_PBAP_PULL && b->cmdDone == b->cmdSeq && b->cmdResult == -2;
+    bool done = b && b->cmd == BT_CMD_PBAP_PULL && b->cmdDone == b->cmdSeq, busy = done && b->cmdResult == -2;
     if (busy && GetTickCount() - s_pbTick > 3000) {   // another pull ran: ask again
         PbAsk(s_pbWant);
+        return;
+    }
+    if (done && b->cmdResult > 0) {   // the stack refused at once (HU 2026-11-11: PbapClient_Connect -> 11; it waited
+        VLog(L"телефон: список %d - стек отказал (ошибка %d)", s_pbWant, b->cmdResult);   // 90 s before)
+        s_pbWant = -1;
+        s_pbFail = true;
+        if (s_screen == S_CONTACTS || s_screen == S_CONTACT || s_screen == S_CALLS || s_screen == S_PHONE)
+            Redraw();
         return;
     }
     bool ended = pb->seq != s_pbSeq && pb->list == s_pbWant;
@@ -1023,8 +1030,8 @@ static void PbTick()   // the 1 s timer: a pull asked for has ended
             s_pbSeq = pb->seq;
         return;
     }
-    if (s_screen == S_CONTACTS || s_screen == S_CONTACT || s_screen == S_CALLS)
-        Redraw();
+    if (s_screen == S_CONTACTS || s_screen == S_CONTACT || s_screen == S_CALLS || s_screen == S_PHONE)
+        Redraw();   // (the dial screen shows the recent calls)
 }
 
 static void PbDial(const char* num)
@@ -1786,7 +1793,7 @@ static void WifiStateText(const WifiInfo& w, wchar_t* s, int n)
     switch (w.state) {
     case WIFI_NOWZC:      _snwprintf(s, n, L"%s", w.msg[0] ? w.msg : L"нет службы Wi-Fi"); break;
     case WIFI_NOADAPTER:  _snwprintf(s, n, L"адаптер Wi-Fi не найден"); break;
-    case WIFI_OFF:        _snwprintf(s, n, L"выключено"); break;
+    case WIFI_OFF:        _snwprintf(s, n, L"%s", w.msg[0] ? w.msg : L"выключено"); break;   // (or restarting)
     case WIFI_AP:         _snwprintf(s, n, L"точка ГУ «%s» · телефонов: %d", w.apSsid, w.apClients); break;
     case WIFI_CONNECTING: _snwprintf(s, n, L"подключение к %s…", w.ssid); break;
     case WIFI_CONNECTED:
@@ -1857,7 +1864,7 @@ static void ScrSetWifi(HDC dc)
     if (!w.count && w.state >= WIFI_DISCONNECTED)
         EmptyList(dc, 272, 160, 480, w.scanning ? L"Ищу сети…" : L"Сетей не видно",
                   w.scanning ? NULL : L"«Найти» — поиск заново");
-    if (w.msg[0] && w.state != WIFI_NOWZC)
+    if (w.msg[0] && w.state != WIFI_NOWZC && w.state != WIFI_OFF)   // (those two: in the row)
         T(dc, 256, 326, w.msg, 14, kDim, 400, AL_START, 370);
     // the unit's own access point: by hand, or automatically when no known network is in sight
     if (w.state >= WIFI_AP) {
@@ -1865,6 +1872,8 @@ static void ScrSetWifi(HDC dc)
         Button(dc, 256, 352, 196, 40, apOn ? L"Точка доступа: вкл" : L"Точка доступа", apOn ? B_SEL : B_N, IC_NONE,
                14, 0, A_WIFIAP);   // (its automatic start, "Фикс Xiaomi", removed: the user 2026-11-08)
     }
+    if (w.state == WIFI_OFF && w.msg[0] && s_on[T_WIFI])   // restarting (HU 2026-11-11: the buttons went, the switch
+        Button(dc, 424, 70, 124, 44, L"Перезапуск…", B_DIS, IC_NONE, 14, 0);   // on - its button stays, waiting)
     if (w.state == WIFI_DISCONNECTED)   // (no link - the driver stuck: what a full power cut cures, sheet 24; the row's
                                         // longer texts, with a link, would reach it)
         Button(dc, 424, 70, 124, 44, L"Перезапустить", B_N, IC_NONE, 14, 0, A_WIFIRESTART);

@@ -70,9 +70,9 @@ enum { kVolMax = 50, WP_MCU_VOLUME = 1, WP_MCU_MARK = 2, WP_MCU_TUNER = 3, WP_MC
 // Ghidra 2026-11-10 (G3NavHMI CAudio::MsgDecode FUN_00666028): 0x310A 00 <v> = loudness (1 on; CAudioEffectDlg),
 // 0x3108 00 <t> <v> (t 0, 1 or 4) = "Алгоритм изменения громкости" (v != 0 on; CAudioFieldDlg), 0x3101 00 <type> <v> =
 // the volumes: type 0 the current one, 5 the start's, 1 the phone's (Bluetooth), 8 the traffic announcements' (TA).
-enum { MV_START, MV_PHONE, MV_TA, MV_COUNT };
-struct McuSound { int eq[3], bal, fad, loud, algo, vols[MV_COUNT]; };   // VestaHome's units (-6..6, -8..8); 99 / -1 =
-static McuSound s_mcuSnd = { { 99, 99, 99 }, 99, 99, -1, -1, { -1, -1, -1 } };   // not seen
+// (HU 2026-11-11: the MCU sent neither 0x310A nor 0x3108 - the switches keep their own state, s_cfg.)
+struct McuSound { int eq[3], bal, fad, loud, algo; };   // VestaHome's units (-6..6, -8..8); 99 / -1 = not seen
+static McuSound s_mcuSnd = { { 99, 99, 99 }, 99, 99, -1, -1 };
 static int      s_vol = -1, s_mute = -1, s_src = -1;
 static volatile LONG s_volPosted;
 
@@ -380,9 +380,6 @@ static void McuTake(const McuMsg& m)
         if (s_vol != p[2])
             s_radioDirty = true;   // the cache in the ini
         s_vol = p[2];
-    } else if (m.id == 0x3101 && (p[1] == 5 || p[1] == 1 || p[1] == 8) && p[2] <= kVolMax) {
-        int k = p[1] == 5 ? MV_START : p[1] == 1 ? MV_PHONE : MV_TA;
-        s_mcuSnd.vols[k] = p[2];   // (the redraw: `sound` below)
     } else if (m.id == 0x3109) {
         volume = s_mute >= 0 && s_mute != (p[1] != 0);
         mark = s_mute == 0 && p[1] != 0;   // MUTE pressed: a mark in the records (the hardware key - an on-screen
@@ -415,8 +412,6 @@ static void McuTake(const McuMsg& m)
         sound = true;
         s_mcuSnd.algo = p[2] != 0;
     }
-    if (m.id == 0x3101 && (p[1] == 5 || p[1] == 1 || p[1] == 8))
-        sound = true;
     static bool s_infoInit;
     if (!s_infoInit) {
         s_infoInit = true;
@@ -445,7 +440,7 @@ static void McuTake(const McuMsg& m)
         for (int k = 0; k < 4 && p[1] + k <= p[2] && p[1] + k < kTunList; k++)
             McuText(p + 4 + k * 8, 8, s_tun.listName[p[1] + k], true);
         break;
-    case 0x0907: s_tun.cur = p[2] == 0xFF ? -1 : p[2]; break;
+    case 0x0907: s_tun.cur = PresetPlaying(p[2] == 0xFF ? -1 : p[2], s_presetSent); break;   // (a place 0..7)
     case 0x0908:
         if (p[1] == 0 && p[3] < kTunList && p[4] <= kTunList) {   // the station list
             s_tun.listCount = p[4];

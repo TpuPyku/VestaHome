@@ -213,14 +213,10 @@ static void ScrSetSound(HDC dc)
     Sep(dc, 256, 350, 512);
     // loudness: the shell's keys 0x93 / 0x94 (CAudioEffectDlg's ON / OFF, Ghidra 2026-11-10), its state the MCU's
     // 0x310A (before: always "on" after a start)
-    McuSound m = McuSoundGet();
-    if (m.loud >= 0)
-        s_on[T_LOUDNESS] = m.loud != 0;
+    McuSound m = McuSoundGet();   // (the MCU's report if it ever sends one, else the last set here: s_cfg.loud)
+    s_on[T_LOUDNESS] = m.loud >= 0 ? m.loud != 0 : s_cfg.loud > 0;
     T(dc, 264, 384, L"Тонкомпенсация", 18, kText, 400);
-    if (m.loud >= 0)
-        Toggle(dc, 688, 358, T_LOUDNESS);
-    else
-        T(dc, 760, 384, L"нет данных MCU", 14, kDim, 400, AL_END);
+    Toggle(dc, 688, 358, T_LOUDNESS);
 }
 
 static void ScrSetBalance(HDC dc)
@@ -258,15 +254,11 @@ static void ScrSetBalance(HDC dc)
     Button(dc, 504, 280, 256, 48, L"В центр", B_N, IC_NONE, 16, 0, A_BALCENTER);
     // the shell's "Алгоритм изменения громкости" (its balance screen CAudioFieldDlg, Ghidra 2026-11-10): on / off by
     // SPApi_SendRadioAudioVolData(2, on), the MCU's state 0x3108
-    McuSound m = McuSoundGet();
-    if (m.algo >= 0)
-        s_on[T_VOLALGO] = m.algo != 0;
+    McuSound m = McuSoundGet();   // (the MCU's report if it ever sends one, else the last set here: s_cfg.volAlgo)
+    s_on[T_VOLALGO] = m.algo >= 0 ? m.algo != 0 : s_cfg.volAlgo > 0;
     T(dc, 504, 362, L"Алгоритм изменения", 16, kText, 400);
     T(dc, 504, 384, L"громкости", 16, kText, 400);
-    if (m.algo >= 0)
-        Toggle(dc, 688, 350, T_VOLALGO);
-    else
-        T(dc, 760, 384, L"нет данных MCU", 14, kDim, 400, AL_END);   // (on the label's second line)
+    Toggle(dc, 688, 350, T_VOLALGO);
 }
 
 // The volume by speed (the user 2026-10-22: the MCU has no key for it - our own): the volume the user set (the
@@ -320,45 +312,29 @@ static void SpeedVolTick()   // once a second
 }
 
 // Volumes (the user 2026-10-22, out of the demo) as the stock shell's CAudioVolumeDlg (Ghidra 2026-10-22): the
-// navigation's / the keys' volume - its value sent (SendRadioKeyVolData + ext key 0x9E); the MCU's own three - the
-// start's, the phone's, the traffic announcements' - as the shell's CAudioVolumeDlg (Ghidra 2026-11-10): the value
-// set by SPApi_SendRadioAudioVolData(0 / 3 / 5, v), reported in 0x3101 (types 5 / 1 / 8; the screen's key 0xE5 asks
-// for them); not reported yet - the rows' keys as before (+ / -: ext 0x52 / 0x53, 0x95 / 0x96, 0x2D / 0x2B, their
-// order unverified); VestaHome's cap of the volume at the start (StartVolumeTick).
+// navigation's / the keys' volume - its value sent (SendRadioKeyVolData + ext key 0x9E); VestaHome's cap of the
+// volume at the start (StartVolumeTick); the volume by speed. (The MCU's start / phone / TA volumes: not here - on the
+// unit they showed and changed nothing, HU 2026-11-11, the user: not needed.)
 static void ScrSetVolume(HDC dc)
 {
-    static const wchar_t* rows[5][2] = { { L"Навигация и кнопки", L"подсказки, звук нажатий" },
-                                         { L"При включении", L"сброс до значения" },
-                                         { L"Телефон", L"разговор по Bluetooth" },
-                                         { L"Дорожные сообщения", L"RDS TA" },
+    static const wchar_t* rows[2][2] = { { L"Навигация и кнопки", L"подсказки, звук нажатий" },
                                          { L"Макс. при включении", L"была громче — убавит до неё" } };
     static const wchar_t* speed[4] = { L"Выкл", L"+2", L"+3", L"+4" };
-    enum { H = kSetH };   // six rows: they fit
-    static DWORD s_seen;   // opened: the shell's key of its volumes' screen (as 0xE6, 0xE4) - the MCU reports them
-    if (s_seen != s_screenTick) {
-        s_seen = s_screenTick;
-        McuKey(0xE5, false);
-    }
-    McuSound m = McuSoundGet();
     Settings(dc, S_SET_SOUND);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 2; i++) {
         wchar_t v[8];
         if (i == 0)
             _snwprintf(v, 8, s_cfg.keyVol < 0 ? L"—" : L"%d", s_cfg.keyVol);
-        else if (i == 4)
-            _snwprintf(v, 8, s_cfg.startMax ? L"%d" : L"выкл", s_cfg.startMax);
-        else if (m.vols[i - 1] >= 0)
-            _snwprintf(v, 8, L"%d", m.vols[i - 1]);
         else
-            wcscpy(v, L"− / +");
-        SetRow(dc, 64 + i * H, rows[i][0], rows[i][1], false, A_NONE, 0, H);
-        Stepper(dc, 560, 70 + i * H, 200, v, 44, 20, A_SNDVOL);
+            _snwprintf(v, 8, s_cfg.startMax ? L"%d" : L"выкл", s_cfg.startMax);
+        SetRow(dc, 64 + i * kSetH, rows[i][0], rows[i][1]);
+        Stepper(dc, 560, 70 + i * kSetH, 200, v, 44, 20, A_SNDVOL);
         // the stepper sends -1/+1: which row is in the high bits
         s_btns[kBtnCount - 2].arg = i * 4 + 1;
         s_btns[kBtnCount - 1].arg = i * 4 + 3;
     }
-    SetRow(dc, 64 + 5 * H, L"От скорости", L"добавка на 100 км/ч", true, A_NONE, 0, H);   // (SpeedVolTick)
-    Seg(dc, 512, 70 + 5 * H, 248, 44, speed, 4, G_SPEED_VOL, 15);
+    SetRow(dc, 64 + 2 * kSetH, L"От скорости", L"добавка на 100 км/ч", true);   // (SpeedVolTick)
+    Seg(dc, 512, 70 + 2 * kSetH, 248, 44, speed, 4, G_SPEED_VOL, 15);
 }
 
 // The stream monitor ("Diagnostics -> CAN / UART", "Car -> Data stream"): the port, bytes, the car's values and

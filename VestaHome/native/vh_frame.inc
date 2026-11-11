@@ -340,12 +340,26 @@ static void LogLoad(HWND hwnd)
 // they are (they stay in place, the new page's show when it has turned); on the radio only the presets.
 static bool PhotoFull();   // the photo viewer on the whole screen (vh_photo.inc)
 
-static int SlideTop()   // under what stays: the radio's frequency panel, the media tabs
+static int SlideTop()   // under what stays: the radio's frequency panel, the tabs, the path and head lines
 {
-    if (s_screen == S_PHOTO_VIEW && PhotoFull())
-        return 0;
-    return s_screen == S_RADIO ? 258 : s_screen == S_PHOTO || s_screen == S_VIDEO || s_screen == S_SAVER_PICK ? 116
-           : s_screen == S_FILES ? 104 : 56;   // (the files: their path line stays)
+    switch (s_screen) {
+    case S_PHOTO_VIEW:
+        return PhotoFull() ? 0 : 56;
+    case S_RADIO:
+        return 258;
+    case S_PHOTO: case S_VIDEO: case S_AUDIO_LIST:   // the tabs and the path line (with the pages' arrows)
+        return 156;
+    case S_CONTACTS: case S_CALLS:                   // the phone's pills and the list's head line
+        return 160;
+    case S_NETRADIO_LIST: case S_FAVS:               // the tabs (pills)
+        return 112;
+    case S_SAVER_PICK:
+        return 116;
+    case S_FILES:
+        return 104;   // (the files: their path line stays)
+    default:
+        return 56;
+    }
 }
 
 static int SlideLeft()   // right of what stays: the settings' tiles
@@ -353,20 +367,11 @@ static int SlideLeft()   // right of what stays: the settings' tiles
     return s_screen == S_BT_PAIRED || s_screen == S_WIFI_SAVED ? 244 : 0;
 }
 
-static int SlideBottom()
-{
-    if (s_screen == S_AUDIO_LIST || s_screen == S_SAVER_PICK)
-        return 392;   // the dots stay
-    if (s_screen == S_FILES)
-        return 378;   // over their dots and dock
-    if (s_screen == S_BT_PAIRED || s_screen == S_WIFI_SAVED)
-        return 382;
+static int SlideBottom()   // above the page dots (396), the dock and the bottom bar (408): they stay (the user
+{                          // 2026-11-10: the bottom bar does not move with a swipe; HU 2026-11-11 sheet 29 p. 13)
     if (s_screen == S_PHOTO_VIEW)
         return PhotoFull() ? 480 : 398;   // over its dock
-    if (Section(s_screen) < 0)
-        return 480;
-    return s_screen == S_HOME || s_screen == S_RADIO || s_screen == S_APPS || s_screen == S_PHOTO ||
-           s_screen == S_VIDEO ? 392 : 408;   // the dots stay
+    return 392;
 }
 
 // A page turn: the new page slides in from the right (dir 1) or the left (dir -1) and pushes the old one out,
@@ -450,7 +455,6 @@ struct Pager {
 };
 static const Pager kPagers[] = { { S_HOME, &s_homePage, HomePages, true },
                                  { S_RADIO, &s_radioPage, RadioPages, false },   // (no round: СВ -> FM1 left СВ on, HU 2026-10-24-2)
-                                 { S_RADIO_LIST, &s_rlistPage, RadioListPages, false },
                                  { S_APPS, &s_page, AppsPages, false }, { S_FILES, &s_filePage, FilePages, false },
                                  { S_PHOTO, &s_phPage, PhotoPages, false },
                                  { S_SAVER_PICK, &s_phPage, PhotoPages, false },

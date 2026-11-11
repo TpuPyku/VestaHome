@@ -83,6 +83,7 @@ struct Cfg {
     int     tank;                      // the fuel tank, L (the range from OBD's level): Vesta 55
     bool    time12;                    // the clock 12 h (else 24 h)
     int     startMax;                  // the volume at the start: no louder than this (VestaHome's own), 0 = no cap
+    int     loud, volAlgo;             // loudness, "Алгоритм изменения громкости": as last set (the MCU tells neither)
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
     int     accent;                    // the accent: kAccents' index (0 Марс = the skin's own)
@@ -550,6 +551,10 @@ static void LoadCfg()
             s_cfg.time12 = CfgBool(v);
         } else if (!wcscmp(k, L"sound.startmax")) {
             s_cfg.startMax = _wtoi(v) < 0 ? 0 : _wtoi(v) > 30 ? 30 : _wtoi(v);
+        } else if (!wcscmp(k, L"sound.loud")) {
+            s_cfg.loud = CfgBool(v);
+        } else if (!wcscmp(k, L"sound.volalgo")) {
+            s_cfg.volAlgo = CfgBool(v);
         } else if (!wcscmp(k, L"sound.keyvol")) {
             s_cfg.keyVol = _wtoi(v) < -1 ? -1 : _wtoi(v) > 30 ? 30 : _wtoi(v);
         } else if (!wcscmp(k, L"sound.speedvol")) {
@@ -665,7 +670,9 @@ static void SaveCfg()
         L"screen.saver=%d\r\n"
         L"# sound.speedvol: the volume by speed, 0 off, 1..3 = +2 / +3 / +4 per 100 km/h\r\nsound.speedvol=%d\r\n"
         L"# sound.startmax: the volume at the start no louder than this (0 = no cap); sound.keyvol: navigation / keys\r\n"
-        L"sound.startmax=%d\r\nsound.keyvol=%d\r\ntime.12h=%d\r\n"
+        L"sound.startmax=%d\r\nsound.keyvol=%d\r\n"
+        L"# sound.loud, sound.volalgo: loudness and the volume algorithm (the MCU's), as last set\r\n"
+        L"sound.loud=%d\r\nsound.volalgo=%d\r\ntime.12h=%d\r\n"
         L"# car.sensors: the car widget's three lines (Settings of the widget), -1 none\r\ncar.sensors=%d,%d,%d\r\n"
         L"# car.tank: the fuel tank, L (the range: OBD's fuel level)\r\ncar.tank=%d\r\n"
         L"# screen.theme / screen.light: our colours and maps / the unit's backlight: 0 by sunrise and sunset (GPS, else\r\n"
@@ -696,7 +703,7 @@ static void SaveCfg()
         s_cfg.camOver, s_cfg.camOverBy, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast,
+        s_cfg.radioStation, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.loud, s_cfg.volAlgo, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast,
         s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.btPower ? 1 : 0, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto, s_cfg.netOp, s_cfg.netApn, s_cfg.netUser,

@@ -412,10 +412,9 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
         rt[67] = 0;
         const wchar_t* nm = t.ps[0] ? t.ps : RadioName(t, t.f10);
         WMediaBody(dc, g, d, IC_RADIO, nm[0] ? nm : f, t.f10 ? sub : L"нет данных от радио", rt, -1, NULL, NULL);
-        if (t.presets > 0) {   // previous / next preset of the page playing (none playing: from the first)
-            int cur = t.cur >= 0 && t.cur < 24 ? t.cur : 0, page = cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
-            MediaArrows(dc, g, d, A_PRESET, page + (cur - page + per - 1) % per, A_PRESET,
-                        t.cur >= 0 ? page + (cur - page + 1) % per : cur);
+        if (t.presets > 0) {   // previous / next preset of the page playing (none playing: the first)
+            int per = t.presets < 8 ? t.presets : 8;
+            MediaArrows(dc, g, d, A_PRESET, PresetNext(t.cur, -1, per), A_PRESET, PresetNext(t.cur, 1, per));
         }
         T(dc, g.cx, g.cy + (big ? 12 : 8), f, big ? 34 : 22, d ? kInk : t.f10 ? kOrange : kDim, 700, AL_MID);
         return;
@@ -545,11 +544,10 @@ static void WRadio(HDC dc, int x, int y)
     T(dc, x + 16, y + 88, f, 44, d ? kInk : t.f10 ? kText : kDim, 700);
     // RDS's name, else the one known for the frequency
     TWrap(dc, x + 16, y + 114, t.ps[0] ? t.ps : RadioName(t, t.f10), 17, d ? kInk : kMuted, 600, 216, 1, 0);
-    if (t.presets > 0) {   // previous / next preset (none playing: from the first)
-        int cur = t.cur >= 0 && t.cur < 24 ? t.cur : 0, page = cur / 8 * 8, per = t.presets < 8 ? t.presets : 8;
-        IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_PRESET, page + (cur - page + per - 1) % per);
-        IconBtn(dc, IC_FWD, x + 82, y + 124, 26, d ? kInk : kText, A_PRESET,
-                t.cur >= 0 ? page + (cur - page + 1) % per : cur);
+    if (t.presets > 0) {   // previous / next preset (none playing: the first)
+        int per = t.presets < 8 ? t.presets : 8;
+        IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_PRESET, PresetNext(t.cur, -1, per));
+        IconBtn(dc, IC_FWD, x + 82, y + 124, 26, d ? kInk : kText, A_PRESET, PresetNext(t.cur, 1, per));
     }
 }
 

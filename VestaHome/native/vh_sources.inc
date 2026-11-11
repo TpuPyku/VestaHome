@@ -94,6 +94,15 @@ static void BtQuiet()   // the phone's music paused (inaudible under another sou
 static void BuildButtons();
 static void RedrawFrom(const char* file, int line);
 
+// The removable volumes our music (loaded) and video (playing) are on (VolumeBit; for CardOutRadio).
+static int PlayingVolumes()
+{
+    int v = s_chan ? VolumeBit(s_plDir) : 0;
+    if (s_vidState == VID_PLAYING || s_vidState == VID_PAUSED)
+        v |= VolumeBit(s_vpDir);
+    return v;
+}
+
 static void FollowSource(int src)
 {
     if (!IsWindowVisible(s_wnd) || GetForegroundWindow() != s_wnd)

@@ -571,10 +571,16 @@ static void DoActionOn(const Btn& b)
             (b.arg == T_AUTOCONNECT ? s_cfg.btAutoConnect : s_cfg.btAutoAnswer) = s_on[b.arg] ? 1 : 0;
             SaveCfg();
         }
-        if (b.arg == T_LOUDNESS)   // the shell's loudness keys (CAudioEffectDlg ON / OFF, Ghidra 2026-11-10)
+        if (b.arg == T_LOUDNESS) {   // the shell's loudness keys (CAudioEffectDlg ON / OFF, Ghidra 2026-11-10)
             McuKey(s_on[T_LOUDNESS] ? 0x93 : 0x94, false);
-        if (b.arg == T_VOLALGO)    // "Алгоритм изменения громкости" (CAudioFieldDlg's list: VolData(2, on))
+            s_cfg.loud = s_on[T_LOUDNESS];   // (the MCU does not report it: kept, HU 2026-11-11)
+            SaveCfg();
+        }
+        if (b.arg == T_VOLALGO) {    // "Алгоритм изменения громкости" (CAudioFieldDlg's list: VolData(2, on))
             McuSend3("SPApi_SendRadioAudioVolData", 2, s_on[T_VOLALGO] ? 1 : 0, 0);
+            s_cfg.volAlgo = s_on[T_VOLALGO];
+            SaveCfg();
+        }
         break;
     case A_SEG:
         s_seg[b.arg / 16] = b.arg % 16;
@@ -957,24 +963,11 @@ static void DoActionOn(const Btn& b)
             McuSend3("SPApi_SendRadioKeyVolData", s_cfg.keyVol, 0, 0);
             McuKey(0x9E, true);
             SaveCfg();
-        } else if (row >= 1 && row <= 3 && McuSoundGet().vols[row - 1] >= 0) {   // its value known: set as the shell
-            static const int kType[3] = { 0, 3, 5 };   // (CAudioVolumeDlg: the start's, the phone's, TA's)
-            int v = McuSoundGet().vols[row - 1] + (up ? 1 : -1);
-            v = v < 0 ? 0 : v > 30 ? 30 : v;
-            McuSend3("SPApi_SendRadioAudioVolData", kType[row - 1], v, 0);
-        } else if (row == 1) {
-            McuKey(up ? 0x52 : 0x53, true);
-        } else if (row == 2) {
-            McuKey(up ? 0x95 : 0x96, false);
-        } else if (row == 3) {
-            McuKey(up ? 0x2D : 0x2B, false);
-        } else if (row == 4) {   // the start's cap: 0 (off), 5..30
+        } else {   // the start's cap: 0 (off), 5..30
             int v = s_cfg.startMax + (up ? 1 : -1);
             s_cfg.startMax = v < 5 ? (up ? 5 : 0) : v > 30 ? 30 : v;
             SaveCfg();
         }
-        if (row >= 1 && row <= 3)
-            VLog(L"громкости: строка %d %s", row, up ? L"+" : L"-");
         break;
     }
     case A_WXNOW:    WeatherRefresh(); break;
