@@ -71,16 +71,27 @@ static void TestCats()
 {
     NcCat c[4];
     int n = NcCats("[{\"name\":\"jazz\",\"stationcount\":1760},{\"name\":\"zz top fans\",\"stationcount\":3},"
-                   "{\"name\":\"\",\"stationcount\":9}]", NC_TAGS, c, 4);
+                   "{\"name\":\"\",\"stationcount\":9},{\"name\":\"Rock\",\"stationcount\":7}]", NC_TAGS, c, 4);
     Check(n == 2 && !strcmp(c[0].key, "jazz") && !wcscmp(c[0].name, L"Джаз") && c[0].count == 1760, "a known tag");
-    Check(!wcscmp(c[1].name, L"Zz top fans"), "an unknown tag: a capital first letter");
+    Check(!strcmp(c[1].key, "Rock") && !wcscmp(c[1].name, L"Рок") && c[1].count == 7,
+          "not a genre (a band, a name, a country, a word) left out; a genre in any case kept");
+    n = NcCats("[{\"name\":\"oldies\",\"stationcount\":90},{\"name\":\"m\\u00e9xico\",\"stationcount\":80},"
+               "{\"name\":\"radio\",\"stationcount\":70},{\"name\":\"retro\",\"stationcount\":60},"
+               "{\"name\":\"hiphop\",\"stationcount\":50},{\"name\":\"hip-hop\",\"stationcount\":40}]", NC_TAGS, c, 4);
+    Check(n == 2 && !strcmp(c[0].key, "oldies") && !strcmp(c[1].key, "hiphop") && !wcscmp(c[1].name, L"Хип-хоп"),
+          "one row a genre: the tag with more stations, the same genre's others left out");
+    NcCats("[{\"name\":\"jazz\"}]", NC_TAGS, c, 4);
+    Check(NcCats("[{\"name\":\"jazz\"}]", NC_TAGS, c, 4) == 1, "a genre against the rows of this answer only");
+    n = NcCats("[{\"name\":\"Nowhere\",\"iso_3166_1\":\"\"},{\"name\":\"Russia\",\"iso_3166_1\":\"RU\"}]",
+               NC_COUNTRIES, c, 4);
+    Check(n == 1 && !strcmp(c[0].key, "RU"), "a country without its code left out");
     n = NcCats("[{\"name\":\"Russia\",\"iso_3166_1\":\"RU\",\"stationcount\":900},"
                "{\"name\":\"Narnia\",\"iso_3166_1\":\"XX\",\"stationcount\":2}]", NC_COUNTRIES, c, 4);
     Check(n == 2 && !strcmp(c[0].key, "RU") && !wcscmp(c[0].name, L"Россия") && !wcscmp(c[1].name, L"Narnia"),
           "countries: the code to ask, the Russian name or its own");
     n = NcCats("[{\"name\":\"russian\",\"iso_639\":\"ru\",\"stationcount\":1200}]", NC_LANGS, c, 4);
     Check(n == 1 && !strcmp(c[0].key, "russian") && !wcscmp(c[0].name, L"Русский"), "languages: asked by the name");
-    Check(NcCats("[{\"name\":\"a\",\"stationcount\":1},{\"name\":\"b\",\"stationcount\":1}]", NC_TAGS, c, 1) == 1,
+    Check(NcCats("[{\"name\":\"pop\",\"stationcount\":1},{\"name\":\"rock\",\"stationcount\":1}]", NC_TAGS, c, 1) == 1,
           "cap at most");
 }
 
@@ -171,7 +182,7 @@ static void TestEdges()
           "a long country cut to 47 characters, the codec after it");
 
     NcCat c[2];
-    n = NcCats("[{\"name\":\"x\"}]", NC_TAGS, c, 2);
+    n = NcCats("[{\"name\":\"jazz\"}]", NC_TAGS, c, 2);
     Check(n == 1 && c[0].count == 0, "no station count: 0");
     char p[10];
     NcCatsPath(NC_TAGS, p, sizeof(p));

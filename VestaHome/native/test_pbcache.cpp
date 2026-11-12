@@ -100,8 +100,50 @@ static void TestSeal()
     Check(SecretOpenBytes(sealed, 10, back, sizeof(back)) < 0, "open: shorter than nonce and tag - -1");
 }
 
+static void TestSort()   // (the names in UTF-8 escapes: this file has no BOM)
+{
+    BtPbEntry e[9] = { Entry("\xD0\xAF\xD0\xBD\xD0\xB0", "1"),                         // Яна
+                       Entry("anna", "2"),
+                       Entry("\xD0\x81\xD0\xBB\xD0\xBA\xD0\xB0", "3"),                 // Ёлка
+                       Entry("", "4"),
+                       Entry("\xD0\xB1\xD0\xBE\xD1\x80\xD0\xB8\xD1\x81", "5"),         // борис
+                       Entry("8 800 taxi", "6"),
+                       Entry("\xD0\x95\xD0\xB2\xD0\xB3\xD0\xB5\xD0\xBD\xD0\xB8\xD0\xB9", "7"),   // Евгений
+                       Entry("Boris", "8"),
+                       Entry("\xD0\x9E\xD0\xBB\xD1\x8C\xD0\xB3\xD0\xB0", "9") };       // Ольга
+    PbSortBook(e, 9);
+    const char* want = "573912864";   // борис Евгений Ёлка Ольга Яна anna Boris "8 800" (no name)
+    bool ok = true;
+    for (int i = 0; i < 9; i++)
+        ok = ok && e[i].num[0][0] == want[i];
+    Check(ok, "sort: Cyrillic by the alphabet (ё as е, any case), then Latin, then the rest, no name last");
+    BtPbEntry f[6] = { Entry("#1", "1"),
+                       Entry("\xD0\xAE", "2"),                          // Ю (one letter)
+                       Entry("X\xD1\x8F", "3"),                         // Xя
+                       Entry("\xD0\xAF-\xD1\x8F", "4"),                 // Я-я
+                       Entry("J.Lo", "5"),
+                       Entry("", "6") };
+    PbSortBook(f, 6);
+    want = "245316";   // by the first letter only: Ю Я-я J.Lo Xя #1 (no name)
+    ok = true;
+    for (int i = 0; i < 6; i++)
+        ok = ok && f[i].num[0][0] == want[i];
+    Check(ok, "sort: the group by the first letter alone");
+    BtPbEntry g[2] = { Entry("b", "1"), Entry("a", "2") };
+    PbSortBook(g, 2);
+    Check(g[0].num[0][0] == '2', "sort: two entries");
+    BtPbEntry h[4] = { Entry("zed", "1"), Entry("\xD0\xB0\xD0\xBD\xD1\x82", "2"), Entry("#", "3"),
+                       Entry("\xD0\x90\xD2\x9B", "4") };   // zed, ант, Ақ (a Kazakh second letter)
+    PbSortBook(h, 4);
+    Check(h[0].num[0][0] == '2' && h[1].num[0][0] == '4' && h[2].num[0][0] == '1' && h[3].num[0][0] == '3',
+          "sort: the alphabets' ends (а, z), a group by the first letter only");
+    PbSortBook(e, 0);
+    PbSortBook(NULL, 0);
+}
+
 int main()
 {
+    TestSort();
     TestPack();
     TestSeal();
     printf("%d checks, %d failed\n", s_checks, s_failed);

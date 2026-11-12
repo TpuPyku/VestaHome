@@ -17,4 +17,9 @@ int PbPack(const char* phone, int storage, const BtPbEntry* book, int nb, const 
 bool PbUnpack(const unsigned char* in, int len, char phone[18], int* storage, BtPbEntry** book, int* nb,
               BtPbEntry** calls, int* nc);
 
+// The book in the order of a phone in Russian (the user 2026-11-12: "не в алфавитном порядке" - PBAP gives it in the
+// order the contacts were made): Cyrillic names by the alphabet (ё as е, any case), then Latin, then the rest, the
+// entries without a name last.
+void PbSortBook(BtPbEntry* book, int n);
+
 #endif

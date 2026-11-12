@@ -73,3 +73,45 @@ bool PbUnpack(const unsigned char* in, int len, char phone[18], int* storage, Bt
     *calls = Copied(in + kHead + (b > 0 ? b : 0) * kEntry, c);
     return true;
 }
+
+// ---- the book's order
+static wchar_t Lower(wchar_t c)   // Latin and Cyrillic; ё as е
+{
+    if ((c >= L'A' && c <= L'Z') || (c >= 0x410 && c <= 0x42F))
+        return (wchar_t)(c + 0x20);
+    return c == 0x401 || c == 0x451 ? (wchar_t)0x435 : c;
+}
+
+static void SortKey(const char* s, wchar_t* out, int cap)   // UTF-8 (up to 3 bytes a character) lowered
+{
+    const unsigned char* p = (const unsigned char*)s;
+    int n = 0;
+    while (*p && n < cap - 1) {
+        int more = *p >= 0xE0 ? 2 : *p >= 0xC0 ? 1 : 0;
+        wchar_t c = (wchar_t)(more == 2 ? *p & 0x0F : more ? *p & 0x1F : *p);
+        for (p++; more && (*p & 0xC0) == 0x80; more--, p++)
+            c = (wchar_t)(c << 6 | (*p & 0x3F));
+        out[n++] = Lower(c);
+    }
+    out[n] = 0;
+}
+
+static int Rank(const wchar_t* k)   // Cyrillic, Latin, the rest, no name
+{
+    return !k[0] ? 3 : k[0] >= 0x430 && k[0] <= 0x44F ? 0 : k[0] >= L'a' && k[0] <= L'z' ? 1 : 2;
+}
+
+static int ByName(const void* a, const void* b)
+{
+    wchar_t ka[64], kb[64];
+    SortKey(((const BtPbEntry*)a)->name, ka, 64);
+    SortKey(((const BtPbEntry*)b)->name, kb, 64);
+    int ra = Rank(ka), rb = Rank(kb);
+    return ra != rb ? ra - rb : wcscmp(ka, kb);
+}
+
+void PbSortBook(BtPbEntry* book, int n)
+{
+    if (n > 1)
+        qsort(book, n, sizeof(BtPbEntry), ByName);
+}

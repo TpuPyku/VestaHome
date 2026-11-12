@@ -94,8 +94,16 @@ int NcRecentPut(NcStation* list, int n, int cap, const NcStation& s)
 // ---- Russian names
 struct NcWord { const char* key; const wchar_t* ru; };
 
+// The genres: only these tags are shown (the user 2026-11-12: the catalogue's top tags are half places, words and
+// names - "méxico", "radio", "música"); several tags of one genre - one row, the one with the most stations.
 static const NcWord kTags[] = {
-    { "pop", L"Поп" }, { "rock", L"Рок" }, { "news", L"Новости" }, { "music", L"Музыка" },
+    { "pop", L"Поп" }, { "pop music", L"Поп" }, { "rock", L"Рок" }, { "news", L"Новости" },
+    { "classic rock", L"Классический рок" }, { "pop rock", L"Поп-рок" }, { "alternative rock", L"Альтернативный рок" },
+    { "classic hits", L"Золотые хиты" }, { "top hits", L"Хиты" }, { "top40", L"Топ-40" }, { "2000s", L"Хиты 2000-х" },
+    { "hiphop", L"Хип-хоп" }, { "religious", L"Религия" }, { "gospel", L"Госпел" }, { "funk", L"Фанк" },
+    { "salsa", L"Сальса" }, { "edm", L"EDM" }, { "electro", L"Электро" }, { "smooth jazz", L"Смус-джаз" },
+    { "punk", L"Панк" }, { "r&b", L"R&B" }, { "soundtrack", L"Саундтреки" }, { "instrumental", L"Инструментальная" },
+    { "acoustic", L"Акустика" }, { "opera", L"Опера" }, { "drum and bass", L"Драм-н-бэйс" },
     { "dance", L"Танцевальная" }, { "electronic", L"Электроника" }, { "classical", L"Классика" },
     { "jazz", L"Джаз" }, { "talk", L"Разговорное" }, { "oldies", L"Ретро" }, { "retro", L"Ретро" },
     { "80s", L"Хиты 80-х" }, { "90s", L"Хиты 90-х" }, { "70s", L"Хиты 70-х" }, { "hits", L"Хиты" },
@@ -144,15 +152,23 @@ static const NcWord kLangs[] = {
     { "kazakh", L"Казахский" }, { "belarusian", L"Белорусский" }, { "hindi", L"Хинди" }, { NULL, NULL }
 };
 
-void NcName(int kind, const char* key, const char* name, wchar_t* out, int cap)
+static const NcWord* Known(int kind, const char* key)   // its Russian name's entry, NULL: none
 {
     const NcWord* t = kind == NC_COUNTRIES || kind == NC_CIS ? kCountries : kind == NC_LANGS ? kLangs : kTags;
     for (; t->key; t++)
-        if (!_stricmp(t->key, key)) {
-            wcsncpy(out, t->ru, cap - 1);
-            out[cap - 1] = 0;
-            return;
-        }
+        if (!_stricmp(t->key, key))
+            return t;
+    return NULL;
+}
+
+void NcName(int kind, const char* key, const char* name, wchar_t* out, int cap)
+{
+    const NcWord* t = Known(kind, key);
+    if (t) {
+        wcsncpy(out, t->ru, cap - 1);
+        out[cap - 1] = 0;
+        return;
+    }
     Utf8ToWide(name ? name : key, out, cap);
     if (out[0] >= L'a' && out[0] <= L'z')
         out[0] = (wchar_t)(out[0] - L'a' + L'A');
@@ -207,6 +223,23 @@ int NcStations(const char* json, NcStation* out, int cap)
     return n;
 }
 
+// A genre row: a known genre not listed yet (the tags come the most stations first)
+static bool NewGenre(const char* key, const NcCat* out, int n)
+{
+    const NcWord* t = Known(NC_TAGS, key);
+    for (int i = 0; t && i < n; i++)
+        if (!wcscmp(out[i].name, t->ru))
+            return false;
+    return t != NULL;
+}
+
+static bool Shown(int kind, const char* key, const NcCat* out, int n)   // a row of this list
+{
+    if (!key[0])
+        return false;
+    return kind == NC_CIS ? InCis(key) : kind == NC_TAGS ? NewGenre(key, out, n) : true;
+}
+
 int NcCats(const char* json, int kind, NcCat* out, int cap)
 {
     int n = 0;
@@ -218,7 +251,7 @@ int NcCats(const char* json, int kind, NcCat* out, int cap)
             JStr(JKey(it, "iso_3166_1"), c.key, sizeof(c.key));
         else
             strcpy(c.key, name);
-        if (!c.key[0] || (kind == NC_CIS && !InCis(c.key)))
+        if (!Shown(kind, c.key, out, n))
             continue;
         NcName(kind, c.key, name, c.name, 48);
         c.count = (int)JNum(JKey(it, "stationcount"), 0);

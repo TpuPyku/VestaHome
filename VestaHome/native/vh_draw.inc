@@ -2350,12 +2350,14 @@ static void PageDots(HDC dc, int page, int pages, int cx = 400, int y = 398)
     if (pages < 2)
         return;
     Zone(cx - 120, y - 6, 240, 16, A_PAGE);
-    // at most 5 dots (the user 2026-10-23: a long folder's went off the screen): a window round the page shown
-    int n = pages < 5 ? pages : 5, first = page - 2;
-    first = first > pages - n ? pages - n : first;
-    first = first < 0 ? 0 : first;
-    int w = 28 + (n - 1) * 28, dx = cx - w / 2;
-    for (int p = first; p < first + n; p++) {
+    if (pages > 5) {   // at most 5 dots (the user 2026-10-23: a long folder's went off the screen); more - "4 / 12"
+        wchar_t s[16];  // (2026-11-12: a window of 5 round the page kept it the middle dot - "stuck at 3")
+        _snwprintf(s, 16, L"%d / %d", page + 1, pages);
+        T(dc, cx, y + 8, s, 14, kOrange, 700, AL_MID, 200);
+        return;
+    }
+    int w = 28 + (pages - 1) * 28, dx = cx - w / 2;
+    for (int p = 0; p < pages; p++) {
         int dw = p == page ? 28 : 20;
         R(dc, dx, y, dw, 6, 3, p == page ? kOrange : kDim);
         dx += dw + 8;

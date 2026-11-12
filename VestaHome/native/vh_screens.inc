@@ -1006,6 +1006,7 @@ static void PbLoad()   // the kept lists, if they are this phone's (s_pbPhone)
     int storage, nb, nc;
     BtPbEntry *book = NULL, *calls = NULL;
     if (n > 0 && PbUnpack(plain, n, phone, &storage, &book, &nb, &calls, &nc) && !strcmp(phone, s_pbPhone)) {
+        PbSortBook(book, nb);   // (kept before the order came)
         s_book = book;
         s_calls = calls;
         s_bookN = nb;
@@ -1063,6 +1064,8 @@ static bool PbTake(int list)
         free(e);
         return false;
     }
+    if (list == BT_PB_PB)
+        PbSortBook(e, n);   // (the phone gives it in the order the contacts were made)
     BtPbEntry*& to = list == BT_PB_PB ? s_book : s_calls;
     free(to);
     to = e;
