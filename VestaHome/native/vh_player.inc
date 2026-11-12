@@ -109,6 +109,12 @@ static bool BassLoad()
         VLog(L"плеер: bass.dll без нужных функций");
         return false;
     }
+    // (2 s of playback ahead, BASS's default 0.5: a navigator taking the processor - Navitel 73 %, HU sheet 30 - is
+    // given it, our sound rides its peaks out; ~350 KB)
+    typedef BOOL (WINAPI *BassSetConfigFn)(DWORD, DWORD);
+    BassSetConfigFn setConfig = (BassSetConfigFn)BASS_PROC("BASS_SetConfig");
+    if (setConfig)
+        setConfig(0 /* BASS_CONFIG_BUFFER */, 2000);
     if (!s_bass.init(-1, 44100, 0, s_wnd, NULL)) {
         s_bass.state = -2;
         VLog(L"плеер: BASS_Init ошибка %d", s_bass.error());

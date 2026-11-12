@@ -44,4 +44,29 @@ inline bool PanDeadRequest(long state, unsigned long ageMs)
     return PanWaiting(state) && ageMs >= kPanStuckMs;
 }
 
+// The phone's address as the stack's PAN calls take it (BD_ADDR, 6 bytes; the SDK's FUN_100068f0, Ghidra 2026-11-12):
+// "A4:E2:01:02:03:04" - its pairs from the last, out[0] = 0x04 ... out[5] = 0xA4. False: not 6 hex pairs.
+inline bool PanAddr(const char* text, unsigned char out[6])
+{
+    if (!text)
+        return false;
+    int i = 0;
+    for (; i < 6; i++) {
+        const char* p = text + i * 3;
+        int v = 0;
+        for (int k = 0; k < 2; k++) {
+            char c = p[k];
+            int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 :
+                    c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+            if (d < 0)
+                return false;
+            v = v * 16 + d;
+        }
+        out[5 - i] = (unsigned char)v;
+        if (p[2] != (i < 5 ? ':' : 0))
+            return false;
+    }
+    return true;
+}
+
 #endif

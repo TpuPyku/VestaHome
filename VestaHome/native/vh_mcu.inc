@@ -71,8 +71,8 @@ enum { kVolMax = 50, WP_MCU_VOLUME = 1, WP_MCU_MARK = 2, WP_MCU_TUNER = 3, WP_MC
 // 0x3108 00 <t> <v> (t 0, 1 or 4) = "Алгоритм изменения громкости" (v != 0 on; CAudioFieldDlg), 0x3101 00 <type> <v> =
 // the volumes: type 0 the current one, 5 the start's, 1 the phone's (Bluetooth), 8 the traffic announcements' (TA).
 // (HU 2026-11-11: the MCU sent neither 0x310A nor 0x3108 - the switches keep their own state, s_cfg.)
-struct McuSound { int eq[3], bal, fad, loud, algo; };   // VestaHome's units (-6..6, -8..8); 99 / -1 = not seen
-static McuSound s_mcuSnd = { { 99, 99, 99 }, 99, 99, -1, -1 };
+struct McuSound { int eq[3], bal, fad; };   // VestaHome's units (-6..6, -8..8); 99 = not seen
+static McuSound s_mcuSnd = { { 99, 99, 99 }, 99, 99 };
 static int      s_vol = -1, s_mute = -1, s_src = -1;
 static volatile LONG s_volPosted;
 
@@ -405,12 +405,6 @@ static void McuTake(const McuMsg& m)
         sound = s_mcuSnd.bal != p[1] - 8 || s_mcuSnd.fad != p[2] - 8;
         s_mcuSnd.bal = p[1] - 8;
         s_mcuSnd.fad = 8 - p[2];   // (the MCU's fader is ours reversed: BalanceSend)
-    } else if (m.id == 0x310A) {
-        sound = true;
-        s_mcuSnd.loud = p[1] != 0;
-    } else if (m.id == 0x3108 && (p[1] == 0 || p[1] == 1 || p[1] == 4)) {
-        sound = true;
-        s_mcuSnd.algo = p[2] != 0;
     }
     static bool s_infoInit;
     if (!s_infoInit) {

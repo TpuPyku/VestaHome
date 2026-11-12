@@ -52,12 +52,13 @@ int main()
     Check(LearnSource(-1, 500, 0, 7) == -1, "the media (7) after the key: not AUX's");
     Check(LearnSource(-1, 500, 0, 9) == -1, "Bluetooth (9) after the key: not AUX's");
     Check(LearnSource(-1, 500, 0, 1) == 1, "1: an unknown number - learned");
-    Check(PhonePaused(0, 60000, true), "the phone plays by itself under the radio: paused (as the shell)");
-    Check(PhonePaused(7, 60000, true), "under the media: paused");
-    Check(!PhonePaused(9, 60000, true), "under Bluetooth: it is its music - plays");
-    Check(!PhonePaused(0, 5000, true), "5 s after our own switching (to Bluetooth, the source still to come): plays");
-    Check(PhonePaused(0, 5001, true), "just over 5 s after ours: paused");
-    Check(!PhonePaused(0, 60000, false), "under the shell (it pauses itself): left alone");
+    Check(PhonePaused(0, 60000, 3000, true), "the phone plays by itself under the radio 3 s: paused (as the shell)");
+    Check(PhonePaused(7, 60000, 3000, true), "under the media: paused");
+    Check(!PhonePaused(9, 60000, 3000, true), "under Bluetooth: it is its music - plays");
+    Check(!PhonePaused(0, 5000, 3000, true), "5 s after our own switching (to Bluetooth, the source still to come): plays");
+    Check(PhonePaused(0, 5001, 3000, true), "just over 5 s after ours: paused");
+    Check(!PhonePaused(0, 60000, 3000, false), "under the shell (it pauses itself): left alone");
+    Check(!PhonePaused(0, 60000, 2999, true), "under 3 s (a notification's sound, HU sheet 30: dozens an hour): left alone");
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

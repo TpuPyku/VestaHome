@@ -317,8 +317,8 @@ static bool PbEvent(int* ev)
         return false;
     bool ours = s_pbOurs || s_pbSession;
     __try {
-        switch (ev[0]) {
-        case 0x38:
+        switch (ev[0]) {   // (the SDK's codes = its case labels + 1, as NCL_BT's: HU sheet 30 - 0x39 02 connected,
+        case 0x39:         // 0x3A the start, 0x3B an entry each, 0x3C the end; were taken one lower: one empty contact)
             s_pb->pbap = ev[1];
             if (ev[1] == 2 && s_pbConnecting) {   // connected for VestaHome: its pull, the shell not told
                 s_pbConnecting = 0;
@@ -332,15 +332,23 @@ static bool PbEvent(int* ev)
                 s_pbConnecting = s_pbSession = s_pbOurs = 0;
             }
             return ours;
-        case 0x39:
+        case 0x3A:
             if (s_pb->state == BT_PBS_PULLING)
                 s_pb->count = s_pb->total = 0;
             return s_pbOurs != 0;
-        case 0x3A:
+        case 0x3B:
             if (s_pb->state == BT_PBS_PULLING)
                 PbEntry(ev);
             return s_pbOurs != 0;
-        case 0x3B:
+        case 0x3E:   // (after a SIM pull, nothing more came: HU sheet 30 - taken as failed, the next pull free)
+            if (s_pb->state == BT_PBS_PULLING)
+                PbState(BT_PBS_FAILED);
+            if (s_pbOurs) {
+                s_pbOurs = 0;
+                return true;
+            }
+            return ours;
+        case 0x3C:
             if (s_pb->state == BT_PBS_PULLING)
                 PbState(BT_PBS_DONE);
             if (s_pbOurs) {
@@ -372,7 +380,7 @@ static void ProxyCb(int* ev)
         SetEvent(s_panEv);
     LogEvent(ev);
     PairWatch(ev);
-    bool hide = ev[0] >= 0x38 && ev[0] <= 0x3E && PbEvent(ev);
+    bool hide = ev[0] >= 0x39 && ev[0] <= 0x3F && PbEvent(ev);
     if (s_appCb && !hide)
         s_appCb(ev);
 }
@@ -401,6 +409,8 @@ static int PbapCmd(const char* t)
     s_pbConnTick = GetTickCount();
     PbState(BT_PBS_CONNECTING);
     int r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_PbapClient_Connect])(addr);
+    if (r == 11)   // (on its way: 0x39 02 followed, HU sheet 30 - not a refusal)
+        r = 0;
     if (r != 0) {
         s_pbConnecting = 0;
         PbState(BT_PBS_FAILED);
@@ -498,6 +508,31 @@ static void PanUnstick(const wchar_t* why)
     wchar_t b[96];
     wsprintfW(b, L"PAN state: %d -> ready (%s, asked %u ms ago)", was, why, GetTickCount() - s_panAsked);
     LogLine(b);
+}
+
+// The layer under the SDK still holding the phone's PAN (HU sheet 30: after the state put back to "ready" every
+// XCBPAN_UserConnect answered 1, failed, till a reboot): XCBPAN_UserDisconnect (btapi.dll #162, as the SDK's own
+// Disconnect calls it - BD_ADDR, panstate.h PanAddr), its end the 0x46 awaited up to 3 s. Its answer, -1: not called.
+static int PanLowDisconnect(const char* addr)
+{
+    unsigned char bd[6];
+    HMODULE m = GetModuleHandleW(L"btapi.dll");
+    typedef int (*DiscFn)(unsigned char*);
+    DiscFn f = m ? (DiscFn)GetProcAddressW(m, (LPCWSTR)162) : NULL;
+    if (!f || !PanAddr(addr, bd))
+        return -1;
+    ResetEvent(s_panEv);
+    int r = -1;
+    __try {
+        r = f(bd);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        r = -2;
+    }
+    bool ended = (r == 0 || r == 2) && WaitForSingleObject(s_panEv, 3000) == WAIT_OBJECT_0;
+    wchar_t b[96];
+    wsprintfW(b, L"PAN low disconnect %S -> %d%s", addr, r, ended ? L", 0x46" : L"");
+    LogLine(b);
+    return r;
 }
 
 static int PowerCmd(bool on)
@@ -641,6 +676,10 @@ static DWORD WINAPI CmdThread(LPVOID)
                     PanUnstick(L"connect");
                 s_panAsked = GetTickCount();
                 r = ((int (*)(char*, unsigned short))g_real[IDX_Flc_Bluetooth_PanServer_Connect])(a, 0x1116);
+                if (r == 1 && PanLowDisconnect(a) >= 0) {   // refused below the SDK: let the old link go, once more
+                    s_panAsked = GetTickCount();
+                    r = ((int (*)(char*, unsigned short))g_real[IDX_Flc_Bluetooth_PanServer_Connect])(a, 0x1116);
+                }
                 // 0 / 2: on its way - the event tells the end; but 0 is also the SDK's silent "not ready": nothing
                 // went out then, and the state tells which
                 busy = r == 0 && v && *v != PAN_ST_CONNECTING;

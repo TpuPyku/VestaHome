@@ -101,8 +101,21 @@ static void TestRealDll(const char* path)
     free(im);
 }
 
+static void TestAddr()
+{
+    unsigned char a[6];
+    Check(PanAddr("A4:E2:01:02:03:fe", a) && a[0] == 0xFE && a[1] == 3 && a[2] == 2 && a[3] == 1 && a[4] == 0xE2 &&
+          a[5] == 0xA4, "address: the last pair first (as the SDK's)");
+    Check(!PanAddr("A4:E2:01:02:03", a), "address: five pairs - refused");
+    Check(!PanAddr("A4:E2:01:02:03:04:05", a), "address: seven pairs - refused");
+    Check(!PanAddr("A4:E2:01:02:03:0G", a), "address: not hex - refused");
+    Check(!PanAddr("", a) && !PanAddr(0, a), "address: none - refused");
+    Check(PanAddr("00:00:00:00:00:09", a) && a[0] == 9 && a[5] == 0, "address: zeros kept");
+}
+
 int main(int argc, char** argv)
 {
+    TestAddr();
     TestStates();
     TestMadeUp();
     if (argc > 1)

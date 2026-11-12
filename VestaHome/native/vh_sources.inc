@@ -128,19 +128,26 @@ static void FollowSource(int src)
 
 // The phone's play started by itself while another source sounds: paused at once, as the stock shell does (the user
 // 2026-11-11: no switching to Bluetooth by the phone - an SMS notification took the radio, sheet 29 p. 34; was the
-// source to Bluetooth since 2026-10-29). Once per play started while we watch (the playing state's edge).
+// source to Bluetooth since 2026-10-29). Once per play started while we watch (the playing state's edge), after it has
+// played 3 s on (a notification's sound left alone: HU sheet 30).
 static void PhonePlayTakes(int src, DWORD now)
 {
     static int s_avWas = -1;
+    static DWORD s_playFrom;   // the play's start seen; 0: none to watch (not playing, paused already, or before us)
     BtState bt;
     if (!BtGet(&bt, NULL))
         return;
     if (bt.av != s_avWas)   // (HU 2026-10-29: it worked twice, then not - whether the phone's state came at all)
         VLog(L"телефон: музыка %d -> %d (источник %d, наше переключение %lu с назад)", s_avWas, bt.av, src,
              (now - s_srcByUs) / 1000);
-    if (bt.av == 2 && s_avWas >= 0 && s_avWas != 2 && PhonePaused(src, now - s_srcByUs, McuHostOn())) {
+    if (bt.av == 2 && s_avWas >= 0 && s_avWas != 2)
+        s_playFrom = now ? now : 1;
+    if (bt.av != 2)
+        s_playFrom = 0;
+    if (s_playFrom && PhonePaused(src, now - s_srcByUs, now - s_playFrom, McuHostOn())) {
         VLog(L"телефон: играет сам при источнике %d - пауза", src);
         BtCmd(BT_CMD_PAUSE);
+        s_playFrom = 0;
     }
     s_avWas = bt.av;
 }

@@ -426,6 +426,8 @@ static void NavitelEpoch(const App& a)
 
 struct FindApp { HWND found; };
 static BOOL CALLBACK EnumApp(HWND h, LPARAM lp);
+static bool s_findHidden;   // EnumApp: a hidden window too (a running program that hid itself: GpsSim's "Свернуть")
+static void RaiseWindow(HWND h);
 
 static void RunApp(int i)
 {
@@ -436,6 +438,19 @@ static void RunApp(int i)
     FindApp f = { NULL };
     if (!s_waitPid && (a.wclass[0] || a.wtitle[0]))
         EnumWindows(EnumApp, (LPARAM)&f);
+    if (s_waitPid && !f.found) {   // (visible: the wait below raises it; hidden - shown now, HU sheet 30 p. 18)
+        EnumWindows(EnumApp, (LPARAM)&f);
+        if (!f.found) {
+            s_findHidden = true;
+            EnumWindows(EnumApp, (LPARAM)&f);
+            s_findHidden = false;
+            if (f.found) {
+                RaiseWindow(f.found);
+                s_waitApp = -1;
+                return;
+            }
+        }
+    }
     if (s_waitPid || f.found) {
         s_waitTick = GetTickCount();
         SetTimer(s_wnd, TIMER_WAIT, 300, NULL);
@@ -477,7 +492,7 @@ static void RunApp(int i)
 
 static BOOL CALLBACK EnumApp(HWND h, LPARAM lp)
 {
-    if (h == s_wnd || !IsWindowVisible(h) || GetParent(h))
+    if (h == s_wnd || (!s_findHidden && !IsWindowVisible(h)) || GetParent(h))
         return TRUE;
     static const App none = App();
     const App& a = s_waitApp >= 0 ? s_apps[s_waitApp] : none;
@@ -543,6 +558,23 @@ static void DropRaised()
         if (IsWindow(s_raised[i]))
             SetWindowPos(s_raised[i], HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     s_raisedCount = 0;
+}
+
+// MUTE twice (the user 2026-11-12: "all the windows but VestaHome away"): the programs started from here and the one in
+// front hidden, under the rest - their tile starts them again: their hidden window comes back (RunApp, s_findHidden).
+static void HideOthers(HWND front)
+{
+    int n = 0;
+    for (int i = 0; i <= s_raisedCount; i++) {
+        HWND h = i < s_raisedCount ? s_raised[i] : front;
+        if (!h || h == s_wnd || !IsWindow(h) || !IsWindowVisible(h) || GetParent(h))
+            continue;
+        SetWindowPos(h, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        ShowWindow(h, SW_HIDE);
+        n++;
+    }
+    s_raisedCount = 0;
+    VLog(L"MUTE дважды: окон убрано %d", n);
 }
 
 // A raised program stuck on top (sheet 22: Navitel's exit - its process stayed, at 0 % CPU, its window over all,

@@ -565,20 +565,14 @@ static void DoActionOn(const Btn& b)
             LogsSet(s_on[T_LOGS]);
         if (b.arg == T_BT)
             BtPowerSet(s_on[T_BT]);
+        if (b.arg == T_PB_AUTO) {   // the phone book at each connect (the user 2026-11-12: off by default)
+            s_cfg.pbAuto = s_on[T_PB_AUTO] ? 1 : 0;
+            SaveCfg();
+        }
         if (b.arg == T_AUTOCONNECT || b.arg == T_AUTOANSWER) {   // the stack's options (the proxy), kept for the next boot
             BtCmdText(BT_CMD_SETOPT, b.arg == T_AUTOCONNECT ? (s_on[b.arg] ? L"c 1" : L"c 0")
                                                             : (s_on[b.arg] ? L"a 1" : L"a 0"));
             (b.arg == T_AUTOCONNECT ? s_cfg.btAutoConnect : s_cfg.btAutoAnswer) = s_on[b.arg] ? 1 : 0;
-            SaveCfg();
-        }
-        if (b.arg == T_LOUDNESS) {   // the shell's loudness keys (CAudioEffectDlg ON / OFF, Ghidra 2026-11-10)
-            McuKey(s_on[T_LOUDNESS] ? 0x93 : 0x94, false);
-            s_cfg.loud = s_on[T_LOUDNESS];   // (the MCU does not report it: kept, HU 2026-11-11)
-            SaveCfg();
-        }
-        if (b.arg == T_VOLALGO) {    // "Алгоритм изменения громкости" (CAudioFieldDlg's list: VolData(2, on))
-            McuSend3("SPApi_SendRadioAudioVolData", 2, s_on[T_VOLALGO] ? 1 : 0, 0);
-            s_cfg.volAlgo = s_on[T_VOLALGO];
             SaveCfg();
         }
         break;
@@ -590,10 +584,6 @@ static void DoActionOn(const Btn& b)
         }
         if (b.arg / 16 == G_TIME_FMT) {   // 12 / 24 h: the clock
             s_cfg.time12 = b.arg % 16 == 0;
-            SaveCfg();
-        }
-        if (b.arg / 16 == G_SPEED_VOL) {   // (SpeedVolTick follows it)
-            s_cfg.speedVol = b.arg % 16;
             SaveCfg();
         }
         if (b.arg / 16 == G_SAVER) {
@@ -716,7 +706,15 @@ static void DoActionOn(const Btn& b)
         else if (b.arg < 4000 && b.arg / 4 < s_bookN)
             PbDial(s_book[b.arg / 4].num[b.arg % 4]);
         break;
-    case A_PBRELOAD: PbAsk(b.arg); break;
+    case A_PBRELOAD: s_pbNoAuto = false; PbAsk(b.arg); break;
+    case A_PBDEL:    // asked twice (4 s): this phone's book and log, its file
+        if (s_pbDelArm && GetTickCount() - s_pbDelArm < 4000) {
+            s_pbDelArm = 0;
+            PbDelete();
+        } else {
+            s_pbDelArm = GetTickCount();
+        }
+        break;
     case A_PBFIND:   OpenKeysFor(s_pbFind, 23, L"Поиск контакта", S_CONTACTS); s_bookPage = 0; break;
     case A_PBSIM:    // the other book: pulled anew
         s_pbStorage ^= 1;

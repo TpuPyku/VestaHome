@@ -27,7 +27,7 @@ bool MusicBackOnTab(bool heldBySource, bool playing)
     return heldBySource && !playing;
 }
 
-bool PhonePaused(int src, unsigned sinceOursMs, bool host)
+bool PhonePaused(int src, unsigned sinceOursMs, unsigned playingMs, bool host)
 {
-    return src != 9 && sinceOursMs > 5000 && host;
+    return src != 9 && sinceOursMs > 5000 && playingMs >= 3000 && host;
 }

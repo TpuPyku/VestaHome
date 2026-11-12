@@ -368,6 +368,8 @@ static int SlideTop()   // under what stays: the radio's frequency panel, the ta
         return 116;
     case S_FILES:
         return 104;   // (the files: their path line stays)
+    case S_TASKS:
+        return 228;   // (the graphs, the tabs and the arrows stay: HU sheet 30)
     default:
         return 56;
     }
@@ -382,6 +384,8 @@ static int SlideBottom()   // above the page dots (396), the dock and the bottom
 {                          // 2026-11-10: the bottom bar does not move with a swipe; HU 2026-11-11 sheet 29 p. 13)
     if (s_screen == S_PHOTO_VIEW)
         return PhotoFull() ? 480 : 398;   // over its dock
+    if (s_screen == S_TASKS)
+        return 406;   // (its 4th row ends at 404; no dots)
     return 392;
 }
 

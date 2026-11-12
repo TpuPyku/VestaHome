@@ -248,9 +248,53 @@ static void BtOwnerTick()   // once a second, 10 s on from the start
 // connect the one remembered (bt.last) as the shell does (Hf_Connect + Av_Connect, the proxy's BT_CMD_CONNECT),
 // the phone only (no music link) - its music link (Av_Connect); then its music becomes the source (BtMusicOn) and
 // plays (Av_Mute(0) + Av_Play, as the shell's play). Given up after 2 min.
+// The phone's music chosen and its link gone (HU sheet 30: BT music no more until a reboot): asked again, as at the
+// start - its music link when the phone is there, else the phone remembered (bt.last)
+static bool PbAutoOn()
+{
+    return s_cfg.pbAuto != 0;
+}
+
+static void BtMusicLink()
+{
+    BtState bt;
+    if (!BtGet(&bt, NULL) || bt.av != 0 || s_cfg.btOwner == BTO_OBD)
+        return;
+    if (bt.hf >= 1) {
+        VLog(L"Bluetooth: музыка телефона не подключена - подключаю (A2DP)");
+        BtCmd(BT_CMD_AVCONNECT);
+    } else if (s_cfg.btLast[0]) {
+        VLog(L"Bluetooth: телефон не подключён - подключаю %s", s_cfg.btLast);
+        BtCmdText(BT_CMD_CONNECT, s_cfg.btLast);
+    }
+}
+
+// 60 s on (the log is on the card by then): the MCU's source and the programs running - who plays (HU sheet 30: after a
+// reboot SD music sounded with the phone's, no player of ours had started)
+static void StartReport(DWORD el)
+{
+    static bool s_done;
+    if (s_done || el < 60000)
+        return;
+    s_done = true;
+    static TaskInfo t;
+    TaskSample(&t, s_wnd);
+    wchar_t s[400] = L"";
+    for (int i = 0; i < t.procCount && wcslen(s) < 340; i++)
+        if (!TaskIsSystem(t.proc[i].name)) {
+            wcscat(s, L" ");
+            wcsncat(s, t.proc[i].name, 39);
+        }
+    int vol, mute, src;
+    VolGet(&vol, &mute, &src);
+    VLog(L"запуск: через 60 с источник MCU %d, наш плеер %s; программы:%s", src, PlayerPlaying() ? L"играет" : L"нет",
+         s[0] ? s : L" —");
+}
+
 static void ResumeSourceTick()
 {
     DWORD el = GetTickCount() - s_bootTick;
+    StartReport(el);
     if (s_resumed || el < 10000)
         return;
     int vol, mute, src;

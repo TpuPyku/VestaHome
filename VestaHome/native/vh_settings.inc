@@ -47,6 +47,7 @@ struct Cfg {
     bool    weatherGps;                // the place where the car is; without a fix the home point
     wchar_t homeName[48];
     int btAutoConnect, btAutoAnswer;   // the stack's options, -1 never set (VestaStub applies them at each boot)
+    int pbAuto;                        // the kept phone book refreshed at each connect (the user 2026-11-12: off)
     wchar_t btName[32];                // the unit's Bluetooth name (VestaStub writes it before the stack starts)
     double  homeLat, homeLon;          // both 0 = not set
     wchar_t gpsPort[16];               // the shell's NMEA port, only read
@@ -78,12 +79,10 @@ struct Cfg {
     int     nmeaCom;                   // its number: kNmeaComMin..kNmeaComMax (vh_gps.inc)
     bool    wifiOn;                    // the Wi-Fi radio (wifi.cpp WifiEnable)
     int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
-    int     speedVol;                  // the volume by speed: 0 off, 1..3 = +2 / +3 / +4 per 100 km/h
     int     carSens[3];                // the car widget's lines: sensors (kCarSensor), -1 none
     int     tank;                      // the fuel tank, L (the range from OBD's level): Vesta 55
     bool    time12;                    // the clock 12 h (else 24 h)
     int     startMax;                  // the volume at the start: no louder than this (VestaHome's own), 0 = no cap
-    int     loud, volAlgo;             // loudness, "Алгоритм изменения громкости": as last set (the MCU tells neither)
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
     int     accent;                    // the accent: kAccents' index (0 Марс = the skin's own)
@@ -142,7 +141,6 @@ static void CfgDefaults()
     s_cfg.netAuto = true;   // (the user 2026-10-30: the modem in - online)
     s_cfg.nmeaCom = 6;
     s_cfg.saverMin = 5;
-    s_cfg.speedVol = 2;
     s_cfg.tank = 55;
     s_cfg.startMax = 10;
     s_cfg.keyVol = -1;
@@ -406,6 +404,8 @@ static void LoadCfg()
             s_cfg.btAutoConnect = _wtoi(v);
         } else if (!wcscmp(k, L"bt.autoanswer")) {
             s_cfg.btAutoAnswer = _wtoi(v);
+        } else if (!wcscmp(k, L"bt.pbauto")) {
+            s_cfg.pbAuto = CfgBool(v);
         } else if (!wcscmp(k, L"bt.name")) {
             wcsncpy(s_cfg.btName, v, 31);
             s_cfg.btName[31] = 0;
@@ -551,14 +551,8 @@ static void LoadCfg()
             s_cfg.time12 = CfgBool(v);
         } else if (!wcscmp(k, L"sound.startmax")) {
             s_cfg.startMax = _wtoi(v) < 0 ? 0 : _wtoi(v) > 30 ? 30 : _wtoi(v);
-        } else if (!wcscmp(k, L"sound.loud")) {
-            s_cfg.loud = CfgBool(v);
-        } else if (!wcscmp(k, L"sound.volalgo")) {
-            s_cfg.volAlgo = CfgBool(v);
         } else if (!wcscmp(k, L"sound.keyvol")) {
             s_cfg.keyVol = _wtoi(v) < -1 ? -1 : _wtoi(v) > 30 ? 30 : _wtoi(v);
-        } else if (!wcscmp(k, L"sound.speedvol")) {
-            s_cfg.speedVol = _wtoi(v) < 0 ? 0 : _wtoi(v) > 3 ? 3 : _wtoi(v);
         } else if (!wcscmp(k, L"screen.saverfile") && v[0]) {
             wcsncpy(s_cfg.saverFile, v, MAX_PATH - 1);
         } else if (!wcscmp(k, L"screen.saverbg")) {
@@ -647,6 +641,7 @@ static void SaveCfg()
         L"weather.gps=%d\r\nhome.name=%s\r\nhome.lat=%.5f\r\nhome.lon=%.5f\r\n"
         L"# bt.name: the unit's name seen by phones (VestaStub sets it at the boot, before Bluetooth starts)\r\n"
         L"bt.name=%s\r\nbt.autoconnect=%d\r\nbt.autoanswer=%d\r\n"
+        L"# bt.pbauto: the kept phone book and call log pulled anew at each connect (0: only by \"Обновить\")\r\nbt.pbauto=%d\r\n"
         L"# gps.baud: 0 = leave the port's speed as the shell set it\r\n"
         L"gps.port=%s\r\ngps.baud=%u\r\ngps.time=%d\r\n"
         L"# time.tz: local time = UTC + minutes (180 = Moscow)\r\ntime.tz=%d\r\n"
@@ -668,11 +663,9 @@ static void SaveCfg()
         L"# gps.nmeacom: its number, 5..9\r\ngps.nmeaport=%d\r\ngps.nmeacom=%d\r\n"
         L"# screen.saver: the clock after this many minutes untouched (0 = never)\r\n"
         L"screen.saver=%d\r\n"
-        L"# sound.speedvol: the volume by speed, 0 off, 1..3 = +2 / +3 / +4 per 100 km/h\r\nsound.speedvol=%d\r\n"
         L"# sound.startmax: the volume at the start no louder than this (0 = no cap); sound.keyvol: navigation / keys\r\n"
         L"sound.startmax=%d\r\nsound.keyvol=%d\r\n"
-        L"# sound.loud, sound.volalgo: loudness and the volume algorithm (the MCU's), as last set\r\n"
-        L"sound.loud=%d\r\nsound.volalgo=%d\r\ntime.12h=%d\r\n"
+        L"time.12h=%d\r\n"
         L"# car.sensors: the car widget's three lines (Settings of the widget), -1 none\r\ncar.sensors=%d,%d,%d\r\n"
         L"# car.tank: the fuel tank, L (the range: OBD's fuel level)\r\ncar.tank=%d\r\n"
         L"# screen.theme / screen.light: our colours and maps / the unit's backlight: 0 by sunrise and sunset (GPS, else\r\n"
@@ -698,12 +691,12 @@ static void SaveCfg()
         L"# login, password; net.auto: dial when it is in\r\n"
         L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
-        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer,
+        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer, s_cfg.pbAuto,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
         s_cfg.camOver, s_cfg.camOverBy, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,
         s_cfg.shuffle, s_cfg.repeat, s_cfg.musicTree, s_cfg.videoDir, s_cfg.videoFile, s_cfg.videoStretch, s_cfg.videoMoving,
-        s_cfg.radioStation, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.speedVol, s_cfg.startMax, s_cfg.keyVol, s_cfg.loud, s_cfg.volAlgo, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast,
+        s_cfg.radioStation, s_cfg.rvcInvert, s_cfg.wifiOn, s_cfg.nmeaPort, s_cfg.nmeaCom, s_cfg.saverMin, s_cfg.startMax, s_cfg.keyVol, s_cfg.time12, s_cfg.carSens[0], s_cfg.carSens[1], s_cfg.carSens[2], s_cfg.tank, s_cfg.themeMode, s_cfg.lightMode, homeWg, s_cfg.uiScreen, s_cfg.uiSource, s_cfg.uiMedia, s_cfg.btLast,
         s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.btPower ? 1 : 0, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto, s_cfg.netOp, s_cfg.netApn, s_cfg.netUser,

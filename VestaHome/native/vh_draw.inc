@@ -1705,11 +1705,13 @@ static void VSlider(HDC dc, int x, int y, int h, int pct, const wchar_t* label, 
     T(dc, x, y + h + 28, label, 14, kMuted, 600, AL_MID);
 }
 
+// a: the left arrow sends arg base - 1, the right one base + 1 (through Zone: a pressed button's redraw keeps the
+// full frame's buttons, an arg set after it would land on another one - HU sheet 30 p. 5)
 static void Stepper(HDC dc, int x, int y, int w, const wchar_t* value, int h = 48, int size = 20,
-                    Action a = A_NONE)   // a: the left arrow sends arg -1, the right one +1
+                    Action a = A_NONE, int base = 0)
 {
     R(dc, x, y, w, h, h / 2, kPanel2);
-    bool l = Zone(x, y, 48, h, a, -1), r = Zone(x + w - 48, y, 48, h, a, 1);
+    bool l = Zone(x, y, 48, h, a, base - 1), r = Zone(x + w - 48, y, 48, h, a, base + 1);
     if (l)
         R(dc, x + 2, y + 2, 44, h - 4, (h - 4) / 2, kOrange);
     if (r)

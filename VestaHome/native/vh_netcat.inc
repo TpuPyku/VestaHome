@@ -31,6 +31,101 @@ static int     s_ncCatN, s_ncCatKind = -1;
 struct NcPage { int kind; char arg[200]; wchar_t title[48]; int offset, total, raw; bool byName; };
 static NcPage  s_ncPage;               // what s_nl[NL_CAT] holds
 static wchar_t s_ncQuery[64];          // the search's text (the keyboard's: VestaCore vkeys)
+// The catalogue's mirror (netmirror.h; the user 2026-11-12: radio-browser blocked for many) - VestaCore's weekly file,
+// kept beside VestaHome (RadioMirror.bin), downloaded again when older than a week; answers when radio-browser and our
+// cache don't. radio-browser not answering: not asked again for 15 min (each list would wait ~1 min for its tries).
+static const char* const kNcMirrorUrl = "https://github.com/TpuPyku/VestaCore/releases/download/radio/radio-mirror.bin";
+enum { kNcMirrorAgeS = 7 * 24 * 3600, kNcDownMs = 15 * 60 * 1000, kNcMirrorMax = 16 * 1024 * 1024 };
+static volatile DWORD s_ncDownTick;    // radio-browser did not answer then (0: it did, or never asked)
+static volatile LONG  s_ncMirrorBusy;
+
+static void NcMirrorFile(wchar_t* path, const wchar_t* ext)
+{
+    _snwprintf(path, MAX_PATH, L"%sRadioMirror.%s", s_dir, ext);
+    path[MAX_PATH - 1] = 0;
+}
+
+// The mirror's answer to path, as a new zero-closed buffer for free(); false: no mirror, or not in it
+static bool NcMirrorRead(const char* path, unsigned char** body, int* len)
+{
+    wchar_t file[MAX_PATH];
+    NcMirrorFile(file, L"bin");
+    HANDLE f = CreateFile(file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return false;
+    DWORD size = GetFileSize(f, NULL), got = 0;
+    unsigned char* data = size > 0 && size < kNcMirrorMax ? (unsigned char*)malloc(size) : NULL;
+    if (data)
+        ReadFile(f, data, size, &got, NULL);
+    CloseHandle(f);
+    const unsigned char* b = NULL;
+    int n = 0;
+    bool ok = data && got == size && NcMirrorFind(data, (int)size, path, &b, &n);
+    if (ok && (*body = (unsigned char*)malloc(n + 1)) != NULL) {
+        memcpy(*body, b, n);
+        (*body)[n] = 0;
+        *len = n;
+    }
+    free(data);
+    return ok && *body;
+}
+
+static DWORD WINAPI NcMirrorThread(LPVOID)
+{
+    wchar_t part[MAX_PATH], file[MAX_PATH];
+    NcMirrorFile(part, L"part");
+    NcMirrorFile(file, L"bin");
+    int err = 0, metaint = 0;
+    char name[8], type[64];
+    HttpStream* h = HttpStreamOpen(kNcMirrorUrl, &err, &metaint, name, sizeof(name), type, sizeof(type));
+    HANDLE f = h ? CreateFile(part, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL) : INVALID_HANDLE_VALUE;
+    DWORD total = 0;
+    bool ok = f != INVALID_HANDLE_VALUE;
+    static char buf[16 * 1024];
+    for (int n; ok && (n = HttpStreamRead(h, buf, sizeof(buf))) > 0 && total < kNcMirrorMax;) {
+        DWORD put = 0;
+        ok = WriteFile(f, buf, n, &put, NULL) && put == (DWORD)n;
+        total += n;
+    }
+    if (f != INVALID_HANDLE_VALUE)
+        CloseHandle(f);
+    if (h)
+        HttpStreamClose(h);
+    ok = ok && total > 6;
+    if (ok) {   // (a whole file only: the old one kept till then)
+        DeleteFile(file);
+        ok = MoveFile(part, file) != 0;
+    } else {
+        DeleteFile(part);
+    }
+    VLog(L"каталог радио: зеркало %s (%u КБ, ошибка %d)", ok ? L"обновлено" : L"не скачалось", (unsigned)(total / 1024), err);
+    InterlockedExchange((LONG*)&s_ncMirrorBusy, 0);
+    return 0;
+}
+
+static void NcMirrorTick()   // the catalogue opened: its mirror downloaded again when missing or older than a week
+{
+    wchar_t file[MAX_PATH];
+    NcMirrorFile(file, L"bin");
+    WIN32_FILE_ATTRIBUTE_DATA a;
+    if (GetFileAttributesEx(file, GetFileExInfoStandard, &a)) {
+        FILETIME now;
+        SYSTEMTIME st;
+        GetSystemTime(&st);
+        SystemTimeToFileTime(&st, &now);
+        unsigned __int64 t = ((unsigned __int64)now.dwHighDateTime << 32 | now.dwLowDateTime),
+                         w = ((unsigned __int64)a.ftLastWriteTime.dwHighDateTime << 32 | a.ftLastWriteTime.dwLowDateTime);
+        if (t > w && (t - w) / 10000000 < kNcMirrorAgeS)
+            return;   // (a clock before the file's time - the unit's after a reset - is taken as old)
+    }
+    if (InterlockedExchange((LONG*)&s_ncMirrorBusy, 1))
+        return;
+    HANDLE th = CreateThread(NULL, 0, NcMirrorThread, NULL, 0, NULL);
+    if (th)
+        CloseHandle(th);
+    else
+        InterlockedExchange((LONG*)&s_ncMirrorBusy, 0);
+}
 
 static DWORD WINAPI NcThread(LPVOID p)
 {
@@ -47,7 +142,10 @@ static DWORD WINAPI NcThread(LPVOID p)
         VLog(L"каталог радио: из кэша, %d байт", len);
     // this server, then the other; HTTPS, then plain HTTP (2026-11-04: a provider resets TLS to radio-browser now
     // and then, both servers at once - its plain HTTP answered; the catalogue is public, no secret goes there)
-    for (int k = 0; k < 4 && !kept; k++) {
+    bool down = s_ncDownTick && GetTickCount() - s_ncDownTick < kNcDownMs && j->what != NCJ_CLICK;
+    if (down)
+        VLog(L"каталог радио: radio-browser не отвечал недавно - кэш и зеркало");
+    for (int k = 0; k < 4 && !kept && !down; k++) {
         if (j->what != NCJ_CLICK && j->gen != s_ncGen)   // another asked meanwhile: no more tries on the link
             break;                                        // (05.11: two at once over BT, each up to 4 x 16 s)
         int h = (s_ncHost + k) % 2;
@@ -58,6 +156,7 @@ static DWORD WINAPI NcThread(LPVOID p)
              j->err, status, body ? len : 0, (unsigned)(GetTickCount() - t0));
         if (j->err == NET_OK && status == 200) {
             s_ncHost = h;
+            s_ncDownTick = 0;
             break;
         }
         free(body);
@@ -70,10 +169,17 @@ static DWORD WINAPI NcThread(LPVOID p)
         free(j);
         return 0;
     }
+    if (!body && !kept && !down)
+        s_ncDownTick = GetTickCount() | 1;
     if (!body && NcCacheRead(cache, j->path, 0, &body, &len)) {
         kept = j->stale = true;
         j->err = NET_OK;
         VLog(L"каталог радио: нет связи, из кэша, %d байт", len);
+    }
+    if (!body && NcMirrorRead(j->path, &body, &len)) {
+        kept = j->stale = true;
+        j->err = NET_OK;
+        VLog(L"каталог радио: нет связи, из зеркала, %d байт", len);
     }
     if (body) {
         if (j->what == NCJ_CATS) {
@@ -127,6 +233,7 @@ static void NetCatClick(const char* uuid)   // radio-browser counts a station pl
 
 static void NcOpenCats(int kind)   // Genres / Countries / Languages: the list, asked again when it is not this one
 {
+    NcMirrorTick();
     if (s_ncCatKind != kind) {
         free(s_ncCats);
         s_ncCats = NULL;

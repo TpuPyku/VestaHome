@@ -659,11 +659,14 @@ static void ScrAudioList(HDC dc);
 enum { TIMER_BTSRC = 12 };
 static int s_btHold;   // ⏮ / ⏭ held: the release command to send when the finger goes up
 
+static void BtMusicLink();   // (vh_resume.inc)
+
 static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x8905), then its BT music key 0x54
 {
     ResumeByUser();                         // (HU 2026-10-18-2: 0x54 alone did nothing; after 0x84 the source turned 09)
     OursQuiet();
     s_srcByUs = GetTickCount();
+    BtMusicLink();
     MainMenuKey(0x84);   // (then 0x54: TIMER_BTSRC)
 }
 
@@ -912,8 +915,10 @@ static void ScrPhone(HDC dc)
 }
 
 // ---- the phone book and the call log (PBAP through the proxy Bluetooth, btshm.h BtPb): pulled from the connected
-// phone when their screen opens (once per phone, "ОБНОВИТЬ" again), kept in memory only (never on the flash). A pull
-// the shell made itself (its book, when PBAP connects) is taken too.
+// phone when their screen opens (once per phone, "ОБНОВИТЬ" again). A pull the shell made itself (its book, when PBAP
+// connects) is taken too. Each phone's lists kept beside VestaHome, sealed with the unit's key (pbcache.h; the user
+// 2026-11-12): the connected phone's shown; pulled again only by "Обновить" (or at each connect when "Книга при
+// подключении" is on, off by default); "Удалить" (asked twice) drops this phone's file and lists.
 static void RedrawFrom(const char* file, int line);
 static void Go(Screen s, bool push);
 static BtPb*      s_pbShm;
@@ -930,6 +935,93 @@ static int        s_pbStorage;      // the book from: 0 the phone, 1 its SIM ("�
 static wchar_t    s_pbFind[24];     // the contacts' search: a part of the name or the number (the keyboard)
 enum { kPbTop = 164, kPbPer = 8 };   // the lists under the head line: two columns of four rows (kRowStep) a page
 static int        s_bookPage, s_callPage;
+static bool       s_pbOld[2];       // the book [0], the calls [1] from the kept file (a pull due if bt.pbauto)
+static bool       s_pbNoAuto;       // deleted: no pull of its own till "Обновить" (or another phone)
+static DWORD      s_pbDelArm;       // "Удалить" pressed once: "Точно?" for 4 s
+static bool PbAutoOn();             // bt.pbauto (vh_resume.inc)
+
+static void PbFile(wchar_t* path)   // the connected phone's (s_pbPhone): phonebook_A4E28798D69F.dat
+{
+    wchar_t id[16];
+    int k = 0;
+    for (const char* p = s_pbPhone; *p && k < 15; p++)
+        if (*p != ':')
+            id[k++] = (wchar_t)*p;
+    id[k] = 0;
+    _snwprintf(path, MAX_PATH, L"%sphonebook_%s.dat", s_dir, id);
+    path[MAX_PATH - 1] = 0;
+}
+
+static void PbDelete()   // this phone's file and lists gone
+{
+    wchar_t path[MAX_PATH];
+    PbFile(path);
+    DeleteFile(path);
+    free(s_book);
+    free(s_calls);
+    s_book = s_calls = NULL;
+    s_bookN = s_callsN = -1;
+    s_bookPage = s_callPage = 0;
+    s_pbOld[0] = s_pbOld[1] = false;
+    s_pbNoAuto = true;
+    s_pbFail = false;
+    VLog(L"телефон: книга и журнал %S удалены", s_pbPhone);
+}
+
+static void PbSave()   // the lists now (after a pull) into the file
+{
+    int n = PbPack(s_pbPhone, s_pbStorage, s_book, s_bookN, s_calls, s_callsN, NULL, 0);
+    unsigned char* plain = (unsigned char*)malloc(n);
+    unsigned char* sealed = (unsigned char*)malloc(n + 64);
+    int len = plain && sealed && PbPack(s_pbPhone, s_pbStorage, s_book, s_bookN, s_calls, s_callsN, plain, n) == n ?
+              SecretSealBytes(plain, n, sealed, n + 64) : -1;
+    wchar_t path[MAX_PATH];
+    PbFile(path);
+    HANDLE f = len > 0 ? CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL) : INVALID_HANDLE_VALUE;
+    DWORD put = 0;
+    if (f != INVALID_HANDLE_VALUE) {
+        WriteFile(f, sealed, len, &put, NULL);
+        CloseHandle(f);
+    }
+    VLog(L"телефон: сохранено рядом с VestaHome %d байт%s", len, put == (DWORD)len ? L"" : L" - не записалось");
+    free(plain);
+    free(sealed);
+}
+
+static void PbLoad()   // the kept lists, if they are this phone's (s_pbPhone)
+{
+    wchar_t path[MAX_PATH];
+    PbFile(path);
+    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    DWORD size = GetFileSize(f, NULL), got = 0;
+    unsigned char* sealed = size < 4 * 1024 * 1024 ? (unsigned char*)malloc(size) : NULL;
+    unsigned char* plain = sealed ? (unsigned char*)malloc(size) : NULL;
+    if (plain)
+        ReadFile(f, sealed, size, &got, NULL);
+    CloseHandle(f);
+    int n = got == size && plain ? SecretOpenBytes(sealed, size, plain, size) : -1;
+    char phone[18];
+    int storage, nb, nc;
+    BtPbEntry *book = NULL, *calls = NULL;
+    if (n > 0 && PbUnpack(plain, n, phone, &storage, &book, &nb, &calls, &nc) && !strcmp(phone, s_pbPhone)) {
+        s_book = book;
+        s_calls = calls;
+        s_bookN = nb;
+        s_callsN = nc;
+        s_pbStorage = storage;
+        s_pbOld[0] = s_pbOld[1] = true;
+        VLog(L"телефон: книга %d, журнал %d - сохранённые", nb, nc);
+    } else {
+        free(book);
+        free(calls);
+        if (n < 0)
+            VLog(L"телефон: сохранённое не открылось (другое ГУ или повреждено)");
+    }
+    free(sealed);
+    free(plain);
+}
 
 static BtPb* PbShm()
 {
@@ -976,6 +1068,8 @@ static bool PbTake(int list)
     to = e;
     (list == BT_PB_PB ? s_bookN : s_callsN) = n;
     VLog(L"телефон: %s — %d записей (из %d)", list == BT_PB_PB ? L"книга" : L"журнал", n, pb->total);
+    s_pbOld[list == BT_PB_PB ? 0 : 1] = false;
+    PbSave();
     return true;
 }
 
@@ -992,9 +1086,15 @@ static void PbNeed(int list)
         s_book = s_calls = NULL;
         s_bookN = s_callsN = -1;
         s_bookPage = s_callPage = 0;
+        s_pbOld[0] = s_pbOld[1] = false;
+        s_pbNoAuto = false;
+        PbLoad();
     }
-    if ((list == BT_PB_PB ? s_bookN : s_callsN) >= 0 || s_pbWant >= 0 || s_pbFail)
-        return;
+    bool& old = s_pbOld[list == BT_PB_PB ? 0 : 1];
+    bool have = (list == BT_PB_PB ? s_bookN : s_callsN) >= 0;
+    if ((have && !(old && PbAutoOn())) || (!have && s_pbNoAuto) || s_pbWant >= 0 || s_pbFail)
+        return;   // (none kept: pulled once by itself; kept ones - only by "Обновить" unless bt.pbauto)
+    old = false;
     if (!PbTake(list))
         PbAsk(list);
 }
@@ -1063,7 +1163,11 @@ static bool PbHead(HDC dc, int list, int n, const wchar_t* what)
         wcscpy(s, L"Телефон не отдал список");
     else
         _snwprintf(s, 64, L"%s: %d", what, n < 0 ? 0 : n);
-    T(dc, 24, 140, s, 17, s_pbFail ? kStop : kMuted, 600, AL_START, 400);
+    T(dc, 24, 140, s, 17, s_pbFail ? kStop : kMuted, 600, AL_START, 336);
+    bool armed = s_pbDelArm && GetTickCount() - s_pbDelArm < 4000;
+    if (s_bookN >= 0 || s_callsN >= 0)
+        Button(dc, 368, 116, 80, 40, armed ? L"Точно?" : L"Удалить", armed ? B_SEL : B_N, IC_NONE, 14, 0,
+               s_pbWant >= 0 ? A_NONE : A_PBDEL);
     if (list == BT_PB_PB) {   // the book: the phone's / the SIM's, the search
         Button(dc, 456, 116, 80, 40, s_pbStorage ? L"SIM" : L"Тел.", s_pbStorage ? B_SEL : B_N, IC_NONE, 14, 0,
                s_pbWant >= 0 ? A_NONE : A_PBSIM);
@@ -1419,6 +1523,8 @@ static void ScrSetBt(HDC dc)
         Toggle(dc, 640, y + 10, T_AUTOCONNECT);
         SetRow(dc, y += kSetH, L"Автоответ", L"входящий звонок принимается через 5 с");
         Toggle(dc, 640, y + 10, T_AUTOANSWER);
+        SetRow(dc, y += kSetH, L"Книга при подключении", L"обновлять с телефона сама (иначе — «Обновить»)");
+        Toggle(dc, 640, y + 10, T_PB_AUTO);
         s[0] = 0;   // the paired ones (0x08), by name
         for (int i = 0; i < bt.paired && i < BT_PAIRED && wcslen(s) < 150; i++) {
             wchar_t nm[48];

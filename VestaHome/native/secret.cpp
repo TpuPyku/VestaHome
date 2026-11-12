@@ -135,6 +135,32 @@ bool SecretSeal(const wchar_t* plain, wchar_t* out, int cap)
     return true;
 }
 
+int SecretSealBytes(const unsigned char* plain, int n, unsigned char* out, int cap)
+{
+    int total = kNonce + n + kTag;
+    if (!s_ready || n < 0 || cap < total)
+        return -1;
+    Nonce(out);
+    memcpy(out + kNonce, plain, n);
+    br_chacha20_ct_run(s_key, out, 1, out + kNonce, n);
+    Tag(out, kNonce + n, out + kNonce + n);
+    return total;
+}
+
+int SecretOpenBytes(const unsigned char* sealed, int len, unsigned char* out, int cap)
+{
+    int n = len - kNonce - kTag;
+    unsigned char tag[kTag];
+    if (!s_ready || n < 0 || cap < n)
+        return -1;
+    Tag(sealed, kNonce + n, tag);
+    if (memcmp(tag, sealed + kNonce + n, kTag))
+        return -1;   // another unit's key, or damaged
+    memcpy(out, sealed + kNonce, n);
+    br_chacha20_ct_run(s_key, sealed, 1, out, n);
+    return n;
+}
+
 bool SecretOpen(const wchar_t* sealed, wchar_t* plain, int cap)
 {
     plain[0] = 0;

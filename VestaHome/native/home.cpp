@@ -44,6 +44,8 @@
 #include "presetpos.h"  // the preset playing: the MCU names its place on a page only
 #include "zonepart.h"  // a partial frame's buttons against the full frame's
 #include "secret.h"
+#include "pbcache.h"   // the phone book kept beside VestaHome, sealed
+#include "netmirror.h" // the radio catalogue's mirror (VestaCore's release "radio")
 #include "rvc.h"
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
 #include "vnight.h"    // VestaCore: the night mode shared with OSMapsCE
@@ -117,7 +119,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_CAMDL, A_TZ,
               A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
               A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
-              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_SCROLL, A_USERWG, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
+              A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_PBDEL, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_SCROLL, A_USERWG, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIRESTART, A_PAGESTEP, A_WIFIAP,
@@ -151,12 +153,12 @@ struct Btn {
 
 // Values of the screens' switches, segmented choices and two text fields: demo ones, except the settings kept
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
-enum { T_GPS_TIME, T_LOUDNESS, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
+enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_VOLALGO, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
-enum { G_TIME_FMT, G_SPEED_VOL, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
+enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 1, 2, 1, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
 enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS };   // typed settings (A_KEYS)
@@ -640,7 +642,6 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             BtOwnerTick();
             ClockWatchTick();
             TripTick();
-            SpeedVolTick();
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)
                 static DWORD s_tripSig;
                 RECT wr;
@@ -1043,19 +1044,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (wp == WP_MCU_VOLUME) {   // the volume or the mute changed: the top bar (the window kept 2.5 s if open)
             int v, mu, src;
             VolGet(&v, &mu, &src);
-            if (v == s_svSent && GetTickCount() - s_svTick < 3000)
-                return 0;   // the volume by speed: no window
             {   // MUTE pressed twice (on, off within 1.5 s) while another program is in front: VestaHome back in
                 // front (the user 2026-10-22: the panel's MUTE is the MCU's own - only 0x3109 says it, no key
                 // message, so a long press cannot be seen or kept from muting; twice leaves the sound on)
                 static int   s_muteWas = -1;
                 static DWORD s_muteOn;
                 if (mu != s_muteWas) {
+                    VLog(L"MUTE: %d", mu);   // (HU sheet 30: only 0x3109 00 seen - does "on" come at all?)
                     if (mu)
                         s_muteOn = GetTickCount();
                     else if (s_muteWas == 1 && GetTickCount() - s_muteOn < 1500 &&
                              (!IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd)) {
                         VLog(L"MUTE дважды: VestaHome вперёд");
+                        HideOthers(GetForegroundWindow());
 #ifdef UNDER_CE
                         ShowWindow(hwnd, SW_SHOW);
                         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);

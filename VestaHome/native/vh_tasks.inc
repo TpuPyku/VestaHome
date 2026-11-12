@@ -161,10 +161,13 @@ static void DrawTasks(HDC dc)
     int pages = TaskPages();
     if (s_taskPage >= pages)
         s_taskPage = pages - 1;
-    Button(dc, 668, 176, 40, 48, NULL, B_N, IC_BACK, 18, 24, A_PAGESTEP, -1);
-    _snwprintf(s, 96, L"%d/%d", s_taskPage + 1, pages);
-    T(dc, 726, 207, s, 15, kMuted, 600, AL_MID);
-    Button(dc, 744, 176, 40, 48, NULL, B_N, IC_NEXT, 18, 24, A_PAGESTEP, 1);
+    if (pages > 1) {   // the pages' arrows in the bottom bar, as the lists' (the user 2026-11-12; no dots: the 4th row)
+        bool l = s_taskPage > 0, r = s_taskPage + 1 < pages;
+        _snwprintf(s, 96, L"%d/%d", s_taskPage + 1, pages);
+        T(dc, 608, 446, s, 16, kMuted, 600, AL_END);
+        Button(dc, 624, 412, 76, 52, NULL, l ? B_N : B_DIS, IC_BACK, 18, 28, l ? A_PAGESTEP : A_NONE, -1);
+        Button(dc, 708, 412, 76, 52, NULL, r ? B_N : B_DIS, IC_NEXT, 18, 28, r ? A_PAGESTEP : A_NONE, 1);
+    }
 
     if (s_taskTab == 0 && !s_task.procOk) {
         EmptyList(dc, 40, 350, 720, L"Список процессов недоступен: нет toolhelp.dll");

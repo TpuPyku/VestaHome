@@ -25,5 +25,7 @@ int LearnSource(int known, unsigned askedAgoMs, int was, int now);
 
 // The phone starts playing by itself while another source sounds: paused at once, as the stock shell does (the user
 // 2026-11-11; sheet 29 p. 34: an SMS notification took the radio to Bluetooth) - not under Bluetooth (src 9), not
-// within 5 s of our own switching (sinceOursMs: to Bluetooth, the source still to come), only under our host.
-bool PhonePaused(int src, unsigned sinceOursMs, bool host);
+// within 5 s of our own switching (sinceOursMs: to Bluetooth, the source still to come), only under our host; only
+// once it has played 3 s on (playingMs - HU sheet 30: the phone's notifications and system sounds, 0.3-1 s, dozens an
+// hour, were paused each).
+bool PhonePaused(int src, unsigned sinceOursMs, unsigned playingMs, bool host);
