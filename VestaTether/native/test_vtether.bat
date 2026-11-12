@@ -10,9 +10,13 @@ cd /d "%~dp0"
 if not exist obj\pc mkdir obj\pc
 set OPT=/O2
 if "%COVER%"=="1" set OPT=/Od /Zi
-"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP /EHa test_vtether.cpp rndis.cpp /Foobj\pc\ /Fdobj\pc\ /Feobj\pc\test_vtether.exe ^
+set VH=..\..\VestaHome\native
+set BR=..\..\third_party\bearssl-0.6
+set COMPAT=..\..\third_party\compat
+if not exist %VH%\obj\bearssl_pc.lib call %VH%\build_bearssl.bat || exit /b 1
+"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP /EHa test_vtether.cpp rndis.cpp adb.cpp /Foobj\pc\ /Fdobj\pc\ /Feobj\pc\test_vtether.exe ^
   /DUNICODE /D_UNICODE /DWIN32 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS ^
-  /I"%VC%\include" /I"%VC%\PlatformSDK\Include" /I"%SDK%\Include" ^
-  /link /DEBUG /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" kernel32.lib >obj\pc\build_vt.log || (type obj\pc\build_vt.log & exit /b 1)
+  /I"%BR%\inc" /I"%COMPAT%" /I"%COMPAT%\pc" /I"%VC%\include" /I"%VC%\PlatformSDK\Include" /I"%SDK%\Include" ^
+  /link /DEBUG /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" kernel32.lib advapi32.lib %VH%\obj\bearssl_pc.lib >obj\pc\build_vt.log || (type obj\pc\build_vt.log & exit /b 1)
 if "%1"=="build" exit /b 0
 obj\pc\test_vtether.exe

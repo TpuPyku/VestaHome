@@ -19,6 +19,7 @@ enum {
 struct RndisInitInfo { u32 major, minor, medium, maxPackets, maxTransfer, align; };
 
 u32 RndisGet32(const u8* p);   // little endian
+void RndisPut32(u8* p, u32 v);
 int RndisInit(u8* out, int cap, u32 req, u32 maxTransfer);
 bool RndisInitDone(const u8* m, int n, u32 req, RndisInitInfo* info);
 int RndisQuery(u8* out, int cap, u32 req, u32 oid);

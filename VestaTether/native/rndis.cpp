@@ -9,7 +9,7 @@ enum {
     kDhcpAt = kEthLen + kIpLen + kUdpLen, kDataHeader = 44
 };
 
-static void Put32(u8* p, u32 v)
+void RndisPut32(u8* p, u32 v)
 {
     p[0] = (u8)v;
     p[1] = (u8)(v >> 8);
@@ -22,6 +22,7 @@ u32 RndisGet32(const u8* p)
     return p[0] | p[1] << 8 | p[2] << 16 | (u32)p[3] << 24;
 }
 #define Get32 RndisGet32
+#define Put32 RndisPut32
 
 // The header of a message: its type, length and id (the first words of all but data), the rest zero
 static bool Begin(u8* out, int cap, int size, u32 type, u32 req)

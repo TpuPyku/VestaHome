@@ -9,6 +9,7 @@
 #define USBCLI_LOG L"\\VestaTether.log"
 #include "../../VestaModem/native/usbcli.h"
 #include "rndis.h"
+#include "adb.h"
 
 enum { kTransfer = 16384, kCtlSize = 1025, kAskTries = 30, kDhcpTries = 4 };
 static DWORD s_askMs = 100;     // between reads of the phone's answers
@@ -71,7 +72,7 @@ static const wchar_t* OtherKind(LPCUSB_CONFIGURATION cfg)
         if (d.bInterfaceClass == 2 && d.bInterfaceSubClass == 6)
             return L"CDC ECM";
     }
-    return L"не сетевое (включён ли на телефоне «USB-модем»?)";
+    return L"не сетевое: на телефоне включите «Отладка по USB» (модем включит ГУ) или «USB-модем»";
 }
 
 // One class request on the control interface, blocking; *got - bytes moved
@@ -234,8 +235,9 @@ static bool OpenPipes(Dev* d)
 }
 
 // The steps in turn; d->stage - the one reached
-static void Steps(Dev* d)
+static void Steps(void* p)
 {
+    Dev* d = (Dev*)p;
     DhcpLease lease;
     d->stage = STAGE_PIPES;
     if (!OpenPipes(d))
@@ -254,14 +256,20 @@ static void Steps(Dev* d)
     LogLease(lease);
 }
 
+// A probe's steps on its thread: a fault in them logged, not device.exe's
+static void Guarded(void (*steps)(void*), void* d, const wchar_t* who)
+{
+    __try {
+        steps(d);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        Log(L"%s: исключение %08X", who, GetExceptionCode());
+    }
+}
+
 static DWORD WINAPI Probe(LPVOID param)
 {
     Dev* d = (Dev*)param;
-    __try {
-        Steps(d);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        Log(L"проба: исключение %08X", GetExceptionCode());
-    }
+    Guarded(Steps, d, L"проба");
     s_lastStage = d->stage;
     if (d->stage == STAGE_LEASE)
         Log(L"ПРОБА: успех - телефон раздаёт интернет по USB, можно делать адаптер");
@@ -300,22 +308,205 @@ static void LogPower(LPCUSB_CONFIGURATION cfg)
         Log(L"  питание: просит %u мА, свойства %02X", cfg->Descriptor.MaxPower * 2u, cfg->Descriptor.bmAttributes);
 }
 
-extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE, LPCWSTR, LPBOOL accept, LPCUSB_DRIVER_SETTINGS, DWORD)
+// ---- ADB (2026-11-12, CheryLink's way): a phone in its ordinary mode with "USB debugging" on offers its debugging
+// interface (FF/42/01). Its tethering is switched on by one shell command; the phone then comes again as RNDIS, and the
+// probe above takes it. This unit's key - TetherProbe's file (its path: HKLM\Software\VestaTether "AdbKey"); the phone
+// asks its user once to allow it.
+
+static const char kAdbCmd[] = "shell:svc usb setFunctions rndis 2>&1 || svc usb setFunction rndis 2>&1";
+static const char kAdbName[] = "VestaHome@HU";
+static DWORD s_adbMs = 5000;      // a phone's answer
+static DWORD s_adbAskMs = 60000;  // ... when its user is asked
+static wchar_t s_keyPath[MAX_PATH];
+static int s_adbEnd = -1;         // the last session's state (the tests)
+
+struct AdbDev {
+    USB_HANDLE       h;
+    LPCUSB_FUNCS     f;
+    volatile bool    gone;
+    LPCUSB_INTERFACE itf;
+    USB_PIPE         in, out;
+    HANDLE           thread;
+    AdbKey           key;
+    Adb              s;
+    u8               hdr[ADB_HEADER];
+    u8               data[ADB_MAXDATA + 1];
+};
+
+static AdbDev* volatile s_adb;   // one at a time
+
+static bool IsAdb(LPCUSB_INTERFACE itf)
 {
-    *accept = FALSE;
-    LPCUSB_DEVICE dev = f->lpGetDeviceInfo(h);
-    if (!dev || s_dev)
-        return TRUE;   // (the second interface of the same phone comes here too)
-    LogDevice(dev);
-    LogPower(dev->lpActiveConfig);
-    LPCUSB_INTERFACE ctl, data;
-    if (!FindRndis(dev->lpActiveConfig, &ctl, &data)) {
-        Log(L"RNDIS нет: %s", OtherKind(dev->lpActiveConfig));
-        return TRUE;
+    const USB_INTERFACE_DESCRIPTOR& d = itf->Descriptor;
+    return d.bInterfaceClass == 0xFF && d.bInterfaceSubClass == 0x42 && d.bInterfaceProtocol == 1 && HasBulkPair(itf);
+}
+
+static bool LoadKey(AdbKey* k)
+{
+    if (!s_keyPath[0]) {
+        HKEY r;
+        DWORD size = sizeof(s_keyPath) - sizeof(wchar_t), type;
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"Software\\VestaTether", 0, 0, &r) == ERROR_SUCCESS) {
+            RegQueryValueEx(r, L"AdbKey", NULL, &type, (BYTE*)s_keyPath, &size);
+            RegCloseKey(r);
+        }
     }
+    HANDLE f = CreateFile(s_keyPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return false;
+    u8 buf[2000];
+    DWORD got = 0;
+    ReadFile(f, buf, sizeof(buf), &got, NULL);
+    CloseHandle(f);
+    return AdbKeyParse(buf, (int)got, k);
+}
+
+static bool AdbSend(AdbDev* d, u32 cmd, u32 a0, u32 a1, const void* data, u32 len)
+{
+    u8 h[ADB_HEADER];
+    DWORD got;
+    AdbHeader(h, cmd, a0, a1, (const u8*)data, len);
+    return Bulk(d, d->out, false, h, ADB_HEADER, &got, s_adbMs) &&
+           (!len || Bulk(d, d->out, false, (void*)data, len, &got, s_adbMs));
+}
+
+// The phone's next message: its header, then its data (in d->data, ended by a 0)
+static bool AdbRead(AdbDev* d, AdbMsg* m, DWORD ms)
+{
+    DWORD got = 0, total = 0;
+    if (!Bulk(d, d->in, true, d->hdr, ADB_HEADER, &got, ms) || !AdbParse(d->hdr, (int)got, m))
+        return false;
+    while (total < m->len) {
+        if (!Bulk(d, d->in, true, d->data + total, m->len - total, &got, s_adbMs) || !got)
+            return false;
+        total += got;
+    }
+    d->data[total] = 0;
+    return true;
+}
+
+static u32 KeyE(const AdbKey& k)
+{
+    u32 e = 0;
+    for (int i = 0; i < k.e.len; i++)
+        e = e << 8 | k.e.b[i];
+    return e;
+}
+
+static void LogOutput(const AdbDev* d, u32 len)   // the command's words (ASCII), one line
+{
+    char t[160];
+    u32 n = 0;
+    for (u32 i = 0; i < len && n < sizeof(t) - 1; i++)
+        t[n++] = d->data[i] >= ' ' && d->data[i] < 127 ? (char)d->data[i] : ' ';
+    t[n] = 0;
+    Log(L"ADB: телефон ответил: %S", t);
+}
+
+// What the session asks for, done; false - the end
+static bool AdbAct(AdbDev* d, int act, const AdbMsg& m)
+{
+    u8 sig[ADB_KEY_BYTES];
+    char pub[800];
+    switch (act) {
+    case ADB_DO_SIGN:
+        return m.len == ADB_TOKEN && AdbSign(&d->key, d->data, sig) &&
+               AdbSend(d, ADB_AUTH, ADB_AUTH_SIGNATURE, 0, sig, ADB_KEY_BYTES);
+    case ADB_DO_SENDKEY:
+        Log(L"ADB: телефон спрашивает «Разрешить отладку по USB?» - разрешите (лучше с галочкой «Всегда»)");
+        return AdbSend(d, ADB_AUTH, ADB_AUTH_RSAPUBLICKEY, 0, pub, (u32)AdbPubKey(d->key.n.b, KeyE(d->key), kAdbName, pub, sizeof(pub)));
+    case ADB_DO_OPEN:
+        Log(L"ADB: подключено, включаю «USB-модем»: %S", kAdbCmd + 6);
+        return AdbSend(d, ADB_OPEN, d->s.local, 0, kAdbCmd, sizeof(kAdbCmd));
+    case ADB_DO_OKAY:
+        LogOutput(d, m.len);
+        return AdbSend(d, ADB_OKAY, d->s.local, d->s.remote, NULL, 0);
+    case ADB_DO_FAIL:
+        Log(L"ADB: ключ ГУ не принят");
+        return false;
+    case ADB_DO_DONE:
+        return false;
+    }
+    return true;
+}
+
+static void AdbSession(AdbDev* d)
+{
+    static const char kHost[] = "host::";
+    AdbStart(&d->s, 1);
+    bool on = AdbSend(d, ADB_CNXN, ADB_VERSION, ADB_MAXDATA, kHost, sizeof(kHost));
+    while (on && !d->gone) {
+        AdbMsg m;
+        if (!AdbRead(d, &m, d->s.state == ADB_KEYSENT ? s_adbAskMs : s_adbMs)) {
+            Log(L"ADB: телефон не ответил");
+            return;
+        }
+        on = AdbAct(d, AdbOn(&d->s, m), m);
+    }
+}
+
+static void AdbSteps(void* p)
+{
+    AdbDev* d = (AdbDev*)p;
+    AdbSession(d);
+    if (d->s.state == ADB_DONE)
+        Log(L"ADB: готово - телефон подключится заново как «USB-модем»");
+}
+
+static DWORD WINAPI AdbProbe(LPVOID param)
+{
+    AdbDev* d = (AdbDev*)param;
+    Guarded(AdbSteps, d, L"ADB");
+    s_adbEnd = d->s.state;
+    return 0;
+}
+
+static BOOL WINAPI AdbNotify(LPVOID param, DWORD code, LPDWORD*, LPDWORD*, LPDWORD*, LPDWORD*)
+{
+    if (code != USB_CLOSE_DEVICE)
+        return FALSE;
+    AdbDev* d = (AdbDev*)param;
+    d->gone = true;
+    if (d->thread) {
+        WaitForSingleObject(d->thread, INFINITE);
+        CloseHandle(d->thread);
+    }
+    if (d->in)
+        d->f->lpClosePipe(d->in);
+    if (d->out)
+        d->f->lpClosePipe(d->out);
+    s_adb = NULL;
+    free(d);
+    return TRUE;
+}
+
+// The debugging interface taken when this unit has its key
+static void StartAdb(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE itf, LPBOOL accept)
+{
+    AdbDev* d = (AdbDev*)calloc(1, sizeof(AdbDev));
+    if (!d)
+        return;
+    if (!LoadKey(&d->key)) {
+        Log(L"ADB: нет ключа ГУ - сначала запустите TetherProbe.exe");
+        free(d);
+        return;
+    }
+    d->h = h;
+    d->f = f;
+    d->itf = itf;
+    d->in = f->lpOpenPipe(h, &FindEp(itf, true)->Descriptor);
+    d->out = f->lpOpenPipe(h, &FindEp(itf, false)->Descriptor);
+    s_adb = d;
+    f->lpRegisterNotificationRoutine(h, AdbNotify, d);
+    *accept = TRUE;
+    d->thread = d->in && d->out ? CreateThread(NULL, 0, AdbProbe, d, 0, NULL) : NULL;
+}
+
+static void StartRndis(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE ctl, LPCUSB_INTERFACE data, LPBOOL accept)
+{
     Dev* d = (Dev*)calloc(1, sizeof(Dev));
     if (!d)
-        return TRUE;
+        return;
     d->h = h;
     d->f = f;
     d->ctl = ctl;
@@ -324,6 +515,32 @@ extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE, 
     f->lpRegisterNotificationRoutine(h, Notify, d);
     *accept = TRUE;
     d->thread = CreateThread(NULL, 0, Probe, d, 0, NULL);
+}
+
+// Each interface without a driver of its own comes here: an RNDIS phone - the probe; else its debugging interface - ADB
+extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE itf, LPCWSTR, LPBOOL accept, LPCUSB_DRIVER_SETTINGS, DWORD)
+{
+    static USB_HANDLE s_seen;   // (a device logged once, not for each of its interfaces)
+    *accept = FALSE;
+    LPCUSB_DEVICE dev = f->lpGetDeviceInfo(h);
+    if (!dev)
+        return TRUE;
+    bool first = h != s_seen;
+    s_seen = h;
+    if (first) {
+        LogDevice(dev);
+        LogPower(dev->lpActiveConfig);
+    }
+    LPCUSB_INTERFACE ctl, data;
+    if (!FindRndis(dev->lpActiveConfig, &ctl, &data)) {
+        if (itf && IsAdb(itf) && !s_adb)
+            StartAdb(h, f, itf, accept);
+        else if (first)
+            Log(L"RNDIS нет: %s", OtherKind(dev->lpActiveConfig));
+        return TRUE;
+    }
+    if (!s_dev)   // (the second interface of the same phone comes here too)
+        StartRndis(h, f, ctl, data, accept);
     return TRUE;
 }
 

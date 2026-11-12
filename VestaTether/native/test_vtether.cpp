@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "vtether.cpp"
+#include "bearssl.h"
 
 static int s_checks, s_failed;
 
@@ -178,9 +179,131 @@ static USB_TRANSFER FVendor(USB_HANDLE, LPTRANSFER_NOTIFY_ROUTINE, LPVOID, DWORD
     return NewTr(n, USB_NO_ERROR);
 }
 
+// ---- a phone in its ordinary mode with "USB debugging" on: its ADB end (a header, then its data, each a transfer)
+
+static bool s_adbPhone, s_adbAuth, s_adbKnows, s_adbAllows, s_sigOk;
+static bool s_adbRefuses, s_adbSplit, s_adbBadArgs, s_adbCut;   // (cut: a header whose data never comes)   // the key refused after it is offered; output in two pieces; ours wrong
+static u32 s_adbLocal;                                 // our stream's id (OPEN's)
+static char s_adbCmd[200], s_adbPub[1000];
+static int s_adbOkays, s_adbChunks, s_adbChunkAt;
+static u8 s_adbOut[8][300];
+static int s_adbOutLen[8];
+static AdbMsg s_adbPending;   // a header of ours waiting for its data
+static bool s_adbHasPending;
+static AdbKey s_testKey;
+
+static void AdbQueue(u32 cmd, u32 a0, u32 a1, const void* data, int len)
+{
+    AdbHeader(s_adbOut[s_adbChunks], cmd, a0, a1, (const u8*)data, (u32)len);
+    s_adbOutLen[s_adbChunks++] = ADB_HEADER;
+    if (len) {
+        memcpy(s_adbOut[s_adbChunks], data, len);
+        s_adbOutLen[s_adbChunks++] = len;
+    }
+}
+
+static void AdbToken()
+{
+    u8 token[ADB_TOKEN];
+    for (int i = 0; i < ADB_TOKEN; i++)
+        token[i] = (u8)(i * 13 + s_adbChunks);
+    memcpy(s_adbOut[7], token, ADB_TOKEN);   // (kept for the signature's check)
+    if (s_adbCut) {
+        AdbHeader(s_adbOut[s_adbChunks], ADB_AUTH, ADB_AUTH_TOKEN, 0, token, ADB_TOKEN);
+        s_adbOutLen[s_adbChunks++] = ADB_HEADER;
+        return;
+    }
+    if (!s_adbSplit) {
+        AdbQueue(ADB_AUTH, ADB_AUTH_TOKEN, 0, token, ADB_TOKEN);
+        return;
+    }
+    AdbHeader(s_adbOut[s_adbChunks], ADB_AUTH, ADB_AUTH_TOKEN, 0, token, ADB_TOKEN);   // (its data as 8 + 12)
+    s_adbOutLen[s_adbChunks++] = ADB_HEADER;
+    memcpy(s_adbOut[s_adbChunks], token, 8);
+    s_adbOutLen[s_adbChunks++] = 8;
+    memcpy(s_adbOut[s_adbChunks], token + 8, 12);
+    s_adbOutLen[s_adbChunks++] = 12;
+}
+
+static void AdbGot(const AdbMsg& m, const u8* data)
+{
+    if (m.cmd == ADB_CNXN) {
+        if (s_adbAuth)
+            AdbToken();
+        else
+            AdbQueue(ADB_CNXN, ADB_VERSION, ADB_MAXDATA, "device::", 9);
+    } else if (m.cmd == ADB_AUTH && m.a1 != 0) {
+        s_adbBadArgs = true;
+    } else if (m.cmd == ADB_AUTH && m.a0 == ADB_AUTH_SIGNATURE) {
+        br_rsa_public_key pk = { s_testKey.n.b, (size_t)s_testKey.n.len, s_testKey.e.b, (size_t)s_testKey.e.len };
+        u8 hash[ADB_TOKEN];
+        s_sigOk = m.len == ADB_KEY_BYTES && br_rsa_i31_pkcs1_vrfy(data, m.len, BR_HASH_OID_SHA1, ADB_TOKEN, &pk, hash) &&
+                  !memcmp(hash, s_adbOut[7], ADB_TOKEN);
+        if (s_adbKnows && s_sigOk)
+            AdbQueue(ADB_CNXN, ADB_VERSION, ADB_MAXDATA, "device::", 9);
+        else
+            AdbToken();
+    } else if (m.cmd == ADB_AUTH && m.a0 == ADB_AUTH_RSAPUBLICKEY) {
+        memcpy(s_adbPub, data, m.len);
+        if (s_adbRefuses)
+            AdbToken();
+        else if (s_adbAllows)
+            AdbQueue(ADB_CNXN, ADB_VERSION, ADB_MAXDATA, "device::", 9);
+    } else if (m.cmd == ADB_OPEN) {
+        memcpy(s_adbCmd, data, m.len);
+        s_adbLocal = m.a0;
+        s_adbBadArgs = s_adbBadArgs || m.a1 != 0;
+        AdbQueue(ADB_OKAY, 5, m.a0, NULL, 0);
+        if (!s_adbSplit) {
+            AdbQueue(ADB_WRTE, 5, m.a0, "done\n", 5);
+        } else {   // (the data: its header told 5 bytes, they come as 2 + 3)
+            AdbHeader(s_adbOut[s_adbChunks], ADB_WRTE, 5, m.a0, (const u8*)"done\n", 5);
+            s_adbOutLen[s_adbChunks++] = ADB_HEADER;
+            memcpy(s_adbOut[s_adbChunks], "do", 2);
+            s_adbOutLen[s_adbChunks++] = 2;
+            memcpy(s_adbOut[s_adbChunks], "ne\n", 3);
+            s_adbOutLen[s_adbChunks++] = 3;
+        }
+        AdbQueue(ADB_CLSE, 5, m.a0, NULL, 0);
+    } else if (m.cmd == ADB_OKAY) {
+        s_adbOkays++;
+        s_adbBadArgs = s_adbBadArgs || m.a0 != s_adbLocal || m.a1 != 5 || m.len != 0;
+    }
+}
+
+static USB_TRANSFER AdbBulk(LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD flags, DWORD len, LPVOID buf)
+{
+    if (!(flags & USB_IN_TRANSFER)) {
+        AdbMsg m;
+        if (s_adbHasPending) {
+            s_adbHasPending = false;
+            AdbGot(s_adbPending, (const u8*)buf);
+        } else if (AdbParse((const u8*)buf, (int)len, &m)) {
+            if (m.len) {
+                s_adbPending = m;
+                s_adbHasPending = true;
+            } else {
+                AdbGot(m, NULL);
+            }
+        }
+        cb(param);
+        return NewTr(len, USB_NO_ERROR);
+    }
+    if (s_adbChunkAt >= s_adbChunks)
+        return NewTr(0, USB_NOT_COMPLETE_ERROR);   // (nothing to say: the wait ends)
+    int n = s_adbOutLen[s_adbChunkAt];
+    memcpy(buf, s_adbOut[s_adbChunkAt++], n);
+    if (s_adbChunkAt == s_adbChunks)
+        s_adbChunkAt = s_adbChunks = 0;
+    cb(param);
+    return NewTr(n, USB_NO_ERROR);
+}
+
 static USB_TRANSFER FBulk(USB_PIPE pipe, LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD flags, DWORD len, LPVOID buf, ULONG)
 {
     (void)pipe;
+    if (s_adbPhone)
+        return AdbBulk(cb, param, flags, len, buf);
     if (!(flags & USB_IN_TRANSFER)) {
         const u8* m = (const u8*)buf;
         s_discovers++;
@@ -306,6 +429,11 @@ static void Phone()
     s_replyLen = s_inLen = 0;
     s_lastStage = STAGE_NONE;
     memset(&s_lastLease, 0, sizeof(s_lastLease));
+    s_adbPhone = s_adbAuth = s_adbKnows = s_adbAllows = s_sigOk = s_adbHasPending = false;
+    s_adbRefuses = s_adbSplit = s_adbBadArgs = s_adbCut = false;
+    s_adbOkays = s_adbChunks = s_adbChunkAt = 0;
+    s_adbCmd[0] = s_adbPub[0] = 0;
+    s_adbEnd = -1;
 }
 
 static USB_FUNCS s_funcs;
@@ -445,6 +573,129 @@ static void TestSilences()
     Check(GetTickCount() - t0 < 1500, "pulled out during the wait: the probe ends at once, not after its tries");
 }
 
+// An ADB phone: its debugging interface offered (the others of it are another driver's or none)
+static BOOL AdbComes()
+{
+    BOOL accept = TRUE;
+    USBDeviceAttach((USB_HANDLE)2, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[1], L"x", &accept, NULL, 0);
+    if (accept)
+        WaitForSingleObject(s_adb->thread, 30000);
+    return accept;
+}
+
+static void AdbPhone()
+{
+    Phone();
+    Itf(0, 6, 1, 1, 1);         // MTP
+    Itf(1, 0xFF, 0x42, 1, 1);   // ADB
+    s_adbPhone = true;
+}
+
+static void TestAdb()
+{
+    AdbPhone();
+    s_adbAuth = true;
+    s_adbAllows = true;
+    DWORD t0 = GetTickCount();
+    Check(AdbComes() == TRUE, "adb: its interface taken");
+    Check(GetTickCount() - t0 < 2000, "adb: over once the command closes, no wait after");
+    Check(!s_adbBadArgs, "adb: AUTH and OPEN with 0 in their second argument, OKAY with both streams' ids");
+    Check(s_sigOk, "adb: the token signed with this unit's key");
+    char pub[1000];
+    AdbPubKey(s_testKey.n.b, 65537, "VestaHome@HU", pub, sizeof(pub));
+    Check(!strcmp(s_adbPub, pub), "adb: the key unknown - this unit's key offered to the phone's user");
+    Check(!strcmp(s_adbCmd, kAdbCmd + 0) && !strncmp(s_adbCmd, "shell:svc usb setFunctions rndis", 32),
+          "adb: allowed - tethering switched on by the shell command");
+    Check(s_adbOkays == 1, "adb: the command's output taken");
+    Check(s_adbEnd == ADB_DONE, "adb: done");
+    Check(s_pipes == 2 && s_pipeAddr[0] == 0x81 && s_pipeAddr[1] == 0x01, "adb: its own interface's pipes");
+    BOOL again = TRUE;
+    USBDeviceAttach((USB_HANDLE)2, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[1], L"x", &again, NULL, 0);
+    Check(!again, "adb: a second one while it is here - declined");
+    Gone();
+    Check(s_pipes == 0 && s_adb == NULL, "adb: gone - closed, free");
+
+    AdbPhone();
+    s_adbAuth = s_adbKnows = true;
+    Check(AdbComes() && s_adbEnd == ADB_DONE && !s_adbPub[0] && s_adbCmd[0], "adb: the key known - straight to the command");
+    Gone();
+    AdbPhone();
+    Check(AdbComes() && s_adbEnd == ADB_DONE && s_adbCmd[0], "adb: a phone without auth - the command");
+    Gone();
+    AdbPhone();
+    s_adbAuth = true;
+    s_adbAskMs = 300;
+    t0 = GetTickCount();
+    Check(AdbComes() && s_adbEnd == ADB_KEYSENT && !s_adbCmd[0], "adb: the user not answering - waited, stopped");
+    Check(GetTickCount() - t0 < 2000, "adb: the user's wait is its own (not a phone's answer's)");
+    s_adbAskMs = 60000;
+    Gone();
+    AdbPhone();
+    s_adbAuth = s_adbRefuses = true;
+    t0 = GetTickCount();
+    Check(AdbComes() && s_adbEnd == ADB_FAILED && !s_adbCmd[0] && GetTickCount() - t0 < 2000,
+          "adb: the key refused - stopped at once");
+    Gone();
+    AdbPhone();
+    s_adbSplit = s_adbAuth = s_adbAllows = true;
+    Check(AdbComes() && s_adbEnd == ADB_DONE && s_adbOkays == 1 && s_sigOk && !s_adbBadArgs,
+          "adb: a message's data in two transfers - read whole (the token signed right)");
+    Gone();
+    AdbPhone();
+    s_adbAuth = s_adbCut = true;
+    s_adbMs = 300;
+    Check(AdbComes() && s_adbEnd == ADB_HELLO && !s_adbCmd[0], "adb: a message's data not coming - stopped, nothing signed");
+    s_adbMs = 5000;
+    Gone();
+    AdbPhone();
+    s_failPipe = 1;
+    BOOL taken = TRUE;
+    USBDeviceAttach((USB_HANDLE)2, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[1], L"x", &taken, NULL, 0);
+    Sleep(100);
+    Check(!s_adbCmd[0] && s_adb && !s_adb->thread, "adb: a pipe not opened - no session");
+    Gone();
+    Check(s_pipes == 0 && s_adb == NULL, "adb: a pipe not opened - the other closed when it goes");
+    for (int k = 0; k < 2; k++) {
+        AdbPhone();
+        Itf(1, 0xFF, k ? 0x42 : 0x43, 1, k ? 0 : 1);   // another vendor's; ADB's without its pipes
+        BOOL got = TRUE;
+        USBDeviceAttach((USB_HANDLE)2, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[1], L"x", &got, NULL, 0);
+        Check(!got && s_adb == NULL, k ? "adb: no bulk pair - not taken" : "adb: FF/43/01 - not ADB, not taken");
+    }
+}
+
+static void TestAdbNot()
+{
+    AdbPhone();
+    wchar_t keep[MAX_PATH];
+    wcscpy(keep, s_keyPath);
+    wcscpy(s_keyPath, L"obj\\pc\\no-such-key.bin");
+    Check(AdbComes() == FALSE && s_adb == NULL, "adb: no key of this unit (TetherProbe not run) - not taken");
+    wcscpy(s_keyPath, keep);
+    AdbPhone();
+    BOOL accept = TRUE;
+    USBDeviceAttach((USB_HANDLE)2, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[0], L"x", &accept, NULL, 0);
+    Check(!accept && s_adb == NULL, "adb: its MTP interface - not taken");
+    Phone();
+    Itf(0, 0xE0, 1, 3, 0);
+    Itf(1, 0x0A, 0, 0, 1);
+    Itf(2, 0xFF, 0x42, 1, 1);
+    accept = TRUE;
+    USBDeviceAttach((USB_HANDLE)3, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[2], L"x", &accept, NULL, 0);
+    if (accept)
+        WaitForSingleObject(s_dev->thread, 30000);
+    Check(accept && s_dev && s_adb == NULL && s_lastStage == STAGE_LEASE, "adb: tethering already on - the RNDIS probe, no ADB");
+    Gone();
+    AdbPhone();
+    s_adbAuth = true;
+    accept = TRUE;
+    USBDeviceAttach((USB_HANDLE)2, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[1], L"x", &accept, NULL, 0);
+    Sleep(50);
+    DWORD t0 = GetTickCount();
+    Gone();
+    Check(GetTickCount() - t0 < 1500, "adb: pulled out while asking the user - ends at once");
+}
+
 static void TestNotOurs()
 {
     Phone();
@@ -515,6 +766,16 @@ int main()
     TestFails();
     TestWhichInterface();
     TestSilences();
+    u8 seed[32] = { 1, 2, 3 };
+    AdbKeyMake(seed, sizeof(seed), &s_testKey);
+    u8 file[2000];
+    int flen = AdbKeyPack(&s_testKey, file, sizeof(file));
+    FILE* kf = fopen("obj\\pc\\test_adbkey.bin", "wb");
+    fwrite(file, 1, flen, kf);
+    fclose(kf);
+    wcscpy(s_keyPath, L"obj\\pc\\test_adbkey.bin");
+    TestAdb();
+    TestAdbNot();
     DllMain(NULL, DLL_PROCESS_DETACH, NULL);
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
