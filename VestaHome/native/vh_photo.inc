@@ -627,6 +627,11 @@ static void DoActionOn(const Btn& b)
     case A_TEXTFILES:
         OpenFiles(F_TEXT);
         break;
+    case A_BTRESTART:   // the full restart of Bluetooth (the probe of 2026-11-13): off, the drivers out and in, on
+        VLog(L"bt: полный перезапуск (проба: Deinit, PowerOff, PowerOn, Init)");
+        BtCmdText(BT_CMD_POWER, L"2");
+        wcscpy(s_status, L"Bluetooth перезапускается (до 30 с) — шаги в BTProxy.log");
+        break;
     case A_UWEDIT:   // a user widget's .ini (Home -> widgets)
         if (b.arg >= 0 && b.arg < s_uwCount) {
             wchar_t path[MAX_PATH];

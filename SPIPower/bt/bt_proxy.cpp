@@ -535,6 +535,45 @@ static int PanLowDisconnect(const char* addr)
     return r;
 }
 
+static int PowerCmd(bool on);
+
+typedef int (*PowFn)(void);
+
+static int Guarded(int idx, const wchar_t* name)   // PowerOff / PowerOn, never called before on this unit: logged
+{
+    DWORD t0 = GetTickCount();
+    int r = -99;
+    __try {
+        r = ((PowFn)s_orig[idx])();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        r = -98;
+    }
+    wchar_t b[96];
+    wsprintfW(b, L"RESTART: %s -> %d (%u ms)%s", name, r, GetTickCount() - t0, r == -98 ? L" - EXCEPTION" : L"");
+    LogLine(b);
+    return r;
+}
+
+// The full restart (BT_CMD_POWER "2", the probe of 2026-11-13): the switch's off, then the stack's drivers unloaded
+// (PowerOff - the shell never calls it: BC6888, XCBTUart, XCBTStack, XCBTSound0/1, XCBTSER2) and loaded again
+// (PowerOn), then the switch's on. Whether a stuck stack (PAN, the music) comes back - and whether the stock shell's
+// Bluetooth would come up after ours this way - is what the log tells.
+static int RestartCmd()
+{
+    DWORD t0 = GetTickCount();
+    LogLine(L"RESTART: begin");
+    if (s_shm->power != BT_POW_OFF)
+        PowerCmd(false);
+    Guarded(IDX_Flc_Bluetooth_PowerOff, L"PowerOff");
+    Sleep(1000);
+    Guarded(IDX_Flc_Bluetooth_PowerOn, L"PowerOn");
+    int r = PowerCmd(true);
+    wchar_t b[64];
+    wsprintfW(b, L"RESTART: end, Init -> %d, %u ms in all", r, GetTickCount() - t0);
+    LogLine(b);
+    return r;
+}
+
 static int PowerCmd(bool on)
 {
     if (s_shm->power == (on ? BT_POW_ON : BT_POW_OFF))
@@ -591,7 +630,7 @@ static DWORD WINAPI CmdThread(LPVOID)
         done = n;
         int cmd = s_shm->cmd, idx = -1;
         if (cmd == BT_CMD_POWER || s_shm->power != BT_POW_ON) {   // (off: nothing else reaches the stack)
-            int r = cmd == BT_CMD_POWER ? PowerCmd(s_shm->cmdText[0] == '1') : -3;
+            int r = cmd != BT_CMD_POWER ? -3 : s_shm->cmdText[0] == '2' ? RestartCmd() : PowerCmd(s_shm->cmdText[0] == '1');
             s_shm->cmdResult = r;
             s_shm->cmdDone = n;
             wchar_t b[64];

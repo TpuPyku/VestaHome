@@ -69,7 +69,9 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
                        the stack keeps one) - the stack's own connects (power-on, link lost) off, the phone's
                        internet, music and handsfree let go (PanServer_Disconnect, Av_Disconnect, Hf_Disconnect(0));
                        "1": the stack's connects on */,
-       BT_CMD_POWER /* cmdText "0" / "1": Bluetooth off / on (the user 2026-11-04: a switch as Wi-Fi's) as the
+       BT_CMD_POWER /* cmdText "2": the full restart (2026-11-13 probe): off, PowerOff (the drivers unloaded),
+                       PowerOn, on - each step in BTProxy.log ("RESTART: ...").
+                       cmdText "0" / "1": Bluetooth off / on (the user 2026-11-04: a switch as Wi-Fi's) as the
                        stock shell's switch (CSetUpBTMenuDlg::SlotSwitchBT, Ghidra 2026-11-04): Flc_Bluetooth_Deinit
                        (it ends in a thread of its own: event 0x02) / Flc_Bluetooth_Init + EnablePairIndForApp(1)
                        (event 0x01); never PowerOff - the shell does not, it unloads the stack's drivers. While off
