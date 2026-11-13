@@ -22,4 +22,8 @@ bool PbUnpack(const unsigned char* in, int len, char phone[18], int* storage, Bt
 // entries without a name last.
 void PbSortBook(BtPbEntry* book, int n);
 
+// The book's entry with this number (any of its numbers), digits only compared - the last 10 of them (+7 / 8 and
+// spaces, brackets, dashes do not matter; a number shorter than 10 digits must match whole): its index, -1 none.
+int PbFindNumber(const BtPbEntry* book, int n, const char* number);
+
 #endif

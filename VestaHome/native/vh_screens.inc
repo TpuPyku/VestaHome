@@ -1077,22 +1077,27 @@ static bool PbTake(int list)
 }
 
 // The screens' own list: the phone changed - all again; not there yet - the shell's pull or ours
+static void PbForPhone(const BtState& bt)   // the connected phone's lists: its kept ones when it is another phone
+{
+    if (!strcmp(bt.devAddr, s_pbPhone))
+        return;
+    strcpy(s_pbPhone, bt.devAddr);
+    free(s_book);
+    free(s_calls);
+    s_book = s_calls = NULL;
+    s_bookN = s_callsN = -1;
+    s_bookPage = s_callPage = 0;
+    s_pbOld[0] = s_pbOld[1] = false;
+    s_pbNoAuto = false;
+    PbLoad();
+}
+
 static void PbNeed(int list)
 {
     BtState bt;
     if (!BtGet(&bt, NULL) || bt.hf != 2 || !PbShm())
         return;
-    if (strcmp(bt.devAddr, s_pbPhone)) {
-        strcpy(s_pbPhone, bt.devAddr);
-        free(s_book);
-        free(s_calls);
-        s_book = s_calls = NULL;
-        s_bookN = s_callsN = -1;
-        s_bookPage = s_callPage = 0;
-        s_pbOld[0] = s_pbOld[1] = false;
-        s_pbNoAuto = false;
-        PbLoad();
-    }
+    PbForPhone(bt);
     bool& old = s_pbOld[list == BT_PB_PB ? 0 : 1];
     bool have = (list == BT_PB_PB ? s_bookN : s_callsN) >= 0;
     if ((have && !(old && PbAutoOn())) || (!have && s_pbNoAuto) || s_pbWant >= 0 || s_pbFail)
@@ -1338,21 +1343,29 @@ static void ScrCall(HDC dc)
     const wchar_t* st = c == BT_CALL_INCOMING ? L"Входящий вызов" : c == BT_CALL_DIALING ? L"Набор номера"
                       : c == BT_CALL_ALERTING ? L"Вызов" : c == BT_CALL_ACTIVE ? L"Разговор"
                       : c == BT_CALL_HELD ? L"На удержании" : c == BT_CALL_WAITING ? L"Ожидает" : L"Звонок";
-    wchar_t num[40];
+    wchar_t num[40], name[64] = L"";
     if (bt.callNumber[0] && c != BT_CALL_DIALING && c != BT_CALL_ALERTING)
         BtText(bt.callNumber, num, 40);
     else
         wcscpy(num, s_callOut[0] ? s_callOut : L"—");
+    if (bt.callNumber[0] && bt.hf == 2) {   // the caller's name from the kept book (the user 2026-11-13: number only)
+        PbForPhone(bt);   // (no pull in a call: the book kept for this phone)
+        int i = s_book ? PbFindNumber(s_book, s_bookN, bt.callNumber) : -1;
+        if (i >= 0)
+            BtText(s_book[i].name, name, 64);
+    }
     Frame(dc, L"Телефон");
     Disc(dc, 128, 168, 88, kPanel2);
     Ico(dc, IC_CALL, 96, 136, 64, c == BT_CALL_ACTIVE ? kOk : kMuted);
     T(dc, 256, 112, st, 14, kMuted, 700);
-    T(dc, 256, 168, num, 40, kText, 700, AL_START, 528);
+    T(dc, 256, 168, name[0] ? name : num, 40, kText, 700, AL_START, 528);
+    if (name[0])
+        T(dc, 256, 206, num, 22, kMuted, 400, AL_START, 528);
     if (c == BT_CALL_ACTIVE) {
         DWORD sec = (GetTickCount() - s_callTick) / 1000;
         wchar_t s[16];
         _snwprintf(s, 16, L"%02u:%02u", (unsigned)(sec / 60), (unsigned)(sec % 60));
-        T(dc, 256, 236, s, 34, kText, 700);
+        T(dc, 256, name[0] ? 256 : 236, s, 34, kText, 700);   // (below the number when the name is shown)
     }
     bool d = Zone(216, 296, 368, 96, A_PHONEEND);
     R(dc, 216, 296, 368, 96, 12, d ? Mix(kStop, kInk, 160) : kStop);

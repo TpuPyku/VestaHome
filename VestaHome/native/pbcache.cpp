@@ -115,3 +115,35 @@ void PbSortBook(BtPbEntry* book, int n)
     if (n > 1)
         qsort(book, n, sizeof(BtPbEntry), ByName);
 }
+
+// ---- the caller's name
+
+static int Digits(const char* s, char* out, int cap)   // the number's digits only
+{
+    int n = 0;
+    for (; *s && n < cap - 1; s++)
+        if (*s >= '0' && *s <= '9')
+            out[n++] = *s;
+    out[n] = 0;
+    return n;
+}
+
+static bool SameNumber(const char* a, int an, const char* b, int bn)   // the last 10 digits (or the whole, shorter)
+{
+    int k = an < 10 || bn < 10 ? (an == bn ? an : -1) : 10;
+    return k > 0 && !memcmp(a + an - k, b + bn - k, k);
+}
+
+int PbFindNumber(const BtPbEntry* book, int n, const char* number)
+{
+    char want[32];
+    int wn = Digits(number, want, sizeof(want));
+    for (int i = 0; wn && i < n; i++)
+        for (int j = 0; j < BT_PB_NUMS; j++) {
+            char d[32];
+            int dn = Digits(book[i].num[j], d, sizeof(d));
+            if (dn && SameNumber(want, wn, d, dn))
+                return i;
+        }
+    return -1;
+}

@@ -141,8 +141,25 @@ static void TestSort()   // (the names in UTF-8 escapes: this file has no BOM)
     PbSortBook(NULL, 0);
 }
 
+static void TestFind()   // the caller's name for an incoming number (the user 2026-11-13: only the number shown)
+{
+    BtPbEntry book[4] = { Entry("Mama", "+7 (900) 123-45-67"), Entry("Work", "84951234567"), Entry("Short", "112"),
+                          Entry("Ten", "9031112233") };   // (kept with 10 digits)
+    Check(PbFindNumber(book, 4, "+7 903 111 22 33") == 3, "find: an 11-digit call finds a 10-digit entry");
+    strcpy(book[1].num[1], "8-916-000-11-22");   // a second number of the same contact
+    Check(PbFindNumber(book, 3, "89001234567") == 0, "find: 8... finds +7 (...) - the last 10 digits");
+    Check(PbFindNumber(book, 3, "+79161234567") == -1, "find: another number - none");
+    Check(PbFindNumber(book, 3, "9001234567") == 0, "find: 10 digits (no +7, no 8) find the 11-digit one");
+    Check(PbFindNumber(book, 3, "+79160001122") == 1, "find: a contact's second number");
+    Check(PbFindNumber(book, 3, "112") == 2, "find: a short number - whole");
+    Check(PbFindNumber(book, 3, "4567") == -1, "find: a short number does not match a long one's tail");
+    Check(PbFindNumber(book, 3, "") == -1 && PbFindNumber(book, 0, "112") == -1 && PbFindNumber(NULL, 0, "1") == -1,
+          "find: nothing to find - none");
+}
+
 int main()
 {
+    TestFind();
     TestSort();
     TestPack();
     TestSeal();

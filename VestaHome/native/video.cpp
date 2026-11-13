@@ -148,6 +148,11 @@ bool VideoLoad(VideoLogFn log, wchar_t* why, int whyCap)
     G.init(NULL, NULL);
     {
         wchar_t path[MAX_PATH];
+        // the plugin opens the OMX core by its bare name (g_module_open("omx_core.dll")): CE finds it only beside
+        // the exe or in \Windows - loaded first by its path, the name finds it (VestaAuto, HU 2026-11-13)
+        _snwprintf(path, MAX_PATH, L"%somx_core.dll", kGstDir);
+        if (!LoadLibrary(path) && s_log)
+            s_log(L"видео: LoadLibrary %s: ошибка %u", path, (unsigned)GetLastError());
         _snwprintf(path, MAX_PATH, L"%slibgstomxdecoder.dll", kGstDir);
         HMODULE omx = LoadLibrary(path);
         typedef int (*OmxInit)(void);
