@@ -963,17 +963,18 @@ static bool Reboot()
 
 static const wchar_t* kStockFlag = L"\\SDMMC\\VestaStub.stock";
 
-// VestaHome started by hand while the stock shell is on (its flag there): back to VestaHome - the flag gone, the unit
-// restarted (the two shells' Bluetooth and MCU never both up). Asked first: a start by mistake stays harmless.
+// VestaHome started by hand while the stock shell is on (its flag there): asked (the user 2026-11-13) - yes: back to
+// VestaHome through a restart (the flag gone; the two shells' Bluetooth and MCU never both up); no: VestaHome goes on
+// beside the shell as it is (the flag stays: the next boot is the shell's again).
 static void StockBack()
 {
 #ifdef UNDER_CE
     if (GetFileAttributes(kStockFlag) == 0xFFFFFFFF)
         return;
-    if (MessageBox(NULL, L"Сейчас работает штатная оболочка. Вернуть VestaHome? ГУ перезагрузится.", L"VestaHome",
-                   MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND) != IDYES) {
-        VLog(L"штатная оболочка: VestaHome запущен вручную, возврат отменён");
-        ExitProcess(0);
+    if (MessageBox(NULL, L"Перезагрузить в VestaHome?\r\n\r\nНет - продолжить (возможен конфликт со штатной оболочкой).",
+                   L"VestaHome", MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND) != IDYES) {
+        VLog(L"штатная оболочка: VestaHome запущен вручную поверх неё, без перезагрузки");
+        return;
     }
     DeleteFile(kStockFlag);
     VLog(L"штатная оболочка: флаг снят, возврат к VestaHome - перезагрузка");
