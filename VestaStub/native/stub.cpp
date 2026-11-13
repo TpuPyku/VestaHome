@@ -1117,6 +1117,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
     HuPath(p, L"\\USBDevice\\VestaStub.off");
     if (There(p))
         return RunOriginal(args, L"флаг VestaStub.off на USB");
+    {   // "Штатная" in VestaHome (the user 2026-11-13: through a restart - started on the fly the shell hung the unit):
+        // its flag on the built-in card - the shell at each boot, our Bluetooth and MCU host never up; back - VestaHome
+        // started by hand removes the flag and restarts the unit
+        wchar_t card[MAX_PATH];
+        HuPath(card, L"\\SDMMC");
+        DWORD t0 = GetTickCount();
+        while (!There(card) && GetTickCount() - t0 < 5000)
+            Sleep(250);
+        HuPath(p, L"\\SDMMC\\VestaStub.stock");
+        if (There(p))
+            return RunOriginal(args, L"флаг VestaStub.stock - штатная по кнопке; назад - запустить VestaHome вручную");
+    }
     wchar_t vh[MAX_PATH], self[MAX_PATH];
     if (!FindVesta(vh))
         return RunOriginal(args, L"нет VestaHome.exe");

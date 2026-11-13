@@ -941,15 +941,64 @@ static void WNavi(HDC dc, int x, int y)
           d ? kInk : kDim, 400, 216, 1, 0);
 }
 
+// The unit restarted by software: the HAL's reboot, else the power manager's reset; false - neither took.
+static bool Reboot()
+{
+#ifdef UNDER_CE
+    typedef BOOL (*KernelIoFn)(DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD);
+    typedef DWORD (*PowerFn)(LPCWSTR, DWORD, DWORD);
+    HMODULE core = GetModuleHandle(L"coredll.dll");
+    KernelIoFn kio = core ? (KernelIoFn)GetProcAddress(core, L"KernelIoControl") : NULL;
+    PowerFn power = core ? (PowerFn)GetProcAddress(core, L"SetSystemPowerState") : NULL;
+    VLog(L"перезагрузка: IOCTL_HAL_REBOOT");
+    if (kio)
+        kio(0x0101003C, NULL, 0, NULL, 0, NULL);   // CTL_CODE(FILE_DEVICE_HAL, 15, METHOD_BUFFERED, FILE_ANY_ACCESS)
+    VLog(L"перезагрузка: не вышло (%u) - SetSystemPowerState(RESET)", (unsigned)GetLastError());
+    if (power)
+        power(NULL, 0x00800000, 0x1000);   // POWER_STATE_RESET, POWER_FORCE
+    VLog(L"перезагрузка: не вышло и так (%u)", (unsigned)GetLastError());
+#endif
+    return false;
+}
+
+static const wchar_t* kStockFlag = L"\\SDMMC\\VestaStub.stock";
+
+// VestaHome started by hand while the stock shell is on (its flag there): back to VestaHome - the flag gone, the unit
+// restarted (the two shells' Bluetooth and MCU never both up). Asked first: a start by mistake stays harmless.
+static void StockBack()
+{
+#ifdef UNDER_CE
+    if (GetFileAttributes(kStockFlag) == 0xFFFFFFFF)
+        return;
+    if (MessageBox(NULL, L"Сейчас работает штатная оболочка. Вернуть VestaHome? ГУ перезагрузится.", L"VestaHome",
+                   MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND) != IDYES) {
+        VLog(L"штатная оболочка: VestaHome запущен вручную, возврат отменён");
+        ExitProcess(0);
+    }
+    DeleteFile(kStockFlag);
+    VLog(L"штатная оболочка: флаг снят, возврат к VestaHome - перезагрузка");
+    if (!Reboot())
+        MessageBox(NULL, L"Перезагрузите ГУ: удерживайте крутилку 10 с.", L"VestaHome", MB_OK | MB_TOPMOST);
+    ExitProcess(0);
+#endif
+}
+
 // "ШТАТНАЯ" (the user 2026-10-22): the stock shell instead of VestaHome. Under VestaStub (G3NavHMI_orig.exe beside
-// it) VestaHome only closes: on a clean exit the stub starts the shell itself (and stops its MCU host first);
-// otherwise the shell is started when it does not run (it normally runs beside VestaHome).
-static void ShellStart()
+// it) - through a restart (the user 2026-11-13: started on the fly the shell hung the unit - its Bluetooth does not
+// come up after ours is stopped): the flag \SDMMC\VestaStub.stock (the stub starts the shell at each boot while it is
+// there), then the unit restarted; back - VestaHome started by hand (StockBack). Otherwise the shell is started when it
+// does not run (it normally runs beside VestaHome). false: VestaHome stays (the restart did not take).
+static bool ShellStart()
 {
 #ifdef UNDER_CE
     if (GetFileAttributes(L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe") != 0xFFFFFFFF) {
-        VLog(L"штатная оболочка: её запустит загрузчик VestaHome");
-        return;
+        HANDLE f = CreateFile(kStockFlag, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (f != INVALID_HANDLE_VALUE)
+            CloseHandle(f);
+        VLog(L"штатная оболочка: флаг %s %s, перезагрузка", kStockFlag, f != INVALID_HANDLE_VALUE ? L"есть" : L"НЕ ЗАПИСАН");
+        if (!Reboot())
+            wcscpy(s_status, L"перезагрузите ГУ: удерживайте крутилку 10 с");
+        return false;
     }
     TaskInfo* t = (TaskInfo*)calloc(1, sizeof(TaskInfo));
     bool running = false;
@@ -970,6 +1019,7 @@ static void ShellStart()
     }
     VLog(L"штатная оболочка: %s", running ? L"уже работает" : L"запущена");
 #endif
+    return true;
 }
 
 // ---- the car's sensors (2026-10-22): what VestaHome knows of the car and the unit, for the car widget's lines and

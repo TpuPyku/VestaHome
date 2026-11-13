@@ -1417,6 +1417,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
         return 0;
     }
     VLog(L"=== VestaHome %s запущен", VhVersion());
+    StockBack();   // started by hand while the stock shell is on: back to VestaHome through a restart (asked first)
     {   // the screen's real colour depth (VestaHome draws into 32-bit buffers, GDI converts when it is less)
         HDC sdc = GetDC(NULL);
         VLog(L"экран: %d x %d, %d бит на точку", GetDeviceCaps(sdc, HORZRES), GetDeviceCaps(sdc, VERTRES),

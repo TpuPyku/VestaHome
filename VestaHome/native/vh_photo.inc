@@ -768,7 +768,12 @@ static void DoActionOn(const Btn& b)
         break;
     }
     case A_PTYGO:    PtySearch(); Back(); break;
-    case A_SHELL:    ShellStart(); DestroyWindow(s_wnd); return;
+    case A_SHELL:
+        if (ShellStart())
+            DestroyWindow(s_wnd);
+        else
+            Redraw();   // (the restart did not take: what to do, in the top bar)
+        return;
     case A_PHONEANS:
         BtCmd(BT_CMD_ANSWER);
         Back();
