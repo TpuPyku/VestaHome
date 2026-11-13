@@ -54,9 +54,12 @@ PLAN = (
         ('LaunchInstall.exe',)),
     (os.path.join(V, 'VestaTether', 'VestaTether'), r'SDCard\TetherProbe',
         ('TetherProbe.exe', 'VestaTether.dll')),
-    # the sample add-on (VestaCore/plugins/sample): VestaHome starts VHContent\VHPlugins\<Name>\<Name>.exe
-    (os.path.join(ROOT, 'VestaCore', 'plugins', 'sample', 'out'), r'ResidentFlash\VHContent\VHPlugins\Sample',
-        ('Sample.exe',)),
+    # the add-on "Android Auto" (its own repo VestaAuto; in place of the sample add-on - the user 2026-11-13):
+    # VestaHome starts VHContent\VHPlugins\<Name>\<Name>.exe; its test media (make_media.py) on the card
+    (os.path.join(ROOT, 'VestaAuto', 'VestaAuto'), r'ResidentFlash\VHContent\VHPlugins\VestaAuto',
+        ('VestaAuto.exe',)),
+    (os.path.join(ROOT, 'VestaAuto', 'media'), r'SDCard\VestaAuto',
+        ('test.mp4', 'test.h264')),
 )
 
 
@@ -73,7 +76,8 @@ def copy(src, dst):
 # places of Tests no longer made: removed, so the folder has no stale copies (the user 2026-11-06: one SDCard for the
 # two cards; gone with them: GpsGate 2.0 - an old GPS test, MAIN has it; YaMapsCE - finished, its archive in build\;
 # VestaLaunch - inside LaunchInstall)
-RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets', r'ResidentFlash\VestaHome')
+RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets', r'ResidentFlash\VestaHome',
+           r'ResidentFlash\VHContent\VHPlugins\Sample')
 
 
 def main():
