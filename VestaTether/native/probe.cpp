@@ -1,4 +1,4 @@
-// TetherProbe.exe - run from the card, by hand: lets VestaTether.dll (beside it) see what a phone offers. Copies it into
+﻿// TetherProbe.exe - run from the card, by hand: lets VestaTether.dll (beside it) see what a phone offers. Copies it into
 // \Windows and writes USBD's keys, both new at every boot: after a restart there is no trace of it. Wi-Fi's and Bluetooth's
 // drivers are not touched; the keys are for RNDIS classes, and the last resort for a device nothing else takes (logged,
 // then left alone).
@@ -33,7 +33,46 @@ static int Seed(BYTE* out)
     return n + (int)sizeof(more);
 }
 
-// This unit's ADB key beside the exe: read, or made (RSA-2048: up to a minute here) and written
+// The key made in a thread while a window shows how long (HU 2026-11-13: RSA-2048 takes minutes here; with only an
+// hourglass the probe looked hung and was started four times, the copies slowing each other)
+struct Making { BYTE seed[64]; int len; AdbKey* k; bool made; };
+static DWORD s_keySec;   // how long it took
+
+static DWORD WINAPI MakeThread(void* p)
+{
+    Making* m = (Making*)p;
+    m->made = AdbKeyMake(m->seed, m->len, m->k);
+    return 0;
+}
+
+static bool MakeKey(AdbKey* k)
+{
+    Making m;
+    m.len = Seed(m.seed);
+    m.k = k;
+    m.made = false;
+    HWND w = CreateWindow(L"STATIC", L"", WS_POPUP | WS_BORDER | WS_VISIBLE | SS_CENTER, 100, 140, 600, 200, NULL, NULL,
+                          GetModuleHandle(NULL), NULL);
+    SetWindowPos(w, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    HANDLE t = CreateThread(NULL, 0, MakeThread, &m, 0, NULL);
+    DWORD t0 = GetTickCount();
+    while (t && MsgWaitForMultipleObjects(1, &t, FALSE, 1000, QS_ALLINPUT) != WAIT_OBJECT_0) {
+        wchar_t s[200];
+        wsprintf(s, L"\r\nПроба USB: создаю ключ ГУ (только в первый раз).\r\nЭто до нескольких минут: %u с.\r\n\r\n"
+                    L"Не выключайте ГУ и не запускайте пробу снова.", (GetTickCount() - t0) / 1000);
+        SetWindowText(w, s);
+        MSG msg;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+            DispatchMessage(&msg);
+    }
+    s_keySec = (GetTickCount() - t0) / 1000;
+    if (t)
+        CloseHandle(t);
+    DestroyWindow(w);
+    return m.made;
+}
+
+// This unit's ADB key beside the exe: read, or made and written
 static bool Key(const wchar_t* path)
 {
     BYTE buf[2000];
@@ -46,11 +85,7 @@ static bool Key(const wchar_t* path)
         if (AdbKeyParse(buf, (int)got, &k))
             return true;
     }
-    BYTE seed[64];
-    SetCursor(LoadCursor(NULL, IDC_WAIT));
-    bool made = AdbKeyMake(seed, Seed(seed), &k);
-    SetCursor(NULL);
-    int len = made ? AdbKeyPack(&k, buf, sizeof(buf)) : 0;
+    int len = MakeKey(&k) ? AdbKeyPack(&k, buf, sizeof(buf)) : 0;
     f = len ? CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL) : INVALID_HANDLE_VALUE;
     if (f == INVALID_HANDLE_VALUE)
         return false;
@@ -104,12 +139,20 @@ static DWORD Install()
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 {
+    CreateMutex(NULL, TRUE, L"VestaTetherProbe");   // (one copy: freed when it exits)
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        MessageBox(NULL, L"Проба уже работает (создаёт ключ ГУ) - подождите её окна.", L"Проба телефона по USB",
+                   MB_OK | MB_TOPMOST);
+        return 1;
+    }
     DWORD err = Install();
-    wchar_t s[300];
+    wchar_t s[600] = L"";
     if (err)
         wsprintf(s, L"Не вышло, ошибка %u. Драйвер не установлен.", err);
-    else
-        wcscpy(s, L"Готово. На телефоне включите «Отладка по USB» (меню «Для разработчиков») и подключите его к USB. "
+    else if (s_keySec)
+        wsprintf(s, L"Ключ ГУ создан за %u с.\r\n", s_keySec);
+    if (!err)
+        wcscat(s, L"Готово. На телефоне включите «Отладка по USB» (меню «Для разработчиков») и подключите его к USB. "
                   L"Телефон спросит «Разрешить отладку по USB?» - разрешите, ГУ само включит на нём «USB-модем».\r\n"
                   L"(Или включите «USB-модем» на телефоне сами.)\r\n\r\n"
                   L"Журнал: VestaLogs\\VestaTether.log на SD-карте.\r\nПосле перезагрузки ГУ проба исчезает сама.");
