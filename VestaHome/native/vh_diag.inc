@@ -333,7 +333,7 @@ static void ScrExit(HDC dc)
     int top = Sheet(dc, 208);
     Ico(dc, IC_POWER, kSheetInX, top + 14, 48, kText);
     T(dc, kSheetInX + 60, top + 48, L"VestaHome", 24, kText, 700, AL_START, 600);
-    T(dc, kSheetInX, top + 88, L"Свернуть — останется позади.  Штатная — вернётся штатная оболочка.  Выход — закроется.",
+    T(dc, kSheetInX, top + 88, L"Свернуть — останется позади.  Штатная — перезагрузка в штатную.  Выход — закроется.",
       15, kMuted, 400, AL_START, kSheetInW);
     int w = (kSheetInW - 3 * kSheetGap) / 4;
     Button(dc, kSheetInX, kSheetBtnY, w, kSheetBtnH, L"Отмена", B_N, IC_NONE, 16, 0, A_BACK);
