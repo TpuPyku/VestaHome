@@ -35,6 +35,10 @@ int SimLines(const SimPoint& p, const SYSTEMTIME& utc, char* out, int cap)
     sprintf(b[0], "$GPRMC,%s,A,%s,%c,%s,%c,%.2f,%d.%d,%02d%02d%02d,,,A", tm, lat, ns, lon, ew, p.kmh10 / 18.52,
             p.course10 / 10, p.course10 % 10, utc.wDay, utc.wMonth, utc.wYear % 100);
     sprintf(b[1], "$GPGGA,%s,%s,%c,%s,%c,1,09,0.9,150.0,M,0.0,M,,", tm, lat, ns, lon, ew);
+    if (p.lost) {   // (a tunnel: what a receiver says with no fix - no position)
+        sprintf(b[0], "$GPRMC,%s,V,,,,,,,%02d%02d%02d,,,N", tm, utc.wDay, utc.wMonth, utc.wYear % 100);
+        sprintf(b[1], "$GPGGA,%s,,,,,0,00,,,M,,M,,", tm);
+    }
     sprintf(b[2], "@,%d,1.19", (p.kmh10 + 5) / 10);
     sprintf(b[3], "@ANG,%s%d.%d,", p.wheel10 < 0 ? "-" : "", w / 10, w % 10);
     int at = 0;
@@ -53,4 +57,39 @@ int SimLines(const SimPoint& p, const SYSTEMTIME& utc, char* out, int cap)
 int SimAt(DWORD ms, int n)
 {
     return n > 0 ? (int)(ms / 1000 % (DWORD)n) : 0;
+}
+
+int SimBoxes(const char* text, int* box, int cap)
+{
+    int n = 0;
+    while (*text && n < cap) {
+        double v[4];
+        if (*text != '#' && sscanf(text, "%lf %lf %lf %lf", &v[0], &v[1], &v[2], &v[3]) == 4) {
+            for (int i = 0; i < 4; i++)
+                box[n * 4 + i] = (int)(v[i] * 1e6 + (v[i] < 0 ? -0.5 : 0.5));
+            n++;
+        }
+        const char* e = strchr(text, '\n');
+        if (!e)
+            break;
+        text = e + 1;
+    }
+    return n;
+}
+
+static bool InBox(const SimPoint& p, const int* b)
+{
+    return p.lat >= b[0] && p.lat <= b[2] && p.lon >= b[1] && p.lon <= b[3];
+}
+
+int SimLose(SimPoint* p, int n, const int* box, int nbox)
+{
+    int lost = 0;
+    for (int i = 0; i < n; i++) {
+        p[i].lost = 0;
+        for (int b = 0; b < nbox && !p[i].lost; b++)
+            p[i].lost = InBox(p[i], box + b * 4);
+        lost += p[i].lost;
+    }
+    return lost;
 }

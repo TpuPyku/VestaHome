@@ -5,6 +5,7 @@
 //   run <exe> [args]    start, do not wait
 //   wait <exe> [args]   start and wait (at most 15 min), the exit code in done.txt
 //   kill                end the programs it started
+//   close <title>       WM_CLOSE to the window of that title (a program started by another, e.g. GpsSim's OSMapsCE)
 //   sleep <ms>
 //   quit                end emurun
 #include <windows.h>
@@ -110,6 +111,12 @@ static bool RunFile(const wchar_t* file)
             Start(w + 5, true, out);
         else if (!wcscmp(w, L"kill"))
             Kill(out);
+        else if (!wcsncmp(w, L"close ", 6)) {
+            HWND h = FindWindow(NULL, w + 6);
+            if (h)
+                PostMessage(h, WM_CLOSE, 0, 0);
+            fprintf(out, "close: %s\n", h ? "sent" : "no such window");
+        }
         else if (!wcsncmp(w, L"sleep ", 6))
             Sleep(_wtoi(w + 6));
         else if (!wcscmp(w, L"quit"))

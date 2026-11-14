@@ -63,7 +63,7 @@ static SimPoint At(const Pt* p, const double* cum, int n, int lat0, int lon0, do
     o.lat = lat0 + (int)floor((a.y + (b.y - a.y) * f) / 111320 * 1e6 + 0.5);
     o.lon = lon0 + (int)floor((a.x + (b.x - a.x) * f) / kx * 1e6 + 0.5);
     o.course10 = (int)(Course(a, b) * 10 + 0.5) % 3600;
-    o.kmh10 = o.wheel10 = 0;
+    o.kmh10 = o.wheel10 = o.lost = 0;
     return o;
 }
 
@@ -128,7 +128,7 @@ int SimDrive(const int* lat, const int* lon, int n, SimPoint* out, int cap)
         last.lat = lat[n - 1];
         last.lon = lon[n - 1];
         last.course10 = (int)(Course(p[n - 2], p[n - 1]) * 10 + 0.5) % 3600;
-        last.kmh10 = last.wheel10 = 0;
+        last.kmh10 = last.wheel10 = last.lost = 0;
         for (int k = 0; k < kSimStand1; k++)
             at = Put(out, at, cap, last);
     }

@@ -93,6 +93,26 @@ static void SetRoute(const SimPoint* r, int n, SimPoint* own, const wchar_t* nam
     InterlockedExchange((LONG*)&s_restart, 1);
 }
 
+// The places with no fix (OSMapsCE's tunnel test, 2026-11-14): tunnels.txt beside the exe, boxes "lat0 lon0 lat1 lon1";
+// the drive's points in them go with RMC "V" (simnmea SimLose). The seconds without a fix; 0: no file.
+static int LoseInTunnels(SimPoint* d, int k)
+{
+    wchar_t path[MAX_PATH];
+    GetModuleFileName(NULL, path, MAX_PATH);
+    wchar_t* slash = wcsrchr(path, L'\\');
+    wcscpy(slash ? slash + 1 : path, L"tunnels.txt");
+    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return 0;
+    static char text[8192];   // (boxes along a tunnel: a few dozen lines)
+    DWORD got = 0;
+    ReadFile(f, text, sizeof(text) - 1, &got, NULL);
+    CloseHandle(f);
+    text[got] = 0;
+    static int box[4 * 64];
+    return SimLose(d, k, box, SimBoxes(text, box, 64));
+}
+
 // The route built in OSMapsCE now (VestaCore vroute): driven along from its start
 static void LoadOsm()
 {
@@ -116,8 +136,9 @@ static void LoadOsm()
         return;
     }
     wchar_t name[96];
-    int km10 = (int)(m / 100 + 0.5);
-    _snwprintf(name, 96, L"Маршрут из OSMapsCE · %d,%d км", km10 / 10, km10 % 10);
+    int km10 = (int)(m / 100 + 0.5), lost = LoseInTunnels(d, k);
+    _snwprintf(name, 96, lost ? L"Маршрут из OSMapsCE · %d,%d км · без GPS %d с" : L"Маршрут из OSMapsCE · %d,%d км",
+               km10 / 10, km10 % 10, lost);
     SetRoute(d, k, d, name);
 }
 

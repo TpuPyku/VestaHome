@@ -10,6 +10,7 @@ struct SimPoint {
     int kmh10;       // tenths of km/h
     int course10;    // tenths of a degree, 0..3599
     int wheel10;     // the steering wheel, tenths of a degree (right positive)
+    int lost;        // no fix here (a tunnel, tunnels.txt): RMC "V", GGA 0 - the CAN's lines as ever
 };
 
 // RMC, GGA (9 satellites), "@,<km/h>,1.19", "@ANG,<degrees>," for the point at the UTC time; their length (0: no
@@ -18,5 +19,11 @@ int SimLines(const SimPoint& p, const SYSTEMTIME& utc, char* out, int cap);
 
 // The point of a drive of n points, ms into it (round and round).
 int SimAt(DWORD ms, int n);
+
+// tunnels.txt's text: lines "lat0 lon0 lat1 lon1" (degrees; '#' a comment) -> box (4 ints each, millionths); how many
+int SimBoxes(const char* text, int* box, int cap);
+
+// The drive's points inside any of the boxes marked lost; how many
+int SimLose(SimPoint* p, int n, const int* box, int nbox);
 
 #endif

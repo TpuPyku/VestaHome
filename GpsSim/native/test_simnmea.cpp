@@ -106,11 +106,40 @@ static void TestDrive()
     Check(SimDrive(lat, lon, 1, s_d, 4000) == 0, "drive: one point - none");
 }
 
+// No fix (the tunnels' test, 2026-11-14): RMC "V" with no position, GGA quality 0 - the CAN's speed still there
+static void TestLost()
+{
+    SYSTEMTIME t;
+    memset(&t, 0, sizeof(t));
+    t.wYear = 2026;
+    t.wMonth = 11;
+    t.wDay = 8;
+    t.wHour = 9;
+    t.wMinute = 5;
+    t.wSecond = 7;
+    SimPoint p = { 55791127, 37530260, 540, 117, -125, 1 };
+    char s[512];
+    SimLines(p, t, s, sizeof(s));
+    Check(Line(s, 0, "$GPRMC,090507.00,V,,,,,,,081126,,,N*7A"), "lost: rmc V, no position");
+    Check(Line(s, 1, "$GPGGA,090507.00,,,,,0,00,,,M,,M,,*43"), "lost: gga quality 0");
+    Check(Line(s, 2, "@,54,1.19*16"), "lost: the CAN's speed still");
+    int box[8];
+    int nb = SimBoxes("# Lefortovo\r\n55.75 37.68 55.78 37.72\r\nbad line\r\n55.1 37.1 55.2 37.2", box, 2);
+    Check(nb == 2 && box[0] == 55750000 && box[1] == 37680000 && box[2] == 55780000 && box[3] == 37720000 &&
+          box[4] == 55100000 && box[7] == 37200000, "boxes: two read, a comment and a bad line skipped");
+    Check(SimBoxes("55.75 37.68 55.78 37.72\n55.1 37.1 55.2 37.2", box, 1) == 1, "boxes: at most cap");
+    SimPoint d[3] = { { 55760000, 37700000, 0, 0, 0 }, { 55790000, 37700000, 0, 0, 0 },
+                      { 55770000, 37600000, 0, 0, 0 } };
+    int lost = SimLose(d, 3, box, 1);
+    Check(lost == 1 && d[0].lost && !d[1].lost && !d[2].lost, "lose: only the point in the box");
+}
+
 int main()
 {
     TestLines();
     TestAt();
     TestDrive();
+    TestLost();
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }
