@@ -34,6 +34,7 @@
 #define STBI_ASSERT(x) ((void)0)
 #define STB_IMAGE_IMPLEMENTATION
 #include "callroute.h"
+#include "stockwatch.h"
 #include "stb_image.h"
 
 static const int kMaxFails = 3;
@@ -1059,6 +1060,45 @@ static int RunOriginal(const wchar_t* args, const wchar_t* why)
     return 0;
 }
 
+// The stock shell after "Штатная" watched (stockwatch.h): its window "RadioCommWindow" must be there by the deadline,
+// else the unit is restarted once (the flag VestaStub.retry on the built-in card marks the boot after it).
+static int StockWatch()
+{
+    wchar_t retry[MAX_PATH];
+    HuPath(retry, L"\\SDMMC\\VestaStub.retry");
+    bool restarted = There(retry);
+    for (;;) {
+        // its window there (not WM_NULL: a busy moment would cost a needless restart - HU 2026-11-14, OSMapsCE)
+        HWND w = FindWindow(NULL, L"RadioCommWindow");
+        switch (StockVerdict(w != NULL, GetTickCount(), restarted)) {
+        case STOCK_ALIVE:
+            DeleteFile(retry);
+            Log(L"штатная оболочка ожила за %u с%s", GetTickCount() / 1000, restarted ? L" (после нашей перезагрузки)" : L"");
+            return 0;
+        case STOCK_GIVEUP:
+            DeleteFile(retry);
+            Log(L"штатная оболочка не ожила за %u с и после перезагрузки - оставляю", kStockDeadlineMs / 1000);
+            return 0;
+        case STOCK_RESTART: {
+            HANDLE f = CreateFile(retry, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (f != INVALID_HANDLE_VALUE)
+                CloseHandle(f);
+            Log(L"штатная оболочка не ожила за %u с (её окна нет) - перезагрузка ГУ", kStockDeadlineMs / 1000);
+#ifdef UNDER_CE
+            typedef BOOL (*KernelIoFn)(DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD);
+            HMODULE core = GetModuleHandle(L"coredll.dll");
+            KernelIoFn kio = core ? (KernelIoFn)GetProcAddress(core, L"KernelIoControl") : NULL;
+            if (kio)
+                kio(0x0101003C, NULL, 0, NULL, 0, NULL);   // IOCTL_HAL_REBOOT, as VestaHome's Reboot()
+#endif
+            Log(L"перезагрузка не вышла (%u)", (unsigned)GetLastError());
+            return 0;
+        }
+        }
+        Sleep(500);
+    }
+}
+
 static bool FindVesta(wchar_t* exe)
 {
     static const wchar_t* kCand[] = { L"\\ResidentFlash\\VestaHome\\VestaHome.exe", L"\\SDMMC\\VestaHome\\VestaHome.exe",
@@ -1126,8 +1166,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
         while (!There(card) && GetTickCount() - t0 < 5000)
             Sleep(250);
         HuPath(p, L"\\SDMMC\\VestaStub.stock");
-        if (There(p))
-            return RunOriginal(args, L"флаг VestaStub.stock - штатная по кнопке; назад - запустить VestaHome вручную");
+        if (There(p)) {
+            RunOriginal(args, L"флаг VestaStub.stock - штатная по кнопке; назад - запустить VestaHome вручную");
+            return StockWatch();
+        }
     }
     wchar_t vh[MAX_PATH], self[MAX_PATH];
     if (!FindVesta(vh))
