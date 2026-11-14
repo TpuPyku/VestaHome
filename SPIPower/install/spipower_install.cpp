@@ -443,8 +443,9 @@ static const char* kOldProxyMd5[] = {
     "4bc80501c25e9a4e895dedf41df56fd8",   // 2026-10-19 (before VestaHome's calls made in the shell)
     "2ea883191fe13f4480381dd905897829",   // 2026-10-20 (VestaHome's calls in the shell; before the call journal)
     "04b3ecab9eef88fa35fc97f1b0ac7573",   // 2026-10-21 (the call journal; its log only with the flag)
+    "b5dda404069676993a80f576a0aebba8",   // 2026-11-14 (the 10-21 sources rebuilt - only the time stamp differs)
 };
-static const int   kOldProxyN = 8;
+static const int   kOldProxyN = (int)(sizeof(kOldProxyMd5) / sizeof(kOldProxyMd5[0]));
 
 static int IsOldProxy(const char* md5)
 {
