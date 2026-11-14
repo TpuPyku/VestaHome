@@ -355,12 +355,14 @@ static void OpenCfgKeys(int which)
     case K_ODO: case K_SVCKM: case K_SVCDATE:   // the trip widget's service (vh_widgetset.inc)
         SvcKeys(which);
         break;
-    case K_HOMECOORD:
+    case K_HOMELAT: case K_HOMELON:   // each its own field of digits; the other one kept
+        s_coordWhich = which;
         if (s_cfg.homeLat || s_cfg.homeLon)
-            _snwprintf(s_coordText, 48, L"%.5f, %.5f", s_cfg.homeLat, s_cfg.homeLon);
+            _snwprintf(s_coordText, 48, L"%.5f", which == K_HOMELAT ? s_cfg.homeLat : s_cfg.homeLon);
         else
             s_coordText[0] = 0;
-        OpenKeysFor(s_coordText, 47, L"Широта, долгота", S_WSET_WEATHER);
+        OpenNumFor(s_coordText, 12, which == K_HOMELAT ? L"Широта дома, градусы (−90…90)"
+                   : L"Долгота дома, градусы (−180…180)", S_WSET_WEATHER, NUM_DEC);
         break;
     }
 }
@@ -456,16 +458,10 @@ static void CfgKeysDone()
     }
     if (s_keysTarget == s_cfg.netApn || s_keysTarget == s_cfg.netUser || s_keysTarget == s_cfg.netPass)
         s_cfg.netOp = NetOwn();   // typed: the operator's own settings now
-    if (s_keysTarget == s_coordText) {
-        wchar_t* e;
-        double lat = wcstod(s_coordText, &e);
-        while (*e == L',' || *e == L';' || *e == L' ')
-            e++;
-        double lon = wcstod(e, NULL);
-        if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
-            s_cfg.homeLat = lat;
-            s_cfg.homeLon = lon;
-        }
+    if (s_keysTarget == s_coordText && s_coordText[0]) {   // the latitude or the longitude, in its range
+        double v = wcstod(s_coordText, NULL), lim = s_coordWhich == K_HOMELAT ? 90 : 180;
+        if (v >= -lim && v <= lim)
+            (s_coordWhich == K_HOMELAT ? s_cfg.homeLat : s_cfg.homeLon) = v;
     }
     SaveCfg();
     WeatherRefresh();

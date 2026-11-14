@@ -61,6 +61,7 @@ static Screen         s_keysBack;     // where "Done" and "Cancel" return to
 // on the field (WndProc: VKeysCursorAt), its handle shows below the line.
 enum { kKeyFieldX = 32, kKeyFieldW = 560 };
 static VKeys s_keys;
+static int   s_keysNum;   // NUM_TEXT: the letters; else the digits' keys of that kind (numpad.h)
 static bool    s_clipMenu;     // "Copy" / "Paste" shown in place of the text field
 
 // File browser for the program path: folders and .exe files of s_fdir.
@@ -803,7 +804,34 @@ static void OpenKeysFor(wchar_t* target, int cap, const wchar_t* title, Screen b
     VKeysOpen(&s_keys, target, cap);
     s_keys.en = en;
     s_clipMenu = false;
+    s_keysNum = NUM_TEXT;
     s_screen = S_KEYS;
+}
+
+static void OpenNumFor(wchar_t* target, int cap, const wchar_t* title, Screen back, int kind)   // the digits' keys
+{
+    OpenKeysFor(target, cap, title, back);
+    s_keysNum = kind;
+}
+
+static void KeyChar(wchar_t ch)   // a key on the keyboard screen
+{
+    if (s_keysNum == NUM_TEXT) {
+        VKeysType(&s_keys, ch);
+        return;
+    }
+    NumType(s_keysNum, s_keys.text, s_keys.cap, ch);   // (at the end)
+    s_keys.cur = (int)wcslen(s_keys.text);
+}
+
+static void KeyBack()
+{
+    if (s_keysNum == NUM_TEXT) {
+        VKeysBack(&s_keys);
+        return;
+    }
+    NumBack(s_keysNum, s_keys.text);
+    s_keys.cur = (int)wcslen(s_keys.text);
 }
 
 static void OpenKeys(int field)
@@ -1147,6 +1175,28 @@ static void DrawEdit(HDC dc)
 
 // On-screen keyboard (like the mockup's Wi-Fi keyboard): the field and "Done" on top, 4 rows of 12 keys,
 // then Shift, language, space, backspace.
+// The digits' keys (s_keysNum): 1-9 and 0 as a phone's, backspace; the dot and the minus for coordinates.
+static void NumKey(HDC dc, int x, int y, wchar_t ch)
+{
+    wchar_t s[2] = { ch == L'-' ? L'\x2212' : ch, 0 };
+    bool d = Zone(x, y, 148, 72, A_CHAR, ch);
+    R(dc, x, y, 148, 72, 14, d ? kOrange : kPanel);
+    T(dc, x + 74, y + 48, s, 30, d ? kInk : kText, 700, AL_MID);
+}
+
+static void DrawNumPad(HDC dc)
+{
+    static const wchar_t kPad[] = L"123456789";
+    for (int i = 0; i < 9; i++)
+        NumKey(dc, 168 + (i % 3) * 156, 146 + (i / 3) * 80, kPad[i]);
+    if (NumKeyShown(s_keysNum, L'.'))
+        NumKey(dc, 168, 386, L'.');
+    NumKey(dc, 324, 386, L'0');
+    Button(dc, 480, 386, 148, 72, NULL, B_FILL, IC_BKSP, 18, 36, A_BKSP);
+    if (NumKeyShown(s_keysNum, L'-'))
+        NumKey(dc, 636, 146, L'-');
+}
+
 static void DrawKeys(HDC dc)
 {
     Frame(dc, s_keysTitle, A_CANCEL);
@@ -1175,6 +1225,10 @@ static void DrawKeys(HDC dc)
         R(dc, cx - 1, 108, 3, 6, 0, kOrange);
     }
     Button(dc, 628, 68, 156, 60, L"Готово", B_PRI, IC_NONE, 18, 0, A_OK);
+    if (s_keysNum != NUM_TEXT) {
+        DrawNumPad(dc);
+        return;
+    }
     for (int r = 0; r < VKEYS_ROWS; r++)
         for (int c = 0; c < VKeysRowLen(&s_keys, r); c++) {
             int x = 13 + c * 65, y = 140 + r * 66;

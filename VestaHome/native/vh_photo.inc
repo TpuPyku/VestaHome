@@ -1031,10 +1031,10 @@ static void DoActionOn(const Btn& b)
         }
         break;
     case A_OK:       KeysDone(); break;
-    case A_CHAR:     VKeysType(&s_keys, (wchar_t)b.arg); break;
+    case A_CHAR:     KeyChar((wchar_t)b.arg); break;
     case A_SHIFT:    s_keys.shift = !s_keys.shift; break;
     case A_LANG:     s_keys.en = !s_keys.en; break;
-    case A_BKSP:     VKeysBack(&s_keys); break;
+    case A_BKSP:     KeyBack(); break;
     case A_FILE:     PickFile(b.arg); break;
     case A_UP:       UpDir(); break;
     case A_MINIMIZE: MinimizeHome(); break;

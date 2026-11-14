@@ -41,6 +41,7 @@
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
+#include "numpad.h"    // the digits' keyboard (km, coordinates, a date)
 #include "service.h"   // the car service (ТО) due by km or a year
 #include "presetpos.h"  // the preset playing: the MCU names its place on a page only
 #include "zonepart.h"  // a partial frame's buttons against the full frame's
@@ -163,7 +164,7 @@ static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, 
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 1, 2, 1, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
-enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS, K_ODO, K_SVCKM, K_SVCDATE };   // typed settings (A_KEYS)
+enum { K_WKEY, K_HOMENAME, K_HOMELAT, K_HOMELON, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS, K_ODO, K_SVCKM, K_SVCDATE };   // typed settings (A_KEYS)
 static wchar_t s_dial[20];          // the number typed on the phone's keypad
 static wchar_t s_callOut[20];       // the number dialled from VestaHome (the stack does not tell it back)
 static wchar_t s_pass[24] = L"vesta2026";
@@ -1311,9 +1312,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         else if (wp == VK_RETURN)
             KeysDone();
         else if (wp == VK_BACK)
-            VKeysBack(&s_keys);
+            KeyBack();
         else if (wp >= 32)
-            VKeysType(&s_keys, (wchar_t)wp);
+            KeyChar((wchar_t)wp);
         BuildButtons();
         Redraw();
         return 0;

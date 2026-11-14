@@ -9,6 +9,7 @@
 #define USBCLI_LOG L"\\VestaTether.log"
 #include "../../VestaModem/native/usbcli.h"   // (its Log: the driver's log, a line of ours before the phone's)
 #include "adb.h"
+#include "regwatch.h"
 
 static const wchar_t* const kKeys[] = {
     L"Drivers\\USB\\LoadClients\\Default\\Default\\224_1_3\\VestaTether",    // the interface: E0/01/03
@@ -145,6 +146,99 @@ static DWORD Install()
     return 0;
 }
 
+// ---- what the unit does with the phone (sheet 34 p. 24-25: it only charged, our driver never called)
+enum { kSnapCap = 8192, kWatchMs = 180000 };
+
+static void Snapshot(wchar_t* out)   // HKLM\Drivers\Active: a line each, "name key"
+{
+    int k = 0;
+    out[0] = 0;
+    HKEY act;
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\Active", 0, 0, &act) != ERROR_SUCCESS)
+        return;
+    wchar_t sub[64];
+    for (DWORD i = 0;; i++) {
+        DWORD sn = 64;
+        if (RegEnumKeyEx(act, i, sub, &sn, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        HKEY d;
+        if (RegOpenKeyEx(act, sub, 0, 0, &d) != ERROR_SUCCESS)
+            continue;
+        wchar_t name[32] = L"-", key[160] = L"-";
+        DWORD n1 = sizeof(name), n2 = sizeof(key);
+        RegQueryValueEx(d, L"Name", NULL, NULL, (BYTE*)name, &n1);
+        RegQueryValueEx(d, L"Key", NULL, NULL, (BYTE*)key, &n2);
+        RegCloseKey(d);
+        name[31] = key[159] = 0;
+        k += _snwprintf(out + k, kSnapCap - 1 - k, L"%s %s\n", name, key);
+        if (k >= kSnapCap - 200)
+            break;
+    }
+    out[kSnapCap - 1] = 0;
+    RegCloseKey(act);
+}
+
+static void LogLines(const wchar_t* sign, const wchar_t* lines)
+{
+    for (const wchar_t* l = lines; *l;) {
+        const wchar_t* e = wcschr(l, L'\n');
+        int len = e ? (int)(e - l) : (int)wcslen(l);
+        wchar_t one[240];
+        int c = len < 239 ? len : 239;
+        wcsncpy(one, l, c);
+        one[c] = 0;
+        Log(L"проба: драйвер %s %s", sign, one);
+        l += len + (e ? 1 : 0);
+    }
+}
+
+static void LogClients(HKEY k, const wchar_t* path, int depth)   // USBD's keys: who may take which device
+{
+    wchar_t sub[64], dll[64];
+    DWORD n = sizeof(dll);
+    if (RegQueryValueEx(k, L"DLL", NULL, NULL, (BYTE*)dll, &n) == ERROR_SUCCESS) {
+        dll[63] = 0;
+        Log(L"проба: клиент USB %s -> %s", path, dll);
+    }
+    for (DWORD i = 0; depth < 4; i++) {
+        DWORD sn = 64;
+        if (RegEnumKeyEx(k, i, sub, &sn, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        HKEY c;
+        if (RegOpenKeyEx(k, sub, 0, 0, &c) != ERROR_SUCCESS)
+            continue;
+        wchar_t p[200];
+        _snwprintf(p, 199, L"%s\\%s", path, sub);
+        p[199] = 0;
+        LogClients(c, p, depth + 1);
+        RegCloseKey(c);
+    }
+}
+
+static DWORD WINAPI Watch(void*)   // kWatchMs: each driver loaded / unloaded logged
+{
+    static wchar_t was[kSnapCap], now[kSnapCap], diff[kSnapCap];
+    HKEY lc;
+    if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\USB\\LoadClients", 0, 0, &lc) == ERROR_SUCCESS) {
+        LogClients(lc, L"LoadClients", 0);
+        RegCloseKey(lc);
+    }
+    Snapshot(was);
+    LogLines(L"есть:", was);
+    Log(L"проба: слежу за драйверами %u с - подключайте телефон", kWatchMs / 1000);
+    for (DWORD t0 = GetTickCount(); GetTickCount() - t0 < kWatchMs;) {
+        Sleep(500);
+        Snapshot(now);
+        if (LinesNotIn(now, was, diff, kSnapCap))
+            LogLines(L"загружен:", diff);
+        if (LinesNotIn(was, now, diff, kSnapCap))
+            LogLines(L"выгружен:", diff);
+        wcscpy(was, now);
+    }
+    Log(L"проба: слежение кончилось");
+    return 0;
+}
+
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 {
     CreateMutex(NULL, TRUE, L"VestaTetherProbe");   // (one copy: freed when it exits)
@@ -161,7 +255,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
         err ? L"НЕ ВЫШЛО" : L"драйвер в \\Windows, ключи USBD записаны");
     if (err)
         Log(L"проба: ошибка %u", err);
-    wchar_t s[600] = L"";
+    HANDLE watch = CreateThread(NULL, 0, Watch, NULL, 0, NULL);   // (with the driver or not: what the unit sees)
+    wchar_t s[800] = L"";
     if (err)
         wsprintf(s, L"Не вышло, ошибка %u. Драйвер не установлен.", err);
     else if (s_keySec)
@@ -171,6 +266,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
                   L"Телефон спросит «Разрешить отладку по USB?» - разрешите, ГУ само включит на нём «USB-модем».\r\n"
                   L"(Или включите «USB-модем» на телефоне сами.)\r\n\r\n"
                   L"Журнал: VestaLogs\\VestaTether.log на SD-карте.\r\nПосле перезагрузки ГУ проба исчезает сама.");
+    wcscat(s, L"\r\n\r\nПроба 3 минуты записывает, что ГУ делает с телефоном: подключайте его в это время.");
     MessageBox(NULL, s, L"Проба телефона по USB", MB_OK | MB_TOPMOST);
+    if (watch) {   // (the window closed early: the watch goes on to its end)
+        WaitForSingleObject(watch, INFINITE);
+        CloseHandle(watch);
+    }
     return err ? 1 : 0;
 }

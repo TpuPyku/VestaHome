@@ -2,7 +2,8 @@
 
 // ---- widgets' settings (opened from a widget's caption): sub screens, rows of 56 px over the whole width
 
-static wchar_t s_coordText[48];   // the home point's coordinates while they are typed
+static wchar_t s_coordText[48];   // the home point's latitude or longitude while it is typed
+static int     s_coordWhich;      // K_HOMELAT / K_HOMELON
 
 // Row: label and a second line; the control is drawn by the caller to the right of `right`. With an action the
 // left part is a button of its own.
@@ -31,11 +32,11 @@ static void ScrWSetWeather(HDC dc)
     Toggle(dc, 688, 190, T_W_GPS);
     WRow(dc, 236, L"Домашняя точка", s_cfg.homeName[0] ? s_cfg.homeName : L"название — нажмите, чтобы ввести", A_KEYS,
          K_HOMENAME, 776);
-    if (s_cfg.homeLat || s_cfg.homeLon)
-        _snwprintf(s, 120, L"%.5f, %.5f", s_cfg.homeLat, s_cfg.homeLon);
-    else
-        wcscpy(s, L"не заданы — ввести или взять из GPS");
-    WRow(dc, 292, L"Координаты дома", s, A_KEYS, K_HOMECOORD, 568);
+    bool set = s_cfg.homeLat || s_cfg.homeLon;   // two fields of digits (the user 2026-11-14)
+    _snwprintf(s, 120, set ? L"%.5f" : L"не задана", s_cfg.homeLat);
+    RowCore(dc, 24, 292, 56, 268, 268, 240, L"Широта дома", s, A_KEYS, K_HOMELAT, false);
+    _snwprintf(s, 120, set ? L"%.5f" : L"не задана", s_cfg.homeLon);
+    RowCore(dc, 300, 292, 56, 268, 268, 240, L"Долгота дома", s, A_KEYS, K_HOMELON, false);
     Button(dc, 576, 298, 192, 44, L"Из GPS", B_N, IC_NAV, 15, 22, A_HOMEGPS);
     Weather w;
     WxGet(&w);
@@ -120,8 +121,8 @@ static void SvcKeys(int which)   // the keyboard for one of them, with its value
     else
         s_svcText[0] = 0;
     s_svcText[23] = 0;
-    OpenKeysFor(s_svcText, 23, which == K_ODO ? L"Пробег сейчас, км" : which == K_SVCKM ? L"Пробег на прошлом ТО, км"
-                : L"Дата прошлого ТО, ДД.ММ.ГГГГ", S_WSET_TRIP);
+    OpenNumFor(s_svcText, 23, which == K_ODO ? L"Пробег сейчас, км" : which == K_SVCKM ? L"Пробег на прошлом ТО, км"
+               : L"Дата прошлого ТО, ДД.ММ.ГГГГ", S_WSET_TRIP, which == K_SVCDATE ? NUM_DATE : NUM_INT);
 }
 
 static void SvcKeysDone()   // (CfgKeysDone) typed: kept when it parses
