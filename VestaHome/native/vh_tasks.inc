@@ -1043,6 +1043,36 @@ static void BtOffForShell()
          (unsigned)(GetTickCount() - t0));
 }
 
+static void RadioOn();   // (vh_screens.inc)
+
+// The radio as the MCU's source before the restart into the stock shell (HU 2026-11-14-2/-3: after it the shell asked
+// for the source every 3 s - SendRadioSendCurrentSourceNow - and the MCU never answered while our media was its
+// source; it hung on the logo till the knob's off/on made the MCU tell all again; from the radio it starts as at
+// home). Up to 5 s, the window's messages going on (the keys go by its timer).
+static void RadioForShell()
+{
+    int vol, mute, src = -1;
+    VolGet(&vol, &mute, &src);
+    if (src == 0)
+        return;
+    wcscpy(s_status, L"радио перед перезагрузкой…");
+    InvalidateRect(s_wnd, NULL, FALSE);
+    UpdateWindow(s_wnd);
+    int was = src;
+    RadioOn();
+    DWORD t0 = GetTickCount();
+    while (src != 0 && GetTickCount() - t0 < 5000) {
+        MSG m;
+        while (PeekMessage(&m, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&m);
+            DispatchMessage(&m);
+        }
+        Sleep(50);
+        VolGet(&vol, &mute, &src);
+    }
+    VLog(L"штатная оболочка: источник %d -> %d за %u мс", was, src, (unsigned)(GetTickCount() - t0));
+}
+
 static bool ShellStart()
 {
 #ifdef UNDER_CE
@@ -1051,6 +1081,7 @@ static bool ShellStart()
         if (f != INVALID_HANDLE_VALUE)
             CloseHandle(f);
         VLog(L"штатная оболочка: флаг %s %s, перезагрузка", kStockFlag, f != INVALID_HANDLE_VALUE ? L"есть" : L"НЕ ЗАПИСАН");
+        RadioForShell();
         BtOffForShell();
         if (!Reboot())
             wcscpy(s_status, L"перезагрузите ГУ: удерживайте крутилку 10 с");

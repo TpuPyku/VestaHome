@@ -215,6 +215,39 @@ static void LogClients(HKEY k, const wchar_t* path, int depth)   // USBD's keys:
     }
 }
 
+// The USB controllers' settings (sheet 34 again, 14.11-3: the phone never seen, a flash drive in the same socket is):
+// their keys' values, a line each, 3 levels down - the OTG's role (host / function), the HCD under it
+static void LogValues(HKEY k, const wchar_t* path, int depth)
+{
+    wchar_t name[64], sub[64];
+    BYTE data[256];
+    for (DWORD i = 0;; i++) {
+        DWORD nn = 64, dn = sizeof(data) - 2, type = 0;
+        if (RegEnumValue(k, i, name, &nn, NULL, &type, data, &dn) != ERROR_SUCCESS)
+            break;
+        data[dn] = data[dn + 1] = 0;
+        if (type == REG_DWORD)
+            Log(L"проба: рег %s : %s = 0x%X", path, name, *(DWORD*)data);
+        else if (type == REG_SZ || type == REG_MULTI_SZ)
+            Log(L"проба: рег %s : %s = %s", path, name, (wchar_t*)data);
+        else
+            Log(L"проба: рег %s : %s (тип %u, %u Б)", path, name, type, dn);
+    }
+    for (DWORD i = 0; depth < 3; i++) {
+        DWORD sn = 64;
+        if (RegEnumKeyEx(k, i, sub, &sn, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        HKEY c;
+        if (RegOpenKeyEx(k, sub, 0, 0, &c) != ERROR_SUCCESS)
+            continue;
+        wchar_t p[200];
+        _snwprintf(p, 199, L"%s\\%s", path, sub);
+        p[199] = 0;
+        LogValues(c, p, depth + 1);
+        RegCloseKey(c);
+    }
+}
+
 static DWORD WINAPI Watch(void*)   // kWatchMs: each driver loaded / unloaded logged
 {
     static wchar_t was[kSnapCap], now[kSnapCap], diff[kSnapCap];
@@ -222,6 +255,17 @@ static DWORD WINAPI Watch(void*)   // kWatchMs: each driver loaded / unloaded lo
     if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"Drivers\\USB\\LoadClients", 0, 0, &lc) == ERROR_SUCCESS) {
         LogClients(lc, L"LoadClients", 0);
         RegCloseKey(lc);
+    }
+    static const wchar_t* const kUsbKeys[] = { L"Drivers\\BuiltIn\\USBOTG", L"Drivers\\BuiltIn\\AsyncStorageBus\\USBOTG1",
+                                               L"Drivers\\USB\\FunctionDrivers", L"Drivers\\USB\\ClientDrivers" };
+    for (int i = 0; i < (int)(sizeof(kUsbKeys) / sizeof(kUsbKeys[0])); i++) {
+        HKEY u;
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, kUsbKeys[i], 0, 0, &u) == ERROR_SUCCESS) {
+            LogValues(u, kUsbKeys[i], 0);
+            RegCloseKey(u);
+        } else {
+            Log(L"проба: рег %s - нет", kUsbKeys[i]);
+        }
     }
     Snapshot(was);
     LogLines(L"есть:", was);
