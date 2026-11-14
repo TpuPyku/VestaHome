@@ -561,6 +561,34 @@ static int RestartCmd()
     return r;
 }
 
+// The PAN server's context left by an off that ended late (HU 2026-11-14-3: Deinit's 0x02 after 29 s, the next Init
+// -> 0 with no 0x01: its PanServer_Init found the context there and gave up, panstate.h): its state put to "ready", the
+// only one its Deinit takes, and Deinit called. Its answer.
+static int PanForceDeinit()
+{
+    volatile LONG* v = PanStateVar();
+    LONG was = v ? *v : -1;
+    if (v && was != PAN_ST_DEINIT)
+        InterlockedExchange((LONG*)v, PAN_ST_READY);
+    int r = ((FlcFn0)s_orig[IDX_Flc_Bluetooth_PanServer_Deinit])();
+    wchar_t b[96];
+    wsprintfW(b, L"POWER on: PAN state %d, PanServer_Deinit -> %d", (int)was, r);
+    LogLine(b);
+    return r;
+}
+
+static int PowerOn(DWORD* w)   // Init and its 0x01 (10 s); w: the wait's end
+{
+    int r = ((int (*)(FlcCb))s_orig[IDX_Flc_Bluetooth_Init])(ProxyCb);   // (s_appCb still the stub's)
+    *w = WAIT_FAILED;
+    if (r == 0) {
+        Exports(true);
+        ((int (*)(int))s_orig[IDX_Flc_Bluetooth_Conn_EnablePairIndForApp])(1);
+        *w = WaitForSingleObject(s_powEv, 10000);
+    }
+    return r;
+}
+
 static int PowerCmd(bool on)
 {
     if (s_shm->power == (on ? BT_POW_ON : BT_POW_OFF))
@@ -579,7 +607,7 @@ static int PowerCmd(bool on)
         r = ((FlcFn0)s_orig[IDX_Flc_Bluetooth_Deinit])();   // 2: on its way (its thread), the end - event 0x02
         bool going = r == 0 || r == 2;
         if (going) {
-            w = WaitForSingleObject(s_powEv, 12000);
+            w = WaitForSingleObject(s_powEv, 40000);   // (HU 2026-11-14-3: 29 s once - an "on" before its end failed)
             Exports(false);
             StateOff();
         }
@@ -588,11 +616,15 @@ static int PowerCmd(bool on)
                   GetTickCount() - t0);
     } else {
         s_shm->power = BT_POW_GOING_ON;
-        r = ((int (*)(FlcCb))s_orig[IDX_Flc_Bluetooth_Init])(ProxyCb);   // (s_appCb still the stub's)
-        if (r == 0) {
-            Exports(true);
-            ((int (*)(int))s_orig[IDX_Flc_Bluetooth_Conn_EnablePairIndForApp])(1);
-            w = WaitForSingleObject(s_powEv, 10000);
+        r = PowerOn(&w);
+        if (r == 0 && w != WAIT_OBJECT_0) {   // up in name only: the PAN context in its way - once again without it
+            wsprintfW(b, L"POWER on: Init -> 0, no 0x01 in %u ms - again", GetTickCount() - t0);
+            LogLine(b);
+            ((FlcFn0)s_orig[IDX_Flc_Bluetooth_Deinit])();
+            WaitForSingleObject(s_powEv, 15000);
+            PanForceDeinit();
+            ResetEvent(s_powEv);
+            r = PowerOn(&w);
         }
         s_shm->power = r == 0 ? BT_POW_ON : BT_POW_OFF;
         wsprintfW(b, L"POWER on: Init -> %d, event 0x01 %s, %u ms", r, w == WAIT_OBJECT_0 ? L"yes" : L"NO",

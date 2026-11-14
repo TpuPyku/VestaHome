@@ -161,6 +161,13 @@ static DWORD s_radioAsk;          // the radio wanted (RadioOn, its screen), 0 =
 // 0x84 + 0x54) is the CE's own audio path too: our waveOut sounds with it (BT -> our music worked). So ours take
 // that path; the radio's keys are checked a moment later and a preset taken if they did nothing.
 static DWORD s_srcByUs;      // we switched the source: the watcher (MODE, the shell) leaves our players alone
+static unsigned s_srcWant;   // ... to these (SrcBit): another one coming meanwhile is the user's (srcwatch.h)
+
+static void SrcAsked(unsigned want)
+{
+    s_srcByUs = GetTickCount();
+    s_srcWant = want;
+}
 static DWORD s_radioSrcAsk;  // RadioOn's keys sent (checked 1.5 s later)
 static DWORD s_btPathTick;   // the Bluetooth path taken for our player: the phone paused once it is up
 static DWORD s_mediaAsk;     // MediaSource's SendMediaSourceSelect sent (checked 2 s later: else Bluetooth's path)
@@ -409,7 +416,7 @@ static void RadioOn()
     VolGet(&vol, &mute, &src);
     if (src == 0)
         return;   // already the radio
-    s_srcByUs = GetTickCount();
+    SrcAsked(SrcBit(0));
     MainMenuKey(0x7F);   // (the preset asked 1.5 s after the key: MenuKeyNow)
 }
 
@@ -447,7 +454,8 @@ static void AuxOn()
         McuSend2("SPApi_SendRadioAuxInOutStatus", jack, 0);   // (one argument: the second one is not read)
     VLog(L"источник: AUX - штекер %s, клавиша 0x83 главного меню MCU (было %d)",
          jack < 0 ? L"?" : jack ? L"вставлен" : L"не вставлен", src);
-    s_srcByUs = s_auxAsk = GetTickCount();
+    SrcAsked(kSrcAny);
+    s_auxAsk = s_srcByUs;
     MainMenuKey(0x83);
 }
 
@@ -665,7 +673,7 @@ static void BtMusicOn()   // the shell's "Phone" key 0x84 (the MCU answers 0x890
 {
     ResumeByUser();                         // (HU 2026-10-18-2: 0x54 alone did nothing; after 0x84 the source turned 09)
     OursQuiet();
-    s_srcByUs = GetTickCount();
+    SrcAsked(SrcBit(9));
     BtMusicLink();
     MainMenuKey(0x84);   // (then 0x54: TIMER_BTSRC)
 }
@@ -1378,13 +1386,7 @@ static void ScrCall(HDC dc)
     bool d = Zone(216, 296, 368, 96, A_PHONEEND);
     R(dc, 216, 296, 368, 96, 12, d ? Mix(kStop, kInk, 160) : kStop);
     Ico(dc, IC_HANGUP, 376, 320, 48, kInk);
-    Dock(dc);   // in a call the volume is the main control: the MCU's, as it is now
-    IconBtn(dc, IC_VOL, 104, 417, 44, kMuted, A_SCREEN, S_VOLUME);   // (right of "back")
-    int vol, mute, src;
-    wchar_t v[16] = L"—";
-    if (VolGet(&vol, &mute, &src))
-        _snwprintf(v, 16, mute ? L"без звука" : L"%d", vol);
-    T(dc, 168, 452, v, 22, kText, 700);
+    Dock(dc);   // (the volume: the top bar's speaker only - the user 2026-11-14: not a second one in the bottom bar)
 }
 
 static int TzMinutes();

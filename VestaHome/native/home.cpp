@@ -41,6 +41,7 @@
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
+#include "srcwatch.h"   // a source change: ours or the user's (MODE)
 #include "numpad.h"    // the digits' keyboard (km, coordinates, a date)
 #include "service.h"   // the car service (ТО) due by km or a year
 #include "presetpos.h"  // the preset playing: the MCU names its place on a page only
@@ -710,7 +711,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     int n = t.cur >= 0 && t.cur < 24 ? t.cur : 0;
                     VLog(L"радио: источник %d после клавиш - пресет %d", src, n + 1);
                     RadioPreset(n);
-                    s_srcByUs = now;
+                    SrcAsked(SrcBit(0));
                 }
             }
             if (s_mediaAsk && now - s_mediaAsk > 2000) {
@@ -719,7 +720,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (src != 6 && src != 7 && src != 9) {
                     VLog(L"источник: медиа не включилось (%d) - путь Bluetooth", src);
                     MainMenuKey(0x84);
-                    s_srcByUs = s_btPathTick = now;
+                    SrcAsked(SrcBit(9));
+                    s_btPathTick = now;
                 }
             }
             PhonePlayTakes(src, now);
@@ -733,18 +735,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     VLog(L"источник: AUX у MCU - номер %d", aux);
                     s_auxSrc = aux;
                 }
-                if (s_srcSeen != -2 && (src == 0 || src == 9) && now - s_srcByUs > 6000) {
+                bool ours = SrcOurs(now, s_srcByUs, s_srcWant, src);
+                if (s_srcSeen != -2 && (src == 0 || src == 9) && !ours) {
                     VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
                     OursQuiet();
                 }
                 // MODE to the media (not our asking): our music on - as the shell opens its player there (Ghidra
                 // 2026-10-29: the MCU asks for a player, 0x9101; VestaStub names the card) - unless ours plays
-                if (s_srcSeen != -2 && (src == 6 || src == 7) && now - s_srcByUs > 6000 && !PlayerPlaying() &&
+                if (s_srcSeen != -2 && (src == 6 || src == 7) && !ours && !PlayerPlaying() &&
                     !s_netOn && s_vidState != VID_PLAYING && McuHostOn()) {
                     VLog(L"источник: медиа (MODE) - наша музыка");
                     PlayerToggle();
                 }
-                if (s_srcSeen != -2 && now - s_srcByUs > 6000)
+                if (s_srcSeen != -2 && !ours)
                     FollowSource(src);
                 if (src == 0 && s_srcSeen > 0 && !s_radioSrcAsk && McuHostOn())
                     s_radioSrcAsk = now - 1000;  // back to the radio under our host: silent until a preset (next tick)

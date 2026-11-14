@@ -659,6 +659,14 @@ static bool GuardStuck()   // (every 0.5 s, VestaHome not in front) true: just g
     // a connected add-on is alive (HU 2026-11-14: OSMapsCE, drawing 5 frames a second, sent under twice in a drive -
     // its WM_NULL timed out for 15 s; why is not known): never given up on, "Задачи" ends it if need be
     bool ok = top && (!s_send || PlugOwnsPid(s_guardPid) || s_send(top, WM_NULL, 0, 0, SMTO_NORMAL, 300, &r));
+    // no window of its own, but another program's in front (HU 2026-11-14-3: TetherProbe watching in the background
+    // brought VestaHome over VestaAuto's video): nothing hidden by it - left alone
+    DWORD fgPid = 0;
+    HWND fg = GetForegroundWindow();
+    if (fg)
+        GetWindowThreadProcessId(fg, &fgPid);
+    if (!top && fgPid && fgPid != GetCurrentProcessId() && fgPid != s_guardPid)
+        ok = true;
     if (ok) {
         s_badSince = 0;
         return false;

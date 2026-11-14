@@ -25,9 +25,10 @@ static void MenuKeyNow()
     McuKey(key, false);
     s_menuMain = false;   // (the key leaves the main menu - the radio's or the phone's; the MCU says nothing of it: HU
                           // 2026-10-31, radio -> Bluetooth: 0x84 sent with no "back" from the radio's menu, ignored)
-    if (key == 0x7F)
-        s_srcByUs = s_radioSrcAsk = now;   // (the preset 1.5 s after the key itself)
-    else if (key == 0x84)
+    if (key == 0x7F) {
+        SrcAsked(SrcBit(0));
+        s_radioSrcAsk = now;   // (the preset 1.5 s after the key itself)
+    } else if (key == 0x84)
         SetTimer(s_wnd, TIMER_BTSRC, 800, NULL);   // then Bluetooth's music key 0x54
 }
 
@@ -166,7 +167,8 @@ static void MediaSource()   // one of our players starts
         VLog(L"источник: медиа для нашего звука (было %d)", src);   // cards from our host now, MODE turns it 07
         MediaAskSignal(true);
         McuSend2("SPApi_SendMediaSourceSelect", 5, 3);
-        s_srcByUs = s_mediaAsk = GetTickCount();
+        SrcAsked(SrcBit(6) | SrcBit(7));
+        s_mediaAsk = s_srcByUs;
         return;
     }
     // Straight to Bluetooth's path: SendMediaSourceSelect never made it "media" by itself, and it woke the shell's
@@ -174,7 +176,8 @@ static void MediaSource()   // one of our players starts
     // 18th, before the call): the hardware overlay is one.
     VLog(L"источник: путь Bluetooth для нашего звука (было %d)", src);
     MainMenuKey(0x84);
-    s_srcByUs = s_btPathTick = GetTickCount();
+    SrcAsked(SrcBit(9));
+    s_btPathTick = s_srcByUs;
 }
 
 

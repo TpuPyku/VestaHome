@@ -46,7 +46,7 @@ static const unsigned int kDrillSize = 357u;
 
 // the Bluetooth proxy (bt\) and the factory SDK it replaces (official package); a FLC_BLUETOOTH_SDK.dll
 // that is neither is left alone
-static const char* kBtProxyMd5 = "4e4a97feabb63e18121cf645c757c39c";   // out\FLC_BLUETOOTH_SDK.dll
+static const char* kBtProxyMd5 = "8ef0d4a06eca6438644528b88de9d2ba";   // out\FLC_BLUETOOTH_SDK.dll
 static const char* kBtFactoryMd5 = "7ebcbf0e6dbc7e6243fc022e7b02efd7";
 static const unsigned int kBtFactorySize = 134144u;
 
