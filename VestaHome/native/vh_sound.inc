@@ -352,6 +352,9 @@ static void OpenCfgKeys(int which)
     case K_NETPASS:
         OpenKeysFor(s_cfg.netPass, 31, L"Пароль", S_SET_NET);
         break;
+    case K_ODO: case K_SVCKM: case K_SVCDATE:   // the trip widget's service (vh_widgetset.inc)
+        SvcKeys(which);
+        break;
     case K_HOMECOORD:
         if (s_cfg.homeLat || s_cfg.homeLon)
             _snwprintf(s_coordText, 48, L"%.5f, %.5f", s_cfg.homeLat, s_cfg.homeLon);
@@ -436,6 +439,10 @@ static void CfgKeysDone()
         TeKeysDone();
         return;
     }
+    if (s_keysTarget == s_svcText) {   // the service's km or date
+        SvcKeysDone();
+        return;
+    }
     if (s_keysTarget == s_ncQuery) {   // the radio catalogue's search
         NcSearchDone();
         return;
@@ -469,6 +476,7 @@ static void CfgToControls()
 {
     s_on[T_GPS_TIME] = s_cfg.gpsTime;
     s_on[T_W_GPS] = s_cfg.weatherGps;
+    s_on[T_SVC7000] = s_cfg.svc7000;
     s_on[T_CAM_ALERT] = s_cfg.camAlert;
     s_on[T_PB_AUTO] = s_cfg.pbAuto != 0;
     s_seg[G_TIME_FMT] = s_cfg.time12 ? 0 : 1;
@@ -494,7 +502,8 @@ static bool IsCfgToggle(int id)
 {
     return id == T_GPS_TIME || id == T_W_GPS || id == T_CAM_ALERT ||
            id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_WIFI ||
-           id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE || id == T_NMEA_PORT;
+           id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE || id == T_NMEA_PORT ||
+           id == T_SVC7000;
 }
 
 static void ControlsToCfg()
@@ -502,6 +511,7 @@ static void ControlsToCfg()
     bool weather = s_cfg.weatherGps != s_on[T_W_GPS] || s_cfg.weatherProv != s_seg[G_WPROV];
     s_cfg.gpsTime = s_on[T_GPS_TIME];
     s_cfg.weatherGps = s_on[T_W_GPS];
+    s_cfg.svc7000 = s_on[T_SVC7000];
     s_cfg.camAlert = s_on[T_CAM_ALERT];
     {   // the beep: off / always / above the camera's limit by 0, 10, 20 km/h
         s_cfg.camSound = s_seg[G_CAMSND] > 0;

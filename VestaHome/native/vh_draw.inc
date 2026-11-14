@@ -591,6 +591,16 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.Circle(35, 33, 4.5);
         break;
     }
+    case IC_SERVICE:   // the service (ТО): a wrench - its handle, its open head at the top right
+        p.L2(9, 39, 26, 22);
+        p.ArcP(31, 17, 8, -10, 280);   // (0 right, clockwise: the gap - its jaw - at the top right)
+        break;
+    case IC_AAUTO:   // Android Auto (the add-on's button, the user 2026-11-14): its "A" - a road going up to a point
+        p.L2(6, 41, 24, 7);
+        p.L2(24, 7, 42, 41);
+        p.L2(17, 41, 24, 27);
+        p.L2(24, 27, 31, 41);
+        break;
     case IC_NETRADIO:   // the internet radio: a mast sending waves both ways
         p.L2(24, 22, 15, 43);
         p.L2(24, 22, 33, 43);
@@ -2024,6 +2034,8 @@ static Icon PlayingIcon(Screen* to);   // what plays (vh_tasks.inc): its icon an
 
 static bool ModemShown(bool* online);   // (vh_gps.inc)
 
+static int SvcText(wchar_t* s, int n);   // (vh_tasks.inc: the service's line and its level)
+
 static int StatusMarks(HDC dc, int end, int minLeft)
 {
     BtState bt;
@@ -2037,7 +2049,9 @@ static int StatusMarks(HDC dc, int end, int minLeft)
     ObdGet(&obd);
     bool dtc = obd.state == OBD_ON && (obd.dtcs > 0 || obd.mil == 1);
     bool mdmOn, mdmIn = ModemShown(&mdmOn);   // the USB modem in (the user 2026-11-05): grey, online - the accent
-    Mark m[8] = {
+    wchar_t sv[96];   // the service (ТО) soon or overdue (the user 2026-11-14): a wrench, a tap - its screen
+    int svc = SvcText(sv, 96);
+    Mark m[9] = {
         { IC_USB, kOrange, (s_mediaMask & 2) != 0, A_NONE, 0 },
         { IC_SD, kOrange, (s_mediaMask & 1) != 0, A_NONE, 0 },
         { IC_WIFI, w.state == WIFI_CONNECTED ? kOrange : kDim, w.state >= WIFI_DISCONNECTED, A_NAV, S_SET_WIFI },
@@ -2045,9 +2059,10 @@ static int StatusMarks(HDC dc, int end, int minLeft)
         { IC_SIGNAL, mdmOn ? kOrange : kDim, mdmIn, A_NAV, S_SET_NET },
         { IC_NAV, GpsHasFix() ? kOrange : kDim, true, A_NONE, 0 },
         { play, kOrange, play != IC_NONE, A_NAV, playTo },
-        { IC_WARN, RGB(255, 204, 0), dtc, A_SCREEN, S_OBD_DTC } };   // the trouble codes: always yellow (the user)
+        { IC_WARN, RGB(255, 204, 0), dtc, A_SCREEN, S_OBD_DTC },   // the trouble codes: always yellow (the user)
+        { IC_SERVICE, svc == 2 ? kStop : kOrange, svc > 0, A_SCREEN, S_WSET_TRIP } };
     int x = end;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 9; i++) {
         if (!m[i].shown)
             continue;
         if (x - 34 < minLeft)   // design 0.6: icons of 20, 14 apart

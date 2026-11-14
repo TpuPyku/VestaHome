@@ -81,7 +81,11 @@ struct Cfg {
     int     saverMin;                  // the screen saver after this many minutes untouched, 0 = never
     int     carSens[3];                // the car widget's lines: sensors (kCarSensor), -1 none
     int     tank;                      // the fuel tank, L (the range from OBD's level): Vesta 55
-    bool    time12;                    // the clock 12 h (else 24 h)
+    double  odoKm;                     // the odometer: typed, then counted on (TripTick); -1 not typed
+    double  svcKm;                     // the odometer at the last service (ТО, service.h)
+    int     svcYmd;                    // its date, yyyymmdd (0 not known)
+    bool    svc7000;                   // the recommended interval, 7000 km (else the Vesta's 15000)
+    bool    time12;                   // the clock 12 h (else 24 h)
     int     startMax;                  // the volume at the start: no louder than this (VestaHome's own), 0 = no cap
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
@@ -142,6 +146,7 @@ static void CfgDefaults()
     s_cfg.nmeaCom = 6;
     s_cfg.saverMin = 5;
     s_cfg.tank = 55;
+    s_cfg.odoKm = -1;
     s_cfg.startMax = 10;
     s_cfg.keyVol = -1;
     s_cfg.carSens[0] = 0;   // the speed (CAN), the trip, the unit's board
@@ -536,6 +541,14 @@ static void LoadCfg()
             s_cfg.themeMode = _wtoi(v) % 3;
         } else if (!wcscmp(k, L"screen.light")) {
             s_cfg.lightMode = _wtoi(v) % 3;
+        } else if (!wcscmp(k, L"car.odo")) {
+            s_cfg.odoKm = wcstod(v, NULL);
+        } else if (!wcscmp(k, L"car.service.km")) {
+            s_cfg.svcKm = wcstod(v, NULL);
+        } else if (!wcscmp(k, L"car.service.date")) {
+            s_cfg.svcYmd = _wtoi(v);
+        } else if (!wcscmp(k, L"car.service.7000")) {
+            s_cfg.svc7000 = CfgBool(v);
         } else if (!wcscmp(k, L"car.tank")) {
             s_cfg.tank = _wtoi(v) < 20 ? 20 : _wtoi(v) > 120 ? 120 : _wtoi(v);
         } else if (!wcscmp(k, L"car.sensors")) {   // "0,2,10"
@@ -712,6 +725,14 @@ static void SaveCfg()
                            L"# radio.list / radio.url: the internet radio's list (0 radio.txt, 1 radio_fav.txt, 2 the "
                            L"catalogue, 3 radio_recent.txt) and its station's address\r\nradio.list=%d\r\nradio.url=%s\r\n",
                            kAccents[s_cfg.accent].code, s_cfg.saverBg, s_cfg.saverFile, s_cfg.radioList, s_cfg.radioUrl);
+        n += k > 0 ? k : 0;
+    }
+    {
+        int k = _snwprintf(text + n, 12000 - n, L"# car.odo: the odometer, km (typed in the trip widget's settings, then "
+                           L"counted on; -1 not typed);\r\n# car.service.*: the last service (ТО): its km, its date "
+                           L"yyyymmdd, the 7000 km interval (0: the Vesta's 15000)\r\ncar.odo=%.1f\r\ncar.service.km=%.0f\r\n"
+                           L"car.service.date=%d\r\ncar.service.7000=%d\r\n", s_cfg.odoKm, s_cfg.svcKm, s_cfg.svcYmd,
+                           s_cfg.svc7000 ? 1 : 0);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {

@@ -597,6 +597,7 @@ static void DoActionOn(const Btn& b)
         break;
     case A_KEYS:     OpenCfgKeys(b.arg); break;
     case A_HOMEGPS:  HomeFromGps(); break;
+    case A_SVCDONE:  SvcDone(); break;
     case A_TZ:       TzStep(b.arg); break;
     case A_GPSPORT:  GpsPortStep(b.arg); break;
     case A_NMEACOM: {   // the navigators' port: its number; loaded again under the new one when on
@@ -1147,6 +1148,7 @@ static void HwKey(int key, int st, int kind)
     if (!McuHostOn())
         return;
     VLog(L"кнопка 0x%02X %s %s", key, st ? L"отпущена" : L"нажата", kind == 2 ? L"долго" : kind == 3 ? L"повтор" : L"");
+    s_lastTouch = GetTickCount();   // (a key is use too: the saver counts from it)
     if (PlugKey(key, st, kind))   // the add-on in front took it (OSMapsCE: the zoom on a long up / down)
         return;
     static bool s_dark;

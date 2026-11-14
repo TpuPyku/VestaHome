@@ -364,14 +364,17 @@ static void ScrIncoming(HDC dc)
 {
     BtState bt;
     BtGet(&bt, NULL);
-    wchar_t num[40];
+    wchar_t num[40], name[64];
     BtText(bt.callNumber, num, 40);
+    CallerName(bt, name, 64);
     Under(dc, 184);
     int top = Sheet(dc, 236);
     Disc(dc, kSheetInX + 36, top + 62, 36, kPanel2);
     Ico(dc, IC_CALL, kSheetInX + 12, top + 38, 48, kOk);
     T(dc, kSheetInX + 96, top + 36, L"Входящий вызов", 14, kMuted, 700);
-    T(dc, kSheetInX + 96, top + 80, num[0] ? num : L"номер скрыт", 32, kText, 700, AL_START, 600);
+    T(dc, kSheetInX + 96, top + 80, name[0] ? name : num[0] ? num : L"номер скрыт", 32, kText, 700, AL_START, 600);
+    if (name[0])
+        T(dc, kSheetInX + 96, top + 110, num, 18, kMuted, 400, AL_START, 600);
     enum { kW = (kSheetInW - kSheetGap) / 2, kY = 296, kH = 88 };
     int xEnd = kSheetInX, xAns = kSheetInX + kW + kSheetGap;   // the main action on the right, as in every sheet
     bool d = Zone(xEnd, kY, kW, kH, A_PHONEEND);   // green and red: here the colour carries the meaning

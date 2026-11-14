@@ -35,6 +35,16 @@ static int    s_plugOwnP = -1, s_plugOwnS = -1;             // an add-on's own w
 // one (HU 2026-10-26: "back" on the second screen gave the second again, without its button).
 static int    s_plugStack[8][2], s_plugStackN;
 
+static bool PlugOwnsPid(DWORD pid)   // a connected add-on's process (GuardStuck: not taken for hung)
+{
+    for (int i = 0; i < s_plugN; i++) {
+        DWORD p = 0;
+        if (s_plug[i].hwnd && GetWindowThreadProcessId(s_plug[i].hwnd, &p) && p == pid)
+            return true;
+    }
+    return false;
+}
+
 static bool PlugCanBack()   // an add-on screen under the one shown
 {
     return s_screen == S_PLUGIN && s_plugStackN > 0;

@@ -1334,6 +1334,19 @@ static void ScrCalls(HDC dc)
     }
 }
 
+// The caller's name from the kept book (the user 2026-11-13; sheet 33 p. 11, 29: the ringing sheet showed the number
+// only - it never looked): "" when the number is not in it.
+static void CallerName(const BtState& bt, wchar_t* name, int n)
+{
+    name[0] = 0;
+    if (!bt.callNumber[0] || bt.hf != 2)
+        return;
+    PbForPhone(bt);   // (no pull in a call: the book kept for this phone)
+    int i = s_book ? PbFindNumber(s_book, s_bookN, bt.callNumber) : -1;
+    if (i >= 0)
+        BtText(s_book[i].name, name, n);
+}
+
 // A call: its number, its state as the stack reports it, the time talking; "end" - Hf_End.
 static void ScrCall(HDC dc)
 {
@@ -1348,12 +1361,7 @@ static void ScrCall(HDC dc)
         BtText(bt.callNumber, num, 40);
     else
         wcscpy(num, s_callOut[0] ? s_callOut : L"—");
-    if (bt.callNumber[0] && bt.hf == 2) {   // the caller's name from the kept book (the user 2026-11-13: number only)
-        PbForPhone(bt);   // (no pull in a call: the book kept for this phone)
-        int i = s_book ? PbFindNumber(s_book, s_bookN, bt.callNumber) : -1;
-        if (i >= 0)
-            BtText(s_book[i].name, name, 64);
-    }
+    CallerName(bt, name, 64);
     Frame(dc, L"Телефон");
     Disc(dc, 128, 168, 88, kPanel2);
     Ico(dc, IC_CALL, 96, 136, 64, c == BT_CALL_ACTIVE ? kOk : kMuted);

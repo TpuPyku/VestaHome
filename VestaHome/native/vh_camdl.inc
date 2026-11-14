@@ -150,16 +150,6 @@ static void RegionsText(wchar_t* s, int n)
         wcscpy(s, L"не выбраны — нажмите, чтобы выбрать");
 }
 
-static long YmdDays(int ymd)   // days since 2000-01-01, enough to count a week
-{
-    int y = ymd / 10000, m = ymd / 100 % 100, d = ymd % 100;
-    if (m < 3) {
-        y--;
-        m += 12;
-    }
-    return 365L * y + y / 4 - y / 100 + y / 400 + (153 * (m - 3) + 2) / 5 + d;
-}
-
 static int Today()
 {
     SYSTEMTIME t;

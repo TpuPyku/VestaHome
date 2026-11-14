@@ -14,7 +14,8 @@ static const struct { const wchar_t* name; Icon ic; } kIconNames[] = {
     { L"sd", IC_SD }, { L"usb", IC_USB }, { L"wifi", IC_WIFI }, { L"bt", IC_BT }, { L"info", IC_INFO },
     { L"clock", IC_CLOCK }, { L"photo", IC_PHOTO }, { L"video", IC_VIDEO }, { L"apps", IC_APPS },
     { L"warn", IC_WARN }, { L"eye", IC_EYE }, { L"power", IC_POWER }, { L"folder", IC_FOLDER },
-    { L"tasks", IC_TASKS }, { L"star", IC_STAR }, { L"lock", IC_LOCK }, { L"file", IC_FILE } };
+    { L"tasks", IC_TASKS }, { L"star", IC_STAR }, { L"lock", IC_LOCK }, { L"file", IC_FILE },
+    { L"androidauto", IC_AAUTO }, { L"service", IC_SERVICE } };
 
 // VestaHome's content, widgets and add-ons (the user 2026-11-06): on the built-in partition, ready as VestaHome starts,
 // no waiting for a card; or on the SD card, for what writes often (flash wears). Outside VestaHome's folder: an update

@@ -640,6 +640,8 @@ static void LogNewWindows()
     EnumWindows(EnumGuardNew, 0);
 }
 
+static bool PlugOwnsPid(DWORD pid);   // (vh_plugins.inc)
+
 static bool GuardStuck()   // (every 0.5 s, VestaHome not in front) true: just given up on
 {
     static DWORD s_badSince, s_ticks;
@@ -653,7 +655,9 @@ static bool GuardStuck()   // (every 0.5 s, VestaHome not in front) true: just g
     HWND top = NULL;
     EnumWindows(EnumGuardTop, (LPARAM)&top);
     DWORD_PTR r;
-    bool ok = top && (!s_send || s_send(top, WM_NULL, 0, 0, SMTO_NORMAL, 300, &r));
+    // a connected add-on is alive (HU 2026-11-14: OSMapsCE, drawing 5 frames a second, sent under twice in a drive -
+    // its WM_NULL timed out for 15 s; why is not known): never given up on, "Задачи" ends it if need be
+    bool ok = top && (!s_send || PlugOwnsPid(s_guardPid) || s_send(top, WM_NULL, 0, 0, SMTO_NORMAL, 300, &r));
     if (ok) {
         s_badSince = 0;
         return false;

@@ -55,6 +55,93 @@ static void ScrWSetWeather(HDC dc)
                       : L"Обновляется раз в 30 мин.", 13, kDim, 400, AL_START, 680);
 }
 
+// The trip widget's settings: the service (ТО, the user 2026-11-14, service.h) - the odometer, the last service's km
+// and date (typed, A_KEYS K_ODO / K_SVCKM / K_SVCDATE), the 7000 km interval, "ТО пройдено" (now: twice, "Точно?").
+static wchar_t s_svcText[24];   // what the keyboard edits for them
+static int     s_svcKey;        // which of them (K_*)
+static bool    s_svcAsk;        // "ТО пройдено" pressed once
+
+static void ScrWSetTrip(HDC dc)
+{
+    static DWORD s_seen;
+    if (s_seen != s_screenTick) {
+        s_seen = s_screenTick;
+        s_svcAsk = false;
+    }
+    Frame(dc, L"Бортовой компьютер · ТО");
+    Panel(dc, 16, 64, 768, 344);   // (above y 408: "back" at the bottom left)
+    wchar_t s[96];
+    if (s_cfg.odoKm >= 0)
+        _snwprintf(s, 96, L"%.0f км · дальше считается по скорости (CAN или GPS)", s_cfg.odoKm);
+    else
+        wcscpy(s, L"не задан — нажмите, чтобы ввести (как на приборной панели)");
+    WRow(dc, 68, L"Пробег сейчас", s, A_KEYS, K_ODO, 776);
+    _snwprintf(s, 96, L"%.0f км", s_cfg.svcKm);
+    WRow(dc, 124, L"Прошлое ТО: пробег", s, A_KEYS, K_SVCKM, 776);
+    if (s_cfg.svcYmd)
+        _snwprintf(s, 96, L"%02d.%02d.%d", s_cfg.svcYmd % 100, s_cfg.svcYmd / 100 % 100, s_cfg.svcYmd / 10000);
+    else
+        wcscpy(s, L"не задана — ДД.ММ.ГГГГ");
+    WRow(dc, 180, L"Прошлое ТО: дата", s, A_KEYS, K_SVCDATE, 776);
+    WRow(dc, 236, L"Рекомендуемое ТО каждые 7000 км", s_on[T_SVC7000] ? L"включено: 7000 км или 1 год"
+         : L"выключено: по регламенту Весты — 15 000 км или 1 год", A_NONE, 0, 640);
+    Toggle(dc, 688, 246, T_SVC7000);
+    SvcText(s, 96);
+    WRow(dc, 292, L"Следующее ТО", s, A_NONE, 0, 568, true);
+    Button(dc, 576, 298, 192, 44, s_svcAsk ? L"Точно?" : L"ТО пройдено", s_cfg.odoKm < 0 ? B_DIS : s_svcAsk ? B_PRI : B_N,
+           IC_NONE, 15, 0, A_SVCDONE);
+    T(dc, 96, 450, L"ТО — по пробегу или через год после прошлого, что раньше. «ТО пройдено» — сейчас, на этом пробеге.",
+      13, kDim, 400, AL_START, 680);
+}
+
+static void SvcDone()   // "ТО пройдено": twice (the first asks)
+{
+    if (s_cfg.odoKm < 0)
+        return;
+    if (!s_svcAsk) {
+        s_svcAsk = true;
+        return;
+    }
+    s_svcAsk = false;
+    s_cfg.svcKm = s_cfg.odoKm;
+    s_cfg.svcYmd = TodayYmd();   // (0 while the clock is not set: by km alone)
+    SaveCfg();
+}
+
+static void SvcKeys(int which)   // the keyboard for one of them, with its value now
+{
+    s_svcKey = which;
+    if (which == K_ODO)
+        _snwprintf(s_svcText, 24, s_cfg.odoKm >= 0 ? L"%.0f" : L"", s_cfg.odoKm);
+    else if (which == K_SVCKM)
+        _snwprintf(s_svcText, 24, L"%.0f", s_cfg.svcKm);
+    else if (s_cfg.svcYmd)
+        _snwprintf(s_svcText, 24, L"%02d.%02d.%d", s_cfg.svcYmd % 100, s_cfg.svcYmd / 100 % 100, s_cfg.svcYmd / 10000);
+    else
+        s_svcText[0] = 0;
+    s_svcText[23] = 0;
+    OpenKeysFor(s_svcText, 23, which == K_ODO ? L"Пробег сейчас, км" : which == K_SVCKM ? L"Пробег на прошлом ТО, км"
+                : L"Дата прошлого ТО, ДД.ММ.ГГГГ", S_WSET_TRIP);
+}
+
+static void SvcKeysDone()   // (CfgKeysDone) typed: kept when it parses
+{
+    double km;
+    if (s_svcKey == K_SVCDATE) {
+        int ymd = ParseDmy(s_svcText);
+        if (ymd)
+            s_cfg.svcYmd = ymd;
+    } else if (ParseKm(s_svcText, &km)) {
+        if (s_svcKey == K_ODO) {
+            s_cfg.odoKm = km;
+            s_odoSaved = -1;   // (counted on from the typed one)
+        } else {
+            s_cfg.svcKm = km;
+        }
+    }
+    SaveCfg();
+}
+
 static void RegionsText(wchar_t* s, int n);
 
 static void ScrWSetSpeed(HDC dc)

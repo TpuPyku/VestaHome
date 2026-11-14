@@ -41,6 +41,7 @@
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
+#include "service.h"   // the car service (ТО) due by km or a year
 #include "presetpos.h"  // the preset playing: the MCU names its place on a page only
 #include "zonepart.h"  // a partial frame's buttons against the full frame's
 #include "secret.h"
@@ -96,7 +97,7 @@ enum Icon { IC_NONE, IC_MAP, IC_NAV, IC_RADIO, IC_MUSIC, IC_PHONE, IC_GEAR, IC_H
             IC_BT, IC_USB, IC_LIST, IC_VOL, IC_SEARCH, IC_SHUFFLE, IC_REPEAT, IC_CALL, IC_HANGUP, IC_WIFI,
             IC_STAR, IC_STAR_F, IC_USER, IC_USERS, IC_CLOCK, IC_KEYPAD, IC_MIC_OFF, IC_HANDOVER, IC_PLAY,
             IC_ROT_L, IC_ROT_R, IC_WARN, IC_CALL_IN, IC_CALL_OUT, IC_CALL_MISS, IC_LOCK, IC_REFRESH, IC_EQ,
-            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_NETRADIO, IC_BTMUSIC, IC_RETURN, IC_EYE_OFF, IC_SIGNAL, IC_COUNT };
+            IC_DISC, IC_EYE, IC_POWER, IC_EDIT, IC_ADD, IC_FILE, IC_UP, IC_CAR, IC_CLOUD, IC_TASKS, IC_SD, IC_DOWN, IC_GALLERY, IC_FULL, IC_UNFULL, IC_NETRADIO, IC_BTMUSIC, IC_RETURN, IC_EYE_OFF, IC_SIGNAL, IC_AAUTO, IC_SERVICE, IC_COUNT };
 
 // Picture names in skin.ini (and Skin\<name>.png), by icon; NULL = no picture, always the built-in drawing. Since
 // design 0.6 (2026-10-23) every icon has one: Lucide's, drawn by skin/make_icons.py (the built-in drawing - when the
@@ -107,7 +108,8 @@ static const wchar_t* kIconKey[IC_COUNT] = { NULL, L"map", L"nav", L"radio", L"m
     L"repeat", L"call", L"hangup", L"wifi", L"star", L"star_f", L"user", L"users", L"clock", L"keypad", L"mic_off",
     L"handover", L"play", L"rot_l", L"rot_r", L"warn", L"call_in", L"call_out", L"call_miss", L"lock", L"refresh",
     L"eq", L"disc", L"eye", L"power", L"edit", L"add", L"file", L"up", L"car", L"cloud", L"tasks", L"sd", L"down",
-    L"gallery", L"full", L"unfull", L"netradio", L"btmusic", L"return", L"eye_off", L"signal" };
+    L"gallery", L"full", L"unfull", L"netradio", L"btmusic", L"return", L"eye_off", L"signal",
+    NULL, NULL };   // (IC_AAUTO, IC_SERVICE: the built-in drawing alone)
 typedef char kIconKeyCount[sizeof(kIconKey) / sizeof(kIconKey[0]) == IC_COUNT ? 1 : -1];
 
 // A_NAV opens a main screen from the bottom bar (no history), A_SCREEN opens a screen over the current one,
@@ -124,7 +126,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIRESTART, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_BTRESTART, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
-              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV,
+              A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_SVCDONE,
               A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
@@ -140,7 +142,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NETCAT, S_NETCATS, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NETCAT, S_NETCATS, S_WSET_TRIP, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -155,13 +157,13 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_SVC7000, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 1, 2, 1, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
-enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS };   // typed settings (A_KEYS)
+enum { K_WKEY, K_HOMENAME, K_HOMECOORD, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS, K_ODO, K_SVCKM, K_SVCDATE };   // typed settings (A_KEYS)
 static wchar_t s_dial[20];          // the number typed on the phone's keypad
 static wchar_t s_callOut[20];       // the number dialled from VestaHome (the stack does not tell it back)
 static wchar_t s_pass[24] = L"vesta2026";
@@ -610,8 +612,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                          // photos, a call)
             DWORD now = GetTickCount();
             bool front = IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd;
-            if (!s_lastTouch)
+            static bool s_wasFront;   // (the user 2026-11-14: OSMapsCE closed - the saver at once: the minutes in
+            if (!s_lastTouch || (front && !s_wasFront))   // another program are use, not idle - counted from the return)
                 s_lastTouch = now;
+            s_wasFront = front;
             if (s_screen != S_SAVER)
                 SaverFree();
             if (s_screen == S_SAVER) {

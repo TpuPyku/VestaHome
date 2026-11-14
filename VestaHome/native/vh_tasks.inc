@@ -672,6 +672,38 @@ static int TripRange()   // km on what is left in the tank, -1 not known
     return (int)(o.fuel * s_cfg.tank / 100.0 * 100 / m + 0.5);
 }
 
+// The odometer (the service's, service.h) counted on with the trip's speed; written every 5 km, or at a stop with
+// 1 km and more not written (the flash: not each second; a power cut loses under 5 km).
+static double s_odoSaved = -1;   // the odometer as last written, -1 not yet (taken at the first tick)
+
+static void OdoTick(int kmh)
+{
+    if (s_cfg.odoKm < 0)
+        return;
+    if (s_odoSaved < 0)
+        s_odoSaved = s_cfg.odoKm;
+    if (kmh >= 3)
+        s_cfg.odoKm += kmh / 3600.0;
+    double unsaved = s_cfg.odoKm - s_odoSaved;
+    if (unsaved >= 5 || (kmh < 3 && unsaved >= 1)) {
+        SaveCfg();
+        s_odoSaved = s_cfg.odoKm;
+    }
+}
+
+static int TodayYmd()   // yyyymmdd, 0 while the clock is not set (the unit boots in 2005 until GPS sets it)
+{
+    SYSTEMTIME t;
+    GetLocalTime(&t);
+    return t.wYear < 2025 ? 0 : t.wYear * 10000 + t.wMonth * 100 + t.wDay;
+}
+
+static int SvcText(wchar_t* s, int n)   // the service's line now (service.h ServiceText), its level
+{
+    int today = TodayYmd();
+    return ServiceText(s_cfg.odoKm, s_cfg.svcKm, today ? s_cfg.svcYmd : 0, today, s_cfg.svc7000 ? 7000 : 15000, s, n);
+}
+
 static void TripTick()   // once a second
 {
     if (!s_trip.started) {
@@ -693,6 +725,7 @@ static void TripTick()   // once a second
         kmh = (int)(g.speedKmh + 0.5);
         s_trip.src = 2;
     }
+    OdoTick(kmh);
     if (kmh < 3)
         return;
     s_trip.km += kmh / 3600.0;
@@ -706,7 +739,7 @@ static void TripTick()   // once a second
 static void WTrip(HDC dc, int x, int y)
 {
     bool d = Widget(dc, x, y, kWgW2, kWgH2, s_trip.src == 1 ? L"Бортовой компьютер · Поездка · CAN"
-                    : L"Бортовой компьютер · Поездка · GPS", IC_CLOCK, A_SCREEN, S_CAR);
+                    : L"Бортовой компьютер · Поездка · GPS", IC_CLOCK, A_SCREEN, S_CAR, S_WSET_TRIP);
     wchar_t v[4][16];
     _snwprintf(v[0], 16, s_trip.km < 100 ? L"%.1f" : L"%.0f", s_trip.km);
     for (wchar_t* c = v[0]; *c; c++)
@@ -740,12 +773,13 @@ static void WTrip(HDC dc, int x, int y)
         _snwprintf(f, 48, L"сожжено %d,%d л", (int)s_trip.fuelL, (int)(s_trip.fuelL * 10) % 10);
     f[47] = 0;
     CharUpperBuff(f, 1);
-    if (kObdOn) {   // (the fuel: OBD's alone)
-        Sep(dc, x + 20, y + 246, kWgW2 - 40);
-        T(dc, x + 20, y + 280, f, 18, d ? kInk : kText, 700, AL_START, kWgW2 - 40);
-    }
+    Sep(dc, x + 20, y + 246, kWgW2 - 40);   // the service (the user 2026-11-14); the fuel (OBD's alone) below it
+    wchar_t sv[96];
+    int lv = SvcText(sv, 96);
+    T(dc, x + 20, y + 280, sv, 18, d ? kInk : lv == 2 ? kStop : lv == 1 ? kOrange : kText, 700, AL_START, kWgW2 - 40);
     if (s_trip.started) {
-        _snwprintf(s, 96, L"поездка с %02d:%02d", s_trip.start.wHour, s_trip.start.wMinute);
+        _snwprintf(s, 96, kObdOn ? L"поездка с %02d:%02d · %s" : L"поездка с %02d:%02d", s_trip.start.wHour,
+                   s_trip.start.wMinute, f);
         s[95] = 0;
         T(dc, x + 20, y + 306, s, 14, d ? kInk : kDim, 400, AL_START, kWgW2 - 40);
     }
@@ -989,6 +1023,26 @@ static void StockBack()
 // come up after ours is stopped): the flag \SDMMC\VestaStub.stock (the stub starts the shell at each boot while it is
 // there), then the unit restarted; back - VestaHome started by hand (StockBack). Otherwise the shell is started when it
 // does not run (it normally runs beside VestaHome). false: VestaHome stays (the restart did not take).
+static bool ShellStart();
+
+// Our Bluetooth off before the restart into the stock shell (HU 2026-11-14, sheet 33 p. 30: after the restart the
+// shell hung on the splash, a second one brought it up with its Bluetooth off - the restart does not reset the chip,
+// the shell's own came up over ours still running; a guess). Up to 15 s (the off took 12 s on the unit).
+static void BtOffForShell()
+{
+    if (BtPowerState() == BT_POW_OFF)
+        return;
+    wcscpy(s_status, L"выключаю Bluetooth перед перезагрузкой…");
+    InvalidateRect(s_wnd, NULL, FALSE);
+    UpdateWindow(s_wnd);
+    BtCmdText(BT_CMD_POWER, L"0");
+    DWORD t0 = GetTickCount();
+    while (BtPowerState() != BT_POW_OFF && GetTickCount() - t0 < 15000)
+        Sleep(200);
+    VLog(L"штатная оболочка: Bluetooth %s за %u мс", BtPowerState() == BT_POW_OFF ? L"выключен" : L"НЕ выключился",
+         (unsigned)(GetTickCount() - t0));
+}
+
 static bool ShellStart()
 {
 #ifdef UNDER_CE
@@ -997,6 +1051,7 @@ static bool ShellStart()
         if (f != INVALID_HANDLE_VALUE)
             CloseHandle(f);
         VLog(L"штатная оболочка: флаг %s %s, перезагрузка", kStockFlag, f != INVALID_HANDLE_VALUE ? L"есть" : L"НЕ ЗАПИСАН");
+        BtOffForShell();
         if (!Reboot())
             wcscpy(s_status, L"перезагрузите ГУ: удерживайте крутилку 10 с");
         return false;

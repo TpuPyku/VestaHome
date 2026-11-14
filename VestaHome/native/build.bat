@@ -7,7 +7,7 @@ if "%VS8%"=="" set VS8=C:\Program Files (x86)\Microsoft Visual Studio 8
 set VC=%VS8%\VC
 set SDK=%VS8%\SmartDevices\SDK\PocketPC2003
 set PATH=%VS8%\Common7\IDE;%VC%\bin;%PATH%
-set SRC=home.cpp netcat.cpp netcache.cpp country.cpp video.cpp wifi.cpp wifiie.cpp inikey.cpp obd.cpp btrf.cpp dialloc.cpp drawwhy.cpp btowner.cpp trackend.cpp pbcache.cpp netmirror.cpp presetpos.cpp zonepart.cpp secret.cpp rvc.cpp photo.cpp
+set SRC=home.cpp netcat.cpp netcache.cpp country.cpp video.cpp wifi.cpp wifiie.cpp inikey.cpp obd.cpp btrf.cpp dialloc.cpp drawwhy.cpp btowner.cpp trackend.cpp service.cpp pbcache.cpp netmirror.cpp presetpos.cpp zonepart.cpp secret.cpp rvc.cpp photo.cpp
 set OUT=..\VestaHome
 set BRINC=/I"..\..\third_party\bearssl-0.6\inc" /I"..\..\third_party\compat" /I"..\..\third_party\tjpgd"
 rem TJpgDec (photos): C, compiled on its own (/TC)

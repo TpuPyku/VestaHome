@@ -434,11 +434,10 @@ static void ScrNetCats(HDC dc)   // the genres, the countries or the languages, 
     }
     if (s_ncCatPage >= NcCatPages())
         s_ncCatPage = NcCatPages() - 1;
-    for (int r = 0, i = s_ncCatPage * kNcCatPer; r < kNcCatPer && i < s_ncCatN; r++, i++) {
-        wchar_t n[16];
-        _snwprintf(n, 16, L"%d", s_ncCats[i].count);
-        ListRow(dc, 16, 68 + r * kRowStep, 768, kRowH, s_ncCats[i].name, n, L_N, IC_NONE, NULL, NULL, A_NCPICK, i);
-    }
+    // (no count: the catalogue's own takes the stations we cannot play - HLS, other codecs - the user 2026-11-14:
+    // Туркменистан 4, the list 3)
+    for (int r = 0, i = s_ncCatPage * kNcCatPer; r < kNcCatPer && i < s_ncCatN; r++, i++)
+        ListRow(dc, 16, 68 + r * kRowStep, 768, kRowH, s_ncCats[i].name, NULL, L_N, IC_NONE, NULL, NULL, A_NCPICK, i);
     if (!s_ncCatN)
         EmptyList(dc, 40, 100, 720, s_ncBusy ? L"Загрузка…" : s_ncMsg[0] ? s_ncMsg : L"Пусто", NULL,
                   s_ncMsg[0] ? kOrange : CLR_INVALID);
@@ -550,11 +549,8 @@ static void ScrNetRadioList(HDC dc)
         Button(dc, 16, 62, bw, 44, L"Каталог", B_N, IC_NETRADIO, 16, 20, A_NRLIST, NL_CAT);
         _snwprintf(s, 120, L"› %s", s_ncPage.title);
         T(dc, 16 + bw + 12, 94, s, 16, kText, 700, AL_START, 600 - bw);
-        if (l.n) {
-            if (s_ncPage.total > 0)
-                _snwprintf(s, 120, L"%d–%d из %d", s_ncPage.offset + 1, s_ncPage.offset + s_ncPage.raw, s_ncPage.total);
-            else
-                _snwprintf(s, 120, L"%d–%d", s_ncPage.offset + 1, s_ncPage.offset + s_ncPage.raw);
+        if (l.n) {   // the stations listed (the catalogue's numbers count the ones we cannot play, see above)
+            _snwprintf(s, 120, L"станций: %d", l.n);
             T(dc, 776, 94, s, 14, kMuted, 600, AL_END);
         }
     } else {

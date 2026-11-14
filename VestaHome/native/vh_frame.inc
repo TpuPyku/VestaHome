@@ -60,6 +60,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_WSET_WEATHER: ScrWSetWeather(dc); break;
     case S_WSET_SPEED:  ScrWSetSpeed(dc); break;
     case S_WSET_CAR:    ScrWSetCar(dc); break;
+    case S_WSET_TRIP:   ScrWSetTrip(dc); break;
     case S_SET_HOME:    ScrSetHome(dc); break;
     case S_SET_THEME:   ScrSetTheme(dc); break;
     case S_SET_CAR:     ScrSetCar(dc); break;
