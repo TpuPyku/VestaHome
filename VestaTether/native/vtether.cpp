@@ -341,6 +341,16 @@ static bool IsAdb(LPCUSB_INTERFACE itf)
     return d.bInterfaceClass == 0xFF && d.bInterfaceSubClass == 0x42 && d.bInterfaceProtocol == 1 && HasBulkPair(itf);
 }
 
+// The debugging interface of a device given whole (a VID_PID key, HU 2026-11-14: the class keys never brought the
+// phone to us) - NULL none
+static LPCUSB_INTERFACE FindAdb(LPCUSB_CONFIGURATION cfg)
+{
+    for (DWORD i = 0; cfg && i < cfg->dwNumInterfaces; i++)
+        if (IsAdb(ItfAt(cfg, i)))
+            return ItfAt(cfg, i);
+    return NULL;
+}
+
 static bool LoadKey(AdbKey* k)
 {
     if (!s_keyPath[0]) {
@@ -533,8 +543,9 @@ extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE i
     }
     LPCUSB_INTERFACE ctl, data;
     if (!FindRndis(dev->lpActiveConfig, &ctl, &data)) {
-        if (itf && IsAdb(itf) && !s_adb)
-            StartAdb(h, f, itf, accept);
+        LPCUSB_INTERFACE adb = itf ? (IsAdb(itf) ? itf : NULL) : FindAdb(dev->lpActiveConfig);
+        if (adb && !s_adb)
+            StartAdb(h, f, adb, accept);
         else if (first)
             Log(L"RNDIS нет: %s", OtherKind(dev->lpActiveConfig));
         return TRUE;

@@ -619,6 +619,14 @@ static void TestAdb()
     s_adbAuth = s_adbKnows = true;
     Check(AdbComes() && s_adbEnd == ADB_DONE && !s_adbPub[0] && s_adbCmd[0], "adb: the key known - straight to the command");
     Gone();
+    AdbPhone();   // a whole-device key (the phone's VID_PID, HU 2026-11-14): no interface given - its ADB found
+    s_adbAuth = s_adbKnows = true;
+    BOOL whole = TRUE;
+    USBDeviceAttach((USB_HANDLE)2, &s_funcs, NULL, L"x", &whole, NULL, 0);
+    if (whole && s_adb)
+        WaitForSingleObject(s_adb->thread, 30000);
+    Check(whole && s_adbEnd == ADB_DONE && s_adbCmd[0], "adb: the whole device given (its VID_PID key) - its ADB found");
+    Gone();
     AdbPhone();
     Check(AdbComes() && s_adbEnd == ADB_DONE && s_adbCmd[0], "adb: a phone without auth - the command");
     Gone();

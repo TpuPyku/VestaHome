@@ -5,6 +5,9 @@
 // 2026-11-12: also the phone's debugging interface (ADB, CheryLink's way: the tethering switched on by a command), with
 // this unit's key - made once beside this exe (VestaTetherKey.bin), its path for the driver in the registry.
 #include <windows.h>
+#include <usbdi.h>
+#define USBCLI_LOG L"\\VestaTether.log"
+#include "../../VestaModem/native/usbcli.h"   // (its Log: the driver's log, a line of ours before the phone's)
 #include "adb.h"
 
 static const wchar_t* const kKeys[] = {
@@ -13,7 +16,12 @@ static const wchar_t* const kKeys[] = {
     L"Drivers\\USB\\LoadClients\\Default\\224_1_3\\Default\\VestaTether",    // the whole device
     L"Drivers\\USB\\LoadClients\\Default\\239_2_1\\Default\\VestaTether",    // a composite with interface associations
     L"Drivers\\USB\\LoadClients\\Default\\Default\\255_66_1\\VestaTether",   // a phone's ADB interface: FF/42/01
-    L"Drivers\\USB\\LoadClients\\Default\\Default\\Default\\VestaTether"     // anything without a driver: only logged
+    L"Drivers\\USB\\LoadClients\\Default\\Default\\Default\\VestaTether",    // anything without a driver: only logged
+    // Whole devices by VID_PID, as VestaModem's keys that work on the unit (HU 2026-11-14: the class keys above never
+    // brought the phone to us). The PC bench (tools/tether_bench.py, Xiaomi 23117RA68G): with "USB debugging" it is
+    // 18D1:4EE7 (ADB alone), after the command 2717:FF88 (RNDIS E0/01/03 + CDC data + ADB).
+    L"Drivers\\USB\\LoadClients\\6353_20199\\Default\\Default\\VestaTether",  // 18D1:4EE7 - Google's ADB id, many phones
+    L"Drivers\\USB\\LoadClients\\10007_65416\\Default\\Default\\VestaTether"  // 2717:FF88 - Xiaomi's tethering
 };
 
 // Randomness for the key: the system's generator where there is one, and whatever differs at each run
@@ -145,7 +153,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
                    MB_OK | MB_TOPMOST);
         return 1;
     }
+    InitializeCriticalSection(&s_logCs);   // (usbcli.h's lock: its DllMain is the driver's)
     DWORD err = Install();
+    // (HU 2026-11-14, sheet 33 p. 9-10: the cable in, nothing - no log at all: did USBD never call the driver? This line
+    // says the probe did its part; the driver's own "устройство ..." follows when USBD hands it the phone)
+    Log(L"проба: %s; теперь подключите телефон кабелем (без перезагрузки ГУ - она стирает драйвер)",
+        err ? L"НЕ ВЫШЛО" : L"драйвер в \\Windows, ключи USBD записаны");
+    if (err)
+        Log(L"проба: ошибка %u", err);
     wchar_t s[600] = L"";
     if (err)
         wsprintf(s, L"Не вышло, ошибка %u. Драйвер не установлен.", err);
