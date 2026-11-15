@@ -1349,7 +1349,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case MM_WOM_DONE:   // the camera beep has been played
         VoiceDone();
         return 0;
+    case WM_CLOSE: {   // HU 2026-11-15-2: closed twice ~10 s after the start, code 0, by whom unknown - said here
+        HWND f = GetForegroundWindow();
+        wchar_t cls[64] = L"";
+        DWORD pid = 0;
+        if (f) {
+            GetClassName(f, cls, 64);
+            GetWindowThreadProcessId(f, &pid);
+        }
+        VLog(L"выход: WM_CLOSE извне (впереди окно «%s», процесс %08X)", cls, pid);
+        break;
+    }
     case WM_DESTROY:
+        VLog(L"выход: окно VestaHome закрывается");
         PluginsQuit();
         UiRememberTick();   // the screen and the source as they are now, and what waits for the minute's save
         if (s_cfgSoon) {
