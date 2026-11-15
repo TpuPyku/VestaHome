@@ -1239,6 +1239,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
             Log(L"обновление закончено: запускаю VestaHome");
             continue;
         }
+        if (code == 3) {   // "Выход" pressed (HU 2026-11-15-2: the stock shell came "for no reason" - it was this): the
+            if (!lived)    // explorer instead, VestaHome may be started again by hand; we stay (watchdog, MCU host)
+                WriteCount(0);
+            Log(L"VestaHome закрыт кнопкой «Выход»: штатную не запускаю");
+            for (;;)
+                Sleep(60000);
+        }
         if (code == 0) {   // closed itself (or a second copy that found the first)
             if (!lived)
                 WriteCount(0);

@@ -320,6 +320,7 @@ static int     s_listDrag0;     // its scroll when the finger started
 #ifdef UNDER_CE
 static HWND    s_taskbar;
 #endif
+static int     s_exitCode;   // 3: "Выход" pressed - VestaStub then keeps the stock shell away (HU 2026-11-15-2)
 
 static const wchar_t* kMonths[12] = { L"января", L"февраля", L"марта", L"апреля", L"мая", L"июня",
                                       L"июля", L"августа", L"сентября", L"октября", L"ноября", L"декабря" };
@@ -1484,5 +1485,5 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
         } __except (CrashNote(GetExceptionInformation(), L"окне")) {
         }
     }
-    return 0;
+    return s_exitCode;
 }
