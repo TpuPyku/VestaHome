@@ -1,5 +1,6 @@
 # The HU check sheet generator, sheet 39 (2026-11-15, after HU 2026-11-15-5): the phone's USB driver built into
-# VestaHome (no TetherProbe; its switch in "Сеть"), the 3G settings' own screen, Android Auto's sound without MODE;
+# VestaHome (no TetherProbe; its switch in "Сеть"), the 3G settings' own screen, Android Auto's sound without MODE,
+# the support splash (VestaAuto 0.9) and the unit's ID;
 # VestaHome's bar behind Android Auto, AUX in MODE's round and the tunnels carried. Then the PDF. (Pattern: sheet 38.)
 import io, re, subprocess, os, time
 D = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs') + os.sep
@@ -11,9 +12,10 @@ for m in re.finditer(r'<tr><td class="n">(\d+)</td><td>(.*?)</td><td>(.*?)</td>'
     rows38[int(m.group(1))] = (m.group(2), m.group(3))
 SECTIONS = [
  ('Установка (сначала)', 'Новое: VestaHome сам ставит драйвер телефона по USB (TetherProbe больше не нужен и из Tests '
-  'убран), настройки 3G-модема — на отдельном экране.', [
-  ('VestaHome закрыть: «Настройки → Система → Выход». «Установить» в Tests\\SDCard\\VestaHomeInstall. Папку '
-   'TetherProbe с карты можно удалить. Перезагрузка.', 'Установщик без отказа; после перезагрузки VestaHome работает.'),
+  'убран), настройки 3G-модема — на отдельном экране, ID ГУ для ключа поддержки; VestaAuto 0.9 — заставка поддержки.', [
+  ('VestaHome закрыть: «Настройки → Система → Выход». «Установить» в Tests\\SDCard\\VestaHomeInstall. '
+   'Tests\\ResidentFlash\\VHContent — в \\ResidentFlash\\VHContent с заменой. Папку TetherProbe с карты можно удалить. '
+   'Перезагрузка.', 'Установщик без отказа; после перезагрузки VestaHome работает.'),
  ]),
  ('Телефон по USB без TetherProbe', 'На телефоне «Отладка по USB» не нужна — можно выключить.', [
   ('После перезагрузки TetherProbe НЕ запускать. Открыть экран Android Auto, подключить телефон кабелем.',
@@ -25,6 +27,17 @@ SECTIONS = [
   ('«Настройки → Сеть»: выключить «Телефон по USB». Отключить и снова подключить кабель (модем на телефоне включён).',
    'Интернета по кабелю нет, телефон только заряжается.'),
   ('Включить «Телефон по USB» снова, переподключить кабель.', 'Интернет по кабелю вернулся.'),
+ ]),
+ ('Заставка поддержки (VestaAuto 0.9)', 'Ничего не закрыто: заставка при каждом сеансе. На стоянке — «Продолжить» / '
+  '«Отмена», в движении — 5 с, пока грузится экран, потом сама.', [
+  ('«Настройки → О системе»: строка VestaHome. Записать ID (VH-…).', 'Версия и ID вида VH-XXXXX-XXXXX.'),
+  ('На стоянке открыть Android Auto, подключить кабель.', 'Заставка: QR-код, шутка, «boosty.to/vesta_home», тот же ID; '
+   'кнопки «Продолжить» и «Отмена».'),
+  ('Навести камеру телефона на QR-код.', 'Телефон открывает boosty.to/vesta_home.'),
+  ('«Отмена».', 'VestaHome; значок Android Auto — экран телефона сразу, без заставки.'),
+  ('Переподключить кабель, на заставке «Продолжить».', 'Экран телефона за 1–3 с.'),
+  ('(Если можно — пассажир, машина едет) переподключить кабель.', 'Заставка 5 с с отсчётом, потом экран телефона сам, '
+   'без кнопок.'),
  ]),
  ('Экран 3G-модема', None, [
   ('«Настройки → Сеть»: строка «3G-модем: оператор, APN» → «Настроить». Нажать «APN», ввести что-нибудь, '
