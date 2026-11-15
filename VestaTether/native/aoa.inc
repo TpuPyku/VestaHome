@@ -123,14 +123,70 @@ static void HoldIdle(USB_HANDLE h, LPCUSB_FUNCS f, LPBOOL accept)   // held only
     Log(L"телефон: жду - откройте экран Android Auto, и он перейдёт в Android Auto");
 }
 
+// The phone's bytes (HU 2026-11-15-3: a read that timed out aborted its transfer, the unit's USBD lost the bytes in it
+// and the session stood after the services): one thread keeps a transfer from the phone always under way, never
+// aborted while the phone is here, and puts what comes into a ring; AOA1:'s reads take from there.
+enum { kAoaChunk = 16384, kAoaRing = 262144 };   // (a transfer: whole packets of 512; the ring: a video frame and more)
+
 struct AoaDev {
-    USB_HANDLE    h;
-    LPCUSB_FUNCS  f;
-    volatile bool gone;
-    USB_PIPE      in, out;
-    HANDLE        stream;   // AOA1:
-    volatile LONG busy;     // reads and writes under way
+    USB_HANDLE       h;
+    LPCUSB_FUNCS     f;
+    volatile bool    gone;
+    USB_PIPE         in, out;
+    HANDLE           stream;   // AOA1:
+    volatile LONG    busy;     // reads and writes under way
+    HANDLE           reader, came;   // the reading thread; set when bytes come (or the phone goes)
+    CRITICAL_SECTION ringCs;
+    int              head, len;      // the ring's bytes: from head, len of them
+    u8               chunk[kAoaChunk], ring[kAoaRing];
 };
+
+static int RingRoom(AoaDev* d)
+{
+    EnterCriticalSection(&d->ringCs);
+    int room = kAoaRing - d->len;
+    LeaveCriticalSection(&d->ringCs);
+    return room;
+}
+
+static void RingPut(AoaDev* d, const u8* p, int n)   // (room checked by the only writer)
+{
+    EnterCriticalSection(&d->ringCs);
+    for (int i = 0; i < n; i++)
+        d->ring[(d->head + d->len + i) % kAoaRing] = p[i];
+    d->len += n;
+    LeaveCriticalSection(&d->ringCs);
+    SetEvent(d->came);
+}
+
+static int RingGet(AoaDev* d, u8* p, int cap)
+{
+    EnterCriticalSection(&d->ringCs);
+    int n = d->len < cap ? d->len : cap;
+    for (int i = 0; i < n; i++)
+        p[i] = d->ring[(d->head + i) % kAoaRing];
+    d->head = (d->head + n) % kAoaRing, d->len -= n;
+    LeaveCriticalSection(&d->ringCs);
+    return n;
+}
+
+static DWORD WINAPI AoaReader(LPVOID param)
+{
+    AoaDev* d = (AoaDev*)param;
+    while (!d->gone) {
+        if (RingRoom(d) < kAoaChunk) {   // (the session behind: the phone waits)
+            Sleep(10);
+            continue;
+        }
+        DWORD got = 0;
+        bool ok = Bulk(d, d->in, true, d->chunk, kAoaChunk, &got, INFINITE);
+        if (got && !d->gone)
+            RingPut(d, d->chunk, (int)got);
+        else if (!ok && !d->gone)
+            Sleep(50);   // (an error with the phone still here: not a spin)
+    }
+    return 0;
+}
 
 static AoaDev* volatile s_aoa;   // one phone at a time
 static CRITICAL_SECTION s_aoaCs;
@@ -176,8 +232,17 @@ static BOOL WINAPI AoaNotify(LPVOID param, DWORD code, LPDWORD*, LPDWORD*, LPDWO
     d->gone = true;
     s_aoa = NULL;
     LeaveCriticalSection(&s_aoaCs);
-    while (d->busy)   // (they end within a slice of Bulk's wait)
+    if (d->came)
+        SetEvent(d->came);   // (a read waiting ends)
+    if (d->reader) {   // (its transfer ends within a slice of Bulk's wait)
+        WaitForSingleObject(d->reader, INFINITE);
+        CloseHandle(d->reader);
+    }
+    while (d->busy)
         Sleep(20);
+    if (d->came)
+        CloseHandle(d->came);
+    DeleteCriticalSection(&d->ringCs);
     StreamOff(d->stream);
     if (d->in)
         d->f->lpClosePipe(d->in);
@@ -195,6 +260,8 @@ static void StartAoa(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE itf, LPBOOL 
         return;
     d->h = h;
     d->f = f;
+    InitializeCriticalSection(&d->ringCs);
+    d->came = CreateEvent(NULL, FALSE, FALSE, NULL);
     d->in = f->lpOpenPipe(h, &FindEp(itf, true)->Descriptor);
     d->out = f->lpOpenPipe(h, &FindEp(itf, false)->Descriptor);
     f->lpRegisterNotificationRoutine(h, AoaNotify, d);
@@ -202,7 +269,8 @@ static void StartAoa(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE itf, LPBOOL 
     AoaLock();
     s_aoa = d;
     LeaveCriticalSection(&s_aoaCs);
-    d->stream = d->in && d->out ? StreamOn() : NULL;
+    d->stream = d->in && d->out && d->came ? StreamOn() : NULL;
+    d->reader = d->stream ? CreateThread(NULL, 0, AoaReader, d, 0, NULL) : NULL;
     Log(d->stream ? L"AOA: аксессуар Android Auto - AOA1: готов" : L"AOA: аксессуар есть, AOA1: не создан");
 }
 
@@ -218,25 +286,41 @@ static AoaDev* AoaTake()   // the phone, held for one transfer; NULL - gone
     return d;
 }
 
-static DWORD AoaMove(bool in, void* buf, DWORD len, DWORD ms)
+// What the reading thread has, waited for at most s_aoaReadMs: 0 - nothing in time, -1 - the phone gone
+static DWORD AoaRead(u8* buf, DWORD len)
+{
+    AoaDev* d = AoaTake();
+    if (!d)
+        return (DWORD)-1;
+    int n = 0;
+    for (DWORD t0 = GetTickCount(); !(n = RingGet(d, buf, (int)len)) && !d->gone;) {
+        DWORD waited = GetTickCount() - t0;
+        if (waited >= s_aoaReadMs)
+            break;
+        WaitForSingleObject(d->came, s_aoaReadMs - waited);
+    }
+    bool gone = d->gone;
+    InterlockedDecrement((LONG*)&d->busy);
+    return n ? (DWORD)n : gone ? (DWORD)-1 : 0;
+}
+
+static DWORD AoaWrite(const void* buf, DWORD len)
 {
     AoaDev* d = AoaTake();
     if (!d)
         return (DWORD)-1;
     DWORD got = 0;
-    bool ok = Bulk(d, in ? d->in : d->out, in, buf, len, &got, ms);
+    bool ok = Bulk(d, d->out, false, (void*)buf, len, &got, s_aoaWriteMs);
     bool gone = d->gone;
     InterlockedDecrement((LONG*)&d->busy);
-    if (gone || (!ok && !in))
-        return (DWORD)-1;
-    return got;   // (a read with nothing in time: 0)
+    return gone || !ok ? (DWORD)-1 : got;
 }
 
 extern "C" DWORD AOA_Init(DWORD) { return 1; }
 extern "C" BOOL AOA_Deinit(DWORD) { return TRUE; }
 extern "C" DWORD AOA_Open(DWORD, DWORD, DWORD) { return s_aoa ? 1 : 0; }
 extern "C" BOOL AOA_Close(DWORD) { return TRUE; }
-extern "C" DWORD AOA_Read(DWORD, LPVOID buf, DWORD len) { return AoaMove(true, buf, len, s_aoaReadMs); }
-extern "C" DWORD AOA_Write(DWORD, LPCVOID buf, DWORD len) { return AoaMove(false, (void*)buf, len, s_aoaWriteMs); }
+extern "C" DWORD AOA_Read(DWORD, LPVOID buf, DWORD len) { return AoaRead((u8*)buf, len); }
+extern "C" DWORD AOA_Write(DWORD, LPCVOID buf, DWORD len) { return AoaWrite(buf, len); }
 extern "C" DWORD AOA_Seek(DWORD, long, DWORD) { return (DWORD)-1; }
 extern "C" BOOL AOA_IOControl(DWORD, DWORD, PBYTE, DWORD, PBYTE, DWORD, PDWORD) { return FALSE; }

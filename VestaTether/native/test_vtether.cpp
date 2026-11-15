@@ -339,7 +339,13 @@ static USB_TRANSFER FBulk(USB_PIPE pipe, LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID pa
     return NewTr(n, USB_NO_ERROR);
 }
 
-static BOOL FAbort(USB_TRANSFER, DWORD) { return TRUE; }
+static FTr* AoaWaiting();
+static BOOL FAbort(USB_TRANSFER t, DWORD)
+{
+    if (t && (FTr*)t == AoaWaiting())
+        ((FTr*)t)->n = 0;   // (counted there)
+    return TRUE;
+}
 
 static BOOL FStatus(USB_TRANSFER tr, LPDWORD n, LPDWORD err)
 {
@@ -776,6 +782,12 @@ static bool s_aoaFailOut;   // a write to the accessory refused
 static char s_aoaStr[6][80];
 static u8 s_aoaGot[300], s_aoaIn[300];
 static int s_aoaGotLen, s_aoaInLen;
+static CRITICAL_SECTION s_aoaCsFake;   // (the driver's reading thread and the test)
+static FTr* s_aoaWait;   // the phone's read waiting for its bytes
+static LPTRANSFER_NOTIFY_ROUTINE s_aoaWaitCb;
+static LPVOID s_aoaWaitParam, s_aoaWaitBuf;
+static DWORD s_aoaWaitCap;
+static int s_aoaAborts;   // reads of the phone aborted (HU 2026-11-15-3: an abort there loses its bytes)
 
 static USB_TRANSFER AoaVendor(DWORD flags, LPCUSB_DEVICE_REQUEST r, LPVOID buf)
 {
@@ -819,19 +831,54 @@ static USB_TRANSFER AoaBulk(LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD fl
         cb(param);
         return NewTr(len, USB_NO_ERROR);
     }
-    if (!s_aoaInLen)
-        return NewTr(0, USB_NOT_COMPLETE_ERROR);
-    int n = s_aoaInLen < (int)len ? s_aoaInLen : (int)len;
-    memcpy(buf, s_aoaIn, n);
-    s_aoaInLen = 0;
-    cb(param);
-    return NewTr(n, USB_NO_ERROR);
+    EnterCriticalSection(&s_aoaCsFake);
+    USB_TRANSFER t;
+    if (s_aoaInLen) {   // (the phone's bytes already there: at once)
+        int n = s_aoaInLen < (int)len ? s_aoaInLen : (int)len;
+        memcpy(buf, s_aoaIn, n);
+        s_aoaInLen = 0;
+        cb(param);
+        t = NewTr(n, USB_NO_ERROR);
+    } else {   // waits for the phone (AoaPhoneSends) - as the unit's USBD
+        FTr* p = (FTr*)NewTr(0, USB_NOT_COMPLETE_ERROR);
+        p->done = false;
+        s_aoaWait = p, s_aoaWaitCb = cb, s_aoaWaitParam = param, s_aoaWaitBuf = buf, s_aoaWaitCap = len;
+        t = p;
+    }
+    LeaveCriticalSection(&s_aoaCsFake);
+    return t;
+}
+
+static void AoaPhoneSends(const void* data, int n)   // into the read waiting, or kept for the next
+{
+    EnterCriticalSection(&s_aoaCsFake);
+    if (s_aoaWait) {
+        int k = n < (int)s_aoaWaitCap ? n : (int)s_aoaWaitCap;
+        memcpy(s_aoaWaitBuf, data, k);
+        s_aoaWait->n = k, s_aoaWait->err = USB_NO_ERROR, s_aoaWait->done = true;
+        s_aoaWait = NULL;
+        s_aoaWaitCb(s_aoaWaitParam);
+    } else {
+        memcpy(s_aoaIn + s_aoaInLen, data, n);
+        s_aoaInLen += n;
+    }
+    LeaveCriticalSection(&s_aoaCsFake);
+}
+
+static FTr* AoaWaiting()   // the read aborted: counted, no longer waiting
+{
+    EnterCriticalSection(&s_aoaCsFake);
+    FTr* t = s_aoaWait;
+    if (t)
+        s_aoaAborts++, s_aoaWait = NULL;
+    LeaveCriticalSection(&s_aoaCsFake);
+    return t;
 }
 
 static void AoaReset()
 {
     s_aoaVer = 2;
-    s_aoaAsks = s_aoaStarts = s_aoaBadReq = s_aoaGotLen = s_aoaInLen = s_aoaFailReq = 0;
+    s_aoaAsks = s_aoaStarts = s_aoaBadReq = s_aoaGotLen = s_aoaInLen = s_aoaFailReq = s_aoaAborts = 0;
     s_aoaVerLen = 2;
     s_aoaFailOut = false;
     memset(s_aoaStrLen, 0, sizeof(s_aoaStrLen));
@@ -923,13 +970,26 @@ static void TestAoaStream()
     Check(h != 0, "aoa: AOA1: opens while the phone is here");
     Check(AOA_Write(h, "\x00\x03\x00\x06", 4) == 4 && s_aoaGotLen == 4 && !memcmp(s_aoaGot, "\x00\x03\x00\x06", 4),
           "aoa: a write goes to the phone");
-    memcpy(s_aoaIn, "hello", 5);
-    s_aoaInLen = 5;
+    AoaPhoneSends("hello", 5);
     char buf[64];
     Check(AOA_Read(h, buf, sizeof(buf)) == 5 && !memcmp(buf, "hello", 5), "aoa: the phone's bytes read");
     s_aoaReadMs = 300;
     DWORD t0 = GetTickCount();
     Check(AOA_Read(h, buf, sizeof(buf)) == 0 && GetTickCount() - t0 < 1500, "aoa: nothing from the phone - 0 after a while");
+    Check(s_aoaAborts == 0, "aoa: a read with nothing in time leaves the phone's transfer be (HU 15.11-3: an abort lost bytes)");
+    AoaPhoneSends("abc", 3);   // (while no one reads)
+    AoaPhoneSends("defg", 4);
+    Sleep(100);
+    int n = (int)AOA_Read(h, buf, sizeof(buf));
+    n += n > 0 && n < 7 ? (int)AOA_Read(h, buf + n, sizeof(buf) - n) : 0;
+    Check(n == 7 && !memcmp(buf, "abcdefg", 7), "aoa: the bytes that came while no one read - all kept, in order");
+    AoaPhoneSends("1234567", 7);
+    Sleep(100);
+    memset(buf, '#', sizeof(buf));
+    n = (int)AOA_Read(h, buf, 3);
+    Check(n == 3 && !memcmp(buf, "123#", 4), "aoa: a read takes no more than asked, nothing past it written");
+    n = (int)AOA_Read(h, buf, sizeof(buf));
+    Check(n == 4 && !memcmp(buf, "4567", 4), "aoa: the next read - the rest, from where the last one stopped");
     s_aoaFailOut = true;
     Check(AOA_Write(h, "x", 1) == (DWORD)-1 && s_aoa != NULL, "aoa: a write refused - -1, the phone still here");
     s_aoaFailOut = false;
@@ -1037,6 +1097,7 @@ int main()
     s_funcs.lpOpenPipe = FOpenPipe;
     s_funcs.lpClosePipe = FClosePipe;
     s_funcs.lpIssueBulkTransfer = FBulk;
+    InitializeCriticalSection(&s_aoaCsFake);
     s_funcs.lpAbortTransfer = FAbort;
     s_funcs.lpGetTransferStatus = FStatus;
     s_funcs.lpCloseTransfer = FCloseTr;
