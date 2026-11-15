@@ -771,6 +771,8 @@ static void TestFails()
 // comes as 18D1:2D0x and its accessory interface is the stream device AOA1:
 
 static int s_aoaVer = 2, s_aoaAsks, s_aoaStarts, s_aoaBadReq;
+static int s_aoaVerLen = 2, s_aoaStrLen[6], s_aoaFailReq;   // its answer's bytes; a request it refuses (52 / 53)
+static bool s_aoaFailOut;   // a write to the accessory refused
 static char s_aoaStr[6][80];
 static u8 s_aoaGot[300], s_aoaIn[300];
 static int s_aoaGotLen, s_aoaInLen;
@@ -780,15 +782,20 @@ static USB_TRANSFER AoaVendor(DWORD flags, LPCUSB_DEVICE_REQUEST r, LPVOID buf)
     bool in = (r->bmRequestType & 0x80) != 0;
     if ((r->bmRequestType & 0x1F) != 0 || in != ((flags & USB_IN_TRANSFER) != 0) || (flags & USB_SEND_TO_INTERFACE))
         s_aoaBadReq++;   // (to the device, not an interface)
+    if ((r->bRequest == 51 || r->bRequest == 53) && (r->wIndex || r->wValue))
+        s_aoaBadReq++;   // (both with 0 in value and index)
     if (r->bRequest == 51 && in && r->wLength == 2) {
         s_aoaAsks++;
-        if (!s_aoaVer)
+        if (s_aoaVer < 0)
             return NewTr(0, USB_STALL_ERROR);
         ((u8*)buf)[0] = (u8)s_aoaVer;
-        ((u8*)buf)[1] = 0;
-        return NewTr(2, USB_NO_ERROR);
+        ((u8*)buf)[1] = (u8)(s_aoaVer >> 8);
+        return NewTr(s_aoaVerLen, USB_NO_ERROR);
     }
+    if (r->bRequest == s_aoaFailReq)
+        return NewTr(0, USB_STALL_ERROR);
     if (r->bRequest == 52 && !in && r->wIndex < 6 && r->wLength < 80) {
+        s_aoaStrLen[r->wIndex] = r->wLength;
         memcpy(s_aoaStr[r->wIndex], buf, r->wLength);
         return NewTr(r->wLength, USB_NO_ERROR);
     }
@@ -802,6 +809,10 @@ static USB_TRANSFER AoaVendor(DWORD flags, LPCUSB_DEVICE_REQUEST r, LPVOID buf)
 
 static USB_TRANSFER AoaBulk(LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD flags, DWORD len, LPVOID buf)
 {
+    if (!(flags & USB_IN_TRANSFER) && s_aoaFailOut) {
+        cb(param);
+        return NewTr(0, USB_STALL_ERROR);
+    }
     if (!(flags & USB_IN_TRANSFER)) {
         memcpy(s_aoaGot + s_aoaGotLen, buf, len);
         s_aoaGotLen += (int)len;
@@ -820,7 +831,10 @@ static USB_TRANSFER AoaBulk(LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD fl
 static void AoaReset()
 {
     s_aoaVer = 2;
-    s_aoaAsks = s_aoaStarts = s_aoaBadReq = s_aoaGotLen = s_aoaInLen = 0;
+    s_aoaAsks = s_aoaStarts = s_aoaBadReq = s_aoaGotLen = s_aoaInLen = s_aoaFailReq = 0;
+    s_aoaVerLen = 2;
+    s_aoaFailOut = false;
+    memset(s_aoaStrLen, 0, sizeof(s_aoaStrLen));
     memset(s_aoaStr, 0, sizeof(s_aoaStr));
 }
 
@@ -842,16 +856,41 @@ static void TestAoaSwitch()
     Check(!strcmp(s_aoaStr[0], "Android") && !strcmp(s_aoaStr[1], "Android Auto") && !strcmp(s_aoaStr[3], "2.0.1"),
           "aoa: the strings Android Auto wants (as the PC bench)");
     Check(!s_aoaBadReq, "aoa: vendor requests to the device");
+    bool lens = true;
+    for (int i = 0; i < 6; i++)
+        lens = lens && s_aoaStrLen[i] == (int)strlen(kAoaStrings[i]) + 1;
+    Check(lens, "aoa: each string with its ending zero");
     Check(s_adb == NULL && !s_adbCmd[0], "aoa: no ADB tethering for it");
     AoaReset();
     RndisPhone();   // (its tethering already on: Android Auto still wins while VestaAuto is open)
     Check(Attach((USB_HANDLE)5, NULL) == FALSE && s_aoaStarts == 1 && s_dev == NULL, "aoa: a tethering phone switched too");
     AoaReset();
-    s_aoaVer = 0;
+    s_aoaVer = -1;
     RndisPhone();
     Check(Attach((USB_HANDLE)6, NULL) == TRUE && s_aoaStarts == 0, "aoa: no accessory mode (a stall) - tethering as before");
     WaitForSingleObject(s_dev->thread, 30000);
     Gone();
+    struct { int ver, len, fail; const char* what; } no[] = {
+        { 0, 2, 0, "aoa: protocol 0 - no accessory mode, tethering" },
+        { 2, 1, 0, "aoa: a one-byte answer - not trusted, tethering" },
+        { 2, 2, 52, "aoa: a string refused - not started, tethering" },
+        { 2, 2, 53, "aoa: the start refused - tethering" } };
+    for (int k = 0; k < 4; k++) {
+        AoaReset();
+        s_aoaVer = no[k].ver;
+        s_aoaVerLen = no[k].len;
+        s_aoaFailReq = no[k].fail;
+        RndisPhone();
+        bool taken = Attach((USB_HANDLE)(INT_PTR)(20 + k), NULL) == TRUE;
+        Check(taken && s_aoaStarts == 0 && s_dev != NULL, no[k].what);
+        if (s_dev)
+            WaitForSingleObject(s_dev->thread, 30000);
+        Gone();
+    }
+    AoaReset();
+    s_aoaVer = 0x100;   // (version 1.0 told in its high byte)
+    RndisPhone();
+    Check(Attach((USB_HANDLE)30, NULL) == FALSE && s_aoaStarts == 1, "aoa: a version in the high byte - still switched");
     CloseHandle(vestaAuto);
     AoaReset();
     AdbPhone();
@@ -879,6 +918,7 @@ static void TestAoaStream()
     AccessoryPhone(0x2D01);
     Check(Attach((USB_HANDLE)8, NULL) == TRUE && s_aoa != NULL, "aoa: the accessory taken");
     Check(s_pipes == 2 && s_aoaAsks == 0, "aoa: its pipes open, not switched again");
+    Check(s_pipeAddr[0] == 0x81 && s_pipeAddr[1] == 0x01 && s_aoa->stream, "aoa: in and out each on its endpoint, AOA1: made");
     DWORD h = AOA_Open(1, GENERIC_READ | GENERIC_WRITE, 0);
     Check(h != 0, "aoa: AOA1: opens while the phone is here");
     Check(AOA_Write(h, "\x00\x03\x00\x06", 4) == 4 && s_aoaGotLen == 4 && !memcmp(s_aoaGot, "\x00\x03\x00\x06", 4),
@@ -890,10 +930,30 @@ static void TestAoaStream()
     s_aoaReadMs = 300;
     DWORD t0 = GetTickCount();
     Check(AOA_Read(h, buf, sizeof(buf)) == 0 && GetTickCount() - t0 < 1500, "aoa: nothing from the phone - 0 after a while");
+    s_aoaFailOut = true;
+    Check(AOA_Write(h, "x", 1) == (DWORD)-1 && s_aoa != NULL, "aoa: a write refused - -1, the phone still here");
+    s_aoaFailOut = false;
+    struct Reader {
+        static DWORD WINAPI Run(LPVOID h)
+        {
+            char b[16];
+            return AOA_Read((DWORD)(INT_PTR)h, b, sizeof(b));
+        }
+    };
+    s_aoaReadMs = 30000;
+    HANDLE rd = CreateThread(NULL, 0, Reader::Run, (LPVOID)(INT_PTR)h, 0, NULL);
+    Sleep(100);
     BOOL again = TRUE;
     USBDeviceAttach((USB_HANDLE)8, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[1], L"x", &again, NULL, 0);
     Check(!again && s_adb == NULL, "aoa: its ADB interface left alone");
+    t0 = GetTickCount();
     Gone();
+    DWORD rdEnd = 0;
+    WaitForSingleObject(rd, 5000);
+    GetExitCodeThread(rd, &rdEnd);
+    CloseHandle(rd);
+    Check(rdEnd == (DWORD)-1 && GetTickCount() - t0 < 2000, "aoa: a read waiting for the phone ends at once when it goes, -1");
+    s_aoaReadMs = 300;
     Check(s_aoa == NULL && s_pipes == 0, "aoa: gone - closed, free");
     Check(AOA_Read(h, buf, sizeof(buf)) == (DWORD)-1 && AOA_Write(h, "x", 1) == (DWORD)-1, "aoa: gone - reads and writes fail");
     Check(AOA_Open(1, GENERIC_READ, 0) == 0, "aoa: no phone - AOA1: does not open");
@@ -904,6 +964,23 @@ static void TestAoaStream()
     Gone();
     AccessoryPhone(0x2D01);
     Check(Attach((USB_HANDLE)10, (LPCUSB_INTERFACE)&s_itfs[1]) == FALSE && s_aoa == NULL, "aoa: only its ADB interface given - not taken");
+    AccessoryPhone(0x2D05);
+    Check(Attach((USB_HANDLE)12, NULL) == TRUE && s_aoa != NULL, "aoa: 18D1:2D05 (the last accessory id) - taken");
+    Gone();
+    AccessoryPhone(0x2D01);
+    s_failPipe = 2;
+    Check(Attach((USB_HANDLE)13, NULL) == TRUE && s_aoa && !s_aoa->stream, "aoa: a pipe not opened - no AOA1:");
+    Gone();
+    s_failPipe = 0;
+    AccessoryPhone(0x2D01);
+    Itf(0, 0xFF, 0xFF, 1, 1);   // FF/FF/01 - not the accessory's
+    s_cfg.dwNumInterfaces = 1;
+    Check(Attach((USB_HANDLE)14, NULL) == FALSE && s_aoa == NULL, "aoa: FF/FF/01 - not the accessory interface");
+    AccessoryPhone(0x2D01);
+    Itf(1, 0xFF, 0xFF, 0, 1);   // the accessory's at 1, but only interface 0 (ADB) counted
+    Itf(0, 0xFF, 0x42, 1, 1);
+    s_cfg.dwNumInterfaces = 1;
+    Check(Attach((USB_HANDLE)15, NULL) == FALSE && s_aoa == NULL, "aoa: only the interfaces counted are looked at");
     AccessoryPhone(0x2D06);
     s_cfg.dwNumInterfaces = 1;   // (its ADB would be ADB tethering's)
     Check(Attach((USB_HANDLE)11, NULL) == FALSE && s_aoa == NULL, "aoa: 18D1:2D06 is no accessory");
