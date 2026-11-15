@@ -619,6 +619,10 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         s_plugVoice = v[0] == L'1';
         if (s_plugVoice || !s_voice)
             NaviVoice(s_plugVoice);
+    } else if (!wcscmp(verb, L"sound")) {   // an add-on's own music starts (Android Auto): ours paused, the MCU's
+        VLog(L"дополнение %s: свой звук - наши плееры на паузу, источник медиа", p->id);   // source to media
+        OursQuiet();
+        MediaSource();
     } else if (!wcscmp(verb, L"nav")) {
         VNavParse(cmd, &s_nav);
         s_navPlug = (int)(p - s_plug);
