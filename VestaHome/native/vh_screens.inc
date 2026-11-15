@@ -421,26 +421,18 @@ static void RadioOn()
 }
 
 // AUX: the MCU's input as the shell's main menu does it (FUN_005f7cdc, Ghidra 2026-11-10: AUX - item 7, key 0x83;
-// item 8 - iPod, 0x82). Before, the screen only drew - the sound stayed the previous source's. First the jack's
-// state, as the shell tells the MCU at its start and on each change (FUN_004d4424: SV_DeviceStatusGetStatus(5) of
-// desay_sdk_api.dll, 1 = in -> SPApi_SendRadioAuxInOutStatus(0 / 1)) - under our stub nobody does. The MCU's source
-// number for AUX is learned from the change that follows (s_auxSrc, LearnSource).
+// item 8 - iPod, 0x82). Before, the screen only drew - the sound stayed the previous source's. The jack's state goes
+// to the MCU first (SPApi_SendRadioAuxInOutStatus, message 0x6C02, one byte). The jack itself cannot be read on this
+// firmware (Ghidra 2026-11-15): desay_sdk_api's SV_DeviceStatusGetStatus reads GPIO pin 0 for every type (its pin
+// table is all zeros), its notifications fail (AppProxy's table the same), the stock shell's SPIPower.log has only
+// "0" - and with "0" MODE leaves AUX out (sheet 36). So VestaHome says "in", at its start and on AUX (AuxPlugIn).
+// The MCU's source number for AUX is learned from the change that follows (s_auxSrc, LearnSource).
 static int   s_auxSrc = -1;   // the MCU's source number of AUX (-1 not seen yet)
 static DWORD s_auxAsk;        // our key 0x83 sent
 
-static int AuxJack()   // 1 a plug in, 0 none, -1 not known (the PC, no desay_sdk_api.dll)
+static void AuxPlugIn()
 {
-#ifdef UNDER_CE
-    static HMODULE s_sv;
-    if (!s_sv)
-        s_sv = LoadLibrary(L"desay_sdk_api.dll");
-    typedef int (*StatusFn)(DWORD type, DWORD* status);
-    StatusFn f = s_sv ? (StatusFn)GetProcAddress(s_sv, L"SV_DeviceStatusGetStatus") : NULL;
-    DWORD st = 0;
-    if (f && f(5, &st) == 0)
-        return st != 0;
-#endif
-    return -1;
+    McuSend2("SPApi_SendRadioAuxInOutStatus", 1, 0);   // (one argument: the second one is not read)
 }
 
 static void AuxOn()
@@ -448,12 +440,10 @@ static void AuxOn()
     ResumeByUser();
     OursQuiet();
     BtQuiet();
-    int vol, mute, src, jack = AuxJack();
+    int vol, mute, src;
     VolGet(&vol, &mute, &src);
-    if (jack >= 0)
-        McuSend2("SPApi_SendRadioAuxInOutStatus", jack, 0);   // (one argument: the second one is not read)
-    VLog(L"источник: AUX - штекер %s, клавиша 0x83 главного меню MCU (было %d)",
-         jack < 0 ? L"?" : jack ? L"вставлен" : L"не вставлен", src);
+    AuxPlugIn();
+    VLog(L"источник: AUX - штекер «вставлен» (гнездо не читается), клавиша 0x83 главного меню MCU (было %d)", src);
     SrcAsked(kSrcAny);
     s_auxAsk = s_srcByUs;
     MainMenuKey(0x83);

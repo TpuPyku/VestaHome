@@ -731,6 +731,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_btPathTick = 0;
                 BtQuiet();
             }
+            if (s_srcSeen == -2) {   // the first tick with the MCU: AUX into MODE's round (AuxPlugIn)
+                AuxPlugIn();
+                VLog(L"AUX: MCU сказано «штекер вставлен» (для круга MODE)");
+            }
             if (src != s_srcSeen) {
                 int aux = LearnSource(s_auxSrc, s_auxAsk ? now - s_auxAsk : 0xFFFFFFFF, s_srcSeen, src);
                 if (aux != s_auxSrc) {
