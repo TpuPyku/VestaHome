@@ -61,8 +61,6 @@ PLAN = (
     # its Android Auto session's certificate and key (aasdk's, VestaAuto\tools\get_cert.py; not in any repo)
     (os.path.join(ROOT, 'VestaAuto', 'tools'), r'ResidentFlash\VHContent\VHPlugins\VestaAuto',
         ('hu_cert.pem', 'hu_key.pem')),
-    (os.path.join(ROOT, 'VestaAuto', 'media'), r'SDCard\VestaAuto',
-        ('test.mp4', 'test.h264')),
 )
 
 
@@ -80,7 +78,8 @@ def copy(src, dst):
 # two cards; gone with them: GpsGate 2.0 - an old GPS test, MAIN has it; YaMapsCE - finished, its archive in build\;
 # VestaLaunch - inside LaunchInstall)
 RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets', r'ResidentFlash\VestaHome',
-           r'ResidentFlash\VHContent\VHPlugins\Sample')
+           r'ResidentFlash\VHContent\VHPlugins\Sample',
+           r'SDCard\VestaAuto')   # (the video probe's media: VestaAuto 0.6 shows the phone, no probe - the user 2026-11-15)
 
 
 def main():
