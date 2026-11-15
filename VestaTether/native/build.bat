@@ -22,10 +22,15 @@ echo === ARM (Windows CE)
   /DUNICODE /D_UNICODE /DUNDER_CE=0x420 /D_WIN32_WCE=0x420 /DWINCE /DARM /D_ARM_ /DARMV4 /DNDEBUG ^
   /I"%BR%\inc" /I"%COMPAT%" /I"%SDK%\Include" /I"%VC%\ce\include"
 if errorlevel 1 goto fail
+rem the network adapter (NDIS 5.1 miniport, step 2): the unit's NDIS only
+"%VC%\ce\bin\x86_arm\cl.exe" /nologo /O2 /W3 /GS- /TP /c ndismp.cpp /Foobj\arm\ ^
+  /DUNICODE /D_UNICODE /DUNDER_CE=0x420 /D_WIN32_WCE=0x420 /DWINCE /DARM /D_ARM_ /DARMV4 /DNDEBUG ^
+  /DNDIS_MINIPORT_DRIVER /DNDIS51_MINIPORT /DBINARY_COMPATIBLE=1 /Isdkfix /I"%SDK%\Include" /I"%VC%\ce\include"
+if errorlevel 1 goto fail
 "%VC%\ce\bin\x86_arm\link.exe" /nologo /DLL /SUBSYSTEM:WINDOWSCE,4.20 /MACHINE:ARM ^
   /OUT:"%OUT%\VestaTether.dll" /IMPLIB:obj\arm\VestaTether.lib /DEF:vtether.def obj\arm\vtether.obj obj\arm\rndis.obj ^
-  obj\arm\adb.obj %VH%\obj\bearssl_arm.lib ^
-  /LIBPATH:"%SDK%\Lib\armv4" /LIBPATH:"%VC%\ce\lib\armv4" coredll.lib corelibc.lib /NODEFAULTLIB:oldnames.lib
+  obj\arm\adb.obj obj\arm\ndismp.obj %VH%\obj\bearssl_arm.lib ^
+  /LIBPATH:"%SDK%\Lib\armv4" /LIBPATH:"%VC%\ce\lib\armv4" coredll.lib corelibc.lib ndis.lib /NODEFAULTLIB:oldnames.lib
 if errorlevel 1 goto fail
 "%VC%\ce\bin\x86_arm\link.exe" /nologo /SUBSYSTEM:WINDOWSCE,4.20 /MACHINE:ARM /OUT:"%OUT%\TetherProbe.exe" obj\arm\probe.obj ^
   obj\arm\adb.obj obj\arm\rndis.obj %VH%\obj\bearssl_arm.lib ^

@@ -11,3 +11,4 @@ EXPORTS
     AOA_Write
     AOA_Seek
     AOA_IOControl
+    DriverEntry

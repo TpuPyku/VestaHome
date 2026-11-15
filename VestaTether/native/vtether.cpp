@@ -10,6 +10,7 @@
 #include "../../VestaModem/native/usbcli.h"
 #include "rndis.h"
 #include "adb.h"
+#include "ndismp.h"
 
 enum { kTransfer = 16384, kCtlSize = 1025, kAskTries = 30, kDhcpTries = 4 };
 static DWORD s_askMs = 100;     // between reads of the phone's answers
@@ -29,6 +30,7 @@ struct Dev {
     u32              req;
     u8               mac[6];
     int              stage;
+    bool             adapter;   // registered with NDIS (step 2)
     u8               ctlBuf[kCtlSize];
     u8               buf[kTransfer];
 };
@@ -265,6 +267,43 @@ static void Steps(void* p)
     LogLease(lease);
 }
 
+// ---- step 2 (2026-11-15): the phone as a network adapter (ndismp.h) once the probe got its lease
+
+void NdisLog(const wchar_t* fmt, ...)   // (ndismp.cpp's lines in this log)
+{
+    wchar_t s[300];
+    va_list a;
+    va_start(a, fmt);
+    _vsnwprintf(s, 299, fmt, a);
+    va_end(a);
+    s[299] = 0;
+    Log(L"%s", s);
+}
+
+static bool PortSend(void* ctx, const u8* frame, int len)   // one Ethernet frame as an RNDIS packet
+{
+    Dev* d = (Dev*)ctx;
+    u8 m[1700];
+    int k = RndisWrap(m, sizeof(m), frame, len);
+    DWORD got;
+    return k && !d->gone && Bulk(d, d->out, false, m, (DWORD)k, &got, 1000);
+}
+
+static int PortRecv(void* ctx, u8* buf, int cap)
+{
+    Dev* d = (Dev*)ctx;
+    DWORD got = 0;
+    bool ok = Bulk(d, d->in, true, buf, (DWORD)cap, &got, 1000);
+    return d->gone ? -1 : ok ? (int)got : 0;
+}
+
+static void Adapter(Dev* d)
+{
+    TetherPort p = { d, { 0 }, PortSend, PortRecv };
+    memcpy(p.mac, d->mac, 6);
+    d->adapter = NdisUp(p);
+}
+
 // A probe's steps on its thread: a fault in them logged, not device.exe's
 static void Guarded(void (*steps)(void*), void* d, const wchar_t* who)
 {
@@ -280,8 +319,10 @@ static DWORD WINAPI Probe(LPVOID param)
     Dev* d = (Dev*)param;
     Guarded(Steps, d, L"проба");
     s_lastStage = d->stage;
-    if (d->stage == STAGE_LEASE)
-        Log(L"ПРОБА: успех - телефон раздаёт интернет по USB, можно делать адаптер");
+    if (d->stage == STAGE_LEASE) {
+        Log(L"ПРОБА: успех - телефон раздаёт интернет по USB");
+        Adapter(d);
+    }
     else
         Log(L"ПРОБА: остановилась на шаге «%s»", kStage[d->stage]);
     return 0;
@@ -294,6 +335,8 @@ static void FreeDev(Dev* d)
         WaitForSingleObject(d->thread, INFINITE);
         CloseHandle(d->thread);
     }
+    if (d->adapter)
+        NdisDown();   // (before the pipes close: its thread reads them)
     if (d->in)
         d->f->lpClosePipe(d->in);
     if (d->out)
