@@ -39,11 +39,22 @@ static LPCUSB_INTERFACE FindAoa(LPCUSB_CONFIGURATION cfg)
 }
 
 // The phone asked to come again as an accessory: false - it has no accessory mode (or refused)
-static bool SwitchToAccessory(USB_HANDLE h, LPCUSB_FUNCS f)
+// The accessory mode's version the device tells (0: none - not Android: a modem, a flash drive). Every Android phone
+// answers it, whatever its maker (2026-11-15: the makers' keys bring other devices of theirs here too).
+static int AoaVersion(USB_HANDLE h, LPCUSB_FUNCS f)
 {
     u8 ver[2] = { 0, 0 };
     DWORD got = 0;
-    if (!Request(h, f, USB_REQUEST_VENDOR, true, AOA_GET_PROTOCOL, 0, ver, 2, &got) || got < 2 || !(ver[0] | ver[1])) {
+    if (!Request(h, f, USB_REQUEST_VENDOR, true, AOA_GET_PROTOCOL, 0, ver, 2, &got) || got < 2)
+        return 0;
+    return ver[0] | ver[1] << 8;
+}
+
+static bool SwitchToAccessory(USB_HANDLE h, LPCUSB_FUNCS f)
+{
+    DWORD got = 0;
+    int ver = AoaVersion(h, f);
+    if (!ver) {
         Log(L"AOA: телефон не умеет режим аксессуара - как обычно");
         return false;
     }
@@ -52,7 +63,7 @@ static bool SwitchToAccessory(USB_HANDLE h, LPCUSB_FUNCS f)
             return false;
     if (!Request(h, f, USB_REQUEST_VENDOR, false, AOA_START, 0, NULL, 0, &got))
         return false;
-    Log(L"AOA: VestaAuto открыт - телефон переводится в Android Auto (AOA %u)", ver[0] | ver[1] << 8);
+    Log(L"AOA: VestaAuto открыт - телефон переводится в Android Auto (AOA %u)", ver);
     return true;
 }
 

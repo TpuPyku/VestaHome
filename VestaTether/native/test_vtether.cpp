@@ -1078,6 +1078,12 @@ static void TestAoaLater()
     Phone();
     Itf(0, 3, 1, 1, 1);   // a keyboard-like device: not a phone
     Check(Attach((USB_HANDLE)42, NULL) == FALSE, "aoa later: not a phone - not held");
+    AoaReset();
+    Phone();
+    Itf(0, 0xFF, 0xFF, 0xFF, 1);   // a 3G modem's vendor interface (Huawei: its maker's key brings it here too)
+    s_aoaVer = -1;                 // (no answer to the accessory's question: not Android)
+    Check(Attach((USB_HANDLE)44, NULL) == FALSE, "a vendor-class device that is not Android: not held (its own driver next)");
+    s_aoaVer = 2;
     DWORD t0 = GetTickCount();
     AoaReset();
     Phone();

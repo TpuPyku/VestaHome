@@ -27,9 +27,9 @@ static const wchar_t* const kTetherKeys[] = {
     L"Drivers\\USB\\LoadClients\\6353_11520\\Default\\Default\\VestaTether",  // 18D1:2D00 - an accessory
     L"Drivers\\USB\\LoadClients\\6353_11521\\Default\\Default\\VestaTether",  // 18D1:2D01 - an accessory + ADB
     // Every phone of the big makers, by the vendor alone (the user 2026-11-15: other phones without a list by hand). USBD
-    // takes the most exact key first (VID_PID before VID), and a device the driver does not accept (a flash drive of the
-    // same maker: not MTP / vendor-class) goes on to its own driver. No Huawei (12D1): its phones have no Google
-    // services (no Android Auto), and its 3G modems are VestaModem's and the CD-ROM driver's.
+    // takes the most exact key first (VID_PID before VID: VestaModem's Huawei modems stay its), and a device the driver
+    // does not accept goes on to its own driver: it holds only what answers the accessory mode's question - Android (a
+    // modem, a flash drive of the same maker: not).
     L"Drivers\\USB\\LoadClients\\1256\\Default\\Default\\VestaTether",    // 04E8 Samsung
     L"Drivers\\USB\\LoadClients\\6353\\Default\\Default\\VestaTether",    // 18D1 Google (Pixel; many phones' ADB / AOA ids)
     L"Drivers\\USB\\LoadClients\\10007\\Default\\Default\\VestaTether",   // 2717 Xiaomi, Redmi, POCO
@@ -42,27 +42,45 @@ static const wchar_t* const kTetherKeys[] = {
     L"Drivers\\USB\\LoadClients\\6610\\Default\\Default\\VestaTether",    // 19D2 ZTE
     L"Drivers\\USB\\LoadClients\\2821\\Default\\Default\\VestaTether",    // 0B05 Asus
     L"Drivers\\USB\\LoadClients\\13211\\Default\\Default\\VestaTether",   // 339B Honor
-    L"Drivers\\USB\\LoadClients\\11780\\Default\\Default\\VestaTether"    // 2E04 Nokia (HMD)
+    L"Drivers\\USB\\LoadClients\\11780\\Default\\Default\\VestaTether",   // 2E04 Nokia (HMD)
+    L"Drivers\\USB\\LoadClients\\4817\\Default\\Default\\VestaTether",    // 12D1 Huawei (and old Honor)
+    L"Drivers\\USB\\LoadClients\\10821\\Default\\Default\\VestaTether",   // 2A45 Meizu
+    L"Drivers\\USB\\LoadClients\\6127\\Default\\Default\\VestaTether",    // 17EF Lenovo
+    L"Drivers\\USB\\LoadClients\\2996\\Default\\Default\\VestaTether"     // 0BB4 HTC
 };
 enum { kTetherKeyCount = sizeof(kTetherKeys) / sizeof(kTetherKeys[0]) };
+// "Режим совместимости" (Настройки -> Сеть, off by default - the user 2026-11-15): any device without its own driver
+// comes to ours too - a phone of a maker not above. It holds only Android; the rest - one question, then let go.
+static const wchar_t kTetherAnyKey[] = L"Drivers\\USB\\LoadClients\\Default\\Default\\Default\\VestaTether";
 
-// The driver (its file: `dll`) into \Windows (already loaded - the copy there stays), the keys written; 0 or the error.
-static DWORD TetherRegister(const wchar_t* dll)
+static LONG TetherKey(const wchar_t* path)
+{
+    HKEY k;
+    DWORD disp;
+    LONG r = RegCreateKeyEx(HKEY_LOCAL_MACHINE, path, 0, NULL, 0, 0, NULL, &k, &disp);
+    if (r != ERROR_SUCCESS)
+        return r;
+    static const wchar_t kDll[] = L"VestaTether.dll";
+    RegSetValueEx(k, L"DLL", 0, REG_SZ, (const BYTE*)kDll, sizeof(kDll));
+    RegCloseKey(k);
+    return ERROR_SUCCESS;
+}
+
+// The driver (its file: `dll`) into \Windows (already loaded - the copy there stays), the keys written (any: the
+// compatibility mode's too, else it deleted); 0 or the error.
+static DWORD TetherRegister(const wchar_t* dll, bool any)
 {
     if (!CopyFile(dll, L"\\Windows\\VestaTether.dll", FALSE) &&
         GetFileAttributes(L"\\Windows\\VestaTether.dll") == 0xFFFFFFFF)
         return GetLastError();
     for (int i = 0; i < kTetherKeyCount; i++) {
-        HKEY k;
-        DWORD disp;
-        LONG r = RegCreateKeyEx(HKEY_LOCAL_MACHINE, kTetherKeys[i], 0, NULL, 0, 0, NULL, &k, &disp);
+        LONG r = TetherKey(kTetherKeys[i]);
         if (r != ERROR_SUCCESS)
             return (DWORD)r;
-        static const wchar_t kDll[] = L"VestaTether.dll";
-        RegSetValueEx(k, L"DLL", 0, REG_SZ, (const BYTE*)kDll, sizeof(kDll));
-        RegCloseKey(k);
     }
-    return 0;
+    if (!any)
+        RegDeleteKey(HKEY_LOCAL_MACHINE, kTetherAnyKey);
+    return any ? (DWORD)TetherKey(kTetherAnyKey) : 0;
 }
 
 // The keys deleted: the next phone in is not ours (one plugged in keeps the driver until it is out).
@@ -70,6 +88,7 @@ static void TetherUnregister()
 {
     for (int i = 0; i < kTetherKeyCount; i++)
         RegDeleteKey(HKEY_LOCAL_MACHINE, kTetherKeys[i]);
+    RegDeleteKey(HKEY_LOCAL_MACHINE, kTetherAnyKey);
 }
 
 #endif

@@ -481,6 +481,7 @@ static void CfgToControls()
     s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
     s_on[T_NET_AUTO] = s_cfg.netAuto;
     s_on[T_PHONE_USB] = s_cfg.phoneUsb;
+    s_on[T_PHONE_ANY] = s_cfg.phoneAny;
     s_on[T_NMEA_PORT] = s_cfg.nmeaPort;
     s_on[T_WIFI] = s_cfg.wifiOn;
     s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
@@ -517,8 +518,9 @@ static void ControlsToCfg()
     s_cfg.camWeekly = s_on[T_CAM_WEEKLY];
     s_cfg.videoMoving = s_on[T_VIDEO_MOVING];
     s_cfg.netAuto = s_on[T_NET_AUTO];
-    if (s_cfg.phoneUsb != s_on[T_PHONE_USB]) {
+    if (s_cfg.phoneUsb != s_on[T_PHONE_USB] || s_cfg.phoneAny != s_on[T_PHONE_ANY]) {
         s_cfg.phoneUsb = s_on[T_PHONE_USB];
+        s_cfg.phoneAny = s_on[T_PHONE_ANY];
         PhoneUsbSet(s_cfg.phoneUsb);
     }
     s_cfg.photoSlides = s_on[T_SLIDES_OPEN];

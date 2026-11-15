@@ -251,11 +251,12 @@ static void PhoneUsbSet(bool on)
     }
     wchar_t src[MAX_PATH];
     _snwprintf(src, MAX_PATH, L"%sVestaTether.dll", s_dir);
-    DWORD err = TetherRegister(src);
+    DWORD err = TetherRegister(src, s_cfg.phoneAny);
     if (err)
         VLog(L"телефон по USB: драйвер не встал (%s, ошибка %lu)", src, err);
     else
-        VLog(L"телефон по USB: драйвер зарегистрирован - Android Auto (экран VestaAuto) или USB-модем телефона");
+        VLog(L"телефон по USB: драйвер зарегистрирован%s - Android Auto (экран VestaAuto) или USB-модем телефона",
+             s_cfg.phoneAny ? L" (режим совместимости: любые марки)" : L"");
 #else
     VLog(L"телефон по USB: ПК - только %s", on ? L"включено" : L"выключено");   // (the driver is the unit's only)
 #endif
@@ -1313,6 +1314,8 @@ static void ScrSetNet(HDC dc)
     Button(dc, 600, 238, 160, 44, L"Настроить", B_N, IC_NONE, 16, 0, A_SCREEN, S_SET_NET3G);
     SetRow(dc, 288, L"Автоподключение", L"при вставке модема и после обрыва", true);
     Toggle(dc, 688, 298, T_NET_AUTO);
+    SetRow(dc, 344, L"Режим совместимости", L"телефон по USB любой марки (если свой не находится)", true);
+    Toggle(dc, 688, 354, T_PHONE_ANY);
 }
 
 // The 3G modem's operator, APN, login (the user 2026-11-15: on their own screen, by a button - room on "Сеть")

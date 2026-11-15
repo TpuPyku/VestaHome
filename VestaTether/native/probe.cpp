@@ -118,7 +118,7 @@ static DWORD Install()
     if (err)
         return err;
     wcscpy(src + n, L"VestaTether.dll");
-    return TetherRegister(src);
+    return TetherRegister(src, true);   // (the probe: every device, to see what comes)
 }
 
 // ---- what the unit does with the phone (sheet 34 p. 24-25: it only charged, our driver never called)

@@ -615,7 +615,7 @@ extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE i
             StartAdb(h, f, adb, accept);
         else if (first)
             Log(L"RNDIS нет: %s", OtherKind(dev->lpActiveConfig));
-        if (!*accept && first && !itf && IsPhoneLike(dev->lpActiveConfig))
+        if (!*accept && first && !itf && IsPhoneLike(dev->lpActiveConfig) && AoaVersion(h, f))   // (Android only)
             HoldIdle(h, f, accept);
     } else if (!s_dev) {   // (the second interface of the same phone comes here too)
         StartRndis(h, f, ctl, data, accept);

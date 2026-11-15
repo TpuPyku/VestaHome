@@ -160,7 +160,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_SVC7000, T_PHONE_USB, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_SVC7000, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
