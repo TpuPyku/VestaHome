@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "secret.h"
+#include "vlicense.h"
 
 extern "C" {
 #include "bearssl.h"
@@ -14,62 +15,18 @@ static bool          s_ready;
 
 enum { kNonce = 12, kTag = 8, kMaxPlain = 128 };
 
-#ifdef UNDER_CE
-extern "C" BOOL KernelIoControl(DWORD code, LPVOID in, DWORD inSize, LPVOID out, DWORD outSize, LPDWORD ret);
-#endif
 
 // What makes this unit itself: its device id (the HAL's), otherwise the MAC addresses of its adapters.
 static int s_source;   // 1 the device id, 2 the MAC addresses, 3 the PC's volume, 0 nothing
 
-static int UnitId(unsigned char* buf, int cap)
+static int UnitId(unsigned char* buf, int cap)   // (VestaCore: the support license's ID uses the same bytes)
 {
-    int n = 0;
-#ifdef UNDER_CE
-    const DWORD IOCTL_HAL_GET_DEVICEID = 0x01010054;   // CTL_CODE(FILE_DEVICE_HAL, 21, METHOD_BUFFERED, 0)
-    DWORD got = 0;
-    memset(buf, 0, cap);
-    *(DWORD*)buf = cap;   // DEVICE_ID.dwSize
-    if (KernelIoControl(IOCTL_HAL_GET_DEVICEID, NULL, 0, buf, cap, &got) && got > 20) {
-        s_source = 1;
-        return (int)got;
-    }
-    struct IpAddr { void* next; char ip[16]; char mask[16]; DWORD ctx; };
-    struct Adapter { Adapter* next; DWORD combo; char name[260]; char descr[132]; UINT alen; BYTE addr[8]; };
-    typedef DWORD (WINAPI *AdaptersFn)(void*, ULONG*);
-    HMODULE ip = LoadLibrary(L"iphlpapi.dll");
-    AdaptersFn f = ip ? (AdaptersFn)GetProcAddress(ip, L"GetAdaptersInfo") : NULL;
-    ULONG size = 0;
-    if (f)
-        f(NULL, &size);
-    if (f && size && size < 64 * 1024) {
-        Adapter* a = (Adapter*)malloc(size);
-        if (a && f(a, &size) == 0)
-            for (Adapter* p = a; p && n + 8 <= cap; p = p->next)
-                if (p->alen >= 6 && p->alen <= 8) {
-                    memcpy(buf + n, p->addr, p->alen);
-                    n += p->alen;
-                }
-        free(a);
-    }
-    s_source = n ? 2 : 0;
-#else
-    DWORD serial = 0;   // PC test build: the system volume's serial number
-    GetVolumeInformation(L"C:\\", NULL, 0, &serial, NULL, NULL, NULL, 0);
-    memcpy(buf, &serial, 4);
-    n = 4;
-    s_source = 3;
-#endif
-    return n;
-}
-
-int SecretUnitBytes(unsigned char* buf, int cap)
-{
-    return UnitId(buf, cap);
+    return LicenseUnitBytes(buf, cap, &s_source);
 }
 
 int SecretInit()
 {
-    unsigned char id[256];
+    unsigned char id[LICENSE_UNIT_MAX];   // (the same room as LicenseUnitId's: the same bytes)
     int n = UnitId(id, sizeof(id));
     br_sha256_context h;
     unsigned char k[32];

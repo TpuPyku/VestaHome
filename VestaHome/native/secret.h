@@ -9,8 +9,6 @@ int  SecretInit();   // once, before the settings are read; the key's source: 1 
 bool SecretSeal(const wchar_t* plain, wchar_t* out, int cap);     // false: too long
 bool SecretOpen(const wchar_t* sealed, wchar_t* plain, int cap);  // false: not sealed here, or damaged
 bool SecretIsSealed(const wchar_t* s);
-// The unit's own bytes (the HAL's device id, else the adapters' MAC addresses): the support license's ID (vlicense.h)
-int  SecretUnitBytes(unsigned char* buf, int cap);
 // Bytes sealed the same way (the phone book's cache, pbcache.h): out = nonce, cipher text, tag. Their length, -1: out
 // too small or no key. Open: the plain length in out, -1 - another unit's, damaged, or out too small.
 int  SecretSealBytes(const unsigned char* plain, int n, unsigned char* out, int cap);

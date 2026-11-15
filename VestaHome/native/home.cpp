@@ -367,21 +367,13 @@ static bool    s_support;
 
 static void SupportInit()
 {
-    unsigned char hw[64];
-    int n = SecretUnitBytes(hw, sizeof(hw));
-    LicenseIdText(hw, n, s_unitId);
+    LicenseUnitId(s_unitId);
     wchar_t path[MAX_PATH];
     _snwprintf(path, MAX_PATH, L"%sVestaLicense.key", s_dir);
-    char text[1024];
-    DWORD got = 0;
-    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (f != INVALID_HANDLE_VALUE) {
-        ReadFile(f, text, sizeof(text), &got, NULL);
-        CloseHandle(f);
-    }
-    s_support = got && LicenseValid(text, (int)got, s_unitId);
+    bool found;
+    s_support = LicenseFileValid(path, s_unitId, &found);
     VLog(L"поддержка: ID %s, ключ %s", s_unitId,
-         s_support ? L"есть" : f == INVALID_HANDLE_VALUE ? L"нет" : L"не подходит (другой ГУ или повреждён)");
+         s_support ? L"есть" : !found ? L"нет" : L"не подходит (другой ГУ или повреждён)");
 }
 
 #include "vh_draw.inc"
