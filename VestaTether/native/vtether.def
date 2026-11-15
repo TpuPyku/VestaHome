@@ -3,3 +3,11 @@ EXPORTS
     USBDeviceAttach
     USBInstallDriver
     USBUnInstallDriver
+    AOA_Init
+    AOA_Deinit
+    AOA_Open
+    AOA_Close
+    AOA_Read
+    AOA_Write
+    AOA_Seek
+    AOA_IOControl

@@ -147,8 +147,12 @@ static USB_TRANSFER Noise(u8* buf)
     return NewTr(16, USB_NO_ERROR);
 }
 
+static USB_TRANSFER AoaVendor(DWORD flags, LPCUSB_DEVICE_REQUEST r, LPVOID buf);
+
 static USB_TRANSFER FVendor(USB_HANDLE, LPTRANSFER_NOTIFY_ROUTINE, LPVOID, DWORD flags, LPCUSB_DEVICE_REQUEST r, LPVOID buf, ULONG phys)
 {
+    if ((r->bmRequestType & 0x60) == USB_REQUEST_VENDOR)
+        return AoaVendor(flags, r, buf);
     s_wrongCtlIndex = (u8)(s_wrongCtlIndex | (r->wIndex != 0));
     bool in = (r->bmRequestType & 0x80) != 0;
     if (phys || r->wValue || in != ((flags & USB_IN_TRANSFER) != 0) || r->bRequest != (in ? 1 : 0))
@@ -299,9 +303,14 @@ static USB_TRANSFER AdbBulk(LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD fl
     return NewTr(n, USB_NO_ERROR);
 }
 
+static USB_TRANSFER AoaBulk(LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD flags, DWORD len, LPVOID buf);
+static bool s_aoaPhone;
+
 static USB_TRANSFER FBulk(USB_PIPE pipe, LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD flags, DWORD len, LPVOID buf, ULONG)
 {
     (void)pipe;
+    if (s_aoaPhone)
+        return AoaBulk(cb, param, flags, len, buf);
     if (s_adbPhone)
         return AdbBulk(cb, param, flags, len, buf);
     if (!(flags & USB_IN_TRANSFER)) {
@@ -434,6 +443,7 @@ static void Phone()
     s_adbOkays = s_adbChunks = s_adbChunkAt = 0;
     s_adbCmd[0] = s_adbPub[0] = 0;
     s_adbEnd = -1;
+    s_aoaPhone = false;
 }
 
 static USB_FUNCS s_funcs;
@@ -756,6 +766,149 @@ static void TestFails()
     s_dhcpMs = 2000;
 }
 
+
+// ---- Android Auto (2026-11-15): VestaAuto open (its mutex) - a phone is switched into accessory mode (AOA); then it
+// comes as 18D1:2D0x and its accessory interface is the stream device AOA1:
+
+static int s_aoaVer = 2, s_aoaAsks, s_aoaStarts, s_aoaBadReq;
+static char s_aoaStr[6][80];
+static u8 s_aoaGot[300], s_aoaIn[300];
+static int s_aoaGotLen, s_aoaInLen;
+
+static USB_TRANSFER AoaVendor(DWORD flags, LPCUSB_DEVICE_REQUEST r, LPVOID buf)
+{
+    bool in = (r->bmRequestType & 0x80) != 0;
+    if ((r->bmRequestType & 0x1F) != 0 || in != ((flags & USB_IN_TRANSFER) != 0) || (flags & USB_SEND_TO_INTERFACE))
+        s_aoaBadReq++;   // (to the device, not an interface)
+    if (r->bRequest == 51 && in && r->wLength == 2) {
+        s_aoaAsks++;
+        if (!s_aoaVer)
+            return NewTr(0, USB_STALL_ERROR);
+        ((u8*)buf)[0] = (u8)s_aoaVer;
+        ((u8*)buf)[1] = 0;
+        return NewTr(2, USB_NO_ERROR);
+    }
+    if (r->bRequest == 52 && !in && r->wIndex < 6 && r->wLength < 80) {
+        memcpy(s_aoaStr[r->wIndex], buf, r->wLength);
+        return NewTr(r->wLength, USB_NO_ERROR);
+    }
+    if (r->bRequest == 53 && !in && !r->wLength) {
+        s_aoaStarts++;
+        return NewTr(0, USB_NO_ERROR);
+    }
+    s_aoaBadReq++;
+    return NewTr(0, USB_STALL_ERROR);
+}
+
+static USB_TRANSFER AoaBulk(LPTRANSFER_NOTIFY_ROUTINE cb, LPVOID param, DWORD flags, DWORD len, LPVOID buf)
+{
+    if (!(flags & USB_IN_TRANSFER)) {
+        memcpy(s_aoaGot + s_aoaGotLen, buf, len);
+        s_aoaGotLen += (int)len;
+        cb(param);
+        return NewTr(len, USB_NO_ERROR);
+    }
+    if (!s_aoaInLen)
+        return NewTr(0, USB_NOT_COMPLETE_ERROR);
+    int n = s_aoaInLen < (int)len ? s_aoaInLen : (int)len;
+    memcpy(buf, s_aoaIn, n);
+    s_aoaInLen = 0;
+    cb(param);
+    return NewTr(n, USB_NO_ERROR);
+}
+
+static void AoaReset()
+{
+    s_aoaVer = 2;
+    s_aoaAsks = s_aoaStarts = s_aoaBadReq = s_aoaGotLen = s_aoaInLen = 0;
+    memset(s_aoaStr, 0, sizeof(s_aoaStr));
+}
+
+static BOOL Attach(USB_HANDLE h, LPCUSB_INTERFACE itf)
+{
+    BOOL accept = TRUE;
+    USBDeviceAttach(h, &s_funcs, itf, L"x", &accept, NULL, 0);
+    return accept;
+}
+
+static void TestAoaSwitch()
+{
+    HANDLE vestaAuto = CreateMutex(NULL, FALSE, L"VestaAuto_AA");
+    AoaReset();
+    AdbPhone();   // (its ordinary mode: MTP + ADB)
+    s_adbAuth = s_adbKnows = true;
+    Attach((USB_HANDLE)4, NULL);
+    Check(s_aoaAsks == 1 && s_aoaStarts == 1, "aoa: VestaAuto open - the phone asked, then started as an accessory");
+    Check(!strcmp(s_aoaStr[0], "Android") && !strcmp(s_aoaStr[1], "Android Auto") && !strcmp(s_aoaStr[3], "2.0.1"),
+          "aoa: the strings Android Auto wants (as the PC bench)");
+    Check(!s_aoaBadReq, "aoa: vendor requests to the device");
+    Check(s_adb == NULL && !s_adbCmd[0], "aoa: no ADB tethering for it");
+    AoaReset();
+    RndisPhone();   // (its tethering already on: Android Auto still wins while VestaAuto is open)
+    Check(Attach((USB_HANDLE)5, NULL) == FALSE && s_aoaStarts == 1 && s_dev == NULL, "aoa: a tethering phone switched too");
+    AoaReset();
+    s_aoaVer = 0;
+    RndisPhone();
+    Check(Attach((USB_HANDLE)6, NULL) == TRUE && s_aoaStarts == 0, "aoa: no accessory mode (a stall) - tethering as before");
+    WaitForSingleObject(s_dev->thread, 30000);
+    Gone();
+    CloseHandle(vestaAuto);
+    AoaReset();
+    AdbPhone();
+    s_adbAuth = s_adbKnows = true;
+    Attach((USB_HANDLE)7, NULL);
+    if (s_adb)
+        WaitForSingleObject(s_adb->thread, 30000);
+    Check(s_aoaAsks == 0 && s_adbCmd[0], "aoa: VestaAuto closed - not asked, ADB tethering as before");
+    Gone();
+}
+
+static void AccessoryPhone(int pid)
+{
+    Phone();
+    Itf(0, 0xFF, 0xFF, 0, 1);   // the accessory
+    Itf(1, 0xFF, 0x42, 1, 1);   // ADB
+    s_devd.Descriptor.idVendor = 0x18D1;
+    s_devd.Descriptor.idProduct = (USHORT)pid;
+    s_aoaPhone = true;
+    AoaReset();
+}
+
+static void TestAoaStream()
+{
+    AccessoryPhone(0x2D01);
+    Check(Attach((USB_HANDLE)8, NULL) == TRUE && s_aoa != NULL, "aoa: the accessory taken");
+    Check(s_pipes == 2 && s_aoaAsks == 0, "aoa: its pipes open, not switched again");
+    DWORD h = AOA_Open(1, GENERIC_READ | GENERIC_WRITE, 0);
+    Check(h != 0, "aoa: AOA1: opens while the phone is here");
+    Check(AOA_Write(h, "\x00\x03\x00\x06", 4) == 4 && s_aoaGotLen == 4 && !memcmp(s_aoaGot, "\x00\x03\x00\x06", 4),
+          "aoa: a write goes to the phone");
+    memcpy(s_aoaIn, "hello", 5);
+    s_aoaInLen = 5;
+    char buf[64];
+    Check(AOA_Read(h, buf, sizeof(buf)) == 5 && !memcmp(buf, "hello", 5), "aoa: the phone's bytes read");
+    s_aoaReadMs = 300;
+    DWORD t0 = GetTickCount();
+    Check(AOA_Read(h, buf, sizeof(buf)) == 0 && GetTickCount() - t0 < 1500, "aoa: nothing from the phone - 0 after a while");
+    BOOL again = TRUE;
+    USBDeviceAttach((USB_HANDLE)8, &s_funcs, (LPCUSB_INTERFACE)&s_itfs[1], L"x", &again, NULL, 0);
+    Check(!again && s_adb == NULL, "aoa: its ADB interface left alone");
+    Gone();
+    Check(s_aoa == NULL && s_pipes == 0, "aoa: gone - closed, free");
+    Check(AOA_Read(h, buf, sizeof(buf)) == (DWORD)-1 && AOA_Write(h, "x", 1) == (DWORD)-1, "aoa: gone - reads and writes fail");
+    Check(AOA_Open(1, GENERIC_READ, 0) == 0, "aoa: no phone - AOA1: does not open");
+    AOA_Close(h);
+    s_aoaReadMs = 1000;
+    AccessoryPhone(0x2D00);
+    Check(Attach((USB_HANDLE)9, (LPCUSB_INTERFACE)&s_itfs[0]) == TRUE && s_aoa != NULL, "aoa: 2D00, its interface given - taken");
+    Gone();
+    AccessoryPhone(0x2D01);
+    Check(Attach((USB_HANDLE)10, (LPCUSB_INTERFACE)&s_itfs[1]) == FALSE && s_aoa == NULL, "aoa: only its ADB interface given - not taken");
+    AccessoryPhone(0x2D06);
+    s_cfg.dwNumInterfaces = 1;   // (its ADB would be ADB tethering's)
+    Check(Attach((USB_HANDLE)11, NULL) == FALSE && s_aoa == NULL, "aoa: 18D1:2D06 is no accessory");
+}
+
 int main()
 {
     DllMain(NULL, DLL_PROCESS_ATTACH, NULL);
@@ -784,6 +937,8 @@ int main()
     wcscpy(s_keyPath, L"obj\\pc\\test_adbkey.bin");
     TestAdb();
     TestAdbNot();
+    TestAoaSwitch();
+    TestAoaStream();
     DllMain(NULL, DLL_PROCESS_DETACH, NULL);
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;

@@ -22,7 +22,13 @@ static const wchar_t* const kKeys[] = {
     // brought the phone to us). The PC bench (tools/tether_bench.py, Xiaomi 23117RA68G): with "USB debugging" it is
     // 18D1:4EE7 (ADB alone), after the command 2717:FF88 (RNDIS E0/01/03 + CDC data + ADB).
     L"Drivers\\USB\\LoadClients\\6353_20199\\Default\\Default\\VestaTether",  // 18D1:4EE7 - Google's ADB id, many phones
-    L"Drivers\\USB\\LoadClients\\10007_65416\\Default\\Default\\VestaTether"  // 2717:FF88 - Xiaomi's tethering
+    L"Drivers\\USB\\LoadClients\\10007_65416\\Default\\Default\\VestaTether", // 2717:FF88 - Xiaomi's tethering
+    // Android Auto (2026-11-15): the phone's ordinary modes (HU 2026-11-15: 2717:FF48 MTP + ADB) switched into accessory
+    // mode while VestaAuto is open, and the accessory itself - 18D1:2D00 (alone) / 2D01 (+ ADB): AOA1:
+    L"Drivers\\USB\\LoadClients\\10007_65352\\Default\\Default\\VestaTether", // 2717:FF48 - Xiaomi, MTP + ADB
+    L"Drivers\\USB\\LoadClients\\10007_65344\\Default\\Default\\VestaTether", // 2717:FF40 - Xiaomi, MTP
+    L"Drivers\\USB\\LoadClients\\6353_11520\\Default\\Default\\VestaTether",  // 18D1:2D00 - an accessory
+    L"Drivers\\USB\\LoadClients\\6353_11521\\Default\\Default\\VestaTether"   // 18D1:2D01 - an accessory + ADB
 };
 
 // Randomness for the key: the system's generator where there is one, and whatever differs at each run

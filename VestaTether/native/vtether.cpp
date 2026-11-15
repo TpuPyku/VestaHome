@@ -75,23 +75,32 @@ static const wchar_t* OtherKind(LPCUSB_CONFIGURATION cfg)
     return L"не сетевое: на телефоне включите «Отладка по USB» (модем включит ГУ) или «USB-модем»";
 }
 
-// One class request on the control interface, blocking; *got - bytes moved
-static bool Control(Dev* d, bool in, BYTE request, void* buf, WORD len, DWORD* got)
+// One control request, blocking: kind USB_REQUEST_CLASS to an interface (index - its number), USB_REQUEST_VENDOR to
+// the device; *got - bytes moved
+static bool Request(USB_HANDLE h, LPCUSB_FUNCS f, BYTE kind, bool in, BYTE request, WORD index, void* buf, WORD len, DWORD* got)
 {
+    bool itf = kind == USB_REQUEST_CLASS;
     USB_DEVICE_REQUEST r;
-    r.bmRequestType = (BYTE)((in ? USB_REQUEST_DEVICE_TO_HOST : USB_REQUEST_HOST_TO_DEVICE) | USB_REQUEST_CLASS | USB_REQUEST_FOR_INTERFACE);
+    r.bmRequestType = (BYTE)((in ? USB_REQUEST_DEVICE_TO_HOST : USB_REQUEST_HOST_TO_DEVICE) | kind |
+                             (itf ? USB_REQUEST_FOR_INTERFACE : USB_REQUEST_FOR_DEVICE));
     r.bRequest = request;
     r.wValue = 0;
-    r.wIndex = d->ctl->Descriptor.bInterfaceNumber;
+    r.wIndex = index;
     r.wLength = len;
-    USB_TRANSFER t = d->f->lpIssueVendorTransfer(d->h, NULL, NULL, (in ? USB_IN_TRANSFER : USB_OUT_TRANSFER) | USB_SEND_TO_INTERFACE |
-                                                 USB_SHORT_TRANSFER_OK, &r, buf, 0);
+    USB_TRANSFER t = f->lpIssueVendorTransfer(h, NULL, NULL, (in ? USB_IN_TRANSFER : USB_OUT_TRANSFER) |
+                                              (itf ? USB_SEND_TO_INTERFACE : USB_SEND_TO_DEVICE) | USB_SHORT_TRANSFER_OK, &r, buf, 0);
     if (!t)
         return false;
     DWORD err = USB_NO_ERROR;
-    bool ok = d->f->lpGetTransferStatus(t, got, &err) && err == USB_NO_ERROR;
-    d->f->lpCloseTransfer(t);
+    bool ok = f->lpGetTransferStatus(t, got, &err) && err == USB_NO_ERROR;
+    f->lpCloseTransfer(t);
     return ok;
+}
+
+// One class request on the control interface
+static bool Control(Dev* d, bool in, BYTE request, void* buf, WORD len, DWORD* got)
+{
+    return Request(d->h, d->f, USB_REQUEST_CLASS, in, request, d->ctl->Descriptor.bInterfaceNumber, buf, len, got);
 }
 
 // What came instead of the answer: a keep-alive is answered, the rest (status notes, a lone zero byte) only logged
@@ -527,7 +536,10 @@ static void StartRndis(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE ctl, LPCUS
     d->thread = CreateThread(NULL, 0, Probe, d, 0, NULL);
 }
 
-// Each interface without a driver of its own comes here: an RNDIS phone - the probe; else its debugging interface - ADB
+#include "aoa.inc"
+
+// Each interface without a driver of its own comes here: a phone in accessory mode - AOA1:; any phone while VestaAuto
+// is open - switched into accessory mode; an RNDIS phone - the probe; else its debugging interface - ADB
 extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE itf, LPCWSTR, LPBOOL accept, LPCUSB_DRIVER_SETTINGS, DWORD)
 {
     static USB_HANDLE s_seen;   // (a device logged once, not for each of its interfaces)
@@ -541,6 +553,14 @@ extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE i
         LogDevice(dev);
         LogPower(dev->lpActiveConfig);
     }
+    if (IsAccessory(dev)) {
+        LPCUSB_INTERFACE aoa = itf ? (IsAoaItf(itf) ? itf : NULL) : FindAoa(dev->lpActiveConfig);
+        if (aoa && !s_aoa)
+            StartAoa(h, f, aoa, accept);
+        return TRUE;
+    }
+    if (first && AaWanted() && SwitchToAccessory(h, f))
+        return TRUE;
     LPCUSB_INTERFACE ctl, data;
     if (!FindRndis(dev->lpActiveConfig, &ctl, &data)) {
         LPCUSB_INTERFACE adb = itf ? (IsAdb(itf) ? itf : NULL) : FindAdb(dev->lpActiveConfig);
