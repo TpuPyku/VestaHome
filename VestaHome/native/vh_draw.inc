@@ -2125,19 +2125,21 @@ static void Frame(HDC dc, const wchar_t* title, Action back = A_BACK, Icon act =
         T(dc, 700, 36, s, 18, c, 600, AL_END);
         marksEnd = x0 - 8;
     }
-    int marksLeft = StatusMarks(dc, marksEnd, act != IC_NONE ? 540 : 0);
+    // the bar's buttons (act2, then act) right after the title, the marks in the rest (sheet 36: at fixed places they
+    // left the marks room for three)
+    int bx = act != IC_NONE ? 24 + TextWidth(dc, title, 20, 700) + 16 : 0;
+    int buttonsEnd = bx + (act2 != IC_NONE ? 60 : 0) + 56;
+    int marksLeft = StatusMarks(dc, marksEnd, act != IC_NONE ? buttonsEnd + 8 : 0);
     Now(s, 8);
     T(dc, 776, 36, s, 22, kText, 700, AL_END);   // the clock (design 0.6: 22 bold): no action (the volume opens
                                                  // from the speaker)
-    int x = 20, right = act != IC_NONE ? 470 : 530;
+    int x = 20, right = act != IC_NONE ? bx - 8 : 530;
     if (right > marksLeft - 12)
         right = marksLeft - 12;
+    if (act2 != IC_NONE)   // a second one to its left
+        Button(dc, bx, 6, 56, 44, NULL, B_N, act2, 18, 28, a2, arg2);
     if (act != IC_NONE)
-        Button(dc, 478, 6, 56, 44, NULL, sel ? B_SEL : B_N, act, 18, 28, a);
-    if (act2 != IC_NONE) {   // a second one to its left
-        Button(dc, 418, 6, 56, 44, NULL, B_N, act2, 18, 28, a2, arg2);
-        right = 410;
-    }
+        Button(dc, buttonsEnd - 56, 6, 56, 44, NULL, sel ? B_SEL : B_N, act, 18, 28, a);
     if (CamChip(s, 40)) {   // a speed camera ahead, on every screen: its sign, red when speeding
         int cx = right - 156;
         bool over = CamOver();

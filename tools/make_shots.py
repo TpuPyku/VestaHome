@@ -29,7 +29,7 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'docs', 'sh
 
 # the nav bar and the settings' sections (800 x 480)
 # (8 buttons with the sample add-on's: APPS at 448 - 506 hit the add-on's, 2026-11-08)
-HOME, RADIO, MEDIA, PHONE, APPS, SETTINGS = (60, 440), (170, 440), (282, 440), (394, 440), (448, 440), (618, 440)
+HOME, RADIO, MEDIA, PHONE, APPS, SETTINGS = (60, 440), (170, 440), (282, 440), (394, 440), (514, 440), (618, 440)
 SET = {'general': (60, 90), 'sound': (170, 90), 'screen': (60, 160), 'radio': (170, 160), 'bt': (60, 230),
        'wifi': (170, 230), 'video': (60, 300), 'net': (170, 300), 'car': (60, 370), 'info': (170, 370)}   # (video:
        # "Медиа" - video and photo; net: "Сеть", 2026-10-30)
@@ -45,7 +45,7 @@ SHOTS = [
     ('phone', [PHONE]), ('contacts', [PHONE, (163, 88), ('sleep', 3)]),   # (the phone's pills on top, 2026-11-10)
     ('contact', [PHONE, (163, 88), ('sleep', 3), (200, 190)]), ('favourites', [PHONE, (288, 88)]),
     ('calls', [PHONE, (405, 88), ('sleep', 3)]),
-    ('apps', [APPS]), ('tasks', [APPS, (445, 28), ('sleep', 2)]),
+    ('apps', [APPS]), ('tasks', [APPS, (195, 28), ('sleep', 2)]),
 ] + [('settings_' + k, [SETTINGS, v]) for k, v in SET.items()] + [
     ('settings_bt_paired', [SETTINGS, SET['bt'], (400, 372)]),
     ('settings_wifi_saved', [SETTINGS, SET['wifi'], (710, 372)]),
