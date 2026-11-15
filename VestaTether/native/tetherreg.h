@@ -2,7 +2,8 @@
 // every boot. One list for both who do it: TetherProbe (by hand, from the card) and VestaHome (at its start, while
 // "Настройки → Сеть → Телефон по USB" is on - the user 2026-11-15: the driver works, build it in). Wi-Fi's and
 // Bluetooth's drivers are not touched; the keys are for RNDIS classes, the phone's ADB, the phones seen on the unit and
-// the Android Auto accessory, and the last resort for a device nothing else takes (logged, then left alone).
+// the Android Auto accessory. No catch-all "any device without a driver" (the user 2026-11-15: no use, an attack
+// surface - in every HU log it never brought a device); other makers' phones need their own VID_PID here.
 #ifndef TETHERREG_H
 #define TETHERREG_H
 
@@ -14,7 +15,6 @@ static const wchar_t* const kTetherKeys[] = {
     L"Drivers\\USB\\LoadClients\\Default\\224_1_3\\Default\\VestaTether",    // the whole device
     L"Drivers\\USB\\LoadClients\\Default\\239_2_1\\Default\\VestaTether",    // a composite with interface associations
     L"Drivers\\USB\\LoadClients\\Default\\Default\\255_66_1\\VestaTether",   // a phone's ADB interface: FF/42/01
-    L"Drivers\\USB\\LoadClients\\Default\\Default\\Default\\VestaTether",    // anything without a driver: only logged
     // Whole devices by VID_PID, as VestaModem's keys that work on the unit (HU 2026-11-14: the class keys above never
     // brought the phone to us). The PC bench (tools/tether_bench.py, Xiaomi 23117RA68G): with "USB debugging" it is
     // 18D1:4EE7 (ADB alone), after the command 2717:FF88 (RNDIS E0/01/03 + CDC data + ADB).
