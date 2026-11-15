@@ -344,13 +344,13 @@ static void OpenCfgKeys(int which)
         OpenKeysFor(s_cfg.btName, 31, L"Имя ГУ в Bluetooth", S_SET_BT);
         break;
     case K_NETAPN:
-        OpenKeysFor(s_cfg.netApn, 63, L"APN", S_SET_NET);
+        OpenKeysFor(s_cfg.netApn, 63, L"APN", S_SET_NET3G);
         break;
     case K_NETUSER:
-        OpenKeysFor(s_cfg.netUser, 31, L"Логин", S_SET_NET);
+        OpenKeysFor(s_cfg.netUser, 31, L"Логин", S_SET_NET3G);
         break;
     case K_NETPASS:
-        OpenKeysFor(s_cfg.netPass, 31, L"Пароль", S_SET_NET);
+        OpenKeysFor(s_cfg.netPass, 31, L"Пароль", S_SET_NET3G);
         break;
     case K_ODO: case K_SVCKM: case K_SVCDATE:   // the trip widget's service (vh_widgetset.inc)
         SvcKeys(which);
@@ -480,6 +480,7 @@ static void CfgToControls()
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
     s_on[T_VIDEO_MOVING] = s_cfg.videoMoving;
     s_on[T_NET_AUTO] = s_cfg.netAuto;
+    s_on[T_PHONE_USB] = s_cfg.phoneUsb;
     s_on[T_NMEA_PORT] = s_cfg.nmeaPort;
     s_on[T_WIFI] = s_cfg.wifiOn;
     s_on[T_WIFI_AP_AUTO] = s_cfg.wifiApAuto;
@@ -516,6 +517,10 @@ static void ControlsToCfg()
     s_cfg.camWeekly = s_on[T_CAM_WEEKLY];
     s_cfg.videoMoving = s_on[T_VIDEO_MOVING];
     s_cfg.netAuto = s_on[T_NET_AUTO];
+    if (s_cfg.phoneUsb != s_on[T_PHONE_USB]) {
+        s_cfg.phoneUsb = s_on[T_PHONE_USB];
+        PhoneUsbSet(s_cfg.phoneUsb);
+    }
     s_cfg.photoSlides = s_on[T_SLIDES_OPEN];
     s_cfg.photoAutoRot = s_on[T_AUTOROTATE];
     if (s_cfg.nmeaPort != s_on[T_NMEA_PORT]) {

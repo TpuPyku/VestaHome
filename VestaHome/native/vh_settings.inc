@@ -119,6 +119,7 @@ struct Cfg {
     int     netOp;                     // the modem's operator: 0 by the SIM (the driver's APN), 1.. MdmOps, then own
     wchar_t netApn[64], netUser[32], netPass[32];   // its APN, login, password (own, or the preset's)
     bool    netAuto;                   // dial when the modem is in, again after the link drops
+    bool    phoneUsb;                  // the phone by cable: VestaTether.dll registered at the start (Android Auto, modem)
 };
 static Cfg s_cfg;
 static const int kSaverMins[5] = { 0, 1, 3, 5, 10 };
@@ -143,6 +144,7 @@ static void CfgDefaults()
     s_cfg.wifiOn = true;
     s_cfg.btPower = true;
     s_cfg.netAuto = true;   // (the user 2026-10-30: the modem in - online)
+    s_cfg.phoneUsb = true;  // (the user 2026-11-15, sheet 38: Android Auto and the modem by cable work - built in)
     s_cfg.nmeaCom = 6;
     s_cfg.saverMin = 5;
     s_cfg.tank = 55;
@@ -586,6 +588,8 @@ static void LoadCfg()
             wcsncpy(s_cfg.netPass, v, 31);
         } else if (!wcscmp(k, L"net.auto")) {
             s_cfg.netAuto = CfgBool(v);
+        } else if (!wcscmp(k, L"net.phoneusb")) {
+            s_cfg.phoneUsb = CfgBool(v);
         } else if (!wcscmp(k, L"wifi.ap.ssid") && v[0]) {
             wcsncpy(s_cfg.wifiApSsid, v, 32);
         } else if (!wcscmp(k, L"wifi.ap.pass") && wcslen(v) >= 8) {
@@ -701,8 +705,8 @@ static void SaveCfg()
         L"# wifi.ap.*: the unit's own access point for a phone with its hotspot on 5 GHz (auto: when no known network)\r\n"
         L"wifi.ap.ssid=%s\r\nwifi.ap.pass=%s\r\nwifi.ap.auto=%d\r\n"
         L"# net.*: the USB modem (Settings -> Network): the operator (0 by the SIM, then the presets, then own), APN,\r\n"
-        L"# login, password; net.auto: dial when it is in\r\n"
-        L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\n",
+        L"# login, password; net.auto: dial when it is in; net.phoneusb: the phone by cable (Android Auto, modem)\r\n"
+        L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\nnet.phoneusb=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
         s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer, s_cfg.pbAuto,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
@@ -713,7 +717,7 @@ static void SaveCfg()
         s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.btPower ? 1 : 0, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto, s_cfg.netOp, s_cfg.netApn, s_cfg.netUser,
-        s_cfg.netPass, s_cfg.netAuto);
+        s_cfg.netPass, s_cfg.netAuto, s_cfg.phoneUsb);
     if (n < 0)
         return;
     n += RadioCacheText(text + n, 12000 - n);

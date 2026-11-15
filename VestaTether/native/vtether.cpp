@@ -76,7 +76,7 @@ static const wchar_t* OtherKind(LPCUSB_CONFIGURATION cfg)
         if (d.bInterfaceClass == 2 && d.bInterfaceSubClass == 6)
             return L"CDC ECM";
     }
-    return L"не сетевое: на телефоне включите «Отладка по USB» (модем включит ГУ) или «USB-модем»";
+    return L"не сетевое: на телефоне включите «USB-модем» (Android Auto - экран VestaAuto открыт)";
 }
 
 // One control request, blocking: kind USB_REQUEST_CLASS to an interface (index - its number), USB_REQUEST_VENDOR to
@@ -553,7 +553,7 @@ static void StartAdb(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE itf, LPBOOL 
     if (!d)
         return;
     if (!LoadKey(&d->key)) {
-        Log(L"ADB: нет ключа ГУ - сначала запустите TetherProbe.exe");
+        Log(L"ADB: нет ключа ГУ (TetherProbe) - модем на телефоне включите сами");
         free(d);
         return;
     }

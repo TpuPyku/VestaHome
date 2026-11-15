@@ -233,6 +233,34 @@ static void ModemUsbSet()
 #endif
 }
 
+// ---- The phone by cable (2026-11-15, the user after sheet 38: "the driver for the modem and Android Auto can be built
+// in"): VestaTether.dll (VestaHome's folder) copied into \Windows and its USBD keys written at the start - the list is
+// VestaTether's (tetherreg.h, TetherProbe's too). The phone then goes to Android Auto while VestaAuto's screen is open,
+// else its USB tethering is the network. Off: the keys deleted (a phone in keeps the driver till it is out).
+#ifdef UNDER_CE
+#include "../../VestaTether/native/tetherreg.h"
+#endif
+
+static void PhoneUsbSet(bool on)
+{
+#ifdef UNDER_CE
+    if (!on) {
+        TetherUnregister();
+        VLog(L"телефон по USB: выключен (ключи драйвера убраны)");
+        return;
+    }
+    wchar_t src[MAX_PATH];
+    _snwprintf(src, MAX_PATH, L"%sVestaTether.dll", s_dir);
+    DWORD err = TetherRegister(src);
+    if (err)
+        VLog(L"телефон по USB: драйвер не встал (%s, ошибка %lu)", src, err);
+    else
+        VLog(L"телефон по USB: драйвер зарегистрирован - Android Auto (экран VestaAuto) или USB-модем телефона");
+#else
+    VLog(L"телефон по USB: ПК - только %s", on ? L"включено" : L"выключено");   // (the driver is the unit's only)
+#endif
+}
+
 // Internet through it: RAS over the driver's COM port (the APN is the driver's: by the SIM's operator); the status -
 // the driver's HKLM\Software\Vesta\Modem (Port, Rssi, Mode, Sim)
 #define WM_APP_MODEM (WM_APP + 29)
@@ -1278,18 +1306,30 @@ static void ScrSetNet(HDC dc)
     bool panOn = phone && (bt.pan == BT_PAN_ONLINE || bt.pan == BT_PAN_CONNECTING);
     Button(dc, 600, 126, 160, 44, panOn ? L"Отключить" : L"Подключить", !phone ? B_DIS : panOn ? B_SEL : B_N,
            IC_NONE, 16, 0, phone ? A_NETPAN : A_NONE);
-    SetRow(dc, 176, L"Оператор модема");
+    SetRow(dc, 176, L"Телефон по USB", L"Android Auto и USB-модем телефона по кабелю");
+    Toggle(dc, 688, 186, T_PHONE_USB);
     NetOpName(s_cfg.netOp, op, 40);
-    Stepper(dc, 480, 180, 280, op, 48, 15, A_NETOP);
+    SetRow(dc, 232, L"3G-модем: оператор, APN", op);
+    Button(dc, 600, 238, 160, 44, L"Настроить", B_N, IC_NONE, 16, 0, A_SCREEN, S_SET_NET3G);
+    SetRow(dc, 288, L"Автоподключение", L"при вставке модема и после обрыва", true);
+    Toggle(dc, 688, 298, T_NET_AUTO);
+}
+
+// The 3G modem's operator, APN, login (the user 2026-11-15: on their own screen, by a button - room on "Сеть")
+static void ScrSetNet3G(HDC dc)
+{
+    Settings(dc, S_SET_NET3G);
+    wchar_t op[40];
+    SetRow(dc, 64, L"Оператор модема");
+    NetOpName(s_cfg.netOp, op, 40);
+    Stepper(dc, 480, 68, 280, op, 48, 15, A_NETOP);
     bool sim = s_cfg.netOp == 0;
-    SetRow(dc, 232, L"APN", sim ? L"по SIM-карте (нажмите, чтобы задать)" : s_cfg.netApn[0] ? s_cfg.netApn : L"—",
+    SetRow(dc, 120, L"APN", sim ? L"по SIM-карте (нажмите, чтобы задать)" : s_cfg.netApn[0] ? s_cfg.netApn : L"—",
            false, A_KEYS, K_NETAPN);
-    SetRow(dc, 288, L"Логин и пароль", L"для оператора «Свой»");   // (two keyboards: the login, the password)
-    Button(dc, 480, 294, 136, 44, s_cfg.netUser[0] ? s_cfg.netUser : L"Логин", B_N, IC_NONE, 15, 0, A_KEYS,
+    SetRow(dc, 176, L"Логин и пароль", L"для оператора «Свой»");   // (two keyboards: the login, the password)
+    Button(dc, 480, 182, 136, 44, s_cfg.netUser[0] ? s_cfg.netUser : L"Логин", B_N, IC_NONE, 15, 0, A_KEYS,
            K_NETUSER);
-    Button(dc, 624, 294, 136, 44, s_cfg.netPass[0] ? L"••••" : L"Пароль", B_N, IC_NONE, 15, 0, A_KEYS, K_NETPASS);
-    SetRow(dc, 344, L"Автоподключение", L"при вставке модема и после обрыва", true);
-    Toggle(dc, 688, 354, T_NET_AUTO);
+    Button(dc, 624, 182, 136, 44, s_cfg.netPass[0] ? L"••••" : L"Пароль", B_N, IC_NONE, 15, 0, A_KEYS, K_NETPASS);
 }
 
 

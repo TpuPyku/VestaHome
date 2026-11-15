@@ -49,6 +49,7 @@ SHOTS = [
 ] + [('settings_' + k, [SETTINGS, v]) for k, v in SET.items()] + [
     ('settings_bt_paired', [SETTINGS, SET['bt'], (400, 372)]),
     ('settings_wifi_saved', [SETTINGS, SET['wifi'], (710, 372)]),
+    ('settings_net3g', [SETTINGS, SET['net'], (680, 260)]),   # ("3G-модем" -> "Настроить", 2026-11-15)
     ('set_plugins', [SETTINGS, SET['general'], ('sleep', 2), (400, 376)]),
     ('plugin_screen', [SETTINGS, SET['general'], ('sleep', 2), (400, 376), (614, 92)]),
     ('plugin_tap', [SETTINGS, SET['general'], ('sleep', 2), (400, 376), (614, 92), ('sleep', 2), (744, 208), ('sleep', 1), (744, 208), ('sleep', 1), (400, 96), ('sleep', 1)]),

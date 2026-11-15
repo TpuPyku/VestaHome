@@ -40,6 +40,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_SET_VIDEO:   ScrSetVideo(dc); break;
     case S_SET_PHOTO:   ScrSetVideo(dc); break;   // (one "Media" section now)
     case S_SET_NET:     ScrSetNet(dc); break;
+    case S_SET_NET3G:   ScrSetNet3G(dc); break;
     case S_INFO:        ScrInfo(dc); break;
     case S_WARNING:     ScrWarning(dc); break;
     case S_VOLUME:      ScrVolume(dc); break;

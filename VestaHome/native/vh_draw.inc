@@ -2209,7 +2209,7 @@ static int Section(Screen s)
     case S_SETTINGS: case S_SET_SOUND: case S_SET_BALANCE: case S_SET_SCREEN: case S_SET_RADIO: case S_SET_BT:
     case S_SET_WIFI: case S_SET_VIDEO: case S_SET_PHOTO: case S_INFO: case S_SET_CAR: case S_SET_VOLUME:
     case S_SET_OBD: case S_BT_PAIRED: case S_BT_PAIRNEW: case S_SET_THEME: case S_WIFI_SAVED: case S_SET_PLUGINS:
-    case S_SET_NET:
+    case S_SET_NET: case S_SET_NET3G:
         return 5;
     default:
         return -1;
@@ -2222,7 +2222,7 @@ static int NavSection(Screen s)
 {
     switch (s) {
     case S_SET_BALANCE: case S_SET_VOLUME: case S_SET_OBD: case S_BT_PAIRED: case S_BT_PAIRNEW: case S_SET_THEME:
-    case S_AUDIO_LIST: case S_WIFI_SAVED: case S_SET_PLUGINS:
+    case S_AUDIO_LIST: case S_WIFI_SAVED: case S_SET_PLUGINS: case S_SET_NET3G:
         return -1;
     default:
         return Section(s);
@@ -2438,6 +2438,7 @@ static void Settings(HDC dc, Screen active)
                   (active == S_SET_THEME && items[i].to == S_SET_SCREEN) ||
                   (active == S_SET_PHOTO && items[i].to == S_SET_VIDEO) ||
                   (active == S_WIFI_SAVED && items[i].to == S_SET_WIFI) ||
+                  (active == S_SET_NET3G && items[i].to == S_SET_NET) ||
                   ((active == S_SET_OBD || active == S_BT_PAIRED || active == S_BT_PAIRNEW) &&
                    items[i].to == S_SET_BT);
         bool d = Zone(x, y, 102, 62, items[i].to == active ? A_NONE : A_TAB, items[i].to);

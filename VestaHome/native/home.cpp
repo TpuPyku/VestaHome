@@ -144,7 +144,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NETCAT, S_NETCATS, S_WSET_TRIP, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NETCAT, S_NETCATS, S_WSET_TRIP, S_SET_NET3G, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -159,7 +159,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_SVC7000, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_SVC7000, T_PHONE_USB, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
@@ -453,6 +453,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         ObdInit(hwnd, WM_APP_OBD, VLog);
         if (s_cfg.nmeaPort)   // the navigators' COM port (the registry is new at every boot)
             NmeaPortStart(true, false);
+        if (s_cfg.phoneUsb)   // the phone by cable: Android Auto, the modem (the registry is new at every boot)
+            PhoneUsbSet(true);
         ObdSetSppAddrFn(ObdSppAddr);
         BtRfSetWake(ObdSdpWake);
         for (int i = 0; i < s_cfg.wifiCount; i++)

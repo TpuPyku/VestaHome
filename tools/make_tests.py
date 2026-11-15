@@ -52,8 +52,8 @@ PLAN = (
         ('VestaHomeInstall.exe',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDCard\Updater\UPDATE',
         ('LaunchInstall.exe',)),
-    (os.path.join(V, 'VestaTether', 'VestaTether'), r'SDCard\TetherProbe',
-        ('TetherProbe.exe', 'VestaTether.dll')),
+    # (TetherProbe no more: VestaHome registers VestaTether.dll itself - the user 2026-11-15; the probe stays in its repo
+    # for a diagnosis)
     # the add-on "Android Auto" (its own repo VestaAuto; in place of the sample add-on - the user 2026-11-13):
     # VestaHome starts VHContent\VHPlugins\<Name>\<Name>.exe; its test media (make_media.py) on the card
     (os.path.join(ROOT, 'VestaAuto', 'VestaAuto'), r'ResidentFlash\VHContent\VHPlugins\VestaAuto',
@@ -79,7 +79,8 @@ def copy(src, dst):
 # VestaLaunch - inside LaunchInstall)
 RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets', r'ResidentFlash\VestaHome',
            r'ResidentFlash\VHContent\VHPlugins\Sample',
-           r'SDCard\VestaAuto')   # (the video probe's media: VestaAuto 0.6 shows the phone, no probe - the user 2026-11-15)
+           r'SDCard\VestaAuto',     # (the video probe's media: VestaAuto 0.6 shows the phone, no probe - the user 2026-11-15)
+           r'SDCard\TetherProbe')   # (VestaHome registers the phone's driver itself - the user 2026-11-15)
 
 
 def main():
