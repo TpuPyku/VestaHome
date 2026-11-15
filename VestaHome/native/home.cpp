@@ -726,6 +726,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 }
             }
             PhonePlayTakes(src, now);
+            BtSoundWatch(src, now);
             if (s_btPathTick && now - s_btPathTick > 3000) {   // the BT key may start the phone: it is paused
                 s_btPathTick = 0;
                 BtQuiet();

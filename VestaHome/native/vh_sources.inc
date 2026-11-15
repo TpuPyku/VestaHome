@@ -153,6 +153,35 @@ static void PhonePlayTakes(int src, DWORD now)
     s_avWas = bt.av;
 }
 
+// The phone's music "plays, but no sound" (the user 2026-11-15: BT on, the track goes on, nothing heard; the stack's
+// A2DP state normal, the MCU on Bluetooth): every 10 s while Bluetooth is the source or the phone plays - the MCU's
+// source, volume and mute, the phone's state and whether its track moves, the call audio, each sound device's volume.
+// The moment it goes silent is then in the log next to what changed.
+static void BtSoundWatch(int src, DWORD now)
+{
+    static DWORD s_last;
+    static int s_posWas = -1;
+    if (now - s_last < 10000)
+        return;
+    BtState bt;
+    if (!BtGet(&bt, NULL) || (src != 9 && bt.av != 2))
+        return;
+    s_last = now;
+    int vol, mute, s;
+    VolGet(&vol, &mute, &s);
+    wchar_t dev[120] = L"";
+    int o = 0;
+    for (UINT i = 0, n = waveOutGetNumDevs(); i < n && i < 8 && o < 100; i++) {
+        DWORD v = 0;
+        MMRESULT r = waveOutGetVolume((HWAVEOUT)(UINT_PTR)i, &v);
+        o += _snwprintf(dev + o, 120 - o, r == MMSYSERR_NOERROR ? L" %u:%04X" : L" %u:-", i, (unsigned)(v & 0xFFFF));
+    }
+    VLog(L"BT-звук: источник %d, громкость %d%s, телефон %d/%d, трек %d с%s, звонок %d; устройства%s", src, vol,
+         mute ? L" (MUTE)" : L"", bt.av, bt.playing, bt.posMs / 1000,
+         s_posWas < 0 ? L"" : bt.posMs != s_posWas ? L" (идёт)" : L" (стоит)", bt.hfAudio, dev);
+    s_posWas = bt.posMs;
+}
+
 static void MediaSource()   // one of our players starts
 {
     BtQuiet();
