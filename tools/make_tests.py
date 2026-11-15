@@ -58,6 +58,9 @@ PLAN = (
     # VestaHome starts VHContent\VHPlugins\<Name>\<Name>.exe; its test media (make_media.py) on the card
     (os.path.join(ROOT, 'VestaAuto', 'VestaAuto'), r'ResidentFlash\VHContent\VHPlugins\VestaAuto',
         ('VestaAuto.exe',)),
+    # its Android Auto session's certificate and key (aasdk's, VestaAuto\tools\get_cert.py; not in any repo)
+    (os.path.join(ROOT, 'VestaAuto', 'tools'), r'ResidentFlash\VHContent\VHPlugins\VestaAuto',
+        ('hu_cert.pem', 'hu_key.pem')),
     (os.path.join(ROOT, 'VestaAuto', 'media'), r'SDCard\VestaAuto',
         ('test.mp4', 'test.h264')),
 )
