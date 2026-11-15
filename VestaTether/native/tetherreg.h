@@ -3,7 +3,7 @@
 // "Настройки → Сеть → Телефон по USB" is on - the user 2026-11-15: the driver works, build it in). Wi-Fi's and
 // Bluetooth's drivers are not touched; the keys are for RNDIS classes, the phone's ADB, the phones seen on the unit and
 // the Android Auto accessory. No catch-all "any device without a driver" (the user 2026-11-15: no use, an attack
-// surface - in every HU log it never brought a device); other makers' phones need their own VID_PID here.
+// surface - in every HU log it never brought a device); the big makers by vendor below; others need their VID here.
 #ifndef TETHERREG_H
 #define TETHERREG_H
 
@@ -25,7 +25,24 @@ static const wchar_t* const kTetherKeys[] = {
     L"Drivers\\USB\\LoadClients\\10007_65352\\Default\\Default\\VestaTether", // 2717:FF48 - Xiaomi, MTP + ADB
     L"Drivers\\USB\\LoadClients\\10007_65344\\Default\\Default\\VestaTether", // 2717:FF40 - Xiaomi, MTP
     L"Drivers\\USB\\LoadClients\\6353_11520\\Default\\Default\\VestaTether",  // 18D1:2D00 - an accessory
-    L"Drivers\\USB\\LoadClients\\6353_11521\\Default\\Default\\VestaTether"   // 18D1:2D01 - an accessory + ADB
+    L"Drivers\\USB\\LoadClients\\6353_11521\\Default\\Default\\VestaTether",  // 18D1:2D01 - an accessory + ADB
+    // Every phone of the big makers, by the vendor alone (the user 2026-11-15: other phones without a list by hand). USBD
+    // takes the most exact key first (VID_PID before VID), and a device the driver does not accept (a flash drive of the
+    // same maker: not MTP / vendor-class) goes on to its own driver. No Huawei (12D1): its phones have no Google
+    // services (no Android Auto), and its 3G modems are VestaModem's and the CD-ROM driver's.
+    L"Drivers\\USB\\LoadClients\\1256\\Default\\Default\\VestaTether",    // 04E8 Samsung
+    L"Drivers\\USB\\LoadClients\\6353\\Default\\Default\\VestaTether",    // 18D1 Google (Pixel; many phones' ADB / AOA ids)
+    L"Drivers\\USB\\LoadClients\\10007\\Default\\Default\\VestaTether",   // 2717 Xiaomi, Redmi, POCO
+    L"Drivers\\USB\\LoadClients\\8921\\Default\\Default\\VestaTether",    // 22D9 OPPO, Realme, OnePlus (new)
+    L"Drivers\\USB\\LoadClients\\11669\\Default\\Default\\VestaTether",   // 2D95 Vivo
+    L"Drivers\\USB\\LoadClients\\10864\\Default\\Default\\VestaTether",   // 2A70 OnePlus
+    L"Drivers\\USB\\LoadClients\\8888\\Default\\Default\\VestaTether",    // 22B8 Motorola
+    L"Drivers\\USB\\LoadClients\\4046\\Default\\Default\\VestaTether",    // 0FCE Sony
+    L"Drivers\\USB\\LoadClients\\4100\\Default\\Default\\VestaTether",    // 1004 LG
+    L"Drivers\\USB\\LoadClients\\6610\\Default\\Default\\VestaTether",    // 19D2 ZTE
+    L"Drivers\\USB\\LoadClients\\2821\\Default\\Default\\VestaTether",    // 0B05 Asus
+    L"Drivers\\USB\\LoadClients\\13211\\Default\\Default\\VestaTether",   // 339B Honor
+    L"Drivers\\USB\\LoadClients\\11780\\Default\\Default\\VestaTether"    // 2E04 Nokia (HMD)
 };
 enum { kTetherKeyCount = sizeof(kTetherKeys) / sizeof(kTetherKeys[0]) };
 
