@@ -12,6 +12,8 @@
 #include "adb.h"
 #include "ndismp.h"
 
+static void WaiterStop();   // (aoa.inc: a phone already here switched when VestaAuto opens)
+
 enum { kTransfer = 16384, kCtlSize = 1025, kAskTries = 30, kDhcpTries = 4 };
 static DWORD s_askMs = 100;     // between reads of the phone's answers
 static DWORD s_dhcpMs = 2000;   // one try's wait
@@ -330,6 +332,7 @@ static DWORD WINAPI Probe(LPVOID param)
 
 static void FreeDev(Dev* d)
 {
+    WaiterStop();
     d->gone = true;
     if (d->thread) {
         WaitForSingleObject(d->thread, INFINITE);
@@ -528,6 +531,7 @@ static BOOL WINAPI AdbNotify(LPVOID param, DWORD code, LPDWORD*, LPDWORD*, LPDWO
     if (code != USB_CLOSE_DEVICE)
         return FALSE;
     AdbDev* d = (AdbDev*)param;
+    WaiterStop();
     d->gone = true;
     if (d->thread) {
         WaitForSingleObject(d->thread, INFINITE);
@@ -611,10 +615,13 @@ extern "C" BOOL USBDeviceAttach(USB_HANDLE h, LPCUSB_FUNCS f, LPCUSB_INTERFACE i
             StartAdb(h, f, adb, accept);
         else if (first)
             Log(L"RNDIS нет: %s", OtherKind(dev->lpActiveConfig));
-        return TRUE;
-    }
-    if (!s_dev)   // (the second interface of the same phone comes here too)
+        if (!*accept && first && !itf && IsPhoneLike(dev->lpActiveConfig))
+            HoldIdle(h, f, accept);
+    } else if (!s_dev) {   // (the second interface of the same phone comes here too)
         StartRndis(h, f, ctl, data, accept);
+    }
+    if (*accept && first)
+        WaiterStart(h, f);
     return TRUE;
 }
 

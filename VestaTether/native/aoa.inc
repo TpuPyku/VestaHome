@@ -56,6 +56,73 @@ static bool SwitchToAccessory(USB_HANDLE h, LPCUSB_FUNCS f)
     return true;
 }
 
+// ---- a phone already here when VestaAuto opens (HU 2026-11-15-2: plugged in 20 s before the screen was, never
+// switched): while we hold a phone, a thread watches for VestaAuto and switches it then. One phone at a time.
+
+static USB_HANDLE    s_waitH;
+static LPCUSB_FUNCS  s_waitF;
+static HANDLE        s_waitT;
+static volatile bool s_waitStop;
+static DWORD         s_waitMs = 500;
+
+static DWORD WINAPI WaitAa(LPVOID)
+{
+    while (!s_waitStop) {
+        if (AaWanted()) {
+            SwitchToAccessory(s_waitH, s_waitF);
+            return 0;
+        }
+        Sleep(s_waitMs);
+    }
+    return 0;
+}
+
+static void WaiterStart(USB_HANDLE h, LPCUSB_FUNCS f)
+{
+    if (s_waitT)
+        return;
+    s_waitH = h;
+    s_waitF = f;
+    s_waitStop = false;
+    s_waitT = CreateThread(NULL, 0, WaitAa, NULL, 0, NULL);
+}
+
+static void WaiterStop()   // (the phone gone: before its handle is)
+{
+    if (!s_waitT)
+        return;
+    s_waitStop = true;
+    WaitForSingleObject(s_waitT, INFINITE);
+    CloseHandle(s_waitT);
+    s_waitT = NULL;
+}
+
+static bool IsPhoneLike(LPCUSB_CONFIGURATION cfg)   // MTP / PTP or a vendor's interface: a phone in its ordinary mode
+{
+    for (DWORD i = 0; cfg && i < cfg->dwNumInterfaces; i++) {
+        BYTE c = ItfAt(cfg, i)->Descriptor.bInterfaceClass;
+        if (c == 0x06 || c == 0xFF)
+            return true;
+    }
+    return false;
+}
+
+static BOOL WINAPI IdleNotify(LPVOID, DWORD code, LPDWORD*, LPDWORD*, LPDWORD*, LPDWORD*)
+{
+    if (code != USB_CLOSE_DEVICE)
+        return FALSE;
+    WaiterStop();
+    Log(L"телефон отключён");
+    return TRUE;
+}
+
+static void HoldIdle(USB_HANDLE h, LPCUSB_FUNCS f, LPBOOL accept)   // held only to be switched later (nothing else
+{                                                                  // on the unit takes MTP)
+    f->lpRegisterNotificationRoutine(h, IdleNotify, NULL);
+    *accept = TRUE;
+    Log(L"телефон: жду - откройте экран Android Auto, и он перейдёт в Android Auto");
+}
+
 struct AoaDev {
     USB_HANDLE    h;
     LPCUSB_FUNCS  f;

@@ -983,7 +983,51 @@ static void TestAoaStream()
     Check(Attach((USB_HANDLE)15, NULL) == FALSE && s_aoa == NULL, "aoa: only the interfaces counted are looked at");
     AccessoryPhone(0x2D06);
     s_cfg.dwNumInterfaces = 1;   // (its ADB would be ADB tethering's)
-    Check(Attach((USB_HANDLE)11, NULL) == FALSE && s_aoa == NULL, "aoa: 18D1:2D06 is no accessory");
+    Check(Attach((USB_HANDLE)11, NULL) == TRUE && s_aoa == NULL, "aoa: 18D1:2D06 is no accessory (held as a phone only)");
+    Gone();
+}
+
+// HU 2026-11-15-2: the phone plugged in before the Android Auto screen was opened - switched when it opens
+static void TestAoaLater()
+{
+    s_waitMs = 20;
+    AoaReset();
+    AdbPhone();   // (ADB, its session over: the phone stays)
+    s_adbAuth = s_adbKnows = true;
+    Attach((USB_HANDLE)40, NULL);
+    if (s_adb)
+        WaitForSingleObject(s_adb->thread, 30000);
+    Check(s_aoaStarts == 0, "aoa later: VestaAuto closed - not switched");
+    HANDLE vestaAuto = CreateMutex(NULL, FALSE, L"VestaAuto_AA");
+    for (int i = 0; i < 100 && !s_aoaStarts; i++)
+        Sleep(10);
+    Check(s_aoaStarts == 1, "aoa later: VestaAuto opened - the phone already here switched");
+    Gone();
+    CloseHandle(vestaAuto);
+    AoaReset();
+    Phone();
+    Itf(0, 6, 1, 1, 1);   // MTP only (no ADB, no tethering)
+    Check(Attach((USB_HANDLE)41, NULL) == TRUE, "aoa later: a phone in MTP held, to be switched");
+    vestaAuto = CreateMutex(NULL, FALSE, L"VestaAuto_AA");
+    for (int i = 0; i < 100 && !s_aoaStarts; i++)
+        Sleep(10);
+    Check(s_aoaStarts == 1, "aoa later: the MTP phone switched when VestaAuto opens");
+    Gone();
+    CloseHandle(vestaAuto);
+    AoaReset();
+    Phone();
+    Itf(0, 3, 1, 1, 1);   // a keyboard-like device: not a phone
+    Check(Attach((USB_HANDLE)42, NULL) == FALSE, "aoa later: not a phone - not held");
+    DWORD t0 = GetTickCount();
+    AoaReset();
+    Phone();
+    Itf(0, 6, 1, 1, 1);
+    Attach((USB_HANDLE)43, NULL);
+    s_waitMs = 5000;
+    Sleep(50);
+    Gone();
+    Check(GetTickCount() - t0 < 6000 && s_aoaStarts == 0, "aoa later: the phone gone - the watch ends, nothing sent");
+    s_waitMs = 500;
 }
 
 int main()
@@ -1016,6 +1060,7 @@ int main()
     TestAdbNot();
     TestAoaSwitch();
     TestAoaStream();
+    TestAoaLater();
     DllMain(NULL, DLL_PROCESS_DETACH, NULL);
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
