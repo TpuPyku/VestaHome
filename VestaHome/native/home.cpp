@@ -34,6 +34,7 @@
 #include "netcache.h"  // its lists kept in files
 #include "country.h"   // the country by GPS (the catalogue's "Рядом")
 #include "vjson.h"     // VestaCore: JSON (the catalogue's answers, in netcat.cpp)
+#include "vlicense.h"  // VestaCore: the support license (its ID, its file)
 #include "video.h"
 #include "wifi.h"
 #include "inikey.h"     // Navitel's GPSEpoch (vh_apps.inc)
@@ -358,6 +359,31 @@ static const wchar_t* NetErrorText(int err)
     return L"";
 }
 
+// ---- The support (2026-11-15, the user: Android Auto's splash gone with a key for this unit): the unit's ID shown in
+// "О системе" and told to the add-ons ("welcome": support, unit); the key - VestaLicense.key in VestaHome's folder,
+// made by the author for the ID (VestaCore vlicense.h). Nothing in VestaHome is locked without it.
+static wchar_t s_unitId[LICENSE_ID_LEN];
+static bool    s_support;
+
+static void SupportInit()
+{
+    unsigned char hw[64];
+    int n = SecretUnitBytes(hw, sizeof(hw));
+    LicenseIdText(hw, n, s_unitId);
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%sVestaLicense.key", s_dir);
+    char text[1024];
+    DWORD got = 0;
+    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        ReadFile(f, text, sizeof(text), &got, NULL);
+        CloseHandle(f);
+    }
+    s_support = got && LicenseValid(text, (int)got, s_unitId);
+    VLog(L"поддержка: ID %s, ключ %s", s_unitId,
+         s_support ? L"есть" : f == INVALID_HANDLE_VALUE ? L"нет" : L"не подходит (другой ГУ или повреждён)");
+}
+
 #include "vh_draw.inc"
 #include "vh_screens.inc"
 #include "vh_diag.inc"
@@ -419,6 +445,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             static const wchar_t* kSrc[4] = { L"нет", L"ID устройства", L"MAC адаптеров", L"ПК" };
             int src = SecretInit();   // the key that seals the passwords of the settings
             VLog(L"ключ паролей: %s", kSrc[src & 3]);
+            SupportInit();
         }
         LoadCfg();
         ApplyAccent();

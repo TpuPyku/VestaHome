@@ -2044,8 +2044,10 @@ static void ScrInfo(HDC dc)
     else
         wcscpy(os, L"?");
     CanStatusText(can, 64);
+    wchar_t ver[64];   // (the support: its key, or the unit's ID to ask the author for one - home.cpp SupportInit)
+    _snwprintf(ver, 64, L"%s · %s", VhVersion(), s_support ? L"поддержка: есть" : s_unitId);
     const wchar_t* rows[5][2] = { { L"Модель", L"LADA Vesta · MMC" }, { L"Прошивка ГУ", shell }, { L"ОС", os },
-                                  { L"CAN-модуль", can }, { L"VestaHome", VhVersion() } };
+                                  { L"CAN-модуль", can }, { L"VestaHome", ver } };
     Settings(dc, S_INFO);
     for (int i = 0; i < 5; i++) {
         int y = 64 + i * 44;

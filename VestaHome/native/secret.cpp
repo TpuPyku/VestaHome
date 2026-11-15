@@ -62,6 +62,11 @@ static int UnitId(unsigned char* buf, int cap)
     return n;
 }
 
+int SecretUnitBytes(unsigned char* buf, int cap)
+{
+    return UnitId(buf, cap);
+}
+
 int SecretInit()
 {
     unsigned char id[256];
