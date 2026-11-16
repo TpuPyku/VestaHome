@@ -1915,7 +1915,7 @@ static void WifiStateText(const WifiInfo& w, wchar_t* s, int n)
     switch (w.state) {
     case WIFI_NOWZC:      _snwprintf(s, n, L"%s", w.msg[0] ? w.msg : L"нет службы Wi-Fi"); break;
     case WIFI_NOADAPTER:  _snwprintf(s, n, L"адаптер Wi-Fi не найден"); break;
-    case WIFI_OFF:        _snwprintf(s, n, L"%s", w.msg[0] ? w.msg : L"выключено"); break;   // (or restarting)
+    case WIFI_OFF:        _snwprintf(s, n, L"%s", w.msg[0] ? w.msg : L"выключено"); break;   // (or "включение Wi-Fi: N с…")
     case WIFI_AP:         _snwprintf(s, n, L"точка ГУ «%s» · телефонов: %d", w.apSsid, w.apClients); break;
     case WIFI_CONNECTING: _snwprintf(s, n, L"подключение к %s…", w.ssid); break;
     case WIFI_CONNECTED:
@@ -1994,11 +1994,6 @@ static void ScrSetWifi(HDC dc)
         Button(dc, 256, 352, 196, 40, apOn ? L"Точка доступа: вкл" : L"Точка доступа", apOn ? B_SEL : B_N, IC_NONE,
                14, 0, A_WIFIAP);   // (its automatic start, "Фикс Xiaomi", removed: the user 2026-11-08)
     }
-    if (w.state == WIFI_OFF && w.msg[0] && s_on[T_WIFI])   // restarting (HU 2026-11-11: the buttons went, the switch
-        Button(dc, 424, 70, 124, 44, L"Перезапуск…", B_DIS, IC_NONE, 14, 0);   // on - its button stays, waiting)
-    if (w.state == WIFI_DISCONNECTED)   // (no link - the driver stuck: what a full power cut cures, sheet 24; the row's
-                                        // longer texts, with a link, would reach it)
-        Button(dc, 424, 70, 124, 44, L"Перезапустить", B_N, IC_NONE, 14, 0, A_WIFIRESTART);
     if (WifiSavedCount()) {   // all the remembered ones, in sight or not: to see and to forget (the user 2026-10-26)
         _snwprintf(s, 120, L"Сохранённые (%d)", WifiSavedCount());
         Button(dc, 652, 352, 116, 40, s, B_N, IC_NONE, 13, 0, A_SCREEN, S_WIFI_SAVED);

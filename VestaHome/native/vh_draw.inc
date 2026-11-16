@@ -4,9 +4,9 @@
 // date comes by itself; the release ("0.5") raised by hand.
 #include "vversion.h"
 
-static const wchar_t* VhVersion()   // "0.5.261023"
+static const wchar_t* VhVersion()   // "1.0.261116"
 {
-    return AppVersion(L"0.6");
+    return AppVersion(L"1.0");
 }
 
 // ---------------------------------------------------------------- drawing helpers

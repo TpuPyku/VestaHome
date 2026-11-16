@@ -127,8 +127,8 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_PBDEL, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_SCROLL, A_USERWG, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
-              A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_WIFIRESTART, A_PAGESTEP, A_WIFIAP,
-              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_BTRESTART, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
+              A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON,
               A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_SVCDONE,
               A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH };
 
@@ -219,16 +219,17 @@ static wchar_t s_dir[MAX_PATH];
 static CRITICAL_SECTION s_logLock;
 static const DWORD kLogMax = 1024 * 1024;
 
-// All our logs on / off (Diagnostics -> Logs; the user 2026-10-21: on by default): the flag \SDMMC\VestaLogs.off,
-// written once when switched off (not a log) - the proxies and VestaStub read it too. PC: in the exe's folder.
-static bool s_logsOn = true;
+// All our logs on / off (Diagnostics -> Logs; the user 2026-11-16: off by default, was on): the flag
+// \SDMMC\VestaLogs.on, written once when switched on (not a log) - the proxies, VestaStub and the add-ons read it
+// too. PC: in the exe's folder.
+static bool s_logsOn;
 
-static void LogsOffPath(wchar_t* p)
+static void LogsOnPath(wchar_t* p)
 {
 #ifdef UNDER_CE
-    wcscpy(p, L"\\SDMMC\\VestaLogs.off");
+    wcscpy(p, L"\\SDMMC\\VestaLogs.on");
 #else
-    _snwprintf(p, MAX_PATH - 1, L"%sVestaLogs.off", s_dir);
+    _snwprintf(p, MAX_PATH - 1, L"%sVestaLogs.on", s_dir);
     p[MAX_PATH - 1] = 0;
 #endif
 }
@@ -238,17 +239,17 @@ static void VLog(const wchar_t* fmt, ...);
 static void LogsSet(bool on)
 {
     wchar_t p[MAX_PATH];
-    LogsOffPath(p);
+    LogsOnPath(p);
     if (on) {
-        DeleteFile(p);
+        HANDLE h = CreateFile(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h != INVALID_HANDLE_VALUE)
+            CloseHandle(h);
         s_logsOn = true;
         VLog(L"журналы включены");
     } else {
         VLog(L"журналы выключены");
         s_logsOn = false;
-        HANDLE h = CreateFile(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (h != INVALID_HANDLE_VALUE)
-            CloseHandle(h);
+        DeleteFile(p);
     }
 }
 
@@ -1430,8 +1431,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
     InitializeCriticalSection(&s_logLock);
     {
         wchar_t p[MAX_PATH];
-        LogsOffPath(p);
-        s_logsOn = GetFileAttributes(p) == 0xFFFFFFFF;
+        LogsOnPath(p);
+        s_logsOn = GetFileAttributes(p) != 0xFFFFFFFF;
         s_on[T_LOGS] = s_logsOn;
     }
 #ifndef UNDER_CE

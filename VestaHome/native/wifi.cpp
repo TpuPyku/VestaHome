@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include "wifi.h"
 #include "wifiie.h"
+#include "radiowait.h"
 
 #ifdef UNDER_CE
 #define PROC(m, n) GetProcAddress(m, L##n)
@@ -113,7 +114,6 @@ static UINT       s_msg;
 static WifiLogFn  s_log;
 static wchar_t    s_guid[64];          // the adapter
 static volatile bool s_wantOn = true;  // WifiEnable
-static volatile bool s_restart;        // WifiRestart
 static volatile bool s_wantAp, s_apAuto;   // WifiApManual, WifiApSetup
 static wchar_t s_joined[33];               // the network the SDK was last told to join (the worker's thread)
 static char       s_apSsid[33], s_apPass[65];   // under s_cs
@@ -702,7 +702,7 @@ static void RadioPower(bool on)
 }
 
 // The driver's answer can take long or never come (the SDK's mode change, 2026-11-05: BT's off took 12 s): the switch on
-// a thread of its own, its wait bounded, so a restart always ends and the radio's state is in the log.
+// a thread of its own, its wait bounded, so the Wi-Fi thread always goes on and the radio's state is in the log.
 static DWORD WINAPI RadioThread(LPVOID on)
 {
     RadioPower(on != NULL);
@@ -718,21 +718,25 @@ static void RadioGuarded(bool on)
         return;
     }
     if (WaitForSingleObject(h, kRadioWaitMs) != WAIT_OBJECT_0)
-        Log(L"wifi: перезапуск: драйвер не ответил за %d с (%s)", kRadioWaitMs / 1000, on ? L"вкл." : L"выкл.");
+        Log(L"wifi: радио: драйвер не ответил за %d с (%s)", kRadioWaitMs / 1000, on ? L"вкл." : L"выкл.");
     CloseHandle(h);
 }
 
-// The radio off for a while and on again: the driver forgets its state, as after the power cut (sheet 24: an address
-// came only right after one).
-static void RadioRestart()
+// The switch on again before the radio was off 30 s in all (radiowait.h): the seconds left shown, a second waited
+// (the switch may go back meanwhile). false - on now.
+static bool RadioOnTooSoon(WifiInfo& w, DWORD offTick)
 {
-    enum { kOffMs = 30000, kStepMs = 500 };
-    Log(L"wifi: перезапуск: радио выключается на %d с", kOffMs / 1000);
-    RadioGuarded(false);
-    for (DWORD t0 = GetTickCount(); !s_stop && GetTickCount() - t0 < kOffMs;)
-        Sleep(kStepMs);
-    RadioGuarded(true);
-    Log(L"wifi: перезапуск: радио снова включено");
+    DWORD left = RadioOffLeft(offTick, GetTickCount());
+    if (!left)
+        return false;
+    w.state = WIFI_OFF;
+    w.count = 0;
+    w.ssid[0] = 0;
+    w.ip[0] = 0;
+    _snwprintf(w.msg, 96, L"включение Wi-Fi: %u с…", (unsigned)(left + 999) / 1000);
+    Publish(w);
+    WaitForSingleObject(s_wake, left < 1000 ? left : 1000);
+    return true;
 }
 
 #ifdef UNDER_CE
@@ -948,27 +952,15 @@ static DWORD WINAPI WifiThread(LPVOID)
     DWORD apTick = 0, assocTick = 0, staTick = GetTickCount(), giveUp = 0;
     DWORD quietTick = 0;   // the periodic scan held off since then (RefreshQuiet), 0: scanning as usual
     int attempts = 0;
+    DWORD offTick = 0;   // when the switch put the radio off
     while (!s_stop) {
-        if (s_restart) {
-            s_restart = false;
-            if (radioOn && s_wantOn) {
-                w.state = WIFI_OFF;
-                w.count = 0;
-                w.ssid[0] = 0;
-                w.ip[0] = 0;
-                wcscpy(w.msg, L"перезапуск Wi-Fi: 30 с…");
-                Publish(w);
-                RadioRestart();
-                w.msg[0] = 0;
-                haveAdapter = false;
-                connectTick = lastAuto = 0;
-                ap = autoAp = handover = false;
-                staTick = GetTickCount();
-            }
-        }
         if (s_wantOn != radioOn) {
+            if (s_wantOn && RadioOnTooSoon(w, offTick))
+                continue;
             radioOn = s_wantOn;
-            RadioPower(radioOn);
+            RadioGuarded(radioOn);
+            if (!radioOn)
+                offTick = GetTickCount();
             haveAdapter = false;
             connectTick = lastAuto = 0;
             ap = autoAp = handover = false;
@@ -1396,13 +1388,6 @@ void WifiApSetup(const wchar_t* ssid, const wchar_t* pass, bool autoOn)
 void WifiApManual(bool on)
 {
     s_wantAp = on;
-    if (s_thread)
-        SetEvent(s_wake);
-}
-
-void WifiRestart()
-{
-    s_restart = true;
     if (s_thread)
         SetEvent(s_wake);
 }

@@ -1296,24 +1296,25 @@ static void ScrSetNet(HDC dc)
         c[c > st ? -1 : 0] = 0;
     ModemInfo m;
     ModemGet(&m);
+    // (the order: the user 2026-11-16)
     SetRow(dc, 64, L"USB-модем", st);
     Button(dc, 600, 70, 160, 44, s_rasBusy ? L"…" : m.online ? L"Отключить" : L"Подключить", m.online ? B_SEL : B_N,
            IC_NONE, 16, 0, s_rasBusy ? A_NONE : A_MODEMTEST);
+    NetOpName(s_cfg.netOp, op, 40);
+    SetRow(dc, 120, L"3G-модем: оператор, APN", op);
+    Button(dc, 600, 126, 160, 44, L"Настроить", B_N, IC_NONE, 16, 0, A_SCREEN, S_SET_NET3G);
     BtState bt;
     bool phone = NetPhone(&bt);
     wchar_t pan[80];
     NetPanLabel(bt, phone, pan, 80);
-    SetRow(dc, 120, L"Телефон (Bluetooth)", pan);
+    SetRow(dc, 176, L"Телефон (Bluetooth PAN)", pan);
     bool panOn = phone && (bt.pan == BT_PAN_ONLINE || bt.pan == BT_PAN_CONNECTING);
-    Button(dc, 600, 126, 160, 44, panOn ? L"Отключить" : L"Подключить", !phone ? B_DIS : panOn ? B_SEL : B_N,
+    Button(dc, 600, 182, 160, 44, panOn ? L"Отключить" : L"Подключить", !phone ? B_DIS : panOn ? B_SEL : B_N,
            IC_NONE, 16, 0, phone ? A_NETPAN : A_NONE);
-    SetRow(dc, 176, L"Телефон по USB", L"Android Auto и USB-модем телефона по кабелю");
-    Toggle(dc, 688, 186, T_PHONE_USB);
-    NetOpName(s_cfg.netOp, op, 40);
-    SetRow(dc, 232, L"3G-модем: оператор, APN", op);
-    Button(dc, 600, 238, 160, 44, L"Настроить", B_N, IC_NONE, 16, 0, A_SCREEN, S_SET_NET3G);
-    SetRow(dc, 288, L"Автоподключение", L"при вставке модема и после обрыва", true);
-    Toggle(dc, 688, 298, T_NET_AUTO);
+    SetRow(dc, 232, L"Автоподключение", L"при вставке модема и после обрыва");
+    Toggle(dc, 688, 242, T_NET_AUTO);
+    SetRow(dc, 288, L"Телефон по USB", L"Android Auto и USB-модем телефона по кабелю");
+    Toggle(dc, 688, 298, T_PHONE_USB);
     SetRow(dc, 344, L"Режим совместимости", L"телефон по USB любой марки (если свой не находится)", true);
     Toggle(dc, 688, 354, T_PHONE_ANY);
 }
