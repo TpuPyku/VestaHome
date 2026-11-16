@@ -61,6 +61,9 @@ PLAN = (
     # its Android Auto session's certificate and key (aasdk's, VestaAuto\tools\get_cert.py; not in any repo)
     (os.path.join(ROOT, 'VestaAuto', 'tools'), r'ResidentFlash\VHContent\VHPlugins\VestaAuto',
         ('hu_cert.pem', 'hu_key.pem')),
+    # the add-on "Умный дом" (its own closed repo VestaSmartHome, MQTT - the user 2026-11-16)
+    (os.path.join(ROOT, 'VestaSmartHome', 'VestaSmartHome'), r'ResidentFlash\VHContent\VHPlugins\VestaSmartHome',
+        ('VestaSmartHome.exe',)),
 )
 
 
