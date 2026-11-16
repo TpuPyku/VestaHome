@@ -385,6 +385,24 @@ static void PlugNavTap(int k)
         PlugOpen(s_plug[p], s, false);   // (a main screen: no history, as the other sections)
 }
 
+// An add-on's own sound (Android Auto, "sound"): the MCU's source watched; another source taken (MODE) - the add-on
+// told "sound.lost" once (soundlost.h), until its sound starts again.
+static int s_plugSound = -1, s_soundSrc = -1;   // the add-on, the MCU's source last seen
+
+static void PlugSoundWatch()
+{
+    if (s_plugSound < 0 || s_plugSound >= s_plugN)
+        return;
+    int now = s_src;
+    if (!SoundLost(s_soundSrc, now)) {
+        s_soundSrc = now;
+        return;
+    }
+    VLog(L"дополнение %s: источник MCU %d -> %d, свой звук потерян (sound.lost)", s_plug[s_plugSound].id, s_soundSrc, now);
+    PlugSend(s_plug[s_plugSound], L"sound.lost\tsrc=%d", now);
+    s_plugSound = -1;
+}
+
 // The data an add-on subscribed to (7): each second; gps while a fix is fresh, car - the sensors with data (their
 // number as the key, VestaHome/docs/plugin-api.md), media and night when they change.
 static void PlugData()
@@ -626,6 +644,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         VLog(L"дополнение %s: свой звук - наши плееры на паузу, источник медиа", p->id);   // source to media
         OursQuiet();
         MediaSource();
+        s_plugSound = (int)(p - s_plug);
+        s_soundSrc = s_src;
     } else if (!wcscmp(verb, L"nav")) {
         VNavParse(cmd, &s_nav);
         s_navPlug = (int)(p - s_plug);
@@ -635,6 +655,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         VLog(L"дополнение: %s отключилось", p->id);
         if (s_navPlug == (int)(p - s_plug))
             s_navPlug = -1;
+        if (s_plugSound == (int)(p - s_plug))
+            s_plugSound = -1;
         if (s_plugVoice && !s_voice)   // (gone mid-prompt: the radio back)
             NaviVoice(false);
         s_plugVoice = false;
@@ -759,6 +781,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
 static void PlugScreenWatch()
 {
     PlugData();
+    PlugSoundWatch();
     if (s_plugOwnP >= 0 && GetForegroundWindow() == s_wnd && IsWindowVisible(s_wnd))
         s_plugOwnP = s_plugOwnS = -1;   // VestaHome in front again without "back" (a key, the camera): just forgotten
     for (int i = 0; i < s_uwCount; i++) {

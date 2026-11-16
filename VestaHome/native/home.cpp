@@ -48,6 +48,7 @@
 #include "presetpos.h"  // the preset playing: the MCU names its place on a page only
 #include "zonepart.h"  // a partial frame's buttons against the full frame's
 #include "vsecret.h"
+#include "soundlost.h"
 #include "pbcache.h"   // the phone book kept beside VestaHome, sealed
 #include "netmirror.h" // the radio catalogue's mirror (VestaCore's release "radio")
 #include "rvc.h"
