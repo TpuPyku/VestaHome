@@ -101,11 +101,11 @@ static int Waiting(Open* o)
 
 // A trace of the loading (HU 2026-10-25: ActivateDeviceEx failed - 2 in udevice.exe, 1 in device.exe - and it is
 // not known whether this DLL is loaded at all): one line per step into \SDMemory\VestaLogs\VestaNMEA.log, ASCII,
-// none when \SDMMC\VestaLogs.off is there or the card is not.
+// none without \SDMMC\VestaLogs.on or without the card.
 static void Trace(const char* what, DWORD v)
 {
 #ifdef UNDER_CE
-    if (GetFileAttributes(L"\\SDMMC\\VestaLogs.off") != 0xFFFFFFFF ||
+    if (GetFileAttributes(L"\\SDMMC\\VestaLogs.on") == 0xFFFFFFFF ||
         GetFileAttributes(L"\\SDMemory\\VestaLogs") == 0xFFFFFFFF)
         return;
     HANDLE f = CreateFile(L"\\SDMemory\\VestaLogs\\VestaNMEA.log", GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS,

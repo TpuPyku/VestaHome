@@ -4,7 +4,7 @@
 // 38400 and 19200 8N1: listen 2 s, send the empty id 0FFF (an MCU answers A2 / A3), then 0x8010 with the bad value FF
 // (B1 if the command is allowed, FF if locked; the volume not changed). Only after a B1 the volume is set to 8.
 // Each port's settings are put back as they were. Every byte to UartProbe.log (VestaLogs on the SD card or a USB
-// disk, not with \SDMMC\VestaLogs.off), the summary on the screen.
+// disk, only with \SDMMC\VestaLogs.on), the summary on the screen.
 #include <windows.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -54,7 +54,7 @@ static void Sum(const wchar_t* fmt, ...)
 
 static void OpenLog()
 {
-    if (GetFileAttributes(L"\\SDMMC\\VestaLogs.off") != 0xFFFFFFFF)
+    if (GetFileAttributes(L"\\SDMMC\\VestaLogs.on") == 0xFFFFFFFF)
         return;   // (the user's switch: no logs)
     wchar_t dir[MAX_PATH], path[MAX_PATH];
     if (!LogDir(dir, NULL))

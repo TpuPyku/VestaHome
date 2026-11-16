@@ -8,7 +8,7 @@
 // modem's port (DTR raised first: SET_CONTROL_LINE_STATE, as Linux's option driver does; not answering - the PC UI
 // itself) becomes a COM port, the stream driver of this DLL (key Drivers\VestaModemCom, written by VestaHome with
 // Tsp = Unimodem.dll: a TAPI modem for RAS, *99#). Log: VestaLogs\VestaModem.log on the SD card (or the USB disk),
-// none when \SDMMC\VestaLogs.off is there. Imports COREDLL only.
+// none without \SDMMC\VestaLogs.on. Imports COREDLL only.
 #include <windows.h>
 #include <stdio.h>
 #include <stdarg.h>

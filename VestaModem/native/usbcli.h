@@ -11,7 +11,7 @@ static CRITICAL_SECTION s_logCs;
 static void Log(const wchar_t* fmt, ...)   // one line, UTF-8
 {
     static const wchar_t* kDirs[2] = { L"\\SDMemory", L"\\USBDevice" };
-    if (GetFileAttributes(L"\\SDMMC\\VestaLogs.off") != 0xFFFFFFFF)
+    if (GetFileAttributes(L"\\SDMMC\\VestaLogs.on") == 0xFFFFFFFF)
         return;
     wchar_t w[400];
     int n = _snwprintf(w, 398, L"%10u ", (unsigned)GetTickCount());

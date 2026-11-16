@@ -9,14 +9,14 @@ extern McuShm* g_shm;   // spipower_proxy.cpp: the shared ring, NULL if the mapp
 
 // The flag \SDMMC\SPIPower.on is read in DllMain, but the shell loads us at boot, possibly before the cards are
 // mounted (2026-10-17: no line of the shell's at all): it is looked at again every 10 s, both ways - with
-// \SDMMC\VestaLogs.off, VestaHome's switch of all our logs ("Diagnostics -> Logs", 2026-10-21).
+// \SDMMC\VestaLogs.on, VestaHome's switch of all our logs ("Diagnostics -> Logs", 2026-10-21).
 static int LogOn()
 {
     static DWORD s_checked;
     if (GetTickCount() - s_checked > 10000) {
         s_checked = GetTickCount();
         g_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF &&
-                    GetFileAttributesW(L"\\SDMMC\\VestaLogs.off") == 0xFFFFFFFF;
+                    GetFileAttributesW(L"\\SDMMC\\VestaLogs.on") != 0xFFFFFFFF;
     }
     return g_logging;
 }

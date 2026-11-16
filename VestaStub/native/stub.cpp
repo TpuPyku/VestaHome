@@ -15,7 +15,7 @@
 // messages reach nobody, VestaHome's ring included - and answers the messages the shell answered. A process of its
 // own: the watchdog never loads SPIPowerMgr.dll. It falls - started again (3 times); VestaStub.nomcu on the SD card /
 // USB disk - not started (a test without it). It goes before the original shell is started.
-// The log only on removable media: \SDMemory\VestaLogs\VestaStub.log (\SDMMC\VestaLogs.off - none). At the boot the
+// The log only on removable media: \SDMemory\VestaLogs\VestaStub.log (only with \SDMMC\VestaLogs.on). At the boot the
 // card is often not mounted yet (2026-10-24: no VestaStub.log ever): the lines go to RAM (\Temp\VestaStub.log, not the
 // flash) and are copied to the card as soon as it is there.
 // The PC build (testing) maps the HU's paths "\X\..." to "<exe folder>\hu\X\..." and takes the 3 minutes from
@@ -305,8 +305,8 @@ static void Append(const wchar_t* path, const char* b, DWORD n)
 static void Log(const wchar_t* fmt, ...)
 {
     wchar_t dir[MAX_PATH], path[MAX_PATH], ram[MAX_PATH];
-    HuPath(path, L"\\SDMMC\\VestaLogs.off");   // VestaHome's switch of all our logs ("Diagnostics -> Logs")
-    if (There(path))
+    HuPath(path, L"\\SDMMC\\VestaLogs.on");   // VestaHome's switch of all our logs ("Diagnostics -> Logs")
+    if (!There(path))
         return;
     wchar_t w[300];
     SYSTEMTIME t;

@@ -29,7 +29,7 @@ static int Failed()   // stands in for every export when the original is missing
 }
 
 // \SDMemory\VestaLogs\BTProxy.log, only while \SDMMC\SPIPower.on exists (the MCU proxy's flag; the shell loads us
-// at boot, maybe before the cards are mounted: looked at again every 10 s, both ways - with \SDMMC\VestaLogs.off,
+// at boot, maybe before the cards are mounted: looked at again every 10 s, both ways - with \SDMMC\VestaLogs.on,
 // VestaHome's switch of all our logs)
 static int LogOn()
 {
@@ -37,7 +37,7 @@ static int LogOn()
     if (GetTickCount() - s_checked > 10000) {
         s_checked = GetTickCount();
         s_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF &&
-                    GetFileAttributesW(L"\\SDMMC\\VestaLogs.off") == 0xFFFFFFFF;
+                    GetFileAttributesW(L"\\SDMMC\\VestaLogs.on") != 0xFFFFFFFF;
     }
     return s_logging;
 }

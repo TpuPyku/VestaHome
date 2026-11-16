@@ -444,6 +444,7 @@ static const char* kOldProxyMd5[] = {
     "2ea883191fe13f4480381dd905897829",   // 2026-10-20 (VestaHome's calls in the shell; before the call journal)
     "04b3ecab9eef88fa35fc97f1b0ac7573",   // 2026-10-21 (the call journal; its log only with the flag)
     "b5dda404069676993a80f576a0aebba8",   // 2026-11-14 (the 10-21 sources rebuilt - only the time stamp differs)
+    "4bafaf0777e88da65809a1b22b12002a",   // the units' until 2026-11-16 (its log on unless \SDMMC\VestaLogs.off)
 };
 static const int   kOldProxyN = (int)(sizeof(kOldProxyMd5) / sizeof(kOldProxyMd5[0]));
 

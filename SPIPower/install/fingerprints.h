@@ -40,13 +40,13 @@ static const int kFwN = (int)(sizeof(kFw) / sizeof(kFw[0]));
 
 // our own artifacts: hashed from the installer folder to prove on the device that
 // the MD5 code works and that the folder is not a mix of different builds
-static const char* kProxyMd5 = "4bafaf0777e88da65809a1b22b12002a";   // out\SPIPowerMgr.dll (proxy next to the exe)
+static const char* kProxyMd5 = "5e54f83ef63e9a1c1d58aa5f8d987c74";   // out\SPIPowerMgr.dll (proxy next to the exe)
 static const char* kDrillMd5 = "8800cb0ef22a13f7677cef8a9d09c5dc";   // rescue\drill\SwDnl_drill.upg
 static const unsigned int kDrillSize = 357u;
 
 // the Bluetooth proxy (bt\) and the factory SDK it replaces (official package); a FLC_BLUETOOTH_SDK.dll
 // that is neither is left alone
-static const char* kBtProxyMd5 = "8ef0d4a06eca6438644528b88de9d2ba";   // out\FLC_BLUETOOTH_SDK.dll
+static const char* kBtProxyMd5 = "116654f9531f7da4ca8d2226b5a519d0";   // out\FLC_BLUETOOTH_SDK.dll
 static const char* kBtFactoryMd5 = "7ebcbf0e6dbc7e6243fc022e7b02efd7";
 static const unsigned int kBtFactorySize = 134144u;
 
