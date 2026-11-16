@@ -8,9 +8,9 @@
 // night), notify, open, media; "Settings -> General -> Add-ons". Not yet: volume (no way to it but the knob).
 
 // (the protocol's send and fields: VestaCore vhap.h)
-enum { kPlugMax = 4, kPlugScreens = 4, kPlugItems = 16, kPlugWidgets = 2, kPlugRows = 6, kPlugApi = 1 };
+enum { kPlugMax = 4, kPlugScreens = 4, kPlugItems = 16, kPlugWidgets = 2, kPlugRows = 6, kPlugApi = 2 };   // (2: type=text)
 
-struct PlugItem { wchar_t id[24], type[12], label[48], sub[64], value[48], options[64], link[24]; };
+struct PlugItem { wchar_t id[24], type[12], label[48], sub[64], value[48], options[64], link[24]; bool secret; };
 struct PlugScreen { wchar_t id[24], title[48], icon[16]; bool nav, own; HWND win; int n; PlugItem it[kPlugItems]; };
 struct PlugWidget { wchar_t id[24], title[40], icon[16], screen[24], value[24], unit[24], text[2][96]; int state;
                     bool wide, big, image, shown;
@@ -445,6 +445,7 @@ static void PlugItemSet(PlugItem& it, const wchar_t* cmd)   // the fields a comm
     if (VhapField(cmd, L"value", v, 48)) wcscpy(it.value, v);
     if (VhapField(cmd, L"options", v, 64)) wcscpy(it.options, v);
     if (VhapField(cmd, L"link", v, 24)) wcscpy(it.link, v);
+    if (VhapField(cmd, L"secret", v, 4)) it.secret = v[0] == L'1';
 }
 
 static void PlugWidgetSet(PlugWidget& g, const wchar_t* cmd)
@@ -956,6 +957,10 @@ static void ScrPlugin(HDC dc)
             Button(dc, 720, y + 8, 48, 40, NULL, B_N, IC_NEXT, 18, 28, A_PLUGEV, i * 64 + 3);
         } else if (!wcscmp(it.type, L"row")) {
             WRow(dc, y, it.label, sub, A_PLUGEV, i * 64, 776, last);
+        } else if (!wcscmp(it.type, L"text")) {   // a tap: the keyboard; a secret shows only whether it is set
+            WRow(dc, y, it.label, sub, A_PLUGEV, i * 64 + 4, 776, last);
+            const wchar_t* shown = it.secret ? (it.value[0] ? L"••••••" : L"не задан") : it.value[0] ? it.value : L"—";
+            T(dc, 732, y + 35, shown, 19, it.value[0] ? kText : kMuted, 700, AL_END, 380);   // (left of the row's arrow)
         } else {   // "value" (and anything unknown: shown as a value)
             WRow(dc, y, it.label, sub, A_NONE, 0, 520, last);
             T(dc, 760, y + 35, it.value, 19, kText, 700, AL_END, 240);
@@ -968,6 +973,40 @@ static void ScrPlugin(HDC dc)
         T(dc, 692, 446, s, 15, kMuted, 600, AL_MID);
         Button(dc, 728, 414, 56, 52, NULL, s_plugPage + 1 < pages ? B_N : B_DIS, IC_NEXT, 15, 26, A_PLUGPAGE, 1);
     }
+}
+
+// A text field (type=text): typed on VestaHome's keyboard, sent as "event act=text value=..." on "Done" (nothing on
+// "Cancel"). A secret one starts empty (its value is never shown, only whether one is set) and is typed as dots.
+static int     s_plugTextP;
+static wchar_t s_plugTextScr[24], s_plugTextId[24];
+
+static void PlugTextOpen(const PlugScreen& sc, const PlugItem& it)
+{
+    s_plugTextP = s_plugCur;
+    wcscpy(s_plugTextScr, sc.id);
+    wcscpy(s_plugTextId, it.id);
+    wcscpy(s_plugText, it.secret ? L"" : it.value);
+    OpenKeysFor(s_plugText, 63, it.label, S_PLUGIN);
+    s_keysSecret = it.secret;
+}
+
+static void PlugTextDone()
+{
+    if (s_plugTextP < 0 || s_plugTextP >= s_plugN)
+        return;
+    Plugin& p = s_plug[s_plugTextP];
+    PlugScreen* sc = PlugScreenOf(p, s_plugTextScr);
+    for (int i = 0; sc && i < sc->n; i++)
+        if (!wcscmp(sc->it[i].id, s_plugTextId)) {
+            PlugItem& it = sc->it[i];
+            if (it.secret)
+                wcscpy(it.value, s_plugText[0] ? L"1" : L"");
+            else
+                wcsncpy(it.value, s_plugText, 47);   // (shown at once; the add-on may set it back)
+        }
+    PlugSend(p, L"event\tscreen=%s\tid=%s\tact=text\tvalue=%s", s_plugTextScr, s_plugTextId, s_plugText);
+    memset(s_plugText, 0, sizeof(s_plugText));
+    memset(s_keys.text, 0, sizeof(s_keys.text));   // (a password not left in memory)
 }
 
 static void PlugEvent(int arg)   // a tap on an item of the screen shown
@@ -984,6 +1023,8 @@ static void PlugEvent(int arg)   // a tap on an item of the screen shown
         it.value[0] = it.value[0] == L'1' ? L'0' : L'1';
         it.value[1] = 0;
         PlugSend(p, L"event\tscreen=%s\tid=%s\tact=toggle\tvalue=%c", sc.id, it.id, it.value[0]);
+    } else if (what == 4) {
+        PlugTextOpen(sc, it);
     } else if (what == 2 || what == 3) {
         PlugSend(p, L"event\tscreen=%s\tid=%s\tact=step\tvalue=%s", sc.id, it.id, what == 2 ? L"-1" : L"+1");
     } else if (what >= 8) {

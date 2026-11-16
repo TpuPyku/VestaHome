@@ -1,4 +1,7 @@
-# VestaHome — API дополнений, версия 1
+# VestaHome — API дополнений, версия 2
+
+> Версия 2 (2026-11-16): поле ввода текста `type=text` (5.1), пароль — `secret=1`. Дополнение, написанное
+> для версии 1, работает без изменений; поле `type=text` у VestaHome с `api=1` показывается как значение.
 
 > Сделано (2026-10-26): всё, кроме `volume` (громкость у ГУ меняет только крутилка через MCU — способа из программы
 > пока нет). Пример — `VestaCore/plugins/sample` (виджет, экраны, кнопка в панели, своё окно, подписка gps/night),
@@ -35,7 +38,7 @@
 
 ```
 → hello     id=smarthome  name=Умный дом  ver=1.0  api=1  hwnd=001A0B2C
-← welcome   api=1  vh=0.6.261026  night=0  accent=72C059  lang=ru  support=0  unit=VH-EQFK3-005Z8
+← welcome   api=2  vh=1.0.261116  night=0  accent=72C059  lang=ru  support=0  unit=VH-EQFK3-005Z8
 ```
 `support` — есть ли у этой ГУ ключ поддержки проекта (`VestaLicense.key` в папке VestaHome, VestaCore `vlicense`);
 `unit` — ID ГУ, по которому автор делает ключ. Без ключа ничего не закрыто: дополнение может только показать
@@ -79,11 +82,18 @@
 → item        screen=main  id=mode   type=seg     label=Режим  options=Эко|Комфорт|Выкл  value=1
 → item        screen=main  id=target type=stepper label=Цель  value=22 °
 → item        screen=main  id=room   type=row     label=Комнаты  sub=4 устройства  link=rooms
+→ item        screen=conn  id=host   type=text    label=Сервер  value=mqtt.example        (api 2)
+→ item        screen=conn  id=pass   type=text    label=Пароль  secret=1  value=1          (api 2)
 → item.set    screen=main  id=temp   value=22 °           (меняет только названные поля)
 → screen.clear id=main                                     (убрать все элементы, описать заново)
 ```
 Элементы идут сверху вниз в порядке объявления, строками по 56 px; больше, чем влезает, — страницы
 (точки, свайп). `type=row` с `link=` открывает другой экран дополнения.
+`type=text` (api 2): нажатие открывает клавиатуру VestaHome с текстом `value` (до 63 символов); «Готово» шлёт
+`event act=text` с набранным, «Отмена» — ничего. `secret=1` — пароль: строка показывает только «задан» (точки) или
+«не задан» по тому, пусто ли `value` (дополнение шлёт туда `1`, а не сам пароль), клавиатура начинает с пустого,
+набранное — точками, курсор только в конце, без копирования; пробелы по краям не срезаются. Хранить пароль —
+забота дополнения (VestaCore `vsecret`: ключом этой ГУ, как VestaSmartHome).
 
 События:
 ```
@@ -93,6 +103,7 @@
 ← event  screen=main  id=light  act=toggle  value=0
 ← event  screen=main  id=mode   act=seg     value=2
 ← event  screen=main  id=target act=step    value=+1      (или -1)
+← event  screen=conn  id=host   act=text    value=mqtt.example   (api 2; «Готово» на клавиатуре)
 ```
 
 ### 5.2. Своим окном (видео, карта, всё, что рисует само)
@@ -178,11 +189,10 @@ VestaHome ставит свои плееры (музыка, радио из се
 возвращаются в VestaHome (кнопкой «домой», из «Приложений»), с подписью «снято в 12:40» (настройка в виджете
 «Навигация»).
 
-## 9. Ограничения версии 1
+## 9. Ограничения
 
 Нет: своих картинок в описанных экранах (только значки Lucide из скина по имени `icon=`; картинка — только в
-виджете, 4.1), клавиатуры для
-ввода текста (будет `type=text`), звука от дополнения поверх музыки. Добавятся в следующих версиях с
+виджете, 4.1), звука от дополнения поверх музыки (ввод текста — с версии 2, `type=text`). Добавятся в следующих версиях с
 повышением `api`.
 
 ## 10. Примеры

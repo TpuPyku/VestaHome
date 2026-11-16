@@ -1,10 +1,10 @@
-// The phone book's cache beside VestaHome (pbcache.h) and the byte seal (secret.h) on the PC.
+// The phone book's cache beside VestaHome (pbcache.h) on the PC (the seal itself: VestaCore test_vsecret).
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "pbcache.h"
-#include "secret.h"
+#include "vsecret.h"
 
 static int s_checks, s_failed;
 
@@ -77,29 +77,6 @@ static void TestPack()
     free(many);
 }
 
-static void TestSeal()
-{
-    Check(SecretInit() != 0, "seal: a key");
-    unsigned char plain[300], sealed[400], back[400];
-    for (int i = 0; i < 300; i++)
-        plain[i] = (unsigned char)(i * 7);
-    int n = SecretSealBytes(plain, 300, sealed, sizeof(sealed));
-    Check(n > 300 && n < 400, "seal: nonce and tag added");
-    Check(memcmp(sealed + 12, plain, 300) != 0, "seal: not plain");
-    Check(SecretSealBytes(plain, 300, sealed, n - 1) < 0, "seal: too small - -1");
-    n = SecretSealBytes(plain, 300, sealed, sizeof(sealed));
-    Check(SecretOpenBytes(sealed, n, back, sizeof(back)) == 300 && !memcmp(back, plain, 300), "open: the same back");
-    Check(SecretOpenBytes(sealed, n, back, 299) < 0, "open: too small - -1");
-    Check(SecretOpenBytes(sealed, n, back, 300) == 300, "open: just big enough");
-    Check(SecretSealBytes(plain, 300, sealed, n) == n, "seal: just big enough");
-    Check(SecretSealBytes(plain, -1, sealed, sizeof(sealed)) < 0, "seal: a negative length - -1");
-    int e = SecretSealBytes(plain, 0, sealed, sizeof(sealed));
-    Check(e > 0 && SecretOpenBytes(sealed, e, back, 0) == 0, "seal: nothing - nonce and tag, opened back to nothing");
-    sealed[20] ^= 1;
-    Check(SecretOpenBytes(sealed, n, back, sizeof(back)) < 0, "open: damaged (or another unit's) - -1");
-    Check(SecretOpenBytes(sealed, 10, back, sizeof(back)) < 0, "open: shorter than nonce and tag - -1");
-}
-
 static void TestSort()   // (the names in UTF-8 escapes: this file has no BOM)
 {
     BtPbEntry e[9] = { Entry("\xD0\xAF\xD0\xBD\xD0\xB0", "1"),                         // Яна
@@ -162,7 +139,6 @@ int main()
     TestFind();
     TestSort();
     TestPack();
-    TestSeal();
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

@@ -1,6 +1,6 @@
 // The phone book and the call log kept beside VestaHome (the user 2026-11-12: "сохраняй зашифрованно рядом с VH"):
 // the last phone's lists, shown at once when it connects again (a pull still refreshes them). The file is the plain
-// form below sealed with this head unit's key (secret.h SecretSealBytes): unreadable on another unit or a PC.
+// form below sealed with this head unit's key (VestaCore vsecret.h SecretSealBytes): unreadable on another unit or a PC.
 // Plain form: "VHPB", version 1, the phone's address (18), the book's storage (0 phone, 1 SIM), the counts of the book
 // and the calls, then the entries as they are (BtPbEntry: chars only - the same bytes on the unit and the PC).
 #ifndef VESTA_PBCACHE_H

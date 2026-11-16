@@ -56,6 +56,9 @@ static bool  s_delArmed;          // "Delete" was pressed once; the second press
 static wchar_t*       s_keysTarget;   // the text being typed: a shortcut's field or a setting
 static const wchar_t* s_keysTitle;
 static Screen         s_keysBack;     // where "Done" and "Cancel" return to
+static bool           s_keysSecret;   // a password: shown as stars, typed at the end only, no copy / paste
+static wchar_t        s_plugText[64]; // an add-on's text field being typed (vh_plugins.inc PlugTextDone)
+static void PlugTextDone();
 // The text and its cursor (2026-10-22, the user: long lines are edited in the middle) - VestaCore vkeys (moved there
 // 2026-10-29, OSMapsCE's search too): typing and backspace work at the cursor; the finger puts and drags it anywhere
 // on the field (WndProc: VKeysCursorAt), its handle shows below the line.
@@ -812,6 +815,7 @@ static void OpenKeysFor(wchar_t* target, int cap, const wchar_t* title, Screen b
     VKeysOpen(&s_keys, target, cap);
     s_keys.en = en;
     s_clipMenu = false;
+    s_keysSecret = false;
     s_keysNum = NUM_TEXT;
     s_screen = S_KEYS;
 }
@@ -908,9 +912,12 @@ static void CfgKeysDone();
 static void KeysDone()
 {
     wcscpy(s_keysTarget, s_keys.text);
-    Trim(s_keysTarget);
+    if (!s_keysSecret)   // (a password keeps its spaces)
+        Trim(s_keysTarget);
     s_screen = s_keysBack;
-    if (s_keysBack != S_EDIT)
+    if (s_keysTarget == s_plugText)
+        PlugTextDone();
+    else if (s_keysBack != S_EDIT)
         CfgKeysDone();
 }
 
@@ -1214,6 +1221,22 @@ static void DrawKeys(HDC dc)
         Button(dc, 219, 68, 194, 60, L"Вставить", B_FILL, IC_NONE, 17, 0, A_CLIPPASTE);
         Button(dc, 422, 68, 194, 60, L"Очистить", s_keys.text[0] ? B_FILL : B_DIS, IC_NONE, 17, 0,
                s_keys.text[0] ? A_CLIPCLEAR : A_NONE);
+    } else if (s_keysSecret) {   // dots for the characters (the last that fit), the cursor after them
+        R(dc, 16, 68, 600, 60, 16, kPanel);
+        wchar_t dots[VKEYS_MAX];
+        int n = (int)wcslen(s_keys.text);
+        for (int i = 0; i < n; i++)
+            dots[i] = L'•';
+        HGDIOBJ of = SelectObject(dc, Font(26, 700));
+        SIZE sz = { 0, 0 };
+        int from = 0;
+        while (from < n && GetTextExtentPoint32(dc, dots + from, n - from, &sz) && sz.cx > kKeyFieldW)
+            from++;
+        SelectObject(dc, of);
+        dots[n] = 0;
+        T(dc, kKeyFieldX, 104, dots + from, 26, kText, 700);
+        int cx = kKeyFieldX + (from < n ? (int)sz.cx : 0);
+        R(dc, cx - 1, 76, 3, 34, 0, kOrange);
     } else {
         Zone(16, 68, 600, 70, A_KEYFIELD);   // the finger: the cursor (WndProc); held still: copy / paste
         R(dc, 16, 68, 600, 60, 16, kPanel);
