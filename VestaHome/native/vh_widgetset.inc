@@ -494,7 +494,8 @@ static void ScrInfoMore(HDC dc)
         T(dc, 488, y + 18, right[i][0], 13, kMuted, 400);
         T(dc, 488, y + 37, right[i][1], 15, kText, 700, AL_START, 284);
     }
-    Button(dc, 488, 412, 280, 44, L"Лицензии и сервисы", B_N, IC_INFO, 13, 22, A_SCREEN, S_LICENSES);
+    Button(dc, 488, 412, 136, 44, L"Лицензии", B_N, IC_INFO, 13, 22, A_SCREEN, S_LICENSES);
+    Button(dc, 632, 412, 136, 44, L"Поддержали", B_N, IC_STAR, 13, 22, A_SCREEN, S_THANKS);
 }
 
 // "Details -> Licenses and services": what VestaHome brings that the unit's firmware doesn't have - the libraries
@@ -533,22 +534,33 @@ static const LicItem kLicenses[] = {
     { NULL, L"Видео — GStreamer штатного плеера; Bluetooth — стек FLC оболочки; радио, звук и кнопки — MCU через "
             L"SPIPowerMgr; шрифт Tahoma; Windows CE 6." },
 };
+// "Details -> Supported" (the user 2026-11-16): who supports the development on Boosty, special thanks, where to support
+static const LicItem kThanks[] = {
+    { L"Поддержали разработку на Boosty", NULL },
+    { L"Дмитрий П.", L"" },
+    { L"outerdusk", L"" },
+    { L"Особое спасибо", NULL },
+    { L"Сергей Ludo13", L"За тесты." },
+    { L"Поддержать проект", NULL },
+    { NULL, L"boosty.to/vesta_home" },
+};
 enum { kLicTop = 104, kLicBottom = 420 };
-static Scroll s_licList = { 0, 0, 160 };   // the text: its height known after a frame
+static Scroll s_licList = { 0, 0, 160 }, s_thanksList = { 0, 0, 160 };   // the text: its height known after a frame
 
-static void ScrLicenses(HDC dc)
+// A window of headings, titles and texts over the screen (a title with an empty text: the title alone); it scrolls
+static void TextWindow(HDC dc, const wchar_t* title, const LicItem* items, int n, Scroll& list)
 {
     Under(dc, 153);
     Zone(0, 0, 800, 480, A_BACK);   // a tap beside the window closes it
     Zone(40, 40, 720, 400, A_NONE);
     Panel(dc, 40, 40, 720, 400, 16);
-    T(dc, 64, 82, L"Лицензии и сервисы", 17, kText, 700);
+    T(dc, 64, 82, title, 17, kText, 700);
     Button(dc, 696, 52, 52, 44, NULL, B_N, IC_CLOSE, 15, 24, A_BACK);
     Sep(dc, 56, kLicTop - 6, 688);
-    ScrollBegin(dc, s_licList, 56, kLicTop, 704, kLicBottom);
-    int y = kLicTop + 8 - s_licList.pos;
-    for (int i = 0; i < (int)(sizeof(kLicenses) / sizeof(kLicenses[0])); i++) {
-        const LicItem& it = kLicenses[i];
+    ScrollBegin(dc, list, 56, kLicTop, 704, kLicBottom);
+    int y = kLicTop + 8 - list.pos;
+    for (int i = 0; i < n; i++) {
+        const LicItem& it = items[i];
         if (!it.text) {   // a section's heading
             y += i ? 14 : 0;
             T(dc, 64, y + 14, it.title, 13, kOrange, 700);
@@ -559,10 +571,22 @@ static void ScrLicenses(HDC dc)
             T(dc, 64, y + 18, it.title, 17, kText, 700, AL_START, 620);
             y += 24;
         }
-        y += TWrap(dc, 64, y + 16, it.text, 14, kMuted, 400, 620, 6, 19) * 19 + 8;
+        if (it.text[0])
+            y += TWrap(dc, 64, y + 16, it.text, 14, kMuted, 400, 620, 6, 19) * 19;
+        y += 8;
     }
-    s_licList.content = y + s_licList.pos - kLicTop;
-    ScrollEnd(dc, s_licList, 712, kLicTop, 40, kLicBottom - kLicTop, 60);
+    list.content = y + list.pos - kLicTop;
+    ScrollEnd(dc, list, 712, kLicTop, 40, kLicBottom - kLicTop, 60);
+}
+
+static void ScrLicenses(HDC dc)
+{
+    TextWindow(dc, L"Лицензии и сервисы", kLicenses, sizeof(kLicenses) / sizeof(kLicenses[0]), s_licList);
+}
+
+static void ScrThanks(HDC dc)
+{
+    TextWindow(dc, L"Поддержали разработку", kThanks, sizeof(kThanks) / sizeof(kThanks[0]), s_thanksList);
 }
 
 // "Request": product info and the BT address, as the stock "Info" asks for them (FUN_00679190); the answers come

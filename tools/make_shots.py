@@ -61,7 +61,8 @@ SHOTS = [
     ('plugin_back', [HOME, ('sleep', 3), (547, 448), ('sleep', 1), (400, 376), ('sleep', 1), (44, 446), ('sleep', 1)]),
     ('settings_home_widgets', [SETTINGS, SET['general'], (400, 328)]),
     ('info_more', [SETTINGS, SET['info'], (355, 355)]), ('diagnostics', [SETTINGS, SET['info'], (590, 355)]),
-    ('licenses', [SETTINGS, SET['info'], (355, 355), (627, 433)]),
+    ('licenses', [SETTINGS, SET['info'], (355, 355), (556, 433)]),
+    ('thanks', [SETTINGS, SET['info'], (355, 355), (700, 433)]),
     ('power', [SETTINGS, SET['info'], (728, 356)]),
     ('incoming', [HOME, ('call', 1)]),
     ('car_sensors', [HOME, ('swipeback',), ('sleep', 2), (660, 168)]),   # from page 3 to 2: the car widget (top right)
