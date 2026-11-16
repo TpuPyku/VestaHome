@@ -15,4 +15,18 @@ static bool SoundLost(int before, int now)
     return SoundMedia(before) && now >= 0 && !SoundMedia(now);
 }
 
+// VestaHome's beep (a speed camera, a trouble code's glass) and the MCU's source: on the media source our own output is
+// what is heard - the beep there (device 0, mixed with the music), no navigation voice (the user 2026-11-16: on the media
+// the beep on the voice's device was not heard); elsewhere over the source: the navigation voice on the beep's device
+// (dev -1: WAVE_MAPPER)
+struct BeepWay { bool navi; int dev; };
+
+static BeepWay BeepRoute(int src, int beepDev)
+{
+    BeepWay w;
+    w.navi = !SoundMedia(src);
+    w.dev = w.navi ? beepDev : 0;
+    return w;
+}
+
 #endif

@@ -164,6 +164,7 @@ static short    s_beep[11025 / 2];   // 2 x 120 ms at 1.2 kHz with a gap, 11 kHz
 static short*   s_glass;             // breaking glass (a new OBD trouble code), 1.2 s, made on its first play
 static int      s_glassN;
 static bool     s_beepGlass;         // the next BeepPlay: the glass, not the beep
+static int      s_beepDevNow = -1;   // the next BeepPlay's device (BeepRoute; -1: WAVE_MAPPER)
 
 static void BeepPlay();
 
@@ -219,7 +220,10 @@ static void Beep2()
 {
     if (s_voice)
         return;   // one is on its way
-    if (NaviVoice(true)) {
+    BeepWay w = BeepRoute(s_src, s_cfg.beepDev);   // (soundlost.h: on the media - our own output)
+    s_beepDevNow = w.dev;
+    VLog(L"писк: источник MCU %d, %s, устройство %d", s_src, w.navi ? L"голос навигации" : L"медиа: свой выход", w.dev);
+    if (w.navi && NaviVoice(true)) {
         s_voice = 1;
         SetTimer(s_wnd, TIMER_VOICE, kVoiceLeadMs, NULL);
     } else {
@@ -273,7 +277,7 @@ static void BeepPlay()
     wf.wBitsPerSample = 16;
     wf.nBlockAlign = 2;
     wf.nAvgBytesPerSec = 22050;
-    UINT dev = s_cfg.beepDev < 0 ? WAVE_MAPPER : (UINT)s_cfg.beepDev;
+    UINT dev = s_beepDevNow < 0 ? WAVE_MAPPER : (UINT)s_beepDevNow;
     if (waveOutOpen(&s_beepOut, dev, &wf, (DWORD)s_wnd, 0, CALLBACK_WINDOW) != MMSYSERR_NOERROR) {
         s_beepOut = NULL;
         VoiceDone();
