@@ -10,9 +10,11 @@ set PATH=%VS8%\Common7\IDE;%VC%\bin;%PATH%
 cd /d "%~dp0"
 if not exist obj mkdir obj
 if not exist obj\bearssl_pc.lib call build_bearssl.bat
-"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_pbcache.cpp pbcache.cpp secret.cpp /Foobj\ /Fdobj\ /Feobj\test_pbcache.exe ^
+set CORE=%~dp0..\..\..\VestaCore
+if not exist "%CORE%\vlicense.cpp" set CORE=%~dp0..\..\core
+"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_pbcache.cpp pbcache.cpp secret.cpp "%CORE%\vlicense.cpp" /Foobj\ /Fdobj\ /Feobj\test_pbcache.exe ^
   /DUNICODE /D_UNICODE /DWIN32 /D_CRT_SECURE_NO_WARNINGS /I"%VC%\include" /I"%VC%\PlatformSDK\Include" ^
-  /I"..\..\third_party\bearssl-0.6\inc" /I"..\..\third_party\compat" ^
+  /I"..\..\third_party\bearssl-0.6\inc" /I"..\..\third_party\compat" /I"%CORE%" ^
   /link /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" obj\bearssl_pc.lib kernel32.lib >obj\build_pbcache.log || (type obj\build_pbcache.log & exit /b 1)
 if "%1"=="build" exit /b 0
 obj\test_pbcache.exe
