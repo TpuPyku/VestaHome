@@ -539,7 +539,7 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
         if (dot)
             *dot = 0;
         WMediaBody(dc, g, d, IC_MUSIC, last[0] ? last : L"—",
-                   last[0] ? L"последний трек · ▶ — продолжить" : L"выберите музыку в «Медиа»", NULL, -1, NULL, NULL,
+                   last[0] ? L"последний трек — можно продолжить" : L"выберите музыку в «Медиа»", NULL, -1, NULL, NULL,
                    true);
     }
     MediaArrows(dc, g, d, A_PREVTRK, 0, A_NEXTTRK, 0);
@@ -686,12 +686,13 @@ static void SaverWeather(HDC dc, int cx, int y)
         return;
     wchar_t ts[16];
     _snwprintf(ts, 16, L"%+d°", temp);
-    int tw = TextWidth(dc, ts, 40, 700), iw = w.have ? 72 : 0, x = cx - (iw + tw) / 2;
+    // (64 px as the widget's: at 40 the unit drew its "+" and "°" as boxes - HU 2026-11-17)
+    int tw = TextWidth(dc, ts, 64, 700), iw = w.have ? 72 : 0, x = cx - (iw + tw) / 2;
     if (w.have)
-        WxIcon(dc, w.kind, x, y, kText);
-    T(dc, x + iw, y + 48, ts, 40, kText, 700);
+        WxIcon(dc, w.kind, x, y + 4, kText);
+    T(dc, x + iw, y + 60, ts, 64, kText, 700);
     if (w.have && w.desc[0])
-        T(dc, cx, y + 88, w.desc, 18, kMuted, 400, AL_MID, 400);
+        T(dc, cx, y + 96, w.desc, 18, kMuted, 400, AL_MID, 400);
 }
 
 static bool CarSensor(int id, wchar_t* v, int n);   // (below: the trip's)

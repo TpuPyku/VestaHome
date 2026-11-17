@@ -474,7 +474,7 @@ static void ScrNetRadio(HDC dc)
             s[159] = 0;
             T(dc, 272, 200, s, 15, kMuted, 400, AL_START, 512);
         } else {
-            T(dc, 272, 200, L"Кнопка списка вверху или ▶ — первая станция", 16, kMuted, 400, AL_START, 512);
+            T(dc, 272, 200, L"Кнопка списка вверху или «играть» — первая станция", 16, kMuted, 400, AL_START, 512);
         }
     } else {
         const wchar_t* list = kNetListName[s_netWhich];

@@ -1890,7 +1890,7 @@ static void DirEntries(HDC dc, const wchar_t* dir, wchar_t* const* names, int co
                     *c = L',';
         }
         bool cur = !isDir && curName && !_wcsicmp(n, curName);   // the one playing: "▶ играет" (design 0.6)
-        ListRow(dc, 16 + cell / rows * (cw + 12), 160 + cell % rows * kRowStep, cw, kRowH, s, cur ? L"▶ играет" : NULL,
+        ListRow(dc, 16 + cell / rows * (cw + 12), 160 + cell % rows * kRowStep, cw, kRowH, s, cur ? L"играет" : NULL,
                 cur ? L_CUR : L_N, isDir ? IC_FOLDER : ic, sub[0] ? sub : NULL,
                 NULL, pick, i, isDir ? kOrange : CLR_INVALID);   // folders orange, files muted
     }
