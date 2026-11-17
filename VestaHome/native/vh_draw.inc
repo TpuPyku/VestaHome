@@ -1232,18 +1232,32 @@ struct FontEnt { int size, weight; HFONT f; };
 static FontEnt s_fonts[160];
 static int     s_fontCount;
 
-// Fonts by pixel size and weight (400 / 600 / 700 as in the mockups), created once.
+// Fonts by pixel size and weight (400 / 600 / 700 as in the mockups), created once. The table full (the text fitted
+// to its width tries many sizes): the oldest one deleted for the new one - before, every new size past 160 was a new
+// font never deleted, a GDI leak each frame (HU 2026-11-17: after hours of the screen saver "+" and "°" came as
+// boxes). (A font given out is selected and put back before the next call: none in use is ever deleted.)
+static int s_fontNext;   // the slot the next new font takes once the table is full
+
 static HFONT Font(int size, int weight)
 {
     for (int i = 0; i < s_fontCount; i++)
         if (s_fonts[i].size == size && s_fonts[i].weight == weight)
             return s_fonts[i].f;
     HFONT f = MakeFont(size, weight);
-    if (s_fontCount < 160) {
-        s_fonts[s_fontCount].size = size;
-        s_fonts[s_fontCount].weight = weight;
-        s_fonts[s_fontCount++].f = f;
+    if (!f)
+        return (HFONT)GetStockObject(SYSTEM_FONT);
+    int k = s_fontCount < 160 ? s_fontCount++ : s_fontNext;
+    if (k == s_fontNext && s_fontCount == 160 && s_fonts[k].f) {
+        static bool s_told;
+        if (!s_told)
+            VLog(L"шрифты: больше 160 размеров - старые удаляются (раньше копились)");
+        s_told = true;
+        DeleteObject(s_fonts[k].f);
+        s_fontNext = (s_fontNext + 1) % 160;
     }
+    s_fonts[k].size = size;
+    s_fonts[k].weight = weight;
+    s_fonts[k].f = f;
     return f;
 }
 

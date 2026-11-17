@@ -686,13 +686,12 @@ static void SaverWeather(HDC dc, int cx, int y)
         return;
     wchar_t ts[16];
     _snwprintf(ts, 16, L"%+d°", temp);
-    // (64 px as the widget's: at 40 the unit drew its "+" and "°" as boxes - HU 2026-11-17)
-    int tw = TextWidth(dc, ts, 64, 700), iw = w.have ? 72 : 0, x = cx - (iw + tw) / 2;
+    int tw = TextWidth(dc, ts, 40, 700), iw = w.have ? 72 : 0, x = cx - (iw + tw) / 2;
     if (w.have)
-        WxIcon(dc, w.kind, x, y + 4, kText);
-    T(dc, x + iw, y + 60, ts, 64, kText, 700);
+        WxIcon(dc, w.kind, x, y, kText);
+    T(dc, x + iw, y + 48, ts, 40, kText, 700);
     if (w.have && w.desc[0])
-        T(dc, cx, y + 96, w.desc, 18, kMuted, 400, AL_MID, 400);
+        T(dc, cx, y + 88, w.desc, 18, kMuted, 400, AL_MID, 400);
 }
 
 static bool CarSensor(int id, wchar_t* v, int n);   // (below: the trip's)
