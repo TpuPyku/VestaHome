@@ -128,11 +128,12 @@
 
 Подписка (VestaHome шлёт при изменении, не чаще раза в секунду):
 ```
-→ subscribe  what=gps,car,media,night,keys
+→ subscribe  what=gps,car,media,night,keys,bt
 ← gps    fix=1  lat=53.2001  lon=50.1500  speed=42  course=270
 ← car    speed=42  fuel=31  temp_out=12  …                 (то, что есть: CAN, OBD — имена как в виджете «Автомобиль»)
 ← media  src=radio  title=Relax FM  text=103,7 МГц  playing=1
 ← night  value=1
+← bt     unit=AA:BB:CC:DD:EE:FF  phone=A4:E2:87:98:D6:9F  hf=2   (адрес Bluetooth ГУ, телефон по Bluetooth, HFP: 2 — подключён, -1 — нет proxy; при изменении)
 ← key    code=18  st=0  kind=2                        (только keys: кнопка панели или руля, пока впереди окно дополнения или собственное окно его экрана)
 ← theme  accent=72C059                                (всем, без подписки: тема VestaHome сменилась)
 ```

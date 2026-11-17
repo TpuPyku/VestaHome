@@ -429,6 +429,18 @@ static void PlugData()
     Icon ic = SaverNowPlaying(media, 160);
     (void)ic;
     bool mediaNew = wcscmp(media, s_media0) != 0, nightNew = s_night0 != (s_night ? 1 : 0);
+    // Bluetooth (api 3, 2026-11-17: VestaAuto offers it to Android Auto - the phone takes the car's HFP for calls):
+    // the unit's address, the phone connected and its HFP state
+    static wchar_t s_bt0[80];
+    wchar_t bt[80], unit[24] = L"", phone[18] = L"";
+    BtState st;
+    int hf = BtGet(&st, NULL) ? st.hf : -1;
+    McuBtAddr(unit, 24);
+    if (hf >= 1 && st.devAddr[0])
+        BtText(st.devAddr, phone, 18);
+    _snwprintf(bt, 80, L"bt\tunit=%s\tphone=%s\thf=%d", unit, phone, hf);
+    bt[79] = 0;
+    bool btNew = wcscmp(bt, s_bt0) != 0;
     // the theme's accent: to every add-on when it changes (welcome has it at first; the user's rule 2026-10-26 -
     // the add-ons' accents and highlights are VestaHome's)
     static COLORREF s_accent0 = (COLORREF)-1;
@@ -465,7 +477,10 @@ static void PlugData()
             PlugSend(p, L"media\ttitle=%s\tplaying=%d", media, media[0] ? 1 : 0);
         if ((p.sub & 8) && (nightNew || first))
             PlugSend(p, L"night\tvalue=%d", s_night ? 1 : 0);
+        if ((p.sub & 32) && (btNew || first))
+            PlugSend(p, L"%s", bt);
     }
+    wcscpy(s_bt0, bt);
     wcscpy(s_media0, media);
     s_night0 = s_night ? 1 : 0;
 }
@@ -743,7 +758,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
     } else if (!wcscmp(verb, L"subscribe")) {
         VhapField(cmd, L"what", v, 96);
         p->sub = (wcsstr(v, L"gps") ? 1 : 0) | (wcsstr(v, L"car") ? 2 : 0) | (wcsstr(v, L"media") ? 4 : 0) |
-                 (wcsstr(v, L"night") ? 8 : 0) | (wcsstr(v, L"keys") ? 16 : 0);
+                 (wcsstr(v, L"night") ? 8 : 0) | (wcsstr(v, L"keys") ? 16 : 0) | (wcsstr(v, L"bt") ? 32 : 0);
         p->sub |= 0x100;   // (the first round sends everything)
     } else if (!wcscmp(verb, L"media")) {   // the source playing: toggle / next / prev
         VhapField(cmd, L"cmd", v, 16);
