@@ -51,6 +51,7 @@ static wchar_t     s_netTitle[160]; // the song (ICY StreamTitle), under s_netCs
 static wchar_t     s_netInfo[64];   // MP3 / AAC / OGG
 static CRITICAL_SECTION s_netCs;
 static const wchar_t* WebCover(const char* artist, const char* title);   // (vh_cover.inc)
+static const wchar_t* WebCoverHad(const char* artist, const char* title);
 
 static int CrashNote(EXCEPTION_POINTERS* e, const wchar_t* where);   // (home.cpp)
 
@@ -596,11 +597,29 @@ static const wchar_t* NetCoverFile()
         wcscpy(s_prev, t);
         s_since = GetTickCount();
     }
-    if (!t[0] || s_netState != NR_PLAY || GetTickCount() - s_since < 5000)
-        return NULL;
     char u[480], a[160], ti[160];
     WideCharToMultiByte(CP_UTF8, 0, t, -1, u, sizeof(u), NULL, NULL);
-    return RadioSplit(u, a, ti, 160) ? WebCover(a, ti) : NULL;
+    if (!t[0] || !RadioSplit(u, a, ti, 160))
+        return NULL;
+    const wchar_t* had = WebCoverHad(a, ti);   // (the same song: its cover kept, paused too - the user 17.11)
+    if (had || s_netState != NR_PLAY || GetTickCount() - s_since < 5000)
+        return had;
+    return WebCover(a, ti);
+}
+
+// Once a second while the internet radio plays: its song's cover becomes due (5 s in) or comes - the screens showing
+// it redrawn (nothing else redraws them then; HU 17.11: the cover only after a redraw).
+static void NetCoverTick()
+{
+    static wchar_t s_last[MAX_PATH];
+    if (!s_netOn)
+        return;
+    const wchar_t* f = NetCoverFile();
+    if (!wcscmp(f ? f : L"", s_last))
+        return;
+    wcscpy(s_last, f ? f : L"");
+    if (IsWindowVisible(s_wnd) && (s_screen == S_NETRADIO || s_screen == S_HOME))
+        Redraw();
 }
 
 static void NetStateText(wchar_t* s, int n)

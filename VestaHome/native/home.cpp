@@ -675,6 +675,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (wp == 1) {   // the screen and the source: back at the start, then remembered
             StartVolumeTick();
             ResumeSourceTick();
+            NetCoverTick();
             PbTick();
             PairTick();
             BtOwnerTick();
@@ -965,8 +966,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
         return 0;
     case WM_APP_COVER:   // the music's cover decoded (vh_cover.inc)
-        if (CoverTake((CoverJob*)lp) && IsWindowVisible(hwnd) && !s_drag && (s_screen == S_AUDIO || s_screen == S_HOME))
-            Redraw();
+        if (CoverTake((CoverJob*)lp) && IsWindowVisible(hwnd) && !s_drag &&
+            (s_screen == S_AUDIO || s_screen == S_HOME || s_screen == S_NETRADIO || s_screen == S_AUDIO_BT))
+            Redraw();   // (the internet radio's and Bluetooth's screens too - HU 17.11: seen only after a redraw)
         return 0;
     case WM_APP_PHOTO:   // a picture or a thumbnail decoded
         if ((s_screen == S_PHOTO || s_screen == S_PHOTO_VIEW || s_screen == S_SAVER_PICK) && IsWindowVisible(hwnd) &&

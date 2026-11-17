@@ -361,6 +361,21 @@ static const wchar_t* WebCover(const char* artist, const char* title)
     return NULL;
 }
 
+// The song's picture if it is already there (asked before, or in the cache) - no search; NULL none.
+static const wchar_t* WebCoverHad(const char* artist, const char* title)
+{
+    unsigned long key = WebCoverKey(artist, title);
+    if (key == s_wcKey)
+        return s_wcFile[0] ? s_wcFile : NULL;
+    wchar_t file[MAX_PATH];
+    WebCoverFile(key, file);
+    if (GetFileAttributes(file) == 0xFFFFFFFF)
+        return NULL;
+    s_wcKey = key;
+    wcscpy(s_wcFile, file);
+    return s_wcFile;
+}
+
 static bool WebCoverTake(unsigned long key)   // WM_APP_WEBCOVER: true - the song wanted now (to redraw)
 {
     if (key != s_wcKey)
