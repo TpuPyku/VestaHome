@@ -81,12 +81,22 @@ static void PlugSend(Plugin& p, const wchar_t* fmt, ...)
 // A panel / wheel button to the add-on whose window is in front, if it subscribed to "keys" (7): its answer 2 -
 // it took the button, VestaHome does nothing with it; otherwise VestaHome's own action (the user 2026-10-26: the
 // map's buttons must not take the media's and the phone's).
+static bool PlugFront(const Plugin& p, HWND fg)   // its window in front - or its screen's own one (Android Auto, 5.2)
+{
+    if (fg == p.hwnd)
+        return true;
+    for (int k = 0; k < p.ns; k++)
+        if (p.sc[k].own && p.sc[k].win && p.sc[k].win == fg)
+            return true;
+    return false;
+}
+
 static bool PlugKey(int key, int st, int kind)
 {
     HWND fg = GetForegroundWindow();
     for (int i = 0; i < s_plugN; i++) {
         Plugin& p = s_plug[i];
-        if (!(p.sub & 16) || !p.hwnd || !IsWindow(p.hwnd) || fg != p.hwnd)
+        if (!(p.sub & 16) || !p.hwnd || !IsWindow(p.hwnd) || !PlugFront(p, fg))
             continue;
         if (VhapSend(p.hwnd, s_wnd, L"key\tcode=%d\tst=%d\tkind=%d", key, st, kind) == 2) {
             VLog(L"кнопка 0x%02X — дополнению %s", key, p.id);
