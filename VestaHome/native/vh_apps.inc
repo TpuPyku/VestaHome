@@ -433,8 +433,13 @@ static BOOL CALLBACK EnumApp(HWND h, LPARAM lp);
 static bool s_findHidden;   // EnumApp: a hidden window too (a running program that hid itself: GpsSim's "Свернуть")
 static void RaiseWindow(HWND h);
 
+static int  NaviApp();       // (vh_tasks.inc: OSMapsCE on the apps' list)
+static bool NaviToAddon();   // (vh_plugins.inc: an add-on took the navigation - its screen instead)
+
 static void RunApp(int i)
 {
+    if (i == NaviApp() && NaviToAddon())   // (Android Auto's session: the navigation is the phone's, the user 17.11)
+        return;
     const App& a = s_apps[i];
     // Already running (started from here, or its window "class!title" is open): bring it to the front.
     s_waitPid = RunningPid(a.path);

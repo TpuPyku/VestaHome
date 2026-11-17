@@ -159,6 +159,22 @@ static DWORD s_osmFavsTick;
 static int NaviApp();   // (vh_tasks.inc: OSMapsCE on the apps' list)
 static void RunApp(int i);
 
+// An add-on that took the navigation ("navi on=1", plugin-api.md 7.4: Android Auto while its session runs): OSMapsCE's
+// starts (its tile, the Navigation and the map widgets, a favourite's route) open the add-on's screen instead - two
+// navigators at once would fight for the unit's memory and processor (the user 2026-11-17).
+static int s_naviPlug = -1;
+static void PlugOpen(Plugin& p, int s, bool push);   // (below)
+
+static bool NaviToAddon()
+{
+    if (s_naviPlug < 0 || s_naviPlug >= s_plugN || !s_plug[s_naviPlug].hwnd || !IsWindow(s_plug[s_naviPlug].hwnd) ||
+        !s_plug[s_naviPlug].ns)
+        return false;
+    VLog(L"навигация: идёт сеанс %s - вместо OSMapsCE его экран", s_plug[s_naviPlug].id);
+    PlugOpen(s_plug[s_naviPlug], 0, true);
+    return true;
+}
+
 static Plugin* OsmPlug()   // OSMapsCE running and connected
 {
     Plugin* p = PlugById(L"OSMapsCE");
@@ -286,6 +302,8 @@ static bool PlugWidgetTap(const UserWg& u)   // an add-on's widget tapped: its s
     wcsncpy(pid, u.key + 2, n);
     pid[n] = 0;
     Plugin* p = PlugById(pid);
+    if (!wcscmp(u.key, kOsmKey) && NaviToAddon())   // (the navigation is Android Auto's now)
+        return true;
     if (!wcscmp(u.key, kOsmKey) && !OsmPlug()) {   // OSMapsCE not running: it opens
         if (NaviApp() >= 0)
             RunApp(NaviApp());
@@ -709,6 +727,14 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         MediaSource();
         s_plugSound = (int)(p - s_plug);
         s_soundSrc = s_src;
+    } else if (!wcscmp(verb, L"navi")) {   // the add-on takes the navigation / gives it back
+        VhapField(cmd, L"on", v, 4);
+        int me = (int)(p - s_plug);
+        if (v[0] == L'1')
+            s_naviPlug = me;
+        else if (s_naviPlug == me)
+            s_naviPlug = -1;
+        VLog(L"навигация: %s %s", p->id, v[0] == L'1' ? L"взяло навигацию" : L"отдало навигацию");
     } else if (!wcscmp(verb, L"playing")) {
         PlugPlaying(p, cmd);
     } else if (!wcscmp(verb, L"nav")) {
@@ -724,6 +750,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             s_plugSound = -1;
         if (s_ap.plug == (int)(p - s_plug))
             s_ap.have = false;
+        if (s_naviPlug == (int)(p - s_plug))
+            s_naviPlug = -1;
         if (s_plugVoice && !s_voice)   // (gone mid-prompt: the radio back)
             NaviVoice(false);
         s_plugVoice = false;
