@@ -728,13 +728,21 @@ static DWORD WINAPI CmdThread(LPVOID)
             char a[40];
             CopyText(a, s_shm->cmdText, 18);
             bool busy = false;
+            int first = -9;   // the first try's answer when it was tried again
             if (a[0]) {
                 volatile LONG* v = PanStateVar();
+                // (HU 2026-11-17: the PAN stuck again for an hour, every connect -> 1 at once; what the stack and the
+                // link to the phone were like before each try - the A2DP link's state tells whether the phone is there)
+                wchar_t pre[120];
+                wsprintfW(pre, L"PAN connect %S: state %d, AV %d, last asked %u ms ago", a, v ? (int)*v : -1,
+                          ((FlcFn0)g_real[IDX_Flc_Bluetooth_Av_GetConnectState])(), GetTickCount() - s_panAsked);
+                LogLine(pre);
                 if (v && PanDeadRequest(*v, GetTickCount() - s_panAsked))
                     PanUnstick(L"connect");
                 s_panAsked = GetTickCount();
                 r = ((int (*)(char*, unsigned short))g_real[IDX_Flc_Bluetooth_PanServer_Connect])(a, 0x1116);
                 if (r == 1 && PanLowDisconnect(a) >= 0) {   // refused below the SDK: let the old link go, once more
+                    first = r;
                     s_panAsked = GetTickCount();
                     r = ((int (*)(char*, unsigned short))g_real[IDX_Flc_Bluetooth_PanServer_Connect])(a, 0x1116);
                 }
@@ -761,8 +769,10 @@ static DWORD WINAPI CmdThread(LPVOID)
                     InterlockedIncrement((LONG*)&s_shm->seq);
                 }
             }
-            wchar_t b[80];
-            wsprintfW(b, L"PAN %S -> %d%s", a[0] ? a : "off", r, busy ? L" (not ready: nothing sent)" : L"");
+            wchar_t b[120];
+            volatile LONG* after = PanStateVar();
+            wsprintfW(b, L"PAN %S -> %d%s%s, state now %d", a[0] ? a : "off", r, busy ? L" (not ready: nothing sent)" : L"",
+                      first != -9 ? L" (the first try -> 1, tried again)" : L"", after ? (int)*after : -1);
             LogLine(b);
         } else if (cmd == BT_CMD_PHONE) {   // the phone off for the OBD adapter / the stack's connects back
             if (s_shm->cmdText[0] == '0') {

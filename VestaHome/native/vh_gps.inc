@@ -1128,12 +1128,16 @@ static DWORD s_panPhone, s_panNext, s_panWait = 60000, s_panConn, s_panCheck;
 static volatile LONG s_panProbe;      // the check: 0 running / none, 1 ok, -1 failed
 static int   s_panFails;
 
+static bool PlugRunning(const wchar_t* id);   // (vh_plugins.inc: the add-on connected)
+
 static void PanSend(const BtState& bt, bool on)
 {
     wchar_t a[20];
     MultiByteToWideChar(CP_ACP, 0, bt.devAddr, -1, a, 20);
     a[19] = 0;
-    VLog(L"BT-модем: %s %s", on ? L"подключить" : L"отключить", a);
+    // (HU 2026-11-17: the PAN stuck for an hour - the phone's links and Android Auto beside each try, to tell why)
+    VLog(L"BT-модем: %s %s (телефон: A2DP %d, HFP %d, AVRCP %d, звонок %d; Android Auto %s)", on ? L"подключить" : L"отключить",
+         a, bt.av, bt.hf, bt.avrcp, bt.call[0], PlugRunning(L"VestaAuto") ? L"запущено" : L"нет");
     BtCmdText(BT_CMD_PAN, on ? a : L"");
     s_panConn = on ? GetTickCount() : 0;
 }
@@ -1259,13 +1263,15 @@ static void PanAuto(const BtState& bt)   // every second while a phone is connec
 static void NetPanWatch()
 {
     static int s_last = -1;
+    static DWORD s_lastTick;
     BtState bt;
     if (!BtGet(&bt, NULL))
         return;
-    if (bt.pan != s_last) {
-        static const wchar_t* kNames[4] = { L"нет", L"подключение", L"в сети", L"не вышло" };
+    if (bt.pan != s_last || (bt.pan == BT_PAN_FAILED && bt.panTick != s_lastTick)) {   // (each refusal: they come
+        static const wchar_t* kNames[4] = { L"нет", L"подключение", L"в сети", L"не вышло" };     //  one after another)
         VLog(L"BT-модем: %s", bt.pan >= 0 && bt.pan < 4 ? kNames[bt.pan] : L"?");
         s_last = bt.pan;
+        s_lastTick = bt.panTick;
         s_panIp[0] = 0;
     }
     if (bt.pan == BT_PAN_ONLINE && !s_panIp[0]) {

@@ -114,6 +114,12 @@ static Plugin* PlugById(const wchar_t* id)
     return NULL;
 }
 
+static bool PlugRunning(const wchar_t* id)
+{
+    Plugin* p = PlugById(id);
+    return p && p->hwnd && IsWindow(p->hwnd);
+}
+
 static Plugin* PlugByWnd(HWND h)
 {
     for (int i = 0; i < s_plugN; i++)
