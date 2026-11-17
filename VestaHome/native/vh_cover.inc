@@ -13,6 +13,29 @@ struct CoverJob {
     bool    same;   // the folder's picture as before: the cover kept
 };
 
+// An add-on's music (Android Auto: VestaAuto's "playing", plugin-api.md 7.3; the user 2026-11-17): what plays, its
+// cover a picture file of the add-on's (in \Temp: RAM) - shown while that add-on's own sound plays.
+struct AddonPlay {
+    bool    have;
+    int     plug, state, pos, len;   // state: 1 stopped, 2 playing, 3 paused; pos / len: seconds
+    DWORD   tick;                    // pos as of then
+    wchar_t title[96], artist[96], album[96], app[32], art[MAX_PATH];
+};
+static AddonPlay s_ap;
+static bool      s_cvAddon;   // the cover wanted: the add-on's (its widget is being drawn), not our music's
+static int AddonSoundPlug();  // (vh_plugins.inc) the add-on whose own sound plays, -1 none
+
+static bool AddonPlayShown()
+{
+    return s_ap.have && s_ap.plug >= 0 && AddonSoundPlug() == s_ap.plug;
+}
+
+static int AddonPos()   // seconds in, counted on while it plays
+{
+    int p = s_ap.pos + (s_ap.state == 2 ? (int)((GetTickCount() - s_ap.tick) / 1000) : 0);
+    return s_ap.len > 0 && p > s_ap.len ? s_ap.len : p;
+}
+
 static CRITICAL_SECTION s_cvCs;
 static HANDLE   s_cvEv, s_cvThread;
 static wchar_t  s_cvWant[MAX_PATH];    // the track whose cover is wanted (the worker reads it under s_cvCs)
@@ -95,7 +118,10 @@ static DWORD WINAPI CoverThread(LPVOID)
         LeaveCriticalSection(&s_cvCs);
         wchar_t pic[MAX_PATH] = L"";
         bool got = false;
-        if (j->track[0]) {
+        if (j->track[0] && PicIsName(j->track)) {   // an add-on's cover: the picture itself
+            got = PicLoad(j->track, kCoverPx, kCoverPx, true, 0, false, &j->pic, NULL, NULL, true) == PIC_OK;
+            s_lastPic[0] = 0;
+        } else if (j->track[0]) {
             got = CoverFromTag(j->track, &j->pic);
             if (got) {
                 s_lastPic[0] = 0;
@@ -119,7 +145,9 @@ static DWORD WINAPI CoverThread(LPVOID)
 static void CoverWant()
 {
     wchar_t p[MAX_PATH] = L"";
-    if (s_chan && s_plCur >= 0 && s_plCur < s_plCount)
+    if (s_cvAddon)
+        wcscpy(p, s_ap.art);
+    else if (s_chan && s_plCur >= 0 && s_plCur < s_plCount)
         _snwprintf(p, MAX_PATH, L"%s%s", s_plDir, s_pl[s_plCur]);
     else if (s_cfg.musicFile[0])
         _snwprintf(p, MAX_PATH, L"%s%s", s_cfg.musicDir, s_cfg.musicFile);

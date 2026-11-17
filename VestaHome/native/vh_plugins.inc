@@ -405,6 +405,38 @@ static void PlugNavTap(int k)
 // told "sound.lost" once (soundlost.h), until its sound starts again.
 static int s_plugSound = -1, s_soundSrc = -1;   // the add-on, the MCU's source last seen
 
+static int AddonSoundPlug()
+{
+    return s_plugSound;
+}
+
+// "playing" (plugin-api.md 7.3): what the add-on's music plays now
+static void PlugPlaying(Plugin* p, const wchar_t* cmd)
+{
+    wchar_t v[16];
+    s_ap.have = true;
+    s_ap.plug = (int)(p - s_plug);
+    s_ap.title[0] = s_ap.artist[0] = s_ap.album[0] = s_ap.app[0] = s_ap.art[0] = 0;
+    VhapField(cmd, L"title", s_ap.title, 96);
+    VhapField(cmd, L"artist", s_ap.artist, 96);
+    VhapField(cmd, L"album", s_ap.album, 96);
+    VhapField(cmd, L"app", s_ap.app, 32);
+    VhapField(cmd, L"art", s_ap.art, MAX_PATH);
+    s_ap.state = VhapField(cmd, L"state", v, 16) ? (!wcscmp(v, L"play") ? 2 : !wcscmp(v, L"pause") ? 3 : 1) : 1;
+    s_ap.pos = VhapField(cmd, L"pos", v, 16) ? _wtoi(v) : 0;
+    s_ap.len = VhapField(cmd, L"len", v, 16) ? _wtoi(v) : 0;
+    s_ap.tick = GetTickCount();
+    RECT r;
+    if (s_screen == S_HOME && IsWindowVisible(s_wnd) && HomeMediaRect(&r))
+        RedrawArea(r.left, r.top, r.right, r.bottom);
+}
+
+static void AddonKey(int dir)   // the "now playing" widget's buttons for the add-on's music
+{
+    if (s_ap.plug >= 0 && s_ap.plug < s_plugN)
+        PlugSend(s_plug[s_ap.plug], L"media.key\tkey=%s", dir < 0 ? L"prev" : dir > 0 ? L"next" : L"toggle");
+}
+
 static void PlugSoundWatch()
 {
     if (s_plugSound < 0 || s_plugSound >= s_plugN)
@@ -677,6 +709,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         MediaSource();
         s_plugSound = (int)(p - s_plug);
         s_soundSrc = s_src;
+    } else if (!wcscmp(verb, L"playing")) {
+        PlugPlaying(p, cmd);
     } else if (!wcscmp(verb, L"nav")) {
         VNavParse(cmd, &s_nav);
         s_navPlug = (int)(p - s_plug);
@@ -688,6 +722,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             s_navPlug = -1;
         if (s_plugSound == (int)(p - s_plug))
             s_plugSound = -1;
+        if (s_ap.plug == (int)(p - s_plug))
+            s_ap.have = false;
         if (s_plugVoice && !s_voice)   // (gone mid-prompt: the radio back)
             NaviVoice(false);
         s_plugVoice = false;

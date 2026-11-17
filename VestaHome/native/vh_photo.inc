@@ -510,6 +510,7 @@ static void DoActionOn(const Btn& b)
         break;
     }
     case A_PLUGON:   PlugSwitch(b.arg); break;
+    case A_ADDONKEY: AddonKey(b.arg); break;
     case A_PLUGPAGE: s_plugPage += b.arg; if (s_plugPage < 0) s_plugPage = 0; break;
     case A_PLUGOPEN:
         if (b.arg >= 0 && b.arg < s_plugN && s_plug[b.arg].ns)

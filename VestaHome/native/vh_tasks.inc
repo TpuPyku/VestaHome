@@ -427,10 +427,39 @@ static void TunerPage(const Tuner& t, wchar_t* s, int n)
 // What plays now (design 0.6; the user 2026-10-23: the radio too): our internet radio, our music, the radio (the
 // MCU's source), the phone's music; nothing - the last of ours to go on with. Big (2 x 2), compact (1 x 2) or tall
 // (2 x 1); our music's cover behind it, dimmed (as Android Auto's).
+// An add-on's music (Android Auto): its track, the app, its cover; the buttons to the add-on (media.key); a tap opens
+// its screen.
+static void WMediaAddon(HDC dc, const MediaGeo& g)
+{
+    s_cvAddon = true;
+    bool d = Widget(dc, g.x, g.y, g.w, g.h, g.shape == WS_TALL ? L"Android Auto" : L"Сейчас играет · Android Auto",
+                    IC_MUSIC, A_PLUGOPEN, s_ap.plug, S_NONE, g.shape == WS_TALL);
+    wchar_t sub[200], a[16], b[16];
+    if (s_ap.artist[0] && s_ap.album[0])
+        _snwprintf(sub, 200, L"%s · %s", s_ap.artist, s_ap.album);
+    else
+        wcscpy(sub, s_ap.artist[0] ? s_ap.artist : s_ap.album);
+    sub[199] = 0;
+    int pos = AddonPos();
+    Mmss(a, 16, pos);
+    Mmss(b, 16, s_ap.len);
+    WMediaBody(dc, g, d, IC_MUSIC, s_ap.title[0] ? s_ap.title : L"—", sub, s_ap.app[0] ? s_ap.app : NULL,
+               s_ap.len > 0 ? pos * g.barW / s_ap.len : -1, a, b, true);
+    s_cvAddon = false;
+    MediaArrows(dc, g, d, A_ADDONKEY, -1, A_ADDONKEY, 1);
+    bool down = Zone(g.cx - g.r, g.cy - g.r, 2 * g.r, 2 * g.r, A_ADDONKEY, 0);
+    Disc(dc, g.cx, g.cy, g.r, down ? kFacet : kOrange);
+    Ico(dc, s_ap.state == 2 ? IC_PAUSE : IC_PLAY, g.cx - g.play / 2, g.cy - g.play / 2, g.play, kInk);
+}
+
 static void WMediaAt(HDC dc, int x, int y, int shape)
 {
     MediaGeo g = MediaGeoOf(x, y, shape);
     bool big = g.big || shape == WS_TALL;   // (the frequency's place: two rows high)
+    if (AddonPlayShown()) {
+        WMediaAddon(dc, g);
+        return;
+    }
     int vol, mute, src;
     bool srcKnown = VolGet(&vol, &mute, &src);
     bool ours = s_netOn || PlayerPlaying();
