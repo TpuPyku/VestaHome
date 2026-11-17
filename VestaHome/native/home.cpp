@@ -51,7 +51,7 @@
 #include "soundlost.h"
 #include "pbcache.h"   // the phone book kept beside VestaHome, sealed
 #include "netmirror.h" // the radio catalogue's mirror (VestaCore's release "radio")
-#include "rvc.h"
+#include "vrvc.h"   // VestaCore: the rear view camera
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
 #include "vnight.h"    // VestaCore: the night mode shared with OSMapsCE
 #include "vkeys.h"     // VestaCore: the keyboard's text and cursor
