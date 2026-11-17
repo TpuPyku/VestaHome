@@ -114,6 +114,7 @@ static UINT       s_msg;
 static WifiLogFn  s_log;
 static wchar_t    s_guid[64];          // the adapter
 static volatile bool s_wantOn = true;  // WifiEnable
+static volatile LONG s_offs;           // WifiEnable(false) so far: a quick off - on is still a restart (RadioStep)
 static volatile bool s_wantAp, s_apAuto;   // WifiApManual, WifiApSetup
 static wchar_t s_joined[33];               // the network the SDK was last told to join (the worker's thread)
 static char       s_apSsid[33], s_apPass[65];   // under s_cs
@@ -953,11 +954,19 @@ static DWORD WINAPI WifiThread(LPVOID)
     DWORD quietTick = 0;   // the periodic scan held off since then (RefreshQuiet), 0: scanning as usual
     int attempts = 0;
     DWORD offTick = 0;   // when the switch put the radio off
+    LONG offsSeen = s_offs;   // the switch-offs acted on
     while (!s_stop) {
-        if (s_wantOn != radioOn) {
-            if (s_wantOn && RadioOnTooSoon(w, offTick))
+        int step = RadioStep(s_wantOn, radioOn, (unsigned)s_offs, (unsigned)offsSeen);
+        if (step != RADIO_KEEP) {
+            if (step == RADIO_GO_ON && RadioOnTooSoon(w, offTick))
                 continue;
-            radioOn = s_wantOn;
+            offsSeen = s_offs;   // (off: this one done; on: the ones while it was off do not count)
+            radioOn = step == RADIO_GO_ON;
+            if (!radioOn) {   // (SetMode(0) takes up to 10 s: the line says so meanwhile)
+                w.state = WIFI_OFF;
+                wcscpy(w.msg, L"выключаю Wi-Fi…");
+                Publish(w);
+            }
             RadioGuarded(radioOn);
             if (!radioOn)
                 offTick = GetTickCount();
@@ -1394,6 +1403,9 @@ void WifiApManual(bool on)
 
 void WifiEnable(bool on)
 {
+    Log(L"wifi: выключатель %s", on ? L"вкл." : L"выкл.");
+    if (!on)
+        InterlockedIncrement((LONG*)&s_offs);   // (CE's takes no volatile)
     s_wantOn = on;
     if (s_thread)
         SetEvent(s_wake);

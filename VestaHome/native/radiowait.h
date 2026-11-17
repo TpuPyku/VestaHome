@@ -13,4 +13,17 @@ static unsigned RadioOffLeft(unsigned offTick, unsigned now)
     return off >= (unsigned)kRadioOffMs ? 0 : kRadioOffMs - off;
 }
 
+// What the radio's thread does with the switch (HU 2026-11-17, sheet 40 p. 8: off and on at once did nothing - the
+// thread saw only where the switch is now, on again, and the switch-off was lost). offs - the switch-offs so far
+// (WifiEnable counts them), seen - the ones the thread has acted on: one not acted on puts the radio off even when
+// the switch is on again (then on after the 30 s, RadioOffLeft).
+enum { RADIO_KEEP, RADIO_GO_OFF, RADIO_GO_ON };
+
+static int RadioStep(bool wantOn, bool radioOn, unsigned offs, unsigned seen)
+{
+    if (radioOn)
+        return !wantOn || offs != seen ? RADIO_GO_OFF : RADIO_KEEP;
+    return wantOn ? RADIO_GO_ON : RADIO_KEEP;
+}
+
 #endif
