@@ -73,6 +73,7 @@
 #include "photo.h"
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "wglayout.h"  // the main screen's widgets in their places
+#include "callwin.h"   // an incoming call over any program
 
 #define APP_CLASS L"VestaHome_Wnd"
 
@@ -614,22 +615,25 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     Redraw();
             }
         }
-        if (wp == 1) {   // calls: an incoming one opens its window, a taken one the call's, the end closes them
+        if (wp == 1) {   // calls: an incoming one opens its window over any program (callwin.cpp), a taken one the
+                         // call's, the end closes them and gives the front back
             BtState bt;
             static int s_lastCall;
             if (BtGet(&bt, NULL) && bt.call[0] != s_lastCall) {
                 int c = bt.call[0];
                 s_lastCall = c;
-                bool front = IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd;
                 if (c == BT_CALL_ACTIVE)
                     s_callTick = GetTickCount();
-                if (front && c == BT_CALL_INCOMING && s_screen != S_INCOMING) {
+                CallAct act = CallStep(c, s_screen == S_INCOMING, s_screen == S_CALL);
+                if (act == CA_INCOMING) {
+                    CallFront();
                     Go(S_INCOMING, true);
-                } else if (front && s_screen == S_INCOMING && c >= BT_CALL_DIALING) {
+                } else if (act == CA_TAKEN) {
                     Back();
                     Go(S_CALL, true);
-                } else if (c == BT_CALL_NONE && (s_screen == S_INCOMING || s_screen == S_CALL)) {
+                } else if (act == CA_CLOSE) {
                     Back();
+                    CallGiveBack();
                 }
                 if (IsWindowVisible(hwnd))
                     Redraw();

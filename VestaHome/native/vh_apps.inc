@@ -564,6 +564,37 @@ static void DropRaised()
     s_raisedCount = 0;
 }
 
+// An incoming call (the user 2026-11-17: OSMapsCE in front, nothing to answer with on the unit): VestaHome over any
+// program; the window in front remembered and given back when the call is over, if nobody went elsewhere meanwhile.
+static HWND s_callPrev;
+
+static void CallFront()
+{
+    HWND fg = GetForegroundWindow();
+    if (IsWindowVisible(s_wnd) && fg == s_wnd)
+        return;
+    s_callPrev = fg;
+    VLog(L"звонок: VestaHome вперёд поверх окна %08X", (unsigned)(UINT_PTR)fg);
+#ifdef UNDER_CE
+    ShowWindow(s_wnd, SW_SHOW);
+    SetWindowPos(s_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+#else
+    ShowWindow(s_wnd, IsIconic(s_wnd) ? SW_RESTORE : SW_SHOW);
+#endif
+    SetForegroundWindow(s_wnd);
+}
+
+static void CallGiveBack()
+{
+    HWND p = s_callPrev;
+    s_callPrev = NULL;
+    if (!p || p == s_wnd || !IsWindow(p) || !IsWindowVisible(p) || GetForegroundWindow() != s_wnd)
+        return;
+    VLog(L"звонок окончен: вперёд снова окно %08X", (unsigned)(UINT_PTR)p);
+    SetWindowPos(p, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetForegroundWindow(p);
+}
+
 // MUTE twice (the user 2026-11-12: "all the windows but VestaHome away"): the programs started from here and the one in
 // front hidden, under the rest - their tile starts them again: their hidden window comes back (RunApp, s_findHidden).
 static void HideOthers(HWND front)
