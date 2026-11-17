@@ -248,6 +248,25 @@ static void LogMsg(const wchar_t* s)
     if (g_log2[0]) LogTo(g_log2, s);
 }
 
+// Firmware builds we must not install on, found by a file of their own (the user 2026-11-17: on the CAN panel
+// firmware the factory update - our only rescue path, SPIPower_rescue - bricks the unit; no proxy, no stub there
+// until that firmware is studied). Removing ours stays allowed.
+static const wchar_t* kForeignFw[]  = { L"\\ResidentFlash\\CAN\\can_panel.exe" };
+static const wchar_t* kForeignWhy[] = { L"прошивка с CAN-панелью (can_panel.exe): заводское восстановление на ней делает кирпич" };
+
+static bool ForeignFirmware()   // g_status: the refusal, true when this firmware is one of them
+{
+    for (int i = 0; i < (int)(sizeof(kForeignFw) / sizeof(kForeignFw[0])); i++)
+        if (GetFileAttributes(kForeignFw[i]) != 0xFFFFFFFF) {
+            _snwprintf(g_status, 512, L"Отказ: %s. Ничего не изменено.", kForeignWhy[i]);
+            g_status[511] = 0;
+            LogMsg(g_status);
+            return true;
+        }
+    return false;
+}
+
+
 // ---------------------------------------------------------------- files
 static int FileExists(const wchar_t* p)
 {
@@ -992,6 +1011,8 @@ static int DoInstall(int logging, int force)
 {
     SetPaths();
     LogMsg(logging ? L"--- install (logging on) ---" : L"--- install (pass-through) ---");
+    if (ForeignFirmware())
+        return 0;
 
     if (FlagByte() >= 0) {
         wcscpy(g_status, L"Отказ: заряжен \\ResidentFlash\\SwUpdate.flag (загрузочное обновление) — сначала: drill-off (кнопка ОТМЕНИТЬ ЗАДАНИЕ)");
@@ -1311,6 +1332,8 @@ static int CopyTree(const wchar_t* from, const wchar_t* to)
 // Install or update; the outcome goes to g_status. 1 = done.
 static int DoVhInstall()
 {
+    if (ForeignFirmware())   // (before any file: the loader and the proxy would be refused after it anyway)
+        return 0;
     VhPayload pl;
     if (!VhGetPayload(&pl)) {
         wcscpy(g_status, L"VestaHome: встроенные файлы повреждены (CRC) — скачайте установщик заново.");
@@ -1942,6 +1965,8 @@ static void DoBootArm(const char* verb, int force)
     // proxy's ("install p2" / "rollback"); the boot run does the stub first
     int isRollback = strstr(verb, "rollback") != NULL, isInstall = strstr(verb, "install") != NULL;
     int isStub = strstr(verb, "stub") != NULL, stubOn = strstr(verb, "stub on") != NULL;
+    if ((isInstall || stubOn) && ForeignFirmware())
+        return;
     if (isStub && !stubOn && !isRollback && !isInstall && !IsStubFile(kShellPath)) {
         wcscpy(g_status, L"Загрузчик VestaHome не установлен — на месте G3NavHMI.exe штатная оболочка.");
         return;
