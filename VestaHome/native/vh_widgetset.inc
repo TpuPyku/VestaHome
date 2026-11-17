@@ -539,6 +539,8 @@ static const LicItem kThanks[] = {
     { L"Поддержали разработку на Boosty", NULL },
     { L"Дмитрий П.", L"" },
     { L"outerdusk", L"" },
+    { L"Hobta Evgen", L"" },
+    { L"Roman Raskalov", L"" },
     { L"Особое спасибо", NULL },
     { L"Сергей Ludo13", L"За тесты." },
     { L"Поддержать проект", NULL },
