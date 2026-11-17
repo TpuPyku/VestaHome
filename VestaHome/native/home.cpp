@@ -73,6 +73,7 @@
 #include "photo.h"
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "wglayout.h"  // the main screen's widgets in their places
+#include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)
 #include "callwin.h"   // an incoming call over any program
 
 #define APP_CLASS L"VestaHome_Wnd"
@@ -958,6 +959,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_APP_UWG:   // a widget's url fetched: its data read at the next second
         for (int u = 0; u < s_uwCount; u++)
             s_uw[u].readTick = 0;
+        return 0;
+    case WM_APP_WEBCOVER:   // a song's cover downloaded (vh_cover.inc)
+        if (WebCoverTake((unsigned long)wp) && IsWindowVisible(hwnd) && !s_drag)
+            Redraw();
         return 0;
     case WM_APP_COVER:   // the music's cover decoded (vh_cover.inc)
         if (CoverTake((CoverJob*)lp) && IsWindowVisible(hwnd) && !s_drag && (s_screen == S_AUDIO || s_screen == S_HOME))

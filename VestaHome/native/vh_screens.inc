@@ -727,11 +727,18 @@ static void BtMusicTick(HWND hwnd)
     s_shown = now;
 }
 
+static const wchar_t* s_cvPick;   // (vh_cover.inc)
+static const wchar_t* BtCoverFile();
+static bool CoverArt(int x, int y, int s, int rad);
+
 static void ScrAudioBt(HDC dc)
 {
     Frame(dc, L"Медиа · Bluetooth");
     MediaTabs(dc, S_AUDIO_BT, IC_PHONE, A_SCREEN, S_PHONE);
-    Cover(dc, IC_BT, 16, 124, 232);
+    s_cvPick = BtCoverFile();   // (the song's cover from the net)
+    if (!s_cvPick || !CoverArt(16, 124, 232, 20))
+        Cover(dc, IC_BT, 16, 124, 232);
+    s_cvPick = NULL;
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
     bool on = src == 9;

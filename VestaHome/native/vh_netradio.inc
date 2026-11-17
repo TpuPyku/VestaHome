@@ -50,6 +50,7 @@ static wchar_t     s_netMsg[96];   // the state or the error (under s_netCs whil
 static wchar_t     s_netTitle[160]; // the song (ICY StreamTitle), under s_netCs
 static wchar_t     s_netInfo[64];   // MP3 / AAC / OGG
 static CRITICAL_SECTION s_netCs;
+static const wchar_t* WebCover(const char* artist, const char* title);   // (vh_cover.inc)
 
 static int CrashNote(EXCEPTION_POINTERS* e, const wchar_t* where);   // (home.cpp)
 
@@ -579,6 +580,27 @@ static void NetTick()
 {
     if (s_netOn && s_netState == NR_WAIT && (int)(GetTickCount() - s_netRetryAt) >= 0)
         NetConnect();
+}
+
+// The internet radio's song (ICY "Artist - Title"): its cover file once the song has played 5 s (the sound's buffer
+// first - PLAN.md, the user 2026-11-17), NULL none (yet).
+static const wchar_t* NetCoverFile()
+{
+    static wchar_t s_prev[160];
+    static DWORD s_since;
+    wchar_t t[160];
+    EnterCriticalSection(&s_netCs);
+    wcscpy(t, s_netTitle);
+    LeaveCriticalSection(&s_netCs);
+    if (wcscmp(t, s_prev)) {
+        wcscpy(s_prev, t);
+        s_since = GetTickCount();
+    }
+    if (!t[0] || s_netState != NR_PLAY || GetTickCount() - s_since < 5000)
+        return NULL;
+    char u[480], a[160], ti[160];
+    WideCharToMultiByte(CP_UTF8, 0, t, -1, u, sizeof(u), NULL, NULL);
+    return RadioSplit(u, a, ti, 160) ? WebCover(a, ti) : NULL;
 }
 
 static void NetStateText(wchar_t* s, int n)

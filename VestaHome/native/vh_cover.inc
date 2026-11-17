@@ -22,7 +22,8 @@ struct AddonPlay {
     wchar_t title[96], artist[96], album[96], app[32], art[MAX_PATH];
 };
 static AddonPlay s_ap;
-static bool      s_cvAddon;   // the cover wanted: the add-on's (its widget is being drawn), not our music's
+// s_cvPick (defined in vh_screens.inc, its first user): the cover wanted while set - this picture (an add-on's, a
+// song's from the net), not our music's.
 static int AddonSoundPlug();  // (vh_plugins.inc) the add-on whose own sound plays, -1 none
 
 static bool AddonPlayShown()
@@ -145,8 +146,8 @@ static DWORD WINAPI CoverThread(LPVOID)
 static void CoverWant()
 {
     wchar_t p[MAX_PATH] = L"";
-    if (s_cvAddon)
-        wcscpy(p, s_ap.art);
+    if (s_cvPick)
+        wcsncpy(p, s_cvPick, MAX_PATH - 1);
     else if (s_chan && s_plCur >= 0 && s_plCur < s_plCount)
         _snwprintf(p, MAX_PATH, L"%s%s", s_plDir, s_pl[s_plCur]);
     else if (s_cfg.musicFile[0])
@@ -182,6 +183,199 @@ static bool CoverTake(CoverJob* j)
     }
     free(j);
     return wanted;
+}
+
+// ---- a song's cover from the net (PLAN.md, the user 2026-11-17): the phone's music over Bluetooth, the internet
+// radio's song - iTunes Search (webcover.cpp), one worker, the pictures kept on the SD card / USB disk (Covers\),
+// without one in RAM (\Temp); a song not found is not asked again. The UI thread asks (WebCover) and is told
+// (WM_APP_WEBCOVER).
+#define WM_APP_WEBCOVER (WM_APP + 32)
+static CRITICAL_SECTION s_wcCs;
+static HANDLE   s_wcEv, s_wcThread;
+static char     s_wcArtist[128], s_wcTitle[128];   // the song wanted (UTF-8), under s_wcCs
+static unsigned long s_wcKey;                      // its key (the UI thread's)
+static wchar_t  s_wcFile[MAX_PATH];                // its picture once there, "" not (yet)
+
+static void WebCoverDir(wchar_t* dir)
+{
+#ifdef UNDER_CE
+    const wchar_t* vols[2] = { L"\\SDMemory", L"\\USBDevice" };
+    for (int i = 0; i < 2; i++) {
+        DWORD a = GetFileAttributes(vols[i]);
+        if (a != 0xFFFFFFFF && (a & FILE_ATTRIBUTE_DIRECTORY)) {
+            _snwprintf(dir, MAX_PATH, L"%s\\VestaHome\\", vols[i]);
+            CreateDirectory(dir, NULL);
+            wcscat(dir, L"Covers\\");
+            CreateDirectory(dir, NULL);
+            return;
+        }
+    }
+    wcscpy(dir, L"\\Temp\\VestaCovers\\");
+    CreateDirectory(L"\\Temp", NULL);
+    CreateDirectory(dir, NULL);
+#else
+    _snwprintf(dir, MAX_PATH, L"%sCovers\\", s_dir);
+    CreateDirectory(dir, NULL);
+#endif
+}
+
+static void WebCoverFile(unsigned long key, wchar_t* path)
+{
+    wchar_t dir[MAX_PATH];
+    WebCoverDir(dir);
+    _snwprintf(path, MAX_PATH, L"%s%08lX.jpg", dir, key);
+    path[MAX_PATH - 1] = 0;
+}
+
+// The song's picture searched: Yandex Music first (its servers in Russia), iTunes when it has nothing (a larger
+// catalogue - the user 2026-11-17); its host and path into host / art.
+static bool WebCoverFind(const char* artist, const char* title, char* host, char* art)
+{
+    char path[512];
+    unsigned char* body = NULL;
+    int len = 0, status = 0;
+    YandexSearch(artist, title, path, sizeof(path));
+    bool found = HttpGet("api.music.yandex.net", true, path, &body, &len, &status) == NET_OK && status == 200 &&
+                 YandexArt((const char*)body, host, 64, art, 256);
+    free(body);
+    if (found)
+        return true;
+    body = NULL;
+    WebCoverSearch(artist, title, path, sizeof(path));
+    found = HttpGet("itunes.apple.com", true, path, &body, &len, &status) == NET_OK && status == 200 &&
+            WebCoverArt((const char*)body, host, 64, art, 256);
+    free(body);
+    return found;
+}
+
+// The cache in RAM (no card): over kWebRamMax pictures - the others than the one just saved go (the unit's memory).
+enum { kWebRamMax = 60 };
+static void WebCoverPrune(const wchar_t* keep)
+{
+    if (wcsncmp(keep, L"\\Temp\\", 6))
+        return;
+    wchar_t mask[MAX_PATH], dir[MAX_PATH];
+    wcscpy(dir, keep);
+    *(wcsrchr(dir, L'\\') + 1) = 0;
+    _snwprintf(mask, MAX_PATH, L"%s*.jpg", dir);
+    int n = 0;
+    WIN32_FIND_DATA fd;
+    HANDLE h = FindFirstFile(mask, &fd);
+    for (BOOL ok = h != INVALID_HANDLE_VALUE; ok; ok = FindNextFile(h, &fd))
+        n++;
+    if (h != INVALID_HANDLE_VALUE)
+        FindClose(h);
+    if (n <= kWebRamMax)
+        return;
+    h = FindFirstFile(mask, &fd);
+    for (BOOL ok = h != INVALID_HANDLE_VALUE; ok; ok = FindNextFile(h, &fd)) {
+        wchar_t p[MAX_PATH];
+        _snwprintf(p, MAX_PATH, L"%s%s", dir, fd.cFileName);
+        if (_wcsicmp(p, keep))
+            DeleteFile(p);
+    }
+    if (h != INVALID_HANDLE_VALUE)
+        FindClose(h);
+}
+
+static bool WebCoverFetch(const char* artist, const char* title, const wchar_t* file)
+{
+    char host[64], art[256];
+    if (!WebCoverFind(artist, title, host, art))
+        return false;
+    unsigned char* body = NULL;
+    int len = 0, status = 0;
+    bool ok = HttpGet(host, true, art, &body, &len, &status) == NET_OK && status == 200 && len > 100;
+    if (ok) {
+        HANDLE f = CreateFile(file, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        DWORD put = 0;
+        ok = f != INVALID_HANDLE_VALUE && WriteFile(f, body, len, &put, NULL) && (int)put == len;
+        if (f != INVALID_HANDLE_VALUE)
+            CloseHandle(f);
+        if (!ok)
+            DeleteFile(file);
+        else
+            WebCoverPrune(file);
+    }
+    free(body);
+    return ok;
+}
+
+static DWORD WINAPI WebCoverThread(LPVOID)
+{
+    static unsigned long s_miss[64];   // songs not found (the worker's): not asked again
+    static int s_missN;
+    for (;;) {
+        WaitForSingleObject(s_wcEv, INFINITE);
+        char a[128], t[128];
+        EnterCriticalSection(&s_wcCs);
+        strcpy(a, s_wcArtist);
+        strcpy(t, s_wcTitle);
+        LeaveCriticalSection(&s_wcCs);
+        unsigned long key = WebCoverKey(a, t);
+        bool missed = false;
+        for (int i = 0; i < s_missN && !missed; i++)
+            missed = s_miss[i] == key;
+        wchar_t file[MAX_PATH];
+        WebCoverFile(key, file);
+        if (missed || GetFileAttributes(file) != 0xFFFFFFFF)
+            continue;
+        bool ok = WebCoverFetch(a, t, file);
+        VLog(L"обложка из сети: %S - %S: %s", a, t, ok ? L"есть" : L"не найдена");
+        if (ok)
+            PostMessage(s_wnd, WM_APP_WEBCOVER, (WPARAM)key, 0);
+        else
+            s_miss[s_missN++ % 64] = key;
+        Sleep(2000);   // (one search in two seconds at most)
+    }
+    return 0;
+}
+
+// The song's picture when it is there (in the cache), otherwise asked for; NULL - none (yet).
+static const wchar_t* WebCover(const char* artist, const char* title)
+{
+    if (!title[0])
+        return NULL;
+    unsigned long key = WebCoverKey(artist, title);
+    if (key == s_wcKey)
+        return s_wcFile[0] ? s_wcFile : NULL;
+    s_wcKey = key;
+    wchar_t file[MAX_PATH];
+    WebCoverFile(key, file);
+    if (GetFileAttributes(file) != 0xFFFFFFFF) {
+        wcscpy(s_wcFile, file);
+        return s_wcFile;
+    }
+    s_wcFile[0] = 0;
+    if (!s_wcThread) {
+        InitializeCriticalSection(&s_wcCs);
+        s_wcEv = CreateEvent(NULL, FALSE, FALSE, NULL);
+        s_wcThread = CreateThread(NULL, 0, WebCoverThread, NULL, 0, NULL);
+    }
+    EnterCriticalSection(&s_wcCs);
+    strncpy(s_wcArtist, artist, 127);
+    strncpy(s_wcTitle, title, 127);
+    s_wcArtist[127] = s_wcTitle[127] = 0;
+    LeaveCriticalSection(&s_wcCs);
+    SetEvent(s_wcEv);
+    return NULL;
+}
+
+static bool WebCoverTake(unsigned long key)   // WM_APP_WEBCOVER: true - the song wanted now (to redraw)
+{
+    if (key != s_wcKey)
+        return false;
+    WebCoverFile(key, s_wcFile);
+    return true;
+}
+
+// The phone's song (AVRCP, Bluetooth): its cover file, NULL none (yet).
+static const wchar_t* BtCoverFile()
+{
+    BtState bt;
+    if (!BtGet(&bt, NULL) || !bt.title[0])
+        return NULL;
+    return WebCover(bt.artist, bt.title);
 }
 
 static bool CoverHave()

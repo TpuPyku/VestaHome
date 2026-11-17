@@ -431,7 +431,7 @@ static void TunerPage(const Tuner& t, wchar_t* s, int n)
 // its screen.
 static void WMediaAddon(HDC dc, const MediaGeo& g)
 {
-    s_cvAddon = true;
+    s_cvPick = s_ap.art;
     bool d = Widget(dc, g.x, g.y, g.w, g.h, g.shape == WS_TALL ? L"Android Auto" : L"Сейчас играет · Android Auto",
                     IC_MUSIC, A_PLUGOPEN, s_ap.plug, S_NONE, g.shape == WS_TALL);
     wchar_t sub[200], a[16], b[16];
@@ -445,7 +445,7 @@ static void WMediaAddon(HDC dc, const MediaGeo& g)
     Mmss(b, 16, s_ap.len);
     WMediaBody(dc, g, d, IC_MUSIC, s_ap.title[0] ? s_ap.title : L"—", sub, s_ap.app[0] ? s_ap.app : NULL,
                s_ap.len > 0 ? pos * g.barW / s_ap.len : -1, a, b, true);
-    s_cvAddon = false;
+    s_cvPick = NULL;
     MediaArrows(dc, g, d, A_ADDONKEY, -1, A_ADDONKEY, 1);
     bool down = Zone(g.cx - g.r, g.cy - g.r, 2 * g.r, 2 * g.r, A_ADDONKEY, 0);
     Disc(dc, g.cx, g.cy, g.r, down ? kFacet : kOrange);
@@ -484,7 +484,9 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
     }
     BtState bt;
     if (!ours && srcKnown && src == 9 && BtGet(&bt, NULL) && bt.title[0]) {   // the phone's music (AVRCP)
-        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Bluetooth" : L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV, S_AUDIO_BT);
+        s_cvPick = BtCoverFile();   // (the song's cover from the net)
+        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Bluetooth" : L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV,
+                        S_AUDIO_BT, S_NONE, s_cvPick && shape == WS_TALL);
         wchar_t title[BT_TEXT], artist[BT_TEXT], t0[16] = L"", t1[16] = L"";
         BtText(bt.title, title, BT_TEXT);
         BtText(bt.artist, artist, BT_TEXT);
@@ -498,7 +500,8 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
             _snwprintf(t0, 16, L"%d:%02d", pos / 60000, pos / 1000 % 60);
             _snwprintf(t1, 16, L"%d:%02d", len / 60000, len / 1000 % 60);
         }
-        WMediaBody(dc, g, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1);
+        WMediaBody(dc, g, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1, s_cvPick != NULL);
+        s_cvPick = NULL;
         bool playing = BtPlayingNow(bt);
         MediaArrows(dc, g, d, A_BTCMD, BT_CMD_PREV, A_BTCMD, BT_CMD_NEXT);
         bool down = Zone(g.cx - g.r, g.cy - g.r, 2 * g.r, 2 * g.r, A_BTCMD, BT_CMD_PLAYPAUSE);
@@ -509,14 +512,17 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
     if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
         NetLoadList();
     if (NetCur() && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
-        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Интернет-радио" : L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
+        s_cvPick = NetCoverFile();   // (the song's cover from the net)
+        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Интернет-радио" : L"Сейчас играет · Интернет-радио",
+                        IC_NETRADIO, A_NAV, S_NETRADIO, S_NONE, s_cvPick && shape == WS_TALL);
         wchar_t s[160];
         EnterCriticalSection(&s_netCs);
         wcscpy(s, s_netTitle);
         LeaveCriticalSection(&s_netCs);
         if (!s[0] || s_netState != NR_PLAY)
             NetStateText(s, 160);
-        WMediaBody(dc, g, d, IC_NETRADIO, s_netNow.name, s, NULL, -1, NULL, NULL);
+        WMediaBody(dc, g, d, IC_NETRADIO, s_netNow.name, s, NULL, -1, NULL, NULL, s_cvPick != NULL);
+        s_cvPick = NULL;
         MediaArrows(dc, g, d, A_NRSTEP, -1, A_NRSTEP, 1);
         NetPlayBtn(dc, g.cx, g.cy, g.r, g.play);
         return;

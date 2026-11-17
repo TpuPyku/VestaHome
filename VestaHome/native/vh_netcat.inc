@@ -463,7 +463,10 @@ static void ScrNetRadio(HDC dc)
     NetLoadList();
     Frame(dc, L"Медиа · Интернет-радио");
     MediaTabs(dc, S_NETRADIO, IC_LIST, A_NRLIST, s_netWhich);
-    Cover(dc, IC_NETRADIO, 16, 124, 232);
+    s_cvPick = NetCoverFile();   // (the song's cover from the net)
+    if (!s_cvPick || !CoverArt(16, 124, 232, 20))
+        Cover(dc, IC_NETRADIO, 16, 124, 232);
+    s_cvPick = NULL;
     wchar_t s[160], title[160];
     const NcStation* st = NetCur();
     if (!st) {
