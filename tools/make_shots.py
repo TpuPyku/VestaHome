@@ -8,7 +8,8 @@ saving what the window drew into docs/shots/<NN>_<name>.png (not in git: made ag
 VestaHome.ini is kept and put back; the radio's favourites and recent ones start empty and are put back too.
 Windows only (ctypes, Pillow).
 
-Usage: python VestaHome/tools/make_shots.py [out_dir]   (VH_SHOTS=name,name... - only those)
+Usage: python VestaHome/tools/make_shots.py [out_dir]   (VH_SHOTS=name,name... - only those; VH_SHOTS_SRC=n - the
+MCU's source, 0 the radio by default, 7 the media)
 """
 import ctypes
 import json
@@ -25,6 +26,7 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 VH = os.path.join(HERE, '..', 'VestaHome', 'VestaHome')
 EXE = os.path.join(VH, 'VestaHomePC.exe')
+SRC = int(os.environ.get('VH_SHOTS_SRC', '0'))
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'docs', 'shots')
 
 # the nav bar and the settings' sections (800 x 480)
@@ -59,7 +61,7 @@ SHOTS = [
     ('plugin_nav_open', [HOME, ('sleep', 3), (547, 448), ('sleep', 1)]),
     ('plugin_own', [HOME, ('sleep', 3), (547, 448), ('sleep', 1), (400, 376), ('sleep', 1), (400, 376), ('sleep', 2)]),
     ('plugin_back', [HOME, ('sleep', 3), (547, 448), ('sleep', 1), (400, 376), ('sleep', 1), (44, 446), ('sleep', 1)]),
-    ('settings_home_widgets', [SETTINGS, SET['general'], (400, 328)]),
+    ('settings_home_widgets', [SETTINGS, SET['general'], ('sleep', 2), (400, 372)]),
     ('info_more', [SETTINGS, SET['info'], (355, 355)]), ('diagnostics', [SETTINGS, SET['info'], (590, 355)]),
     ('licenses', [SETTINGS, SET['info'], (355, 355), (556, 433)]),
     ('thanks', [SETTINGS, SET['info'], (355, 355), (700, 433)]),
@@ -232,7 +234,7 @@ def mcu():   # the MCU proxy's stand-in: the tuner on FM1 101.2 with RDS, its pr
             (0x0901, [0, 0, 10120 >> 8, 10120 & 0xFF]), (0x0907, [0, 0, 4]),
             (0x090B, [0, 0, 0] + list(b'  DFM   ')),
             (0x0931, [0, 0, 0, 0] + list(rt[:32])), (0x0931, [0, 0, 0, 1] + list(rt[32:])),
-            (0x3101, [0, 0, 14]), (0x4904, [0, 0])]   # the volume; the source: the radio
+            (0x3101, [0, 0, 14]), (0x4904, [0, SRC])]   # the volume; the source: the radio (VH_SHOTS_SRC=7: the media)
     for i, (mid, data) in enumerate(msgs):
         e = m.msg[i]
         e.tick, e.id, e.len = k32.GetTickCount(), mid, len(data)

@@ -214,7 +214,34 @@ static int JpgDecode(JpgSrc* s, int bw, int bh, bool fill, Pic* out, int* srcW, 
     return PIC_OK;
 }
 
-// stb (PNG, BMP, progressive JPEG): the whole file in memory, then the picture, up to kStbMaxPx.
+// stb from memory (PNG, BMP, progressive JPEG): the picture, up to kStbMaxPx.
+static int StbDecodeMem(const unsigned char* data, int size, Pic* out, int* srcW, int* srcH)
+{
+    int w, h, comp;
+    if (!stbi_info_from_memory(data, size, &w, &h, &comp))
+        return PIC_FORMAT;
+    if (srcW)
+        *srcW = w;
+    if (srcH)
+        *srcH = h;
+    if ((size_t)w * h > (size_t)kStbMaxPx)
+        return PIC_BIG;
+    unsigned char* rgb = stbi_load_from_memory(data, size, &w, &h, &comp, 3);
+    if (!rgb)
+        return PIC_FORMAT;
+    if (!PicAlloc(out, w, h, true)) {
+        stbi_image_free(rgb);
+        return PIC_MEMORY;
+    }
+    for (int i = 0; i < w * h; i++) {
+        const unsigned char* p = rgb + i * 3;
+        out->px32[i] = (DWORD)p[0] << 16 | p[1] << 8 | p[2];
+    }
+    stbi_image_free(rgb);
+    return PIC_OK;
+}
+
+// stb (PNG, BMP, progressive JPEG): the whole file in memory, then the picture.
 static int StbDecode(const wchar_t* path, Pic* out, int* srcW, int* srcH)
 {
     HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -232,33 +259,9 @@ static int StbDecode(const wchar_t* path, Pic* out, int* srcW, int* srcH)
     }
     BOOL ok = ReadFile(f, data, size, &got, NULL);
     CloseHandle(f);
-    int w, h, comp;
-    if (!ok || got != size || !stbi_info_from_memory(data, (int)size, &w, &h, &comp)) {
-        free(data);
-        return PIC_FORMAT;
-    }
-    if (srcW)
-        *srcW = w;
-    if (srcH)
-        *srcH = h;
-    if ((size_t)w * h > (size_t)kStbMaxPx) {
-        free(data);
-        return PIC_BIG;
-    }
-    unsigned char* rgb = stbi_load_from_memory(data, (int)size, &w, &h, &comp, 3);
+    int r = ok && got == size ? StbDecodeMem(data, (int)size, out, srcW, srcH) : PIC_FORMAT;
     free(data);
-    if (!rgb)
-        return PIC_FORMAT;
-    if (!PicAlloc(out, w, h, true)) {
-        stbi_image_free(rgb);
-        return PIC_MEMORY;
-    }
-    for (int i = 0; i < w * h; i++) {
-        const unsigned char* p = rgb + i * 3;
-        out->px32[i] = (DWORD)p[0] << 16 | p[1] << 8 | p[2];
-    }
-    stbi_image_free(rgb);
-    return PIC_OK;
+    return r;
 }
 
 // ---- fitting: each output pixel the average of 4 samples of the 32-bit source (a quarter turn rot applied), into a
@@ -388,6 +391,34 @@ int PicLoad(const wchar_t* path, int boxW, int boxH, bool fill, int rot, bool ex
     r = Fit(&dec, turn, boxW, boxH, fill, out, deep);
     PicFree(&dec);
     return r;
+}
+
+int PicLoadMem(const unsigned char* data, int len, int boxW, int boxH, bool fill, Pic* out, bool deep)
+{
+    out->px = NULL;
+    out->px32 = NULL;
+    out->w = out->h = 0;
+    Pic dec = { 0, 0, NULL, NULL };
+    int r = PIC_FORMAT;
+    if (len >= 2 && data[0] == 0xFF && data[1] == 0xD8) {
+        JpgSrc s = { INVALID_HANDLE_VALUE, data, (size_t)len, 0, NULL };
+        r = JpgDecode(&s, boxW, boxH, fill, &dec, NULL, NULL);
+    }
+    if (r == PIC_FORMAT)
+        r = StbDecodeMem(data, len, &dec, NULL, NULL);
+    if (r != PIC_OK)
+        return r;
+    r = Fit(&dec, 0, boxW, boxH, fill, out, deep);
+    PicFree(&dec);
+    return r;
+}
+
+int PicFit(const Pic* src, int boxW, int boxH, bool fill, Pic* out, bool deep)
+{
+    out->px = NULL;
+    out->px32 = NULL;
+    out->w = out->h = 0;
+    return src->px32 ? Fit(src, 0, boxW, boxH, fill, out, deep) : PIC_FORMAT;
 }
 
 int PicThumb(const wchar_t* path, int w, int h, bool exifRot, Pic* out)

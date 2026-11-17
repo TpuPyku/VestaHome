@@ -10,9 +10,9 @@ static const char* kProvKey[W_COUNT] = { "openmeteo", "owm", "yandex" };   // an
 
 // The main screen's widgets (DrawHome's table follows them; the ini names them).
 enum { WG_MEDIA, WG_SPEED, WG_RADIO, WG_WEATHER, WG_APPS, WG_TRIP, WG_CLIMATE, WG_DATE, WG_PHONE, WG_CAR, WG_NAVI,
-       WG_MEDIA2, WG_COUNT };
+       WG_MEDIA2, WG_MEDIA3, WG_COUNT };
 static const wchar_t* kWgKey[WG_COUNT] = { L"media", L"speed", L"radio", L"weather", L"apps", L"trip", L"climate",
-                                           L"date", L"phone", L"car", L"navi", L"media2" };
+                                           L"date", L"phone", L"car", L"navi", L"media2", L"media3" };
 
 // The user's widgets (VHContent\VHWidgets\*.ini, UserWidgetsScan): ids after the built-in ones, keys
 // "u.<file name>". A script (MortScript) writes the data file, VestaHome only reads and draws it.
@@ -159,7 +159,7 @@ static void CfgDefaults()
     s_cfg.photoAutoRot = true;
     for (int i = 0; i < WG_COUNT; i++)
         s_cfg.homeOrder[i] = i;
-    s_cfg.homeHidden = 1 << WG_MEDIA2;   // the compact "now playing": the big one is there
+    s_cfg.homeHidden = 1 << WG_MEDIA2 | 1 << WG_MEDIA3;   // the compact and the tall "now playing": the big one is there
     wcscpy(s_cfg.wifiApSsid, L"VestaHome");
     wcscpy(s_cfg.saverFile, L"Skin\\saver2.png");   // the example: the headlights
     s_cfg.camDist = 0;
@@ -308,7 +308,7 @@ static void HomeWidgetsLoad(const wchar_t* v)
     for (int i = 0; i < WgCount(); i++)
         if (!seen[i]) {
             s_cfg.homeOrder[n++] = i;
-            if (i == WG_MEDIA2)   // new in 0.6: hidden until asked for (the big one is there)
+            if (i == WG_MEDIA2 || i == WG_MEDIA3)   // new (0.6, 1.0): hidden until asked for (the big one is there)
                 s_cfg.homeHidden |= 1 << i;
         }
 }

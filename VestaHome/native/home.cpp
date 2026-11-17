@@ -71,6 +71,8 @@
 #define STBI_ASSERT(x) ((void)0)
 #include "stb_image.h"
 #include "photo.h"
+#include "cover.h"     // the track's cover: in its tag or its folder
+#include "wglayout.h"  // the main screen's widgets in their places
 
 #define APP_CLASS L"VestaHome_Wnd"
 
@@ -385,6 +387,7 @@ static void SupportInit()
 #include "vh_gps.inc"
 #include "vh_mcu.inc"
 #include "vh_player.inc"
+#include "vh_cover.inc"
 #include "vh_netradio.inc"
 #include "vh_netcat.inc"
 #include "vh_video.inc"
@@ -951,6 +954,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_APP_UWG:   // a widget's url fetched: its data read at the next second
         for (int u = 0; u < s_uwCount; u++)
             s_uw[u].readTick = 0;
+        return 0;
+    case WM_APP_COVER:   // the music's cover decoded (vh_cover.inc)
+        if (CoverTake((CoverJob*)lp) && IsWindowVisible(hwnd) && !s_drag && (s_screen == S_AUDIO || s_screen == S_HOME))
+            Redraw();
         return 0;
     case WM_APP_PHOTO:   // a picture or a thumbnail decoded
         if ((s_screen == S_PHOTO || s_screen == S_PHOTO_VIEW || s_screen == S_SAVER_PICK) && IsWindowVisible(hwnd) &&

@@ -645,20 +645,29 @@ static void WUser(HDC dc, int x, int y, int u)
     }
 }
 
-// cells: 1 a single, 2 a double (1 x 2), 4 a big one (2 x 2, design 0.6).
-struct WidgetDef { const wchar_t* name; int cells; Icon ic; void (*draw)(HDC dc, int x, int y); };
+// shape (wglayout.h): a single, a double (1 x 2), a big one (2 x 2, design 0.6), a tall one (2 x 1, a column).
+struct WidgetDef { const wchar_t* name; int shape; Icon ic; void (*draw)(HDC dc, int x, int y); };
 static const WidgetDef kWidgets[WG_COUNT] = {
-    { L"Сейчас играет", 4, IC_MUSIC, WMedia }, { L"Скорость", 1, IC_NAV, WSpeed },
-    { L"Радио", 1, IC_RADIO, WRadio }, { L"Погода", 1, IC_CLOUD, WWeather },
-    { L"Приложения", 1, IC_APPS, WFavorites }, { L"Поездка", 4, IC_CLOCK, WTrip },
-    { L"Климат", 1, IC_CAR, WClimate }, { L"Календарь", 1, IC_CLOCK, WDate },
-    { L"Телефон", 1, IC_PHONE, WPhone }, { L"Автомобиль", 1, IC_CAR, WCar },
-    { L"Навигация", 1, IC_NAV, WNavi }, { L"Сейчас играет · компактный", 2, IC_MUSIC, WMediaSmall } };
+    { L"Сейчас играет", WS_BIG, IC_MUSIC, WMedia }, { L"Скорость", WS_ONE, IC_NAV, WSpeed },
+    { L"Радио", WS_ONE, IC_RADIO, WRadio }, { L"Погода", WS_ONE, IC_CLOUD, WWeather },
+    { L"Приложения", WS_ONE, IC_APPS, WFavorites }, { L"Поездка", WS_BIG, IC_CLOCK, WTrip },
+    { L"Климат", WS_ONE, IC_CAR, WClimate }, { L"Календарь", WS_ONE, IC_CLOCK, WDate },
+    { L"Телефон", WS_ONE, IC_PHONE, WPhone }, { L"Автомобиль", WS_ONE, IC_CAR, WCar },
+    { L"Навигация", WS_ONE, IC_NAV, WNavi }, { L"Сейчас играет · компактный", WS_WIDE, IC_MUSIC, WMediaSmall },
+    { L"Сейчас играет · вертикальный", WS_TALL, IC_MUSIC, WMediaTall } };
 
 // A widget by its id (built-in or the user's): the only way to it for the layout, the settings and the screen.
+static int WgShapeOf(int id)
+{
+    if (id < WG_COUNT)
+        return kWidgets[id].shape;
+    const UserWg& u = s_uw[id - WG_COUNT];
+    return u.big ? WS_BIG : u.wide ? WS_WIDE : WS_ONE;
+}
 static const wchar_t* WgName(int id) { return id < WG_COUNT ? kWidgets[id].name : s_uw[id - WG_COUNT].title; }
-static bool WgWide(int id) { return id < WG_COUNT ? kWidgets[id].cells >= 2 : s_uw[id - WG_COUNT].wide; }
-static bool WgBig(int id) { return id < WG_COUNT ? kWidgets[id].cells == 4 : s_uw[id - WG_COUNT].big; }
+static bool WgWide(int id) { return WgShapeOf(id) == WS_WIDE || WgShapeOf(id) == WS_BIG; }
+static bool WgBig(int id) { return WgShapeOf(id) == WS_BIG; }
+static bool WgTall(int id) { return WgShapeOf(id) == WS_BIG || WgShapeOf(id) == WS_TALL; }   // two rows high
 static Icon WgIcon(int id) { return id < WG_COUNT ? kWidgets[id].ic : s_uw[id - WG_COUNT].ic; }
 static void WgDraw(int id, HDC dc, int x, int y)
 {
@@ -682,37 +691,22 @@ static bool WgShown(int id)
     return !(s_cfg.homeHidden >> id & 1) && id != WG_CLIMATE;   // the climate: off for now (no data from the car)
 }
 
-// Where each shown widget goes: in their order, each into the first free place (a double needs two free cells
-// side by side in a row, a big one the page's left 2 x 2), so the later ones close up the gaps. page < 0: not
-// placed. Returns the pages.
+// Where each shown widget goes (wglayout.cpp: in their order, each into the first free place of its shape). page < 0:
+// not placed. Returns the pages.
 struct WgPlace { int page, x, y; };
 static int HomeLayout(WgPlace* at)
 {
-    bool used[kWgPages][6];
-    memset(used, 0, sizeof(used));
-    int pages = 1;
-    for (int i = 0; i < WgCount(); i++) {
-        int id = s_cfg.homeOrder[i];
-        at[id].page = -1;
-        if (!WgShown(id))
-            continue;
-        bool wide = WgWide(id), big = WgBig(id);
-        for (int k = 0; k < kWgPages * 6 && at[id].page < 0; k++) {
-            int pg = k / 6, c = k % 6;
-            if (used[pg][c] || (wide && (c % 3 == 2 || used[pg][c + 1])) ||
-                (big && (c || used[pg][3] || used[pg][4])))
-                continue;
-            used[pg][c] = true;
-            if (wide)
-                used[pg][c + 1] = true;
-            if (big)
-                used[pg][3] = used[pg][4] = true;
-            at[id].page = pg;
-            at[id].x = 16 + c % 3 * (kWgW + kWgGap);
-            at[id].y = 64 + c / 3 * (kWgH + kWgGap);
-            if (pg + 1 > pages)
-                pages = pg + 1;
-        }
+    int shapes[kWgMax];
+    WgCell cells[kWgMax];
+    int n = WgCount();
+    for (int i = 0; i < n; i++)
+        shapes[i] = WgShown(s_cfg.homeOrder[i]) ? WgShapeOf(s_cfg.homeOrder[i]) : WS_HIDDEN;
+    int pages = WgPlaceAll(shapes, n, kWgPages, cells);
+    for (int i = 0; i < n; i++) {
+        WgPlace& p = at[s_cfg.homeOrder[i]];
+        p.page = cells[i].page;
+        p.x = 16 + cells[i].cell % 3 * (kWgW + kWgGap);
+        p.y = 64 + cells[i].cell / 3 * (kWgH + kWgGap);
     }
     return pages;
 }
@@ -733,20 +727,26 @@ static bool HomeRect(int id, RECT* rc)
     rc->left = at[id].x;
     rc->top = at[id].y;
     rc->right = at[id].x + (WgWide(id) ? kWgW2 : kWgW);
-    rc->bottom = at[id].y + (WgBig(id) ? kWgH2 : kWgH);
+    rc->bottom = at[id].y + (WgTall(id) ? kWgH2 : kWgH);
     return true;
 }
 
-// The "now playing" widgets on the page shown (the big one, the compact one, both): their area.
+// The "now playing" widgets on the page shown (the big one, the compact one, the tall one): their area.
 static bool HomeMediaRect(RECT* rc)
 {
-    RECT a, b;
-    bool ha = HomeRect(WG_MEDIA, &a), hb = HomeRect(WG_MEDIA2, &b);
-    if (ha && hb)
-        UnionRect(rc, &a, &b);
-    else if (ha || hb)
-        *rc = ha ? a : b;
-    return ha || hb;
+    static const int ids[3] = { WG_MEDIA, WG_MEDIA2, WG_MEDIA3 };
+    bool any = false;
+    for (int i = 0; i < 3; i++) {
+        RECT r;
+        if (!HomeRect(ids[i], &r))
+            continue;
+        if (any)
+            UnionRect(rc, rc, &r);
+        else
+            *rc = r;
+        any = true;
+    }
+    return any;
 }
 
 // The main screen: the date as the title, the widgets of the page, the page dots.
@@ -811,7 +811,7 @@ static void ScrSetHome(HDC dc)
         bool shown = !(s_cfg.homeHidden >> id & 1);
         R(dc, x, y, 380, kRowH, 14, kPanel);   // a plate, as every list's row
         Ico(dc, WgIcon(id), x + 8, y + 11, 26, shown ? kOrange : kDim);
-        const wchar_t* sub = WgBig(id) ? L"большой" : WgWide(id) ? L"двойной" : NULL;
+        const wchar_t* sub = WgBig(id) ? L"большой" : WgWide(id) ? L"двойной" : WgTall(id) ? L"столбец" : NULL;
         wchar_t usub[48];
         if (id >= WG_COUNT && !wcsncmp(s_uw[id - WG_COUNT].key, L"p:", 2)) {   // an add-on's: nothing to edit
             _snwprintf(usub, 48, L"дополнение%s", WgWide(id) ? L" · двойной" : L"");

@@ -492,12 +492,16 @@ static void PlayBtn(HDC dc, int cx, int cy, int r, int isz)
     Ico(dc, PlayerPlaying() ? IC_PAUSE : IC_PLAY, cx - isz / 2, cy - isz / 2, isz, kInk);
 }
 
-// Media -> music: the track, the bar (a tap seeks), shuffle, previous, play/pause, next, repeat.
+static bool CoverArt(int x, int y, int s, int rad);             // (vh_cover.inc)
+
+// Media -> music: the cover, the track, the bar (a tap seeks), shuffle, previous,
+// play/pause, next, repeat.
 static void ScrAudio(HDC dc)
 {
     Frame(dc, L"Медиа · Музыка");
     MediaTabs(dc, S_AUDIO, IC_LIST, A_SCREEN, S_AUDIO_LIST);
-    Cover(dc, IC_MUSIC, 16, 124, 232);
+    if (!CoverArt(16, 124, 232, 20))
+        Cover(dc, IC_MUSIC, 16, 124, 232);
     wchar_t title[96], sub[200], s[160];
     double pos = 0, len = 0;
     bool have = PlayerNow(title, sub, 96, &pos, &len);

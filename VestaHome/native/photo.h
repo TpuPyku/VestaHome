@@ -25,6 +25,12 @@ bool PicIsName(const wchar_t* name);
 int  PicLoad(const wchar_t* path, int boxW, int boxH, bool fill, int rot, bool exifRot, Pic* out, int* srcW,
              int* srcH, bool deep);
 
+// The same from a picture in memory (a JPEG or a PNG inside an mp3's tag), no turning.
+int  PicLoadMem(const unsigned char* data, int len, int boxW, int boxH, bool fill, Pic* out, bool deep);
+
+// A 32-bit picture fitted (fill: covering) into box w x h: a smaller copy, 32-bit (deep) or RGB565.
+int  PicFit(const Pic* src, int boxW, int boxH, bool fill, Pic* out, bool deep);
+
 // A thumbnail filling w x h (RGB565): the EXIF thumbnail when the JPEG has one (fast), else the picture at 1/8.
 int  PicThumb(const wchar_t* path, int w, int h, bool exifRot, Pic* out);
 

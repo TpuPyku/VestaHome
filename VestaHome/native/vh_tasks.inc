@@ -221,12 +221,14 @@ enum { kWgW = 248, kWgH = 158, kWgGap = 12, kWgW2 = kWgW * 2 + kWgGap, kWgH2 = k
 
 // Widget panel with its caption; pressed = orange like a tile (returns it: the content follows in ink).
 // With a settings screen the caption strip is a button of its own (a gear at its end) leading there.
+// art: our music's cover behind the card, dimmed (vh_cover.inc), when there is one.
 static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, Icon ic, Action a, int arg = 0,
-                   Screen settings = S_NONE)
+                   Screen settings = S_NONE, bool art = false)
 {
     bool d = a != A_NONE && Zone(x, y, w, h, a, arg);
     bool hd = settings != S_NONE && Zone(x, y, w, 42, A_SCREEN, settings);
-    R(dc, x, y, w, h, 20, d ? kOrange : kPanel2);   // design 0.6: a card without a border (HU 2026-10-24: lighter)
+    if (d || !art || !CoverBack(x, y, w, h, 20))
+        R(dc, x, y, w, h, 20, d ? kOrange : kPanel2);   // design 0.6: a card without a border (HU 2026-10-24: lighter)
     if (hd)
         R(dc, x + 2, y + 2, w - 4, 40, 18, kOrange);
     Ico(dc, ic, x + 16, y + 12, 22, d || hd ? kInk : kOrange);
@@ -321,36 +323,64 @@ static Icon SaverNowPlaying(wchar_t* s, int n)
 // The "now playing" widgets' parts (design 0.6): big 508 x 328 or compact 508 x 158 (1 x 2). The cover (the orange
 // facets with the source's icon), up to three lines of text (the third only big), the bar (k of BarW, -1 none) with
 // its times; the transport row below (MediaRow).
+// The tall one (2 x 1, a column; the user 2026-11-17: beside the map): the cover on top, the text centred under it.
 struct MediaGeo {
+    int  shape;   // WS_BIG, WS_WIDE (compact), WS_TALL
     bool big;
-    int  x, y, h, cx, cy, isz, step, r, play, barW;
+    int  x, y, w, h, cx, cy, isz, step, r, play, barW;
 };
 
-static MediaGeo MediaGeoOf(int x, int y, bool big)
+static MediaGeo MediaGeoOf(int x, int y, int shape)
 {
     MediaGeo g;
-    g.big = big;
+    bool tall = shape == WS_TALL;
+    g.shape = shape;
+    g.big = shape == WS_BIG;
     g.x = x;
     g.y = y;
-    g.h = big ? kWgH2 : kWgH;
-    g.cx = big ? x + kWgW2 / 2 : x + 312;   // the compact one: right of the cover
-    g.cy = big ? y + 282 : y + 136;
-    g.isz = big ? 36 : 28;
-    g.step = big ? 114 : 102;               // the arrows' centres from the middle
-    g.r = big ? 36 : 20;
-    g.play = big ? 32 : 22;
-    g.barW = big ? 468 : 352;
+    g.w = tall ? kWgW : kWgW2;
+    g.h = shape == WS_WIDE ? kWgH : kWgH2;
+    g.cx = tall ? x + kWgW / 2 : g.big ? x + kWgW2 / 2 : x + 312;   // the compact one: right of the cover
+    g.cy = tall ? y + 292 : g.big ? y + 282 : y + 136;
+    g.isz = tall ? 30 : g.big ? 36 : 28;
+    g.step = tall ? 74 : g.big ? 114 : 102;   // the arrows' centres from the middle
+    g.r = tall ? 26 : g.big ? 36 : 20;
+    g.play = tall ? 24 : g.big ? 32 : 22;
+    g.barW = tall ? 216 : g.big ? 468 : 352;
     return g;
 }
 
+// The cover (vh_cover.inc) where the source has one (our music), otherwise the orange facets with its icon.
+static void MediaArt(HDC dc, Icon ic, bool art, int x, int y, int s, int rad, int isz)
+{
+    if (art && CoverArt(x, y, s, rad))
+        return;
+    TriFill(x, y, s, s, rad);
+    Ico(dc, ic, x + (s - isz) / 2, y + (s - isz) / 2, isz, Mix(kInk, kTriOr[1], 140));
+}
+
 static void WMediaBody(HDC dc, const MediaGeo& g, bool d, Icon ic, const wchar_t* title, const wchar_t* sub,
-                       const wchar_t* third, int k, const wchar_t* t0, const wchar_t* t1)
+                       const wchar_t* third, int k, const wchar_t* t0, const wchar_t* t1, bool art = false)
 {
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     int x = g.x, y = g.y;
+    if (g.shape == WS_TALL) {
+        if (!art || !CoverHave())   // the cover: behind the card (Widget), the facets only without one
+            MediaArt(dc, ic, false, x + 64, y + 50, 120, 16, 56);
+        T(dc, g.cx, y + 200, title, 22, fg, 700, AL_MID, 216);
+        T(dc, g.cx, y + 222, sub, 15, mg, 400, AL_MID, 216);
+        if (k >= 0) {
+            R(dc, x + 16, y + 236, g.barW, 6, 3, d ? kInk : kLine);
+            R(dc, x + 16, y + 236, k > 6 ? k : 6, 6, 3, d ? kInk : kOrange);
+            T(dc, x + 16, y + 258, t0, 13, mg, 600);
+            T(dc, x + 232, y + 258, t1, 13, mg, 600, AL_END);
+        } else if (third) {
+            T(dc, g.cx, y + 244, third, 13, d ? kInk : kDim, 400, AL_MID, 216);
+        }
+        return;
+    }
     if (g.big) {
-        TriFill(x + 20, y + 52, 132, 132, 18);
-        Ico(dc, ic, x + 54, y + 86, 64, Mix(kInk, kTriOr[1], 140));
+        MediaArt(dc, ic, art, x + 20, y + 52, 132, 18, 64);
         T(dc, x + 172, y + 98, title, 28, fg, 700, AL_START, 316);
         TWrap(dc, x + 172, y + 126, sub, 17, mg, 400, 316, 1, 0);
         if (third)
@@ -363,8 +393,7 @@ static void WMediaBody(HDC dc, const MediaGeo& g, bool d, Icon ic, const wchar_t
         }
         return;
     }
-    TriFill(x + 16, y + 42, 100, 100, 14);
-    Ico(dc, ic, x + 40, y + 66, 52, Mix(kInk, kTriOr[1], 140));
+    MediaArt(dc, ic, art, x + 16, y + 42, 100, 14, 52);
     T(dc, x + 136, y + 70, title, 26, fg, 700, AL_START, 352);
     wchar_t times[40] = L"";
     if (k >= 0 && t0 && t1 && t0[0])
@@ -396,17 +425,19 @@ static void TunerPage(const Tuner& t, wchar_t* s, int n)
 }
 
 // What plays now (design 0.6; the user 2026-10-23: the radio too): our internet radio, our music, the radio (the
-// MCU's source), the phone's music; nothing - the last of ours to go on with. Big (2 x 2) or compact (1 x 2).
-static void WMediaAt(HDC dc, int x, int y, bool big)
+// MCU's source), the phone's music; nothing - the last of ours to go on with. Big (2 x 2), compact (1 x 2) or tall
+// (2 x 1); our music's cover behind it, dimmed (as Android Auto's).
+static void WMediaAt(HDC dc, int x, int y, int shape)
 {
-    MediaGeo g = MediaGeoOf(x, y, big);
+    MediaGeo g = MediaGeoOf(x, y, shape);
+    bool big = g.big || shape == WS_TALL;   // (the frequency's place: two rows high)
     int vol, mute, src;
     bool srcKnown = VolGet(&vol, &mute, &src);
     bool ours = s_netOn || PlayerPlaying();
     if (!ours && srcKnown && src == 0) {   // the radio: its name, frequency and page, RDS; the presets step
         Tuner t;
         TunerGet(&t);
-        bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Радио", IC_RADIO, A_NAV, S_RADIO);
+        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Радио" : L"Сейчас играет · Радио", IC_RADIO, A_NAV, S_RADIO);
         wchar_t f[16], pg[8], sub[48], rt[68];
         FreqText(t.f10, f, 16);
         TunerPage(t, pg, 8);
@@ -419,12 +450,12 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
             int per = t.presets < 8 ? t.presets : 8;
             MediaArrows(dc, g, d, A_PRESET, PresetNext(t.cur, -1, per), A_PRESET, PresetNext(t.cur, 1, per));
         }
-        T(dc, g.cx, g.cy + (big ? 12 : 8), f, big ? 34 : 22, d ? kInk : t.f10 ? kOrange : kDim, 700, AL_MID);
+        T(dc, g.cx, g.cy + (big ? 12 : 8), f, shape == WS_TALL ? 24 : big ? 34 : 22, d ? kInk : t.f10 ? kOrange : kDim, 700, AL_MID);
         return;
     }
     BtState bt;
     if (!ours && srcKnown && src == 9 && BtGet(&bt, NULL) && bt.title[0]) {   // the phone's music (AVRCP)
-        bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV, S_AUDIO_BT);
+        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Bluetooth" : L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV, S_AUDIO_BT);
         wchar_t title[BT_TEXT], artist[BT_TEXT], t0[16] = L"", t1[16] = L"";
         BtText(bt.title, title, BT_TEXT);
         BtText(bt.artist, artist, BT_TEXT);
@@ -449,7 +480,7 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
     if (s_mediaLast == 2 && !PlayerPlaying())   // the internet radio last (it may be off): its station
         NetLoadList();
     if (NetCur() && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
-        bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
+        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Интернет-радио" : L"Сейчас играет · Интернет-радио", IC_NETRADIO, A_NAV, S_NETRADIO);
         wchar_t s[160];
         EnterCriticalSection(&s_netCs);
         wcscpy(s, s_netTitle);
@@ -461,7 +492,8 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
         NetPlayBtn(dc, g.cx, g.cy, g.r, g.play);
         return;
     }
-    bool d = Widget(dc, x, y, kWgW2, g.h, L"Сейчас играет · Музыка", IC_MUSIC, A_NAV, S_AUDIO);
+    bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Музыка" : L"Сейчас играет · Музыка", IC_MUSIC, A_NAV,
+                    S_AUDIO, S_NONE, shape == WS_TALL);   // (the user 2026-11-17: behind only where no room for it)
     wchar_t title[96], sub[200], s[48], a[16], b[16];
     double pos = 0, len = 0;
     if (PlayerNow(title, sub, 96, &pos, &len)) {
@@ -469,7 +501,7 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
         Mmss(a, 16, pos);
         Mmss(b, 16, len);
         WMediaBody(dc, g, d, IC_MUSIC, title, sub[0] ? sub : s, sub[0] ? s : NULL,
-                   len > 0 ? (int)(pos * g.barW / len) : 0, a, b);
+                   len > 0 ? (int)(pos * g.barW / len) : 0, a, b, true);
     } else {   // nothing loaded: the last track (dim) to go on with, or a dash
         wchar_t last[MAX_PATH];
         const wchar_t* fn = wcsrchr(s_cfg.musicFile, L'\\');
@@ -478,7 +510,8 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
         if (dot)
             *dot = 0;
         WMediaBody(dc, g, d, IC_MUSIC, last[0] ? last : L"—",
-                   last[0] ? L"последний трек · ▶ — продолжить" : L"выберите музыку в «Медиа»", NULL, -1, NULL, NULL);
+                   last[0] ? L"последний трек · ▶ — продолжить" : L"выберите музыку в «Медиа»", NULL, -1, NULL, NULL,
+                   true);
     }
     MediaArrows(dc, g, d, A_PREVTRK, 0, A_NEXTTRK, 0);
     PlayBtn(dc, g.cx, g.cy, g.r, g.play);
@@ -486,12 +519,17 @@ static void WMediaAt(HDC dc, int x, int y, bool big)
 
 static void WMedia(HDC dc, int x, int y)   // big, 2 x 2
 {
-    WMediaAt(dc, x, y, true);
+    WMediaAt(dc, x, y, WS_BIG);
 }
 
 static void WMediaSmall(HDC dc, int x, int y)   // compact, 1 x 2
 {
-    WMediaAt(dc, x, y, false);
+    WMediaAt(dc, x, y, WS_WIDE);
+}
+
+static void WMediaTall(HDC dc, int x, int y)   // tall, 2 x 1
+{
+    WMediaAt(dc, x, y, WS_TALL);
 }
 
 static const wchar_t* kHeadings[8] = { L"С", L"СВ", L"В", L"ЮВ", L"Ю", L"ЮЗ", L"З", L"СЗ" };
