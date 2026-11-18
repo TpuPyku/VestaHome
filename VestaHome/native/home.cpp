@@ -626,7 +626,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)
                     s_callTick = GetTickCount();
-                CallAct act = CallStep(c, s_screen == S_INCOMING, s_screen == S_CALL);
+                CallAct act = CallStep(c, s_screen == S_INCOMING, s_screen == S_CALL, AaInFront());
                 if (act == CA_INCOMING) {
                     CallFront();
                     Go(S_INCOMING, true);

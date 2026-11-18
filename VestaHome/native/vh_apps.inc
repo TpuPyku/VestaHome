@@ -569,8 +569,16 @@ static void DropRaised()
     s_raisedCount = 0;
 }
 
+// Android Auto's screen in front (VestaAuto's own window): the phone shows a call there itself.
+static bool AaInFront()
+{
+    wchar_t cls[32];
+    HWND fg = GetForegroundWindow();
+    return fg && GetClassName(fg, cls, 32) && !wcscmp(cls, L"VestaAutoOwn_Wnd");
+}
+
 // An incoming call (the user 2026-11-17: OSMapsCE in front, nothing to answer with on the unit): VestaHome over any
-// program; the window in front remembered and given back when the call is over, if nobody went elsewhere meanwhile.
+// program but Android Auto (callwin.cpp); the window in front remembered and given back when the call is over, if nobody went elsewhere meanwhile.
 static HWND s_callPrev;
 
 static void CallFront()

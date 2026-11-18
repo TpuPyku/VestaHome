@@ -10,8 +10,9 @@ enum CallAct {
 };
 
 // call: the line's state now (btshm.h BT_CALL_*: 0 none, 1 incoming, 2 dialing, ... 4 active); onIncoming / onCall:
-// the incoming call's / the call's window shown.
-CallAct CallStep(int call, bool onIncoming, bool onCall);
+// the incoming call's / the call's window shown; phoneShows: Android Auto in front - the phone shows the call on its
+// own screen, so no window of ours over it (the user 2026-11-18: not twice).
+CallAct CallStep(int call, bool onIncoming, bool onCall, bool phoneShows);
 
 // While a call lasts the panel's and the wheel's buttons are VestaHome's (answer, hang up), not an add-on's.
 bool CallKeysOurs(int call);
