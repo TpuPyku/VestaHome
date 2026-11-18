@@ -15,11 +15,13 @@ for m in re.finditer(r'<tr><td class="n">(\d+)</td><td>(.*?)</td><td>(.*?)</td>'
 SECTIONS = [
  ('Установка (сначала)', 'VestaHome 1.0.261117 (звонки, обложки, Android Auto), VestaAuto (выход, GPS, Bluetooth, '
   'музыка, микрофон), VestaLaunch 1.05.261117, OSMapsCE 2.1.261117.', [
-  ('VestaHome закрыть: «Настройки → О системе» → питание → «Выход». «УСТАНОВИТЬ / ОБНОВИТЬ» в '
-   'Tests\\SDCard\\VestaHomeInstall. Tests\\ResidentFlash\\VHContent — в \\ResidentFlash\\VHContent с заменой. '
-   'Папку Tests\\SDCard\\OSMapsCE — в \\SDMMC\\OSMapsCE с заменой. Перезагрузка.',
-   'Установщик без отказа; после перезагрузки VestaHome работает.'),
-  ('«Настройки → О системе».', 'VestaHome 1.0.261117.'),
+  ('VestaHome закрыть: «Настройки → О системе» → питание → «Выход» (дополнения закрываются вместе с ней, зависшие — '
+   'через 3 с). Сначала, пока VestaHome закрыта: Tests\\ResidentFlash\\VHContent — в \\ResidentFlash\\VHContent с '
+   'заменой; папку Tests\\SDCard\\OSMapsCE — в \\SDMMC\\OSMapsCE с заменой. Потом «УСТАНОВИТЬ / ОБНОВИТЬ» в '
+   'Tests\\SDCard\\VestaHomeInstall. Перезагрузка.',
+   'Копирование без ошибок «файл занят»; установщик без отказа; после перезагрузки VestaHome работает.'),
+  ('«Настройки → О системе». В \\SDMemory\\VestaLogs\\VestaAuto.log — первая строка после запуска.',
+   'VestaHome 1.0.26111…; «=== VestaAuto 1.4 запущен» (не 1.3).'),
   ('«О системе → Диагностика»: включить «Журналы» (если выключены).', 'Журналы пишутся в \\SDMemory\\VestaLogs.'),
  ]),
  ('Входящий звонок поверх всего', 'На прошлой поездке звонки при OSMapsCE впереди сбрасывались: окна VestaHome не '
