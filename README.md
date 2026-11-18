@@ -65,4 +65,4 @@ SPIPower\install\build.bat        → установщик VestaHomeInstall.exe 
 VestaHome бесплатен. Если программа вам понравилась:
 
 - поставьте ⭐ звезду репозиторию (кнопка **Star** вверху страницы) — так VestaHome проще найти другим владельцам Весты;
-- поддержите разработку на [Boosty](https://boosty.to/vesta_home) — добровольно, всё в VestaHome остаётся бесплатным.
+- поддержите разработку на [Boosty](https://boosty.to/vesta_home) — добровольно, VestaHome остаётся бесплатным.
