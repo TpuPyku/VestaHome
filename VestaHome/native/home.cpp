@@ -367,9 +367,10 @@ static const wchar_t* NetErrorText(int err)
 
 // ---- The support (2026-11-15, the user: Android Auto's splash gone with a key for this unit): the unit's ID shown in
 // "О системе" and told to the add-ons ("welcome": support, unit); the key - VestaLicense.key in VestaHome's folder,
-// made by the author for the ID (VestaCore vlicense.h). Nothing in VestaHome is locked without it.
+// made by the author for the ID (VestaCore vlicense.h). Nothing in VestaHome is locked without it. Its level
+// (2026-11-18): a subscriber (Android Auto's splash gone) or a co-author (also the smart home add-on).
 static wchar_t s_unitId[LICENSE_ID_LEN];
-static bool    s_support;
+static int     s_support;   // LICENSE_NONE / SUPPORTER / COAUTHOR
 
 static void SupportInit()
 {
@@ -378,8 +379,8 @@ static void SupportInit()
     _snwprintf(path, MAX_PATH, L"%sVestaLicense.key", s_dir);
     bool found;
     s_support = LicenseFileValid(path, s_unitId, &found);
-    VLog(L"поддержка: ID %s, ключ %s", s_unitId,
-         s_support ? L"есть" : !found ? L"нет" : L"не подходит (другой ГУ или повреждён)");
+    VLog(L"поддержка: ID %s, ключ %s", s_unitId, s_support == LICENSE_COAUTHOR ? L"Соавтора" :
+         s_support ? L"подписчика" : !found ? L"нет" : L"не подходит (другой ГУ или повреждён)");
 }
 
 #include "vh_draw.inc"

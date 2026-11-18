@@ -705,7 +705,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         VLog(L"дополнение: %s (%s %s) подключено", p->id, p->name, p->ver);
         PlugSend(*p, L"welcome\tapi=%d\tvh=%s\tnight=%d\taccent=%06X\tlang=ru\tsupport=%d\tunit=%s", kPlugApi,
                  VhVersion(), s_night ? 1 : 0,
-                 (unsigned)(GetRValue(kOrange) << 16 | GetGValue(kOrange) << 8 | GetBValue(kOrange)), s_support ? 1 : 0,
+                 (unsigned)(GetRValue(kOrange) << 16 | GetGValue(kOrange) << 8 | GetBValue(kOrange)), s_support,
                  s_unitId);
         if (s_screen == S_SET_PLUGINS && IsWindowVisible(s_wnd))
             Redraw();
