@@ -957,10 +957,35 @@ static void PluginsStart()
         PluginsIn(dirs[i]);
 }
 
-static void PluginsQuit()   // VestaHome closes: the add-ons too
+// VestaHome closes: the add-ons too - asked, waited for 3 s, the ones still there ended (the user 2026-11-18: an add-on
+// hung stayed after the exit, its exe could not be replaced by an update until the unit was rebooted).
+static void PluginsQuit()
 {
     for (int i = 0; i < s_plugN; i++)
         PlugSend(s_plug[i], L"quit");
+    DWORD t0 = GetTickCount();
+    for (bool left = true; left && GetTickCount() - t0 < 3000;) {
+        left = false;
+        for (int i = 0; i < s_plugN; i++)
+            left = left || (s_plug[i].hwnd && IsWindow(s_plug[i].hwnd));
+        if (left)
+            Sleep(100);
+    }
+    for (int i = 0; i < s_plugN; i++) {
+        HWND h = s_plug[i].hwnd;
+        DWORD pid = 0;
+        if (!h || !IsWindow(h) || !GetWindowThreadProcessId(h, &pid) || !pid)
+            continue;
+#ifdef UNDER_CE
+        HANDLE p = OpenProcess(0, FALSE, pid);   // (CE: no access rights - 0, as vh_apps.inc)
+#else
+        HANDLE p = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+#endif
+        bool ok = p && TerminateProcess(p, 1);
+        if (p)
+            CloseHandle(p);
+        VLog(L"выход: дополнение %s не закрылось за 3 с - %s", s_plug[i].id, ok ? L"завершено" : L"не завершается");
+    }
 }
 
 static void PlugSwitch(int i)   // "Add-ons": on / off (the file "disabled" in its folder), started at once when on
