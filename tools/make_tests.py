@@ -32,6 +32,8 @@ PLAN = (
     (os.path.join(ROOT, 'VestaHome', 'GpsSim', 'GpsSim'), r'SDCard\GpsSim', ('GpsSim.exe', 'GpsSimOSM.exe')),
     # UartProbe: the radio MCU's own UART on COM1 / COM2 (its 0x8010 sets the current volume; PROJECT.md), from the card
     (os.path.join(ROOT, 'VestaHome', 'UartProbe', 'UartProbe'), r'SDCard\UartProbe', ('UartProbe.exe',)),
+    # McuProbe: the MCU without our proxy - a second client of the stock SPIPowerMgr.dll for 5 min (2026-11-19)
+    (os.path.join(ROOT, 'VestaHome', 'McuProbe', 'McuProbe'), r'SDCard\McuProbe', ('McuProbe.exe',)),
     # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
