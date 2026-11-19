@@ -2,14 +2,14 @@
 """The radio stations' table for VestaHome: a city and a frequency -> the station's name and its logo (the user
 2026-11-18: RDS in the CIS often gives no name or a wrong one; the station by the city and the frequency instead).
 
-    python make_radio.py <radio_data.zip> <cities1000.zip> <out folder> [--size 64]
+    python make_radio.py <radio_data.zip> <cities1000.zip> <out folder> [--size 192]
 
 radio_data.zip (from the user; not in any repository - the logos are the stations'): radio_freqs_RU.json and
 radio_freqs_BY.json ({"radio": [{cityName, country, freqNum (x10 kHz), freqName, freqLogo}]}) and logo300x300/<id>.png.
 cities1000.zip: GeoNames' cities of 1000 people and more (CC BY 4.0, download.geonames.org/export/dump) - the cities'
 places, by their Russian names.
 
-Out: stations.txt (UTF-8, a station a line "lat;lon;f10;name", by the city) and logos/<station's name>.png (size x
+Out: stations.txt (UTF-8, a station a line "lat;lon;f10;name", by the city) and logos/<station's name>.jpg (size x
 size; matched by name_key - anyone may add a logo of their own station by its name).
 """
 import argparse
@@ -126,15 +126,18 @@ def station_lines(radio, index):
 
 
 def logos(data, out, size, files):
-    """The logos as files[id].png, size x size (RGBA kept)."""
+    """The logos as files[id].jpg, size x size, on black (VestaHome shows them dimmed behind the frequency, the
+    lighter of the screen and the logo: black is no logo; a JPEG ~4 times smaller than the PNG)."""
     from PIL import Image
     os.makedirs(out, exist_ok=True)
     n = 0
     for name in data.namelist():
         lid = name.split('/')[-1][:-4]
         if name.startswith('logo300x300/') and name.endswith('.png') and lid in files:
-            im = Image.open(io.BytesIO(data.read(name))).convert('RGBA')
-            im.resize((size, size), Image.LANCZOS).save(os.path.join(out, files[lid] + '.png'), optimize=True)
+            im = Image.open(io.BytesIO(data.read(name))).convert('RGBA').resize((size, size), Image.LANCZOS)
+            flat = Image.new('RGB', (size, size), (0, 0, 0))
+            flat.paste(im, (0, 0), im)
+            flat.save(os.path.join(out, files[lid] + '.jpg'), quality=85, optimize=True)
             n += 1
     return n
 
@@ -144,7 +147,7 @@ def main(argv=None):
     ap.add_argument('data')
     ap.add_argument('geonames')
     ap.add_argument('out')
-    ap.add_argument('--size', type=int, default=64)
+    ap.add_argument('--size', type=int, default=192)   # (VestaHome's kRlSize)
     a = ap.parse_args(argv)
     data = zipfile.ZipFile(a.data)
     radio = []

@@ -67,6 +67,17 @@ class TestNames(unittest.TestCase):
         self.assertEqual(k('Радио'), 'radio')   # (nothing but the word: kept)
         self.assertEqual(k('Европа Плюс'), 'evropaplyus')
 
+    def test_key_as_vestahome(self):
+        """The same as VestaHome's RdbKey (test_radiodb.cpp's cases): a logo found on the PC is found on the unit."""
+        k = make_radio.name_key
+        cases = [('Рок-н-ролл', 'roknroll'), ('Объект', 'obekt'), ('Rock’n’Roll FM', 'rocknroll'), ('Mix ФМ', 'mix'),
+                 ('Радио №1', '1'), ('', ''), ('!!!', ''), ('AZ az 09', 'azaz09'), ('a{b 1:2 [', 'ab12'),
+                 ('А Я а я Ё', 'ayaayae'), ('аѐб', 'ab'), ('Ъ', ''), ('Радио Авторадио', 'avto'),
+                 ('Радио радио', 'radio'), ('Авто радио FM', 'avtoradio'), ('radiox fm', 'radiox'),
+                 ('x radiofm', 'xradiofm'), ('ЁЖИК', 'ezhik'), ('Xradio', 'x')]
+        for name, want in cases:
+            self.assertEqual(k(name), want, name)
+
     def test_logo_names(self):
         """A logo's file: the shortest of the names it stands for, fit for a file; two logos of one name - the
         first kept, the other told."""

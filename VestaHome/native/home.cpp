@@ -72,6 +72,7 @@
 #include "stb_image.h"
 #include "photo.h"
 #include "cover.h"     // the track's cover: in its tag or its folder
+#include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
 #include "wglayout.h"  // the main screen's widgets in their places
 #include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)
 #include "callwin.h"   // an incoming call over any program
@@ -391,6 +392,7 @@ static void SupportInit()
 #include "vh_mcu.inc"
 #include "vh_player.inc"
 #include "vh_cover.inc"
+#include "vh_radiologo.inc"
 #include "vh_netradio.inc"
 #include "vh_netcat.inc"
 #include "vh_video.inc"

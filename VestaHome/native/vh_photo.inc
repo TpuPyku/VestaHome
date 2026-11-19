@@ -149,7 +149,8 @@ static int PhotoTileEntry(int t)   // tile t of the page: its entry, -2 none
 // The picture into the frame at x, y (cut at the frame and at the partial redraw's area): the viewer's 32-bit, the
 // thumbnails RGB565 widened. rad: its corners rounded by that radius (the thumbnails, HU 2026-10-25: the square
 // corners stuck out of the rounded outline) - what is under them stays.
-static void BlitPic(const Pic& p, int x, int y, int rad = 0)
+// lighter: each channel the lighter of the screen's and the picture's (a dimmed logo behind text: the radio).
+static void BlitPic(const Pic& p, int x, int y, int rad, bool lighter)
 {
     if (!p.px && !p.px32)
         return;
@@ -169,6 +170,16 @@ static void BlitPic(const Pic& p, int x, int y, int rad = 0)
         int x0 = x + cut < s_clip.left ? s_clip.left : x + cut;
         int x1 = x + p.w - cut > s_clip.right ? s_clip.right : x + p.w - cut;
         Pix* dst = s_backBits + (479 - fy) * 800;
+        if (p.px32 && lighter) {
+            const DWORD* src = p.px32 + r * p.w - x;
+            for (int i = x0; i < x1; i++) {
+                DWORD a = dst[i], b = src[i];
+                dst[i] = (a & 0xFF0000) > (b & 0xFF0000) ? a & 0xFF0000 : b & 0xFF0000;
+                dst[i] |= (a & 0xFF00) > (b & 0xFF00) ? a & 0xFF00 : b & 0xFF00;
+                dst[i] |= (a & 0xFF) > (b & 0xFF) ? a & 0xFF : b & 0xFF;
+            }
+            continue;
+        }
         if (p.px32) {
             if (x1 > x0)
                 memcpy(dst + x0, p.px32 + r * p.w + (x0 - x), (x1 - x0) * sizeof(Pix));

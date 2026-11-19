@@ -399,7 +399,7 @@ static bool CoverHave()
     return s_cv.px32 != NULL;
 }
 
-static void BlitPic(const Pic& p, int x, int y, int rad);   // (vh_photo.inc)
+static void BlitPic(const Pic& p, int x, int y, int rad = 0, bool lighter = false);   // (vh_photo.inc)
 
 // The cover s x s at x, y, its corners rounded by rad; false: none (the caller draws its placeholder).
 static bool CoverArt(int x, int y, int s, int rad)
@@ -425,6 +425,15 @@ static bool CoverArt(int x, int y, int s, int rad)
 // The cover behind a card x, y, w x h (corners rad): covering the card, sharp, dimmed to kCoverDim of 256 so the
 // text stays readable on it. false: none (the card's own colour).
 enum { kCoverDim = 72 };
+static void PicDim(Pic* p)   // its 32-bit pixels to kCoverDim of 256
+{
+    for (int i = 0; i < p->w * p->h; i++) {
+        DWORD c = p->px32[i];
+        p->px32[i] = ((c >> 16 & 255) * kCoverDim >> 8) << 16 | ((c >> 8 & 255) * kCoverDim >> 8) << 8 |
+                     ((c & 255) * kCoverDim >> 8);
+    }
+}
+
 static bool CoverBack(int x, int y, int w, int h, int rad)
 {
     if (!CoverHave())
@@ -433,11 +442,7 @@ static bool CoverBack(int x, int y, int w, int h, int rad)
         PicFree(&s_cvBack);
         if (PicFit(&s_cv, w, h, true, &s_cvBack, true) != PIC_OK)
             return false;
-        for (int i = 0; i < w * h; i++) {
-            DWORD c = s_cvBack.px32[i];
-            s_cvBack.px32[i] = ((c >> 16 & 255) * kCoverDim >> 8) << 16 | ((c >> 8 & 255) * kCoverDim >> 8) << 8 |
-                               ((c & 255) * kCoverDim >> 8);
-        }
+        PicDim(&s_cvBack);
     }
     BlitPic(s_cvBack, x, y, rad);
     return true;

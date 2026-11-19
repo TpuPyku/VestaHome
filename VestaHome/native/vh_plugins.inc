@@ -62,7 +62,6 @@ static bool PlugBack()   // "back" on an add-on screen with another under it: th
     return true;
 }
 
-static void BlitPic(const Pic& p, int x, int y, int rad);   // (vh_photo.inc)
 static void MediaStep(int dir);
 static void MediaToggle();
 
