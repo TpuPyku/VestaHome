@@ -47,7 +47,7 @@ SHOTS = [
     ('phone', [PHONE]), ('contacts', [PHONE, (163, 88), ('sleep', 3)]),   # (the phone's pills on top, 2026-11-10)
     ('contact', [PHONE, (163, 88), ('sleep', 3), (200, 190)]), ('favourites', [PHONE, (288, 88)]),
     ('calls', [PHONE, (405, 88), ('sleep', 3)]),
-    ('apps', [APPS]), ('tasks', [APPS, (195, 28), ('sleep', 2)]),
+    ('apps', [APPS]), ('tasks', [APPS, (698, 82), ('sleep', 2)]),
 ] + [('settings_' + k, [SETTINGS, v]) for k, v in SET.items()] + [
     ('settings_bt_paired', [SETTINGS, SET['bt'], (400, 372)]),
     ('settings_wifi_saved', [SETTINGS, SET['wifi'], (710, 372)]),

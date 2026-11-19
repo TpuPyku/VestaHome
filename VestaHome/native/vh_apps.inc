@@ -1152,29 +1152,33 @@ static void AppIcon(HDC dc, const App& a, int x, int y, int size, bool d)
     }
 }
 
-// Apps, a main screen: program tiles 184 x 150, 4 x 2 per page, the last one "Add" as a dashed empty slot; in edit
-// mode (the pencil in the top bar) the tiles are framed orange and open the editor. Page dots under the tiles.
+// Apps, a main screen: under the top bar a strip of two buttons with captions, "Изменить" (edit mode) and "Диспетчер"
+// (the task manager) - the user 2026-11-19, variant B: in the top bar they hid its messages; then program tiles
+// 184 x 130, 4 x 2 per page, the last one "Add" as a dashed empty slot; in edit mode the tiles are framed orange and
+// open the editor. Page dots under the tiles.
+enum { kAppY = 112, kAppH = 130, kAppStep = 138 };
 static void DrawApps(HDC dc)
 {
-    Frame(dc, s_editMode ? L"Приложения · Изменение" : L"Приложения", A_BACK, IC_EDIT, A_EDITMODE, s_editMode,
-          IC_TASKS, A_SCREEN, S_TASKS);
+    Frame(dc, s_editMode ? L"Приложения · Изменение" : L"Приложения", A_BACK);
+    Button(dc, 430, 60, 170, 44, L"Изменить", s_editMode ? B_SEL : B_N, IC_EDIT, 16, 24, A_EDITMODE);
+    Button(dc, 612, 60, 172, 44, L"Диспетчер", B_N, IC_TASKS, 16, 24, A_SCREEN, S_TASKS);
     int first = s_page * kAppsPerPage;
     int tiles = s_appCount + (s_appCount < kMaxApps ? 1 : 0);
     for (int k = 0; k < kAppsPerPage && first + k < tiles; k++) {
-        int i = first + k, x = 16 + (k % 4) * 194, y = 64 + (k / 4) * 162;
+        int i = first + k, x = 16 + (k % 4) * 194, y = kAppY + (k / 4) * kAppStep;
         if (i == s_appCount) {   // "Add"
-            bool d = Zone(x, y, 184, 150, A_ADD);
+            bool d = Zone(x, y, 184, kAppH, A_ADD);
             if (d)
-                R(dc, x, y, 184, 150, 14, kOrange);
+                R(dc, x, y, 184, kAppH, 14, kOrange);
             else
-                DashRect(dc, x, y, 184, 150, 14, kLine);
-            Ico(dc, IC_ADD, x + 68, y + 30, 48, d ? kInk : kDim);
-            T(dc, x + 92, y + 124, L"Добавить", 15, d ? kInk : kDim, 600, AL_MID);
+                DashRect(dc, x, y, 184, kAppH, 14, kLine);
+            Ico(dc, IC_ADD, x + 68, y + 22, 48, d ? kInk : kDim);
+            T(dc, x + 92, y + 110, L"Добавить", 15, d ? kInk : kDim, 600, AL_MID);
             continue;
         }
         const App& a = s_apps[i];
-        bool d = Zone(x, y, 184, 150, A_RUN, i);
-        R(dc, x, y, 184, 150, 18, d ? kOrange : kPanel, d || !s_editMode ? CLR_INVALID : kOrange);   // editing: outlined
+        bool d = Zone(x, y, 184, kAppH, A_RUN, i);
+        R(dc, x, y, 184, kAppH, 18, d ? kOrange : kPanel, d || !s_editMode ? CLR_INVALID : kOrange);   // editing: outlined
         if (!d) {   // orange facet in the top right corner, following the rounded corner (radius 14)
             POINT f[12];
             int n = 0;
@@ -1187,8 +1191,8 @@ static void DrawApps(HDC dc)
             f[n].x = x + 184 - 1; f[n].y = y + 38; n++;
             Poly(dc, f, n, kFacet);
         }
-        AppIcon(dc, a, x + 60, y + 24, 64, d);
-        T(dc, x + 92, y + 124, a.exists ? a.name : L"нет файла", 15, d ? kInk : a.exists ? kMuted : kDim,
+        AppIcon(dc, a, x + 60, y + 16, 64, d);
+        T(dc, x + 92, y + 110, a.exists ? a.name : L"нет файла", 15, d ? kInk : a.exists ? kMuted : kDim,
           d ? 700 : 600, AL_MID, 168);
     }
     if (s_appCount == 0) {
