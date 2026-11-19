@@ -3,8 +3,9 @@
 // can_panel.exe does it - LoadRadioEngine, InitializeRadioEngine, SetSkelonton for skeletons 1..0x12 - and for 5 min
 // every message counted by skeleton and code. The question: does a second reader get all the messages (pic.dll gives
 // each frame to every opener of PIC1:, by its code), and does the shell keep everything (keys, volume, radio, the
-// camera, calls) meanwhile. Run from the card by hand; the log only with \SDMMC\VestaLogs.on, to
-// \SDMemory\VestaLogs\McuProbe.log. Ends by ExitProcess, no Uninit (pic.dll's close drops our node only).
+// camera, calls) meanwhile. Run from the card by hand; the log always (no VestaLogs.on: LogPlace), to
+// \SDMemory\VestaLogs\McuProbe.log (else the USB disk's). Ends by ExitProcess, no Uninit (pic.dll's close drops our
+// node only).
 //
 // The factory DLL is taken when it is there beside the proxy (SPIPowerMgr_orig.dll) - the probe is the no-proxy case;
 // otherwise SPIPowerMgr.dll (the stock one on a unit without VestaHome). Sends nothing but the product info request
@@ -18,10 +19,22 @@ enum { kRunMs = 5 * 60 * 1000, kRing = 512, kCodes = 160, kFirstShown = 3 };
 
 static wchar_t s_log[MAX_PATH];
 
-static bool LogsOn()
+// The log always (the user 2026-11-19: run on the CAN panel's unit, no VestaHome there to switch logs on - a probe
+// without its log is no use), but only on removable media: the SD card, else a USB disk; neither - not run.
+static bool LogPlace()
 {
-    return GetFileAttributes(L"\\SDMMC\\VestaLogs.on") != 0xFFFFFFFF &&
-           GetFileAttributes(L"\\SDMemory") != 0xFFFFFFFF;
+    static const wchar_t* kVol[2] = { L"\\SDMemory", L"\\USBDevice" };
+    for (int i = 0; i < 2; i++) {
+        DWORD a = GetFileAttributes(kVol[i]);
+        if (a == 0xFFFFFFFF || !(a & FILE_ATTRIBUTE_DIRECTORY))
+            continue;
+        wchar_t dir[MAX_PATH];
+        _snwprintf(dir, MAX_PATH, L"%s\\VestaLogs", kVol[i]);
+        CreateDirectory(dir, NULL);
+        _snwprintf(s_log, MAX_PATH, L"%s\\McuProbe.log", dir);
+        return true;
+    }
+    return false;
 }
 
 static void Log(const wchar_t* fmt, ...)
@@ -160,13 +173,11 @@ static bool Running(const wchar_t* cls)
 
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 {
-    if (!LogsOn()) {
-        MessageBox(NULL, L"Проба MCU пишет журнал на карту: включите «Диагностика → Журналы» в VestaHome и вставьте "
-                   L"SD-карту.", L"McuProbe", MB_OK | MB_TOPMOST);
+    if (!LogPlace()) {
+        MessageBox(NULL, L"Проба MCU пишет журнал на SD-карту или USB-диск - вставьте их.", L"McuProbe",
+                   MB_OK | MB_TOPMOST);
         return 1;
     }
-    CreateDirectory(L"\\SDMemory\\VestaLogs", NULL);
-    wcscpy(s_log, L"\\SDMemory\\VestaLogs\\McuProbe.log");
     if (MessageBox(NULL, L"Проба MCU: 5 минут второй клиент штатной библиотеки MCU рядом с оболочкой. Всё это время "
                    L"пользуйтесь ГУ как обычно (кнопки руля, громкость, радио, камера, звонок) и запишите, если что-то "
                    L"не сработало.\r\n\r\nНачать?", L"McuProbe", MB_YESNO | MB_TOPMOST) != IDYES)
@@ -222,9 +233,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     Flush();
     Minute(minute + 1);
     Log(L"=== конец: всего %u сообщений, разных (скелет, код) %d", s_total, s_cntN);
-    wchar_t end[200];
-    _snwprintf(end, 200, L"Проба закончена: %u сообщений MCU, разных %d.\r\n\r\nПришлите McuProbe.log и SPIPower.log "
-               L"из \\SDMemory\\VestaLogs и что не сработало за эти 5 минут.", s_total, s_cntN);
+    wchar_t end[400];
+    _snwprintf(end, 400, L"Проба закончена: %u сообщений MCU, разных %d.\r\n\r\nПришлите %s и что не сработало за эти "
+               L"5 минут.", s_total, s_cntN, s_log);
     MessageBox(NULL, end, L"McuProbe", MB_OK | MB_TOPMOST);
     (void)dep;
     ExitProcess(0);   // (no Uninit: the shell's link stays as it was; our PIC1: node goes with the process)
