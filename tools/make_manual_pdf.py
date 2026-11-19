@@ -81,18 +81,35 @@ def page(md_path, base):
             '</head><body>%s</body></html>' % (base, title.group(1) if title else '', CSS, body))
 
 
+def wait_whole(path, limit=90):
+    """True once the file is there and its size stays the same for 2 s (Edge writes it after its launcher returns)."""
+    import time
+    last = -1
+    for _ in range(limit * 2):
+        size = os.path.getsize(path) if os.path.exists(path) else -1
+        if size > 0 and size == last:
+            return True
+        last = size
+        time.sleep(1)
+    return False
+
+
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(TOP, 'build')
     tmp = os.path.join(tempfile.gettempdir(), 'vesta_manual.html')   # (its pictures: by <base>, the guide's folder)
     for md, name, base in GUIDES:
         open(tmp, 'w', encoding='utf-8').write(page(os.path.join(TOP, md), base))
         pdf = os.path.join(out, name)
-        if os.path.exists(pdf):
-            os.remove(pdf)
-        subprocess.run([EDGE, '--headless', '--disable-gpu', '--no-pdf-header-footer', '--print-to-pdf=' + pdf,
+        new = pdf + '.new.pdf'   # (the old PDF stays until the new one is whole: Edge may return before it writes)
+        if os.path.exists(new):
+            os.remove(new)
+        subprocess.run([EDGE, '--headless', '--disable-gpu', '--no-pdf-header-footer', '--print-to-pdf=' + new,
                         'file:///' + tmp.replace('\\', '/')], check=False, timeout=120,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print(name, 'ok' if os.path.exists(pdf) else 'FAILED')
+        ok = wait_whole(new)
+        if ok:
+            os.replace(new, pdf)
+        print(name, 'ok' if ok else 'FAILED (the old one kept)')
     os.remove(tmp)
 
 
