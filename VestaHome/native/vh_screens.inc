@@ -105,9 +105,8 @@ struct Tuner {
 };
 static void TunerGet(Tuner* t);
 static const wchar_t* RadioName(const Tuner& t, int f10);   // a station's name, "" when not known
-static const wchar_t* RadioTableName(int f10);              // (vh_radiologo.inc) by the city, NULL none
-static bool RadioLogoFor(const wchar_t* const* names, int n);
-static void RadioLogoBack(int x, int y);
+static const wchar_t* RadioNow(const Tuner& t, bool* logo);  // (vh_radiologo.inc) the name shown, its logo
+static bool RadioLogoArt(int x, int y, int s, int rad);
 static void McuKey(int code, bool ext);
 static void MainMenuKey(int key);   // (vh_sources.inc: "back" to the MCU's main menu first)
 static void RadioPreset(int i);
@@ -280,34 +279,34 @@ static void ScrRadio(HDC dc)
     else
         _snwprintf(band, 8, L"FM%d", page + 1);
     // the name: the table's by the city and the frequency first (RDS in the CIS often none or wrong - the user
-    // 2026-11-18), then RDS, then the one learned; the logo by the first of them that has one
-    const wchar_t* table = RadioTableName(t.f10);
-    const wchar_t* learned = RadioName(t, t.f10);
-    const wchar_t* name = table ? table : t.ps[0] ? t.ps : learned;
-    const wchar_t* names[3] = { table, t.ps, learned };
+    // 2026-11-18), then RDS, then the one learned; with a logo (the user 2026-11-19): it at the left above the
+    // scale, the frequency and the name moved towards the middle, the frequency smaller
+    bool logo;
+    const wchar_t* name = RadioNow(t, &logo);
+    int tx = logo ? 172 : 24, fy = logo ? 118 : 128, fs = logo ? 64 : 76;
     // design 0.6: the frequency the largest, "МГц · FM1" after it (the page's name; a tap - the next page, a swipe
     // too), PTY and the stations at the right; the name and RDS text; the scale with the seek arrows at its ends
     // (an arrow or the scale's end: seek down / up); the page's presets; the page dots
     Frame(dc, L"Радио");
-    if (t.f10 && RadioLogoFor(names, 3))
-        RadioLogoBack(14, 56);   // (behind the frequency, down to the presets, the scale too - the user 2026-11-19)
-    int end = T(dc, 24, 128, f, 76, t.f10 ? kText : kDim, 700, AL_START, 300);
+    if (logo)
+        RadioLogoArt(20, 58, 136, 16);
+    int end = T(dc, tx, fy, f, fs, t.f10 ? kText : kDim, 700, AL_START, 300);
     if (t.f10) {
         wchar_t pg[12];
         _snwprintf(pg, 12, L"%s%s", band, pending ? L"…" : L"");
-        int ux = T(dc, end + 14, 126, mw ? L"кГц · " : L"МГц · ", 20, kMuted, 400);
-        int ue = T(dc, ux, 126, pg, 20, kOrange, 700);
+        int ux = T(dc, end + 14, fy - 2, mw ? L"кГц · " : L"МГц · ", 20, kMuted, 400);
+        int ue = T(dc, ux, fy - 2, pg, 20, kOrange, 700);
         Zone(end + 6, 64, ue - end + 8, 72, A_RPAGE);   // the next page
     } else {
-        T(dc, end + 14, 126, L"нет данных — включаю радио…", 18, kDim, 700, AL_START, 470 - end);
+        T(dc, end + 14, fy - 2, L"нет данных — включаю радио…", 18, kDim, 700, AL_START, 470 - end);
     }
     Button(dc, 556, 76, 76, 44, L"PTY", B_N, IC_NONE, 16, 0, A_SCREEN, S_RADIO_PTY);   // a programme type
     Button(dc, 640, 76, 144, 44, L"Станции", B_N, IC_LIST, 16, 20, A_SCREEN, S_RADIO_LIST);
-    Marquee(dc, 24, 166, 752, name, 26, kText, 700);
+    Marquee(dc, tx, logo ? 158 : 166, 776 - tx, name, logo ? 24 : 26, kText, 700);
     wchar_t rt[68];
     _snwprintf(rt, 68, L"%s%s", t.rt[0], t.rt[1]);
     rt[67] = 0;
-    Marquee(dc, 24, 190, 752, rt, 15, kMuted, 400);
+    Marquee(dc, tx, logo ? 184 : 190, 776 - tx, rt, 15, kMuted, 400);
     if (s_marqOn)
         SetTimer(s_wnd, TIMER_MARQ, kMarqMs, NULL);   // (again: the same timer, restarted)
     bool sd = Zone(8, 200, 112, 48, A_RKEY, 0x13B), su = Zone(680, 200, 112, 48, A_RKEY, 0x13C);   // seek down / up

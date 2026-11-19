@@ -4,7 +4,7 @@
 
     python make_radio.py <radio_data.zip> <cities1000.zip> <out folder> [--size 192]
     (out: VestaHome/VestaHome/VHContent/RadioLogos - the PC build's content, git-ignored; on the unit
-    \ResidentFlash\VHContent\RadioLogos or \SDMemory\VHContent\RadioLogos)
+    \\ResidentFlash\\VHContent\\RadioLogos or \\SDMemory\\VHContent\\RadioLogos)
 
 radio_data.zip (from the user; not in any repository - the logos are the stations'): radio_freqs_RU.json and
 radio_freqs_BY.json ({"radio": [{cityName, country, freqNum (x10 kHz), freqName, freqLogo}]}) and logo300x300/<id>.png.
@@ -128,8 +128,8 @@ def station_lines(radio, index):
 
 
 def logos(data, out, size, files):
-    """The logos as files[id].jpg, size x size, on black (VestaHome shows them dimmed behind the frequency, the
-    lighter of the screen and the logo: black is no logo; a JPEG ~4 times smaller than the PNG)."""
+    """The logos as files[id].jpg, size x size, on white (VestaHome shows them as they are on a light plate - the
+    user 2026-11-19: not dimmed; most have a white background of their own; a JPEG ~4 times smaller than the PNG)."""
     from PIL import Image
     os.makedirs(out, exist_ok=True)
     n = 0
@@ -137,7 +137,7 @@ def logos(data, out, size, files):
         lid = name.split('/')[-1][:-4]
         if name.startswith('logo300x300/') and name.endswith('.png') and lid in files:
             im = Image.open(io.BytesIO(data.read(name))).convert('RGBA').resize((size, size), Image.LANCZOS)
-            flat = Image.new('RGB', (size, size), (0, 0, 0))
+            flat = Image.new('RGB', (size, size), (255, 255, 255))
             flat.paste(im, (0, 0), im)
             flat.save(os.path.join(out, files[lid] + '.jpg'), quality=85, optimize=True)
             n += 1

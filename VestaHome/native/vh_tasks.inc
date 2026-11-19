@@ -326,7 +326,7 @@ static Icon SaverNowPlaying(wchar_t* s, int n)
         TunerGet(&tu);
         wchar_t f[16];
         FreqText(tu.f10, f, 16);
-        const wchar_t* nm = tu.ps[0] ? tu.ps : RadioName(tu, tu.f10);
+        const wchar_t* nm = RadioNow(tu, NULL);
         if (tu.f10)
             _snwprintf(s, n, L"%s  %s", f, nm);
         s[n - 1] = 0;
@@ -365,22 +365,26 @@ static MediaGeo MediaGeoOf(int x, int y, int shape)
 }
 
 // The cover (vh_cover.inc) where the source has one (our music), otherwise the orange facets with its icon.
-static void MediaArt(HDC dc, Icon ic, bool art, int x, int y, int s, int rad, int isz)
+// art: ART_COVER the music's cover, ART_LOGO the radio station's logo (vh_radiologo.inc), else none.
+enum { ART_NONE, ART_COVER, ART_LOGO };
+static void MediaArt(HDC dc, Icon ic, int art, int x, int y, int s, int rad, int isz)
 {
-    if (art && CoverArt(x, y, s, rad))
+    if (art == ART_COVER && CoverArt(x, y, s, rad))
+        return;
+    if (art == ART_LOGO && RadioLogoArt(x, y, s, rad))
         return;
     TriFill(x, y, s, s, rad);
     Ico(dc, ic, x + (s - isz) / 2, y + (s - isz) / 2, isz, Mix(kInk, kTriOr[1], 140));
 }
 
 static void WMediaBody(HDC dc, const MediaGeo& g, bool d, Icon ic, const wchar_t* title, const wchar_t* sub,
-                       const wchar_t* third, int k, const wchar_t* t0, const wchar_t* t1, bool art = false)
+                       const wchar_t* third, int k, const wchar_t* t0, const wchar_t* t1, int art = ART_NONE)
 {
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     int x = g.x, y = g.y;
     if (g.shape == WS_TALL) {
-        if (!art || !CoverHave())   // the cover: behind the card (Widget), the facets only without one
-            MediaArt(dc, ic, false, x + 64, y + 50, 120, 16, 56);
+        if (art != ART_COVER || !CoverHave())   // the cover: behind the card (Widget), the facets without one
+            MediaArt(dc, ic, art == ART_LOGO ? ART_LOGO : ART_NONE, x + 64, y + 50, 120, 16, 56);
         T(dc, g.cx, y + 200, title, 22, fg, 700, AL_MID, 216);
         T(dc, g.cx, y + 222, sub, 15, mg, 400, AL_MID, 216);
         if (k >= 0) {
@@ -458,7 +462,7 @@ static void WMediaAddon(HDC dc, const MediaGeo& g)
     Mmss(a, 16, pos);
     Mmss(b, 16, s_ap.len);
     WMediaBody(dc, g, d, IC_MUSIC, s_ap.title[0] ? s_ap.title : L"—", sub, s_ap.app[0] ? s_ap.app : NULL,
-               s_ap.len > 0 ? pos * g.barW / s_ap.len : -1, a, b, true);
+               s_ap.len > 0 ? pos * g.barW / s_ap.len : -1, a, b, ART_COVER);
     s_cvPick = NULL;
     MediaArrows(dc, g, d, A_ADDONKEY, -1, A_ADDONKEY, 1);
     bool down = Zone(g.cx - g.r, g.cy - g.r, 2 * g.r, 2 * g.r, A_ADDONKEY, 0);
@@ -487,8 +491,10 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
         _snwprintf(sub, 48, L"%s %s · %s", f, t.band == 2 ? L"кГц" : L"МГц", pg);
         _snwprintf(rt, 68, L"%s%s", t.rt[0], t.rt[1]);
         rt[67] = 0;
-        const wchar_t* nm = t.ps[0] ? t.ps : RadioName(t, t.f10);
-        WMediaBody(dc, g, d, IC_RADIO, nm[0] ? nm : f, t.f10 ? sub : L"нет данных от радио", rt, -1, NULL, NULL);
+        bool logo;
+        const wchar_t* nm = RadioNow(t, &logo);
+        WMediaBody(dc, g, d, IC_RADIO, nm[0] ? nm : f, t.f10 ? sub : L"нет данных от радио", rt, -1, NULL, NULL,
+                   logo ? ART_LOGO : ART_NONE);
         if (t.presets > 0) {   // previous / next preset of the page playing (none playing: the first)
             int per = t.presets < 8 ? t.presets : 8;
             MediaArrows(dc, g, d, A_PRESET, PresetNext(t.cur, -1, per), A_PRESET, PresetNext(t.cur, 1, per));
@@ -514,7 +520,7 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
             _snwprintf(t0, 16, L"%d:%02d", pos / 60000, pos / 1000 % 60);
             _snwprintf(t1, 16, L"%d:%02d", len / 60000, len / 1000 % 60);
         }
-        WMediaBody(dc, g, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1, s_cvPick != NULL);
+        WMediaBody(dc, g, d, IC_BTMUSIC, title, artist, NULL, k, t0, t1, s_cvPick ? ART_COVER : ART_NONE);
         s_cvPick = NULL;
         bool playing = BtPlayingNow(bt);
         MediaArrows(dc, g, d, A_BTCMD, BT_CMD_PREV, A_BTCMD, BT_CMD_NEXT);
@@ -535,7 +541,7 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
         LeaveCriticalSection(&s_netCs);
         if (!s[0] || s_netState != NR_PLAY)
             NetStateText(s, 160);
-        WMediaBody(dc, g, d, IC_NETRADIO, s_netNow.name, s, NULL, -1, NULL, NULL, s_cvPick != NULL);
+        WMediaBody(dc, g, d, IC_NETRADIO, s_netNow.name, s, NULL, -1, NULL, NULL, s_cvPick ? ART_COVER : ART_NONE);
         s_cvPick = NULL;
         MediaArrows(dc, g, d, A_NRSTEP, -1, A_NRSTEP, 1);
         NetPlayBtn(dc, g.cx, g.cy, g.r, g.play);
@@ -550,7 +556,7 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
         Mmss(a, 16, pos);
         Mmss(b, 16, len);
         WMediaBody(dc, g, d, IC_MUSIC, title, sub[0] ? sub : s, sub[0] ? s : NULL,
-                   len > 0 ? (int)(pos * g.barW / len) : 0, a, b, true);
+                   len > 0 ? (int)(pos * g.barW / len) : 0, a, b, ART_COVER);
     } else {   // nothing loaded: the last track (dim) to go on with, or a dash
         wchar_t last[MAX_PATH];
         const wchar_t* fn = wcsrchr(s_cfg.musicFile, L'\\');
@@ -560,7 +566,7 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
             *dot = 0;
         WMediaBody(dc, g, d, IC_MUSIC, last[0] ? last : L"—",
                    last[0] ? L"последний трек — можно продолжить" : L"выберите музыку в «Медиа»", NULL, -1, NULL, NULL,
-                   true);
+                   ART_COVER);
     }
     MediaArrows(dc, g, d, A_PREVTRK, 0, A_NEXTTRK, 0);
     PlayBtn(dc, g.cx, g.cy, g.r, g.play);
@@ -632,8 +638,13 @@ static void WRadio(HDC dc, int x, int y)
                     : t.band == 1 || (t.f10 >= 6500 && t.f10 < 8750) ? L"Радио · УКВ" : L"Радио · FM", IC_RADIO, A_NAV,
                     S_RADIO);
     T(dc, x + 16, y + 88, f, 44, d ? kInk : t.f10 ? kText : kDim, 700);
-    // RDS's name, else the one known for the frequency
-    TWrap(dc, x + 16, y + 114, t.ps[0] ? t.ps : RadioName(t, t.f10), 17, d ? kInk : kMuted, 600, 216, 1, 0);
+    // the name shown (the table's, RDS's, the learned); the logo at the right
+    bool logo;
+    const wchar_t* nm = RadioNow(t, &logo);
+    if (logo && RadioLogoArt(x + 160, y + 48, 72, 12))
+        TWrap(dc, x + 16, y + 114, nm, 17, d ? kInk : kMuted, 600, 136, 1, 0);
+    else
+        TWrap(dc, x + 16, y + 114, nm, 17, d ? kInk : kMuted, 600, 216, 1, 0);
     if (t.presets > 0) {   // previous / next preset (none playing: the first)
         int per = t.presets < 8 ? t.presets : 8;
         IconBtn(dc, IC_PREV, x + 24, y + 124, 26, d ? kInk : kText, A_PRESET, PresetNext(t.cur, -1, per));

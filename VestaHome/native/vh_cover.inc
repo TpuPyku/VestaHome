@@ -399,7 +399,7 @@ static bool CoverHave()
     return s_cv.px32 != NULL;
 }
 
-static void BlitPic(const Pic& p, int x, int y, int rad = 0, bool lighter = false);   // (vh_photo.inc)
+static void BlitPic(const Pic& p, int x, int y, int rad = 0);   // (vh_photo.inc)
 
 // The cover s x s at x, y, its corners rounded by rad; false: none (the caller draws its placeholder).
 static bool CoverArt(int x, int y, int s, int rad)
