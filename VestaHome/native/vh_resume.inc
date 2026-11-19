@@ -432,6 +432,8 @@ static bool Swipe(int dir)
 // for each).
 static void SetTheme(bool night)
 {
+    if (night != s_night)   // (sheet 41: Android Auto fell after the theme was changed by hand - when, in the log)
+        VLog(L"тема: %s", night ? L"ночь" : L"день");
     s_night = night;
     NightShare(night);
 }
