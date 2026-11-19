@@ -485,7 +485,12 @@ static void PlugData()
     wchar_t bt[80], unit[24] = L"", phone[18] = L"";
     BtState st;
     int hf = BtGet(&st, NULL) ? st.hf : -1;
-    McuBtAddr(unit, 24);
+    static DWORD s_btAsked;   // the unit's address: asked of the MCU until it answers, every 30 s (sheet 41, 2026-11-19:
+    LONG attach, wraps;       // only "Details" asked for it - Android Auto never got it)
+    if (!McuBtAddr(unit, 24) && McuState(&attach, &wraps) > 0 && (!s_btAsked || GetTickCount() - s_btAsked > 30000)) {
+        s_btAsked = GetTickCount();
+        McuSend0("SPApi_SendRadioRequestBTAddress");
+    }
     if (hf >= 1 && st.devAddr[0])
         BtText(st.devAddr, phone, 18);
     _snwprintf(bt, 80, L"bt\tunit=%s\tphone=%s\thf=%d", unit, phone, hf);
