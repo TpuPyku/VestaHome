@@ -1,15 +1,18 @@
 ﻿// vh_radiologo.inc - part of home.cpp (included there, in order): the FM station's name by the city and the
 // frequency, and its logo behind the frequency, dimmed as the tall widget's cover (the user 2026-11-19: the logo
 // shaded behind the frequency, down to the presets, the scale under it too; not on the presets). The set is its own
-// archive (the logos are the stations'): <VestaHome>\RadioLogos\stations.txt (make_radio.py) and
-// RadioLogos\logos\<the station's name>.png / .jpg - anyone may add their own station's by its name. The place:
+// archive (the logos are the stations') in VestaHome's content (the user 2026-11-19: VHContent, not VestaHome's own
+// folder): VHContent\RadioLogos\stations.txt (make_radio.py) and RadioLogos\logos\<the station's name>.png / .jpg
+// on the partition or the SD card (VhContentDirs) - anyone may add their own station's by its name. The place:
 // the last GPS fix, else the home point. The logo: by the table's name, else RDS's, else the name learned.
 enum { kRlFiles = 600, kRlFileName = 48, kRlSize = 192, kRlTableMax = 1024 * 1024 };
+static int VhContentDirs(const wchar_t* sub, wchar_t (*dirs)[MAX_PATH]);   // (vh_userwidgets.inc)
 
 static Rdb     s_rdb;                        // the table's stations near the place
 static bool    s_rdbRead, s_rdbNone;         // read once; no table there (not looked for again)
 static char    s_rlKey[kRlFiles][RDB_KEY];   // the logos' files: their names' keys
 static wchar_t s_rlFile[kRlFiles][kRlFileName];
+static char    s_rlDir[kRlFiles];             // which content folder it is in
 static int     s_rlCount = -1;               // -1: not listed yet
 static char    s_rlShown[RDB_KEY] = "\x01";  // the key of the logo in s_rlPic ("\x01": none asked yet)
 static Pic     s_rlPic;                      // that logo, dimmed
@@ -34,9 +37,13 @@ static void RadioTableFor(double lat, double lon)
     if (s_rdbNone || (s_rdbRead && !RdbStale(&s_rdb, lat, lon)))
         return;
     s_rdbRead = true;
-    wchar_t path[MAX_PATH];
-    _snwprintf(path, MAX_PATH, L"%sRadioLogos\\stations.txt", s_dir);
-    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    wchar_t dirs[2][MAX_PATH], path[MAX_PATH];
+    int nd = VhContentDirs(L"RadioLogos", dirs);
+    HANDLE f = INVALID_HANDLE_VALUE;
+    for (int i = 0; i < nd && f == INVALID_HANDLE_VALUE; i++) {   // (the first that has it)
+        _snwprintf(path, MAX_PATH, L"%sstations.txt", dirs[i]);
+        f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    }
     if (f == INVALID_HANDLE_VALUE) {
         s_rdbNone = true;
         return;
@@ -64,11 +71,10 @@ static const wchar_t* RadioTableName(int f10)
     return s_rdb.n > 0 ? RdbName(&s_rdb, f10, lat, lon) : NULL;
 }
 
-static void RadioLogosList()
+static void RadioLogosIn(const wchar_t* dir, int d)   // one content folder's logos/ into the list
 {
-    s_rlCount = 0;
     wchar_t pat[MAX_PATH];
-    _snwprintf(pat, MAX_PATH, L"%sRadioLogos\\logos\\*.*", s_dir);
+    _snwprintf(pat, MAX_PATH, L"%slogos\\*.*", dir);
     WIN32_FIND_DATA fd;
     HANDLE h = FindFirstFile(pat, &fd);
     if (h == INVALID_HANDLE_VALUE)
@@ -84,10 +90,20 @@ static void RadioLogosList()
         RdbKey(name, s_rlKey[s_rlCount]);
         if (s_rlKey[s_rlCount][0]) {
             wcscpy(s_rlFile[s_rlCount], fd.cFileName);
+            s_rlDir[s_rlCount] = (char)d;
             s_rlCount++;
         }
     } while (s_rlCount < kRlFiles && FindNextFile(h, &fd));
     FindClose(h);
+}
+
+static void RadioLogosList()   // the partition's first (a name in both: its own), then the SD card's
+{
+    s_rlCount = 0;
+    wchar_t dirs[2][MAX_PATH];
+    int nd = VhContentDirs(L"RadioLogos", dirs);
+    for (int i = 0; i < nd; i++)
+        RadioLogosIn(dirs[i], i);
     VLog(L"радио: логотипов %d", s_rlCount);
 }
 
@@ -115,8 +131,9 @@ static bool RadioLogoFor(const wchar_t* const* names, int n)
     if (strcmp(key, s_rlShown)) {
         strcpy(s_rlShown, key);
         PicFree(&s_rlPic);
-        wchar_t path[MAX_PATH];
-        _snwprintf(path, MAX_PATH, L"%sRadioLogos\\logos\\%s", s_dir, file >= 0 ? s_rlFile[file] : L"");
+        wchar_t dirs[2][MAX_PATH], path[MAX_PATH];
+        VhContentDirs(L"RadioLogos", dirs);
+        _snwprintf(path, MAX_PATH, L"%slogos\\%s", dirs[file >= 0 ? s_rlDir[file] : 0], file >= 0 ? s_rlFile[file] : L"");
         if (file >= 0 && PicLoad(path, kRlSize, kRlSize, false, 0, false, &s_rlPic, NULL, NULL, true) == PIC_OK)
             PicDim(&s_rlPic);   // (as the tall widget's cover)
     }

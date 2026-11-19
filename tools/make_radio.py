@@ -3,6 +3,8 @@
 2026-11-18: RDS in the CIS often gives no name or a wrong one; the station by the city and the frequency instead).
 
     python make_radio.py <radio_data.zip> <cities1000.zip> <out folder> [--size 192]
+    (out: VestaHome/VestaHome/VHContent/RadioLogos - the PC build's content, git-ignored; on the unit
+    \ResidentFlash\VHContent\RadioLogos or \SDMemory\VHContent\RadioLogos)
 
 radio_data.zip (from the user; not in any repository - the logos are the stations'): radio_freqs_RU.json and
 radio_freqs_BY.json ({"radio": [{cityName, country, freqNum (x10 kHz), freqName, freqLogo}]}) and logo300x300/<id>.png.

@@ -39,8 +39,8 @@ PLAN = (
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
         ('TestMedia',)),
     # the FM stations by the city and their logos (make_radio.py; the user 2026-11-19: a set of its own, not in the
-    # installer - the logos are the stations'): into VestaHome's folder on the unit
-    (os.path.join(V, 'VestaHome', 'VestaHome'), r'ResidentFlash\VestaHome',
+    # installer - the logos are the stations'; in VestaHome's content, VHContent)
+    (os.path.join(V, 'VestaHome', 'VestaHome', 'VHContent'), r'ResidentFlash\VHContent',
         ('RadioLogos',)),
     # the user widgets' examples and their guide (VestaHome reads \ResidentFlash\VHContent\VHWidgets\*.ini)
     (os.path.join(V, 'VestaHome', 'VestaWidgets'), r'ResidentFlash\VHContent\VHWidgets',
@@ -86,7 +86,7 @@ def copy(src, dst):
 # places of Tests no longer made: removed, so the folder has no stale copies (the user 2026-11-06: one SDCard for the
 # two cards; gone with them: GpsGate 2.0 - an old GPS test, MAIN has it; YaMapsCE - finished, its archive in build\;
 # VestaLaunch - inside LaunchInstall)
-RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets',
+RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets', r'ResidentFlash\VestaHome',
            r'ResidentFlash\VHContent\VHPlugins\Sample',
            r'SDCard\VestaAuto',     # (the video probe's media: VestaAuto 0.6 shows the phone, no probe - the user 2026-11-15)
            r'SDCard\TetherProbe')   # (VestaHome registers the phone's driver itself - the user 2026-11-15)

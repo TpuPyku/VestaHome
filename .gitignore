@@ -95,5 +95,3 @@ VestaTether/tools/adbkey_pc.pem
 # a head unit's support license (the author makes it per unit ID; never in the repo)
 VestaLicense.key
 VestaHome/VestaHome/Covers/
-# the radio stations' table and logos from make_radio.py (the logos are the stations': not in the repo)
-VestaHome/VestaHome/RadioLogos/

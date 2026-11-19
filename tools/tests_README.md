@@ -7,7 +7,7 @@
 | Папка | Куда на ГУ | Что это |
 |---|---|---|
 | `SDCard\` | карта памяти: `\SDMemory` (внешняя), для OSMapsCE можно и `\SDMMC` | всё для проверок |
-| `ResidentFlash\` | `\ResidentFlash` — встроенный раздел | `VHContent`: виджеты (`VHWidgets`) и дополнения (`VHPlugins`) VestaHome; `VestaHome\RadioLogos`: станции FM по городу и их логотипы (отдельный набор, не установщиком) |
+| `ResidentFlash\` | `\ResidentFlash` — встроенный раздел | `VHContent`: виджеты (`VHWidgets`) и дополнения (`VHPlugins`) VestaHome; `RadioLogos`: станции FM по городу и их логотипы (отдельный набор, не установщиком) |
 
 Обычная папка программы копируется **целиком** (`SDCard\OSMapsCE\` → `\SDMemory\OSMapsCE\`).
 
