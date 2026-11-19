@@ -1062,10 +1062,21 @@ static void WNavi(HDC dc, int x, int y)
           d ? kInk : kDim, 400, 216, 1, 0);
 }
 
-// The unit restarted by software: the HAL's reboot, else the power manager's reset; false - neither took.
-static bool Reboot()
+// The unit restarted by software: the HAL's reboot, else the power manager's reset; false - neither took. viaMcu: the
+// MCU asked first (SPApi_SendResetEvent(1), as the installer and Main.exe on its failure) - the stock shell after our
+// warm reboot hung on its logo (sheets 33-35, 2026-11-19 again: the MCU stays silent to it, the knob off / on cures
+// it); the MCU's reset restarts the whole unit as the knob does. No restart within 10 s - the warm one as before.
+static bool Reboot(bool viaMcu = false)
 {
 #ifdef UNDER_CE
+    typedef void (*ResetFn)(int);
+    ResetFn reset = viaMcu ? (ResetFn)SpmProc("SPApi_SendResetEvent") : NULL;
+    if (reset) {
+        VLog(L"перезагрузка: сброс через MCU (SPApi_SendResetEvent)");
+        reset(1);
+        Sleep(10000);
+        VLog(L"перезагрузка: MCU не перезагрузил ГУ за 10 с");
+    }
     typedef BOOL (*KernelIoFn)(DWORD, LPVOID, DWORD, LPVOID, DWORD, LPDWORD);
     typedef DWORD (*PowerFn)(LPCWSTR, DWORD, DWORD);
     HMODULE core = GetModuleHandle(L"coredll.dll");
@@ -1170,7 +1181,7 @@ static bool ShellStart()
         VLog(L"штатная оболочка: флаг %s %s, перезагрузка", kStockFlag, f != INVALID_HANDLE_VALUE ? L"есть" : L"НЕ ЗАПИСАН");
         RadioForShell();
         BtOffForShell();
-        if (!Reboot())
+        if (!Reboot(true))
             wcscpy(s_status, L"перезагрузите ГУ: удерживайте крутилку 10 с");
         return false;
     }
