@@ -9,7 +9,8 @@ radio_freqs_BY.json ({"radio": [{cityName, country, freqNum (x10 kHz), freqName,
 cities1000.zip: GeoNames' cities of 1000 people and more (CC BY 4.0, download.geonames.org/export/dump) - the cities'
 places, by their Russian names.
 
-Out: stations.txt (UTF-8, a station a line "lat;lon;f10;logo;name", by the city) and logos/<id>.png (size x size).
+Out: stations.txt (UTF-8, a station a line "lat;lon;f10;name", by the city) and logos/<station's name>.png (size x
+size; matched by name_key - anyone may add a logo of their own station by its name).
 """
 import argparse
 import io
@@ -35,6 +36,52 @@ def sound(name):
     s = ''.join(LAT.get(c, c) for c in name.lower())
     s = ''.join(c for c in s if 'a' <= c <= 'z').replace('j', 'y').replace('iy', 'y').replace('yy', 'y')
     return s.rstrip('y')
+
+
+def name_key(name):
+    """A station's name as matched - the table's, RDS's and a logo file's alike (the user 2026-11-19: the logos by
+    the station's name, so anyone can add their own): Latin letters and digits only, Cyrillic spelt in Latin, a
+    "радио" before and a "радио" / "FM" after left off (unless nothing else is left). VestaHome does the same."""
+    words, w = [], ''
+    for c in name.lower() + ' ':
+        c = LAT.get(c, c)
+        if c and all('a' <= x <= 'z' or '0' <= x <= '9' for x in c):
+            w += c
+        elif c in ('', "'"):
+            pass   # (ъ, ь: no letter; an apostrophe inside a word)
+        elif w:
+            words.append(w)
+            w = ''
+    if len(words) > 1 and words[0] == 'radio':
+        words = words[1:]
+    if len(words) > 1 and words[-1] in ('radio', 'fm'):
+        words = words[:-1]
+    elif len(words) == 1 and words[0].endswith('radio') and len(words[0]) > 5:
+        words = [words[0][:-5]]   # (Авторадио: one word)
+    return ''.join(words)
+
+
+def file_name(name):
+    """The name fit for a file (FAT's forbidden characters as spaces)."""
+    return ' '.join(''.join(' ' if c in '\\/:*?"<>|' else c for c in name).split())
+
+
+def logo_files(radio):
+    """{logo id: its file's name} - the shortest of the names it stands for; and the logos whose name another one
+    has already (left out; Russia's first - a station of one name in Belarus has its own logo)."""
+    names = {}
+    for r in radio:
+        names.setdefault(r['freqLogo'], set()).add(r['freqName'].strip())
+    files, keys, clash = {}, {}, []
+    for lid in sorted(names, key=lambda i: (not i.startswith('ru'), i)):
+        name = file_name(min(names[lid], key=lambda n: (len(n), n)))
+        k = name_key(name)
+        if k in keys:
+            clash.append('%s (%s) = %s' % (lid, name, keys[k]))
+            continue
+        keys[k] = lid
+        files[lid] = name
+    return files, clash
 
 
 def city_index(lines):
@@ -73,20 +120,21 @@ def station_lines(radio, index):
                 missed.append(city)
             continue
         name = ' '.join(r['freqName'].replace(';', ' ').split())
-        rows.append((place, int(r['freqNum']), r['freqLogo'], name))
+        rows.append((place, int(r['freqNum']), name))
     rows.sort()
-    return ['%.3f;%.3f;%d;%s;%s' % (p[0], p[1], f, logo, name) for p, f, logo, name in rows], missed
+    return ['%.3f;%.3f;%d;%s' % (p[0], p[1], f, name) for p, f, name in rows], missed
 
 
-def logos(data, out, size):
-    """The logos the table names, size x size PNG (RGBA kept)."""
+def logos(data, out, size, files):
+    """The logos as files[id].png, size x size (RGBA kept)."""
     from PIL import Image
     os.makedirs(out, exist_ok=True)
     n = 0
     for name in data.namelist():
-        if name.startswith('logo300x300/') and name.endswith('.png'):
+        lid = name.split('/')[-1][:-4]
+        if name.startswith('logo300x300/') and name.endswith('.png') and lid in files:
             im = Image.open(io.BytesIO(data.read(name))).convert('RGBA')
-            im.resize((size, size), Image.LANCZOS).save(os.path.join(out, name.split('/')[-1]), optimize=True)
+            im.resize((size, size), Image.LANCZOS).save(os.path.join(out, files[lid] + '.png'), optimize=True)
             n += 1
     return n
 
@@ -108,8 +156,11 @@ def main(argv=None):
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, 'stations.txt'), 'w', encoding='utf-8', newline='\r\n') as f:
         f.write('\n'.join(lines) + '\n')
-    n = logos(data, os.path.join(a.out, 'logos'), a.size)
+    files, clash = logo_files(radio)
+    n = logos(data, os.path.join(a.out, 'logos'), a.size, files)
     print('stations %d, logos %d (%dx%d)' % (len(lines), n, a.size, a.size))
+    for c in clash:
+        print('  a logo of a name taken: %s' % c)
     for m in missed:
         print('  city not found: %s' % m)
     return 0

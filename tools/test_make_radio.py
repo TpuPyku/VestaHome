@@ -53,9 +53,34 @@ class TestCities(unittest.TestCase):
         self.assertIsNone(make_radio.locate('Нигде', 'RU', self.index))
 
 
+class TestNames(unittest.TestCase):
+    def test_key(self):
+        """A station's name as matched (the table's, RDS's, a logo file's - the user 2026-11-19: logos by the station's
+        name): Latin letters and digits, Cyrillic spelt in Latin, "радио" before and "радио"/"FM" after left off."""
+        k = make_radio.name_key
+        self.assertEqual(k('Радио DFM'), 'dfm')
+        self.assertEqual(k('DFM'), 'dfm')
+        self.assertEqual(k('Ретро FM'), k('RETRO'))
+        self.assertEqual(k('Наше радио'), k('NASHE'))
+        self.assertEqual(k('Авторадио'), k('AVTO'))
+        self.assertEqual(k('Радио Monte Carlo'), 'montecarlo')
+        self.assertEqual(k('Радио'), 'radio')   # (nothing but the word: kept)
+        self.assertEqual(k('Европа Плюс'), 'evropaplyus')
+
+    def test_logo_names(self):
+        """A logo's file: the shortest of the names it stands for, fit for a file; two logos of one name - the
+        first kept, the other told."""
+        radio = [{'freqLogo': 'ru023', 'freqName': 'Радио DFM'}, {'freqLogo': 'ru023', 'freqName': 'DFM'},
+                 {'freqLogo': 'ru050', 'freqName': 'AC\\DC: "FM"?'}, {'freqLogo': 'ru099', 'freqName': 'D F M'},
+                 {'freqLogo': 'by010', 'freqName': 'Авторадио'}, {'freqLogo': 'ru001', 'freqName': 'Авторадио'}]
+        files, clash = make_radio.logo_files(radio)
+        self.assertEqual(files, {'ru001': 'Авторадио', 'ru023': 'DFM', 'ru050': 'AC DC FM'})
+        self.assertEqual(clash, ['ru099 (D F M) = ru023', 'by010 (Авторадио) = ru001'])
+
+
 class TestTable(unittest.TestCase):
     def test_lines(self):
-        """A station a line: lat;lon;frequency (x10 kHz);logo;name - by the city, then the frequency; the cities not
+        """A station a line: lat;lon;frequency (x10 kHz);name - by the city, then the frequency; the cities not
         found told apart, their stations left out."""
         index = make_radio.city_index(GEO)
         radio = [
@@ -65,9 +90,9 @@ class TestTable(unittest.TestCase):
             {'cityName': 'Самара', 'country': 'RU', 'freqNum': 9000, 'freqLogo': 'ru002', 'freqName': 'a;b\tc '},
         ]
         lines, missed = make_radio.station_lines(radio, index)
-        self.assertEqual(lines, ['53.208;50.136;8820;ru069;Радио Гордость',
-                                 '53.208;50.136;9000;ru002;a b c',
-                                 '53.208;50.136;10430;ru200;Самара-Максимум'])
+        self.assertEqual(lines, ['53.208;50.136;8820;Радио Гордость',
+                                 '53.208;50.136;9000;a b c',
+                                 '53.208;50.136;10430;Самара-Максимум'])
         self.assertEqual(missed, ['Нигде (RU)'])
 
 
