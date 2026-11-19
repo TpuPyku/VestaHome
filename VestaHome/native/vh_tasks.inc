@@ -243,16 +243,22 @@ static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, I
 // The screen saver's line of what plays (its timer redraws it when the line changes): the internet radio's station
 // and song, our music's track, Bluetooth's track, the radio's station; "" nothing.
 // What plays, for the top bar's mark (2026-10-22): our internet radio, our music, our video, the phone's music, the
-// radio; *to: its screen (a tap opens it). Each its own icon.
-static Icon PlayingIcon(Screen* to)
+// radio; *to: its screen (a tap opens it). Each its own icon. An add-on's sound (Android Auto, the user 2026-11-19:
+// not on the screen saver) - *plug, a tap opens it; -1 otherwise.
+static Icon PlayingIcon(Screen* to, int* plug)
 {
     double pos, len;
+    *plug = -1;
     if (s_netOn) {
         *to = S_NETRADIO;
         return IC_NETRADIO;
     }
     if (PlayerPlaying()) {
         *to = S_AUDIO;
+        return IC_MUSIC;
+    }
+    if (AddonPlayShown()) {   // (the add-on took the sound: our players are paused)
+        *plug = s_ap.plug;
         return IC_MUSIC;
     }
     if (VideoTimes(&pos, &len)) {
@@ -297,6 +303,14 @@ static Icon SaverNowPlaying(wchar_t* s, int n)
     double pos, len;
     if (PlayerPlaying() && PlayerNow(title, sub, 96, &pos, &len)) {
         _snwprintf(s, n, L"%s", title);
+        s[n - 1] = 0;
+        return IC_MUSIC;
+    }
+    if (AddonPlayShown() && s_ap.title[0]) {   // Android Auto's track (as the "now playing" widget)
+        if (s_ap.artist[0])
+            _snwprintf(s, n, L"%s · %s", s_ap.title, s_ap.artist);
+        else
+            _snwprintf(s, n, L"%s", s_ap.title);
         s[n - 1] = 0;
         return IC_MUSIC;
     }

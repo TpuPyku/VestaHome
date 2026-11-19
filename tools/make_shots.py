@@ -87,6 +87,9 @@ SHOTS = [
     ('settings_bt_on', [SETTINGS, SET['bt'], (720, 85), ('sleep', 4)]),
     ('saver_pick', [SETTINGS, SET['screen'], (600, 316), (680, 372), ('sleep', 4)]),   # (thumbnails without a tap)
     ('netradio_cis_ru',[MEDIA, TAB['net'], TAB['list'], (572, 84), ('sleep', 2), (400, 180), ('sleep', 8)]),
+    # an add-on with its own sound and track (as Android Auto, the user 2026-11-19): the top bar's mark, the Bluetooth
+    # screen "busy", the "now playing" widget
+    ('aa_home', [('aa',), HOME, ('sleep', 2)]), ('aa_bt', [('aa',), MEDIA, TAB['bt'], ('sleep', 2)]),
 ]
 
 if os.environ.get('VH_SHOTS'):   # only these (comma-separated names), from a fresh start
@@ -134,6 +137,46 @@ class Pb(ctypes.Structure):
     _fields_ = [('magic', W.DWORD), ('seq', ctypes.c_long), ('storage', ctypes.c_int), ('list', ctypes.c_int),
                 ('state', ctypes.c_int), ('count', ctypes.c_int), ('total', ctypes.c_int), ('pbap', ctypes.c_int),
                 ('tick', W.DWORD), ('e', PbE * 1000)]
+
+
+_aa = {}
+
+
+def aa_addon():   # a stand-in add-on (plugin-api.md 3, 7.3): hello, its own sound, a track; its window stays
+    if _aa:
+        return
+    WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, W.HWND, W.UINT, W.WPARAM, W.LPARAM)
+    u32.DefWindowProcW.argtypes = [W.HWND, W.UINT, W.WPARAM, W.LPARAM]
+    u32.DefWindowProcW.restype = ctypes.c_ssize_t
+
+    def proc(h, m, wp, lp):
+        return 1 if m == 0x4A else u32.DefWindowProcW(h, m, wp, lp)   # WM_COPYDATA: taken
+
+    class WC(ctypes.Structure):
+        _fields_ = [('style', W.UINT), ('proc', WNDPROC), ('cls', ctypes.c_int), ('wnd', ctypes.c_int),
+                    ('inst', W.HINSTANCE), ('icon', W.HICON), ('cursor', W.HANDLE), ('bg', W.HBRUSH),
+                    ('menu', W.LPCWSTR), ('name', W.LPCWSTR)]
+
+    class CDS(ctypes.Structure):
+        _fields_ = [('data', ctypes.c_size_t), ('n', W.DWORD), ('p', ctypes.c_wchar_p)]
+
+    _aa['proc'] = WNDPROC(proc)
+    u32.RegisterClassW(ctypes.byref(WC(0, _aa['proc'], 0, 0, k32.GetModuleHandleW(None), None, None, None, None,
+                                       'ShotsAA_Wnd')))
+    u32.CreateWindowExW.restype = W.HWND
+    self = u32.CreateWindowExW(0, 'ShotsAA_Wnd', 'shots aa', 0, 0, 0, 1, 1, None, None, None, None)
+    vh = u32.FindWindowW('VestaHome_Wnd', None)
+
+    def send(t):
+        c = CDS(0x56484150, len(t) * 2, t)
+        u32.SendMessageW(vh, 0x4A, self, ctypes.byref(c))
+
+    send('hello	id=shotsaa	name=Android Auto	ver=1.0	api=2	hwnd=%08X' % self)
+    send('sound	on=1')
+    send('playing	state=play	title=Кончится лето	artist=КИНО	album=Чёрный альбом	app=Яндекс Музыка'
+         '	pos=42	len=312')
+    _aa['self'] = self
+    time.sleep(1)
 
 
 def mapping(cls, name):
@@ -336,6 +379,8 @@ def main():
                     u32.UpdateWindow(h)
                 elif st[0] == 'call':   # the phone's call state (1: incoming), as the proxy shows it
                     set_call(st[1])
+                elif st[0] == 'aa':   # the stand-in Android Auto: its sound and track
+                    aa_addon()
                 elif st[0] == 'type':   # the keyboard screen: the text, then Enter (the PC build's WM_CHAR)
                     for ch in st[1] + '\r':
                         u32.SendMessageW(h, 0x102, ord(ch), 0)

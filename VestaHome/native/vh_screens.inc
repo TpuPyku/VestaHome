@@ -730,6 +730,7 @@ static void BtMusicTick(HWND hwnd)
 static const wchar_t* s_cvPick;   // (vh_cover.inc)
 static const wchar_t* BtCoverFile();
 static bool CoverArt(int x, int y, int s, int rad);
+static int AddonSoundPlug();   // (vh_plugins.inc) the add-on whose own sound plays, -1 none
 
 static void ScrAudioBt(HDC dc)
 {
@@ -742,6 +743,9 @@ static void ScrAudioBt(HDC dc)
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
     bool on = src == 9;
+    // Android Auto has the sound (the user 2026-11-19: the dead play and a running bar confused): said so, no bar, no
+    // keys, the phone's music not switched to on opening (it would take the sound from Android Auto)
+    bool busy = !on && AddonSoundPlug() >= 0;
     BtState bt;
     bool proxy = BtGet(&bt, NULL);
     static DWORD s_asked;   // the track and the play state, asked for on opening (the shell does the same)
@@ -752,7 +756,7 @@ static void ScrAudioBt(HDC dc)
     static DWORD s_seen;   // opened with the phone connected: its music becomes the source at once
     if (s_seen != s_screenTick) {
         s_seen = s_screenTick;
-        if (proxy && bt.av >= 1 && !on)
+        if (proxy && bt.av >= 1 && !on && !busy)
             BtMusicOn();
     }
     wchar_t cap[160], title[BT_TEXT], artist[BT_TEXT], album[BT_TEXT], line[300];
@@ -763,7 +767,10 @@ static void ScrAudioBt(HDC dc)
         wcscpy(cap, L"Bluetooth-музыка");
     }
     T(dc, 272, 150, cap, 14, kMuted, 600, AL_START, 512);
-    if (proxy && bt.title[0]) {   // the track, as the phone tells it (AVRCP)
+    if (busy) {
+        T(dc, 272, 192, L"Занято Android Auto", 30, kText, 700, AL_START, 512);
+        T(dc, 272, 222, L"Музыка телефона идёт через Android Auto.", 18, kMuted, 400, AL_START, 512);
+    } else if (proxy && bt.title[0]) {   // the track, as the phone tells it (AVRCP)
         BtText(bt.title, title, BT_TEXT);
         BtText(bt.artist, artist, BT_TEXT);
         BtText(bt.album, album, BT_TEXT);
@@ -774,7 +781,8 @@ static void ScrAudioBt(HDC dc)
             wcscpy(line, artist[0] ? artist : album);
         T(dc, 272, 222, line, 18, kMuted, 400, AL_START, 512);
         int len = bt.lengthMs > 0 ? bt.lengthMs : bt.durationMs;
-        if (len > 0) {   // the bar: the position the stack reports every 2 s while playing, moved on in between
+        if (len > 0 && on) {   // the bar: the position the stack reports every 2 s while playing, moved on in between
+                               // (only while it is the source: another one playing, the phone's position runs on)
             int pos = bt.posMs;
             if (bt.playing == 1 && bt.playTick)
                 pos += (int)(GetTickCount() - bt.playTick);
@@ -796,9 +804,9 @@ static void ScrAudioBt(HDC dc)
         T(dc, 272, 222, on ? L"Звук идёт с подключённого телефона." : L"Телефон должен быть подключён по Bluetooth.",
           18, kMuted, 400, AL_START, 512);
     }
-    if (!on)   // not the source (the phone not connected, or the switch did not take): by hand
+    if (!on && !busy)   // not the source (the phone not connected, or the switch did not take): by hand
         Button(dc, 584, 124, 200, 40, L"Включить звук", B_N, IC_BT, 14, 20, A_BTMUSIC);
-    bool ctl = proxy && bt.av >= 1;   // the buttons: the SDK's AVRCP keys, through the proxy
+    bool ctl = proxy && bt.av >= 1 && !busy;   // the buttons: the SDK's AVRCP keys, through the proxy
     bool playing = BtPlayingNow(bt);
     // as the music's: bare arrows, the big orange play (the user 2026-10-24); without the phone dim and dead
     IconBtn(dc, IC_PREV, 392, 312, 48, ctl ? kText : kOff, ctl ? A_BTCMD : A_NONE, BT_CMD_PREV);

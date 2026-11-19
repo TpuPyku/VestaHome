@@ -2044,7 +2044,8 @@ static int VolumeBit(const wchar_t* path)
 struct BtState;
 static bool BtGet(BtState* st, LONG* seq);
 static int BtPowerState();   // (vh_screens.inc)
-static Icon PlayingIcon(Screen* to);   // what plays (vh_tasks.inc): its icon and screen, IC_NONE nothing
+static Icon PlayingIcon(Screen* to, int* plug);   // what plays (vh_tasks.inc): its icon and screen (an add-on's
+                                                   // sound: *plug, its screen opens), IC_NONE nothing
 
 static bool ModemShown(bool* online);   // (vh_gps.inc)
 
@@ -2058,7 +2059,8 @@ static int StatusMarks(HDC dc, int end, int minLeft)
     WifiGet(&w);
     struct Mark { Icon ic; COLORREF c; bool shown; Action a; int arg; };
     Screen playTo = S_NONE;
-    Icon play = PlayingIcon(&playTo);
+    int playPlug;
+    Icon play = PlayingIcon(&playTo, &playPlug);
     ObdInfo obd;   // the engine's trouble codes (OBD): a warning, a tap - their screen
     ObdGet(&obd);
     bool dtc = obd.state == OBD_ON && (obd.dtcs > 0 || obd.mil == 1);
@@ -2072,7 +2074,7 @@ static int StatusMarks(HDC dc, int end, int minLeft)
         { IC_BT, btOn ? kOrange : kDim, BtPowerState() != BT_POW_OFF, A_NAV, S_PHONE },
         { IC_SIGNAL, mdmOn ? kOrange : kDim, mdmIn, A_NAV, S_SET_NET },
         { IC_NAV, GpsHasFix() ? kOrange : kDim, true, A_NONE, 0 },
-        { play, kOrange, play != IC_NONE, A_NAV, playTo },
+        { play, kOrange, play != IC_NONE, playPlug >= 0 ? A_PLUGOPEN : A_NAV, playPlug >= 0 ? playPlug : playTo },
         { IC_WARN, RGB(255, 204, 0), dtc, A_SCREEN, S_OBD_DTC },   // the trouble codes: always yellow (the user)
         { IC_SERVICE, svc == 2 ? kStop : kOrange, svc > 0, A_SCREEN, S_WSET_TRIP } };
     int x = end;
