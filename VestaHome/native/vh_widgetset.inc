@@ -537,10 +537,14 @@ static const LicItem kLicenses[] = {
 // "Details -> Supported" (the user 2026-11-16): who supports the development on Boosty, special thanks, where to support
 static const LicItem kThanks[] = {
     { L"Поддержали разработку на Boosty", NULL },
+    { L"Дмитрий", L"" },
+    { L"Insaf S.", L"" },
+    { L"Александр М.", L"" },
+    { L"Алексей", L"" },
+    { L"Hobta Evgen", L"" },
+    { L"Roman R.", L"" },
     { L"Дмитрий П.", L"" },
     { L"outerdusk", L"" },
-    { L"Hobta Evgen", L"" },
-    { L"Roman Raskalov", L"" },
     { L"Особое спасибо", NULL },
     { L"Сергей Ludo13", L"За тесты." },
     { L"Поддержать проект", NULL },
