@@ -1,9 +1,11 @@
-// radiodb.cpp - the FM station by the city and the frequency, its logo's key by the station's name (radiodb.h).
+﻿// radiodb.cpp - the FM station by the city and the frequency, its logo's key by the station's name (radiodb.h).
 #include <windows.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include "radiodb.h"
+#include "vjson.h"
 
 double RdbKm(double lat1, double lon1, double lat2, double lon2)
 {
@@ -149,4 +151,112 @@ void RdbKey(const wchar_t* name, char* key)
     int k = to - from < RDB_KEY - 1 ? to - from : RDB_KEY - 1;
     memcpy(key, buf + from, k);
     key[k] = 0;
+}
+
+// ---------------------------------------------------------------- the logos from the net
+
+void RdbNetPath(const wchar_t* name, const char* country, char* out, int cap)
+{
+    out[0] = 0;
+    char u8[RDB_NAME * 3], enc[RDB_NAME * 9];
+    if (!name[0] || !WideCharToMultiByte(CP_UTF8, 0, name, -1, u8, sizeof(u8), NULL, NULL))
+        return;
+    UrlEncode(u8, enc, sizeof(enc));
+    int n = _snprintf(out, cap, "/json/stations/search?name=%s&countrycode=%s&hidebroken=true&order=clickcount"
+                      "&reverse=true&limit=20", enc, country);
+    if (n < 0 || n >= cap)
+        out[0] = 0;   // (cut: no search)
+}
+
+// "http(s)://host/path" -> host, path ("/" at least), tls; false: another scheme, no host, a port.
+static bool SplitUrl(const char* url, char* host, int hostCap, char* path, int pathCap, bool* tls)
+{
+    const char* p;
+    if (!strncmp(url, "https://", 8))
+        p = url + 8;
+    else if (!strncmp(url, "http://", 7))
+        p = url + 7;
+    else
+        return false;
+    *tls = p - url == 8;
+    int h = (int)strcspn(p, "/?#");
+    if (!h || h >= hostCap || memchr(p, ':', h))
+        return false;
+    memcpy(host, p, h);
+    host[h] = 0;
+    _snprintf(path, pathCap, "%s%s", p[h] == '/' ? "" : "/", p + h);
+    path[pathCap - 1] = 0;
+    return true;
+}
+
+// cp1251's upper half (0x80..0xFF) in Unicode (0: none there)
+static const unsigned short kCp1251[128] = {
+    0x0402, 0x0403, 0x201A, 0x0453, 0x201E, 0x2026, 0x2020, 0x2021, 0x20AC, 0x2030, 0x0409, 0x2039,
+    0x040A, 0x040C, 0x040B, 0x040F, 0x0452, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+    0x0000, 0x2122, 0x0459, 0x203A, 0x045A, 0x045C, 0x045B, 0x045F, 0x00A0, 0x040E, 0x045E, 0x0408,
+    0x00A4, 0x0490, 0x00A6, 0x00A7, 0x0401, 0x00A9, 0x0404, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x0407,
+    0x00B0, 0x00B1, 0x0406, 0x0456, 0x0491, 0x00B5, 0x00B6, 0x00B7, 0x0451, 0x2116, 0x0454, 0x00BB,
+    0x0458, 0x0405, 0x0455, 0x0457, 0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417,
+    0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F, 0x0420, 0x0421, 0x0422, 0x0423,
+    0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F,
+    0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B,
+    0x043C, 0x043D, 0x043E, 0x043F, 0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447,
+    0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F
+};
+
+// A name kept read wrong once - its UTF-8 bytes taken for cp1251 (radio-browser has such: "Р\xa0СѓСЃ..." for
+// "Русский"): read right again into out; false - not one (a character outside cp1251, not UTF-8). A name without
+// such characters comes out as it was (its key the same: harmless).
+static bool Unmangle(const wchar_t* in, wchar_t* out, int cap)
+{
+    char bytes[RDB_NAME * 6];
+    int n = 0;
+    for (; *in && n < (int)sizeof(bytes) - 1; in++) {
+        int b = *in < 0x80 ? *in : -1;
+        for (int i = 0; i < 128 && b < 0; i++)
+            if (kCp1251[i] == *in)
+                b = 0x80 + i;
+        if (b < 0)
+            return false;
+        bytes[n++] = (char)b;
+    }
+    bytes[n] = 0;
+    return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes, -1, out, cap) > 0;
+}
+
+bool RdbNetLogo(const char* json, const wchar_t* name, char* host, int hostCap, char* path, int pathCap, bool* tls)
+{
+    char want[RDB_KEY], key[RDB_KEY];
+    RdbKey(name, want);
+    if (!want[0])
+        return false;
+    for (const char* it = JFirst(json); it; it = JNext(it)) {
+        const char* n = JKey(it, "name");
+        const char* f = JKey(it, "favicon");
+        if (!n || !f)
+            continue;
+        wchar_t wn[RDB_NAME * 2], fixed[RDB_NAME * 2];
+        JWide(n, wn, RDB_NAME * 2);
+        RdbKey(wn, key);
+        if (strcmp(key, want) && Unmangle(wn, fixed, RDB_NAME * 2))
+            RdbKey(fixed, key);
+        char url[400];
+        JStr(f, url, sizeof(url));
+        if (!strcmp(key, want) && SplitUrl(url, host, hostCap, path, pathCap, tls))
+            return true;
+    }
+    return false;
+}
+
+bool RdbMissed(const char* text, const char* key, int day)
+{
+    size_t k = strlen(key);
+    for (const char* p = text; *p; p += strcspn(p, "\n"), p += *p == '\n') {
+        if (!strncmp(p, key, k) && p[k] == ';') {
+            int when = atoi(p + k + 1);
+            if (day - when < RDB_MISS_DAYS)
+                return true;
+        }
+    }
+    return false;
 }

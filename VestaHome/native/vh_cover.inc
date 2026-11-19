@@ -401,25 +401,29 @@ static bool CoverHave()
 
 static void BlitPic(const Pic& p, int x, int y, int rad = 0);   // (vh_photo.inc)
 
+// A square picture s x s at x, y, its corners rounded by rad: src itself when of that size, else its copy of that
+// size among sized[n] (made once); false: none (no picture, no room). The radio's logo too (vh_radiologo.inc).
+static bool PicSized(const Pic& src, Pic* sized, int n, int x, int y, int s, int rad)
+{
+    if (!src.px32)
+        return false;
+    const Pic* p = src.w == s && src.h == s ? &src : NULL;
+    for (int i = 0; i < n && !p; i++)
+        if (sized[i].px32 && sized[i].w == s)
+            p = &sized[i];
+    for (int i = 0; i < n && !p; i++)
+        if (!sized[i].px32 && PicFit(&src, s, s, true, &sized[i], true) == PIC_OK)
+            p = &sized[i];
+    if (!p)
+        return false;
+    BlitPic(*p, x, y, rad);
+    return true;
+}
+
 // The cover s x s at x, y, its corners rounded by rad; false: none (the caller draws its placeholder).
 static bool CoverArt(int x, int y, int s, int rad)
 {
-    if (!CoverHave())
-        return false;
-    const Pic* p = &s_cv;
-    if (s != kCoverPx) {
-        p = NULL;
-        for (int i = 0; i < kCoverSizes && !p; i++)
-            if (s_cvSized[i].px32 && s_cvSized[i].w == s)
-                p = &s_cvSized[i];
-        for (int i = 0; i < kCoverSizes && !p; i++)
-            if (!s_cvSized[i].px32 && PicFit(&s_cv, s, s, true, &s_cvSized[i], true) == PIC_OK)
-                p = &s_cvSized[i];
-        if (!p)
-            return false;
-    }
-    BlitPic(*p, x, y, rad);
-    return true;
+    return CoverHave() && PicSized(s_cv, s_cvSized, kCoverSizes, x, y, s, rad);
 }
 
 // The cover behind a card x, y, w x h (corners rad): covering the card, sharp, dimmed to kCoverDim of 256 so the
@@ -434,16 +438,23 @@ static void PicDim(Pic* p)   // its 32-bit pixels to kCoverDim of 256
     }
 }
 
+// A picture behind a card the same way (back: its dimmed copy of the card's size, made once). The radio's logo
+// too (vh_radiologo.inc).
+static bool PicBack(const Pic& src, Pic* back, int x, int y, int w, int h, int rad)
+{
+    if (!src.px32)
+        return false;
+    if (!back->px32 || back->w != w || back->h != h) {
+        PicFree(back);
+        if (PicFit(&src, w, h, true, back, true) != PIC_OK)
+            return false;
+        PicDim(back);
+    }
+    BlitPic(*back, x, y, rad);
+    return true;
+}
+
 static bool CoverBack(int x, int y, int w, int h, int rad)
 {
-    if (!CoverHave())
-        return false;
-    if (!s_cvBack.px32 || s_cvBack.w != w || s_cvBack.h != h) {
-        PicFree(&s_cvBack);
-        if (PicFit(&s_cv, w, h, true, &s_cvBack, true) != PIC_OK)
-            return false;
-        PicDim(&s_cvBack);
-    }
-    BlitPic(s_cvBack, x, y, rad);
-    return true;
+    return CoverHave() && PicBack(s_cv, &s_cvBack, x, y, w, h, rad);
 }

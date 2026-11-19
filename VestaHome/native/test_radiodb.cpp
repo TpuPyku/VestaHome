@@ -121,10 +121,68 @@ static void TestPlace()
     Check(d.n == 0 && !RdbStale(&d, 53.0, 50.0), "none near: not stale where it is (not read each frame)");
 }
 
+// The logos not in the set, from the net (the user 2026-11-19): radio-browser.info's search by the name and the
+// country, the first station of the same key with a picture.
+static void TestNet()
+{
+    char p[300];
+    RdbNetPath(L"Ретро FM", "RU", p, sizeof(p));
+    Check(!strcmp(p, "/json/stations/search?name=%D0%A0%D0%B5%D1%82%D1%80%D0%BE%20FM&countrycode=RU"
+                     "&hidebroken=true&order=clickcount&reverse=true&limit=20"), "net: the search's path");
+    RdbNetPath(L"", "RU", p, sizeof(p));
+    Check(!p[0], "net: no name - no search");
+    RdbNetPath(L"X", "RU", p, 20);
+    Check(!p[0], "net: no room - no search");
+    RdbNetPath(L"X", "RU", p, sizeof(p));
+    int plen = (int)strlen(p);
+    RdbNetPath(L"X", "RU", p, plen + 1);
+    Check((int)strlen(p) == plen, "net: just its room - the path");
+    RdbNetPath(L"X", "RU", p, plen);
+    Check(!p[0], "net: a byte short - none");
+    const char* json = "[{\"name\":\"Retro FM Moscow 80s\",\"favicon\":\"https://a.ru/x.png\"},"
+                       "{\"name\":\"RETRO FM\",\"favicon\":\"\"},"
+                       "{\"name\":\"" "\xD0\xA0\xD0\xB5\xD1\x82\xD1\x80\xD0\xBE\x20\x46\x4D" "\",\"favicon\":\"ftp://b.ru/y.png\"},"
+                       "{\"name\":\"Retro\",\"favicon\":\"http://c.ru:8080/z.png\"},"
+                       "{\"name\":\"" "\xD0\xA0\xD0\xB0\xD0\xB4\xD0\xB8\xD0\xBE\x20\xD0\xA0\xD0\xB5\xD1\x82\xD1\x80\xD0\xBE" "\",\"favicon\":\"https://retrofm.ru/img/logo.jpg?v=2\"},"
+                       "{\"name\":\"Retro FM\",\"favicon\":\"http://other.ru/l.png\"}]";
+    char host[64], path[200];
+    bool tls = false;
+    Check(RdbNetLogo(json, L"RETRO", host, sizeof(host), path, sizeof(path), &tls) && !strcmp(host, "retrofm.ru") &&
+          !strcmp(path, "/img/logo.jpg?v=2") && tls,
+          "net: the first of the same key with a picture by http(s), no port (others: another name, none, ftp)");
+    Check(RdbNetLogo("[{\"name\":\"DFM\",\"favicon\":\"http://dfm.ru\"}]", L"Радио DFM", host, sizeof(host), path,
+                     sizeof(path), &tls) && !strcmp(host, "dfm.ru") && !strcmp(path, "/") && !tls,
+          "net: plain http, the root's path");
+    Check(!RdbNetLogo(json, L"Europa Plus", host, sizeof(host), path, sizeof(path), &tls) &&
+          !RdbNetLogo("{}", L"Retro", host, sizeof(host), path, sizeof(path), &tls) &&
+          !RdbNetLogo("[{\"name\":\"Retro\",\"favicon\":\"https://\"}]", L"Retro", host, sizeof(host), path,
+                      sizeof(path), &tls),
+          "net: none of its name, not a list, no host");
+    Check(!RdbNetLogo(json, L"", host, sizeof(host), path, sizeof(path), &tls), "net: no name");
+    const char* one = "[{\"name\":\"DFM\",\"favicon\":\"https://abcd.ru/0123456789\"}]";
+    char h8[8], p5[5];
+    Check(RdbNetLogo(one, L"DFM", h8, 8, path, sizeof(path), &tls) && !strcmp(h8, "abcd.ru") &&
+          !RdbNetLogo(one, L"DFM", h8, 7, path, sizeof(path), &tls), "net: a host just in its room, one over - none");
+    Check(RdbNetLogo(one, L"DFM", host, sizeof(host), p5, 5, &tls) && !strcmp(p5, "/012"), "net: a long path cut");
+    // a name kept read wrong once (its UTF-8 bytes taken for cp1251 - radio-browser has such): read right again
+    const char* moj = "[{\"name\":\"" "\xD0\xA0\xC2\xA0\xD0\xA1\xD1\x93\xD0\xA1\xD0\x83\xD0\xA1\xD0\x83\xD0\xA0\xD1\x94\xD0\xA0\xD1\x91\xD0\xA0\xE2\x84\x96\x20\xD0\xA0\xD2\x90\xD0\xA0\xD1\x91\xD0\xA1\xE2\x80\x9A" "\",\"favicon\":\"https://fm-24.ru/ruhit.jpg\"}]";
+    Check(RdbNetLogo(moj, L"Русский ХИТ", host, sizeof(host), path, sizeof(path), &tls) && !strcmp(host, "fm-24.ru"),
+          "net: a name read wrong once - matched");
+    Check(!RdbNetLogo("[{\"name\":\"\xC3\xA9t\xC3\xA9\",\"favicon\":\"https://x.fr/a.png\"}]", L"Ete", host,
+                      sizeof(host), path, sizeof(path), &tls), "net: other letters not taken for it");
+    // the misses: not asked again for 30 days
+    const char* miss = "retro;100\r\ndfm;50\nbad\n";
+    Check(RdbMissed(miss, "retro", 100) && RdbMissed(miss, "retro", 129) && !RdbMissed(miss, "retro", 130),
+          "misses: within 30 days");
+    Check(!RdbMissed(miss, "dfm", 100) && !RdbMissed(miss, "nashe", 100) && !RdbMissed(miss, "bad", 0) &&
+          !RdbMissed(miss, "ret", 100), "misses: an old one, another, a bad line, a part of a key");
+}
+
 int main()
 {
     TestKey();
     TestPlace();
+    TestNet();
     printf("test_radiodb: %d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

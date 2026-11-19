@@ -9,7 +9,8 @@ VestaHome.ini is kept and put back; the radio's favourites and recent ones start
 Windows only (ctypes, Pillow).
 
 Usage: python VestaHome/tools/make_shots.py [out_dir]   (VH_SHOTS=name,name... - only those; VH_SHOTS_SRC=n - the
-MCU's source, 0 the radio by default, 7 the media; VH_SHOTS_FREQ=f10 - the tuner's frequency, 10120 by default:
+MCU's source, 0 the radio by default, 7 the media; VH_SHOTS_FREQ=f10 - the tuner's frequency, 10120 by default, VH_SHOTS_PS - its RDS name, DFM by default; VH_SHOTS_WIDGETS - the main screen's widgets for the run, as the ini's
+home.widgets:
 the radio's logos tried at other stations)
 """
 import ctypes
@@ -29,6 +30,7 @@ VH = os.path.join(HERE, '..', 'VestaHome', 'VestaHome')
 EXE = os.path.join(VH, 'VestaHomePC.exe')
 SRC = int(os.environ.get('VH_SHOTS_SRC', '0'))
 FREQ = int(os.environ.get('VH_SHOTS_FREQ', '10120'))
+PS = os.environ.get('VH_SHOTS_PS', 'DFM')[:8]
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'docs', 'shots')
 
 # the nav bar and the settings' sections (800 x 480)
@@ -276,7 +278,7 @@ def mcu():   # the MCU proxy's stand-in: the tuner on FM1 101.2 with RDS, its pr
             (0x0908, [0, 0, 0, 0, 8] + sum([[f >> 8, f & 0xFF] for f in freqs], [])),
             (0x0930, fm_names(0, names[:4])), (0x0930, fm_names(4, names[4:])),
             (0x0901, [0, 0, FREQ >> 8, FREQ & 0xFF]), (0x0907, [0, 0, 4]),
-            (0x090B, [0, 0, 0] + list(b'  DFM   ')),
+            (0x090B, [0, 0, 0] + list(PS.center(8).encode())),
             (0x0931, [0, 0, 0, 0] + list(rt[:32])), (0x0931, [0, 0, 0, 1] + list(rt[32:])),
             (0x3101, [0, 0, 14]), (0x4904, [0, SRC])]   # the volume; the source: the radio (VH_SHOTS_SRC=7: the media)
     for i, (mid, data) in enumerate(msgs):
@@ -352,6 +354,9 @@ def main():
     nmea = os.path.join(VH, 'shots.nmea')   # (*.nmea: not in git)
     track(nmea)
     lines = [l for l in (saved or b'').split(b'\r\n') if not l.startswith(b'gps.port=')]
+    widgets = os.environ.get('VH_SHOTS_WIDGETS')
+    if widgets:
+        lines = [l for l in lines if not l.startswith(b'home.widgets=')] + [b'home.widgets=' + widgets.encode()]
     open(ini, 'wb').write(b'\r\n'.join([b'gps.port=shots.nmea'] + lines))
     threading.Thread(target=bluetooth, daemon=True).start()
     threading.Thread(target=mcu, daemon=True).start()

@@ -28,3 +28,13 @@ const wchar_t* RdbName(const Rdb* d, int f10, double lat, double lon);
 void RdbKey(const wchar_t* name, char* key);
 
 double RdbKm(double lat1, double lon1, double lat2, double lon2);
+
+// The logos not in the set, from the net (the user 2026-11-19): radio-browser.info's search of a station's name in
+// a country (its code, "RU"): the path; "" no name or no room.
+void RdbNetPath(const wchar_t* name, const char* country, char* out, int cap);
+// The answer's first station whose name has name's key, with a picture by http(s) and no port: its host, path
+// ("/" at least) and whether by https; false none.
+bool RdbNetLogo(const char* json, const wchar_t* name, char* host, int hostCap, char* path, int pathCap, bool* tls);
+// The names not found ("key;day" lines, day: days since 2000): key missed fewer than RDB_MISS_DAYS before day.
+enum { RDB_MISS_DAYS = 30 };
+bool RdbMissed(const char* text, const char* key, int day);

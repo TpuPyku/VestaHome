@@ -392,9 +392,9 @@ static void SupportInit()
 #include "vh_mcu.inc"
 #include "vh_player.inc"
 #include "vh_cover.inc"
-#include "vh_radiologo.inc"
 #include "vh_netradio.inc"
 #include "vh_netcat.inc"
+#include "vh_radiologo.inc"   // (after vh_netcat.inc: its hosts)
 #include "vh_video.inc"
 #include "vh_sources.inc"
 #include "vh_camera.inc"
@@ -963,6 +963,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_APP_UWG:   // a widget's url fetched: its data read at the next second
         for (int u = 0; u < s_uwCount; u++)
             s_uw[u].readTick = 0;
+        return 0;
+    case WM_APP_RADIOLOGO:   // a radio station's logo from the net (vh_radiologo.inc)
+        if (RadioNetTake((int)wp) && IsWindowVisible(hwnd) && !s_drag)
+            Redraw();
         return 0;
     case WM_APP_WEBCOVER:   // a song's cover downloaded (vh_cover.inc)
         if (WebCoverTake((unsigned long)wp) && IsWindowVisible(hwnd) && !s_drag)

@@ -221,13 +221,16 @@ enum { kWgW = 248, kWgH = 158, kWgGap = 12, kWgW2 = kWgW * 2 + kWgGap, kWgH2 = k
 
 // Widget panel with its caption; pressed = orange like a tile (returns it: the content follows in ink).
 // With a settings screen the caption strip is a button of its own (a gear at its end) leading there.
-// art: our music's cover behind the card, dimmed (vh_cover.inc), when there is one.
+// art (here and in the media widgets): ART_COVER the music's cover, ART_LOGO the radio station's logo
+// (vh_radiologo.inc), else none. Behind the card, dimmed, when there is one: the tall widget's.
+enum { ART_NONE, ART_COVER, ART_LOGO };
 static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, Icon ic, Action a, int arg = 0,
-                   Screen settings = S_NONE, bool art = false)
+                   Screen settings = S_NONE, int art = ART_NONE)
 {
     bool d = a != A_NONE && Zone(x, y, w, h, a, arg);
     bool hd = settings != S_NONE && Zone(x, y, w, 42, A_SCREEN, settings);
-    if (d || !art || !CoverBack(x, y, w, h, 20))
+    bool back = !d && (art == ART_COVER ? CoverBack(x, y, w, h, 20) : art == ART_LOGO && PicBack(s_rlPic, &s_rlBack, x, y, w, h, 20));
+    if (!back)
         R(dc, x, y, w, h, 20, d ? kOrange : kPanel2);   // design 0.6: a card without a border (HU 2026-10-24: lighter)
     if (hd)
         R(dc, x + 2, y + 2, w - 4, 40, 18, kOrange);
@@ -365,8 +368,6 @@ static MediaGeo MediaGeoOf(int x, int y, int shape)
 }
 
 // The cover (vh_cover.inc) where the source has one (our music), otherwise the orange facets with its icon.
-// art: ART_COVER the music's cover, ART_LOGO the radio station's logo (vh_radiologo.inc), else none.
-enum { ART_NONE, ART_COVER, ART_LOGO };
 static void MediaArt(HDC dc, Icon ic, int art, int x, int y, int s, int rad, int isz)
 {
     if (art == ART_COVER && CoverArt(x, y, s, rad))
@@ -383,8 +384,8 @@ static void WMediaBody(HDC dc, const MediaGeo& g, bool d, Icon ic, const wchar_t
     COLORREF fg = d ? kInk : kText, mg = d ? kInk : kMuted;
     int x = g.x, y = g.y;
     if (g.shape == WS_TALL) {
-        if (art != ART_COVER || !CoverHave())   // the cover: behind the card (Widget), the facets without one
-            MediaArt(dc, ic, art == ART_LOGO ? ART_LOGO : ART_NONE, x + 64, y + 50, 120, 16, 56);
+        if (art == ART_NONE || (art == ART_COVER && !CoverHave()))   // the picture: behind the card (Widget), the
+            MediaArt(dc, ic, ART_NONE, x + 64, y + 50, 120, 16, 56);   // facets without one
         T(dc, g.cx, y + 200, title, 22, fg, 700, AL_MID, 216);
         T(dc, g.cx, y + 222, sub, 15, mg, 400, AL_MID, 216);
         if (k >= 0) {
@@ -451,7 +452,7 @@ static void WMediaAddon(HDC dc, const MediaGeo& g)
 {
     s_cvPick = s_ap.art;
     bool d = Widget(dc, g.x, g.y, g.w, g.h, g.shape == WS_TALL ? L"Android Auto" : L"Сейчас играет · Android Auto",
-                    IC_MUSIC, A_PLUGOPEN, s_ap.plug, S_NONE, g.shape == WS_TALL);
+                    IC_MUSIC, A_PLUGOPEN, s_ap.plug, S_NONE, g.shape == WS_TALL ? ART_COVER : ART_NONE);
     wchar_t sub[200], a[16], b[16];
     if (s_ap.artist[0] && s_ap.album[0])
         _snwprintf(sub, 200, L"%s · %s", s_ap.artist, s_ap.album);
@@ -484,15 +485,16 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
     if (!ours && srcKnown && src == 0) {   // the radio: its name, frequency and page, RDS; the presets step
         Tuner t;
         TunerGet(&t);
-        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Радио" : L"Сейчас играет · Радио", IC_RADIO, A_NAV, S_RADIO);
+        bool logo;
+        const wchar_t* nm = RadioNow(t, &logo);   // (the tall one: its logo behind the card, as a cover)
+        bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Радио" : L"Сейчас играет · Радио", IC_RADIO, A_NAV, S_RADIO,
+                        S_NONE, logo && shape == WS_TALL ? ART_LOGO : ART_NONE);
         wchar_t f[16], pg[8], sub[48], rt[68];
         FreqText(t.f10, f, 16);
         TunerPage(t, pg, 8);
         _snwprintf(sub, 48, L"%s %s · %s", f, t.band == 2 ? L"кГц" : L"МГц", pg);
         _snwprintf(rt, 68, L"%s%s", t.rt[0], t.rt[1]);
         rt[67] = 0;
-        bool logo;
-        const wchar_t* nm = RadioNow(t, &logo);
         WMediaBody(dc, g, d, IC_RADIO, nm[0] ? nm : f, t.f10 ? sub : L"нет данных от радио", rt, -1, NULL, NULL,
                    logo ? ART_LOGO : ART_NONE);
         if (t.presets > 0) {   // previous / next preset of the page playing (none playing: the first)
@@ -506,7 +508,7 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
     if (!ours && srcKnown && src == 9 && BtGet(&bt, NULL) && bt.title[0]) {   // the phone's music (AVRCP)
         s_cvPick = BtCoverFile();   // (the song's cover from the net)
         bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Bluetooth" : L"Сейчас играет · Bluetooth", IC_BTMUSIC, A_NAV,
-                        S_AUDIO_BT, S_NONE, s_cvPick && shape == WS_TALL);
+                        S_AUDIO_BT, S_NONE, s_cvPick && shape == WS_TALL ? ART_COVER : ART_NONE);
         wchar_t title[BT_TEXT], artist[BT_TEXT], t0[16] = L"", t1[16] = L"";
         BtText(bt.title, title, BT_TEXT);
         BtText(bt.artist, artist, BT_TEXT);
@@ -534,7 +536,7 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
     if (NetCur() && (s_netOn || (s_mediaLast == 2 && !PlayerPlaying()))) {   // the station, the song, its state
         s_cvPick = NetCoverFile();   // (the song's cover from the net)
         bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Интернет-радио" : L"Сейчас играет · Интернет-радио",
-                        IC_NETRADIO, A_NAV, S_NETRADIO, S_NONE, s_cvPick && shape == WS_TALL);
+                        IC_NETRADIO, A_NAV, S_NETRADIO, S_NONE, s_cvPick && shape == WS_TALL ? ART_COVER : ART_NONE);
         wchar_t s[160];
         EnterCriticalSection(&s_netCs);
         wcscpy(s, s_netTitle);
@@ -548,7 +550,8 @@ static void WMediaAt(HDC dc, int x, int y, int shape)
         return;
     }
     bool d = Widget(dc, x, y, g.w, g.h, shape == WS_TALL ? L"Музыка" : L"Сейчас играет · Музыка", IC_MUSIC, A_NAV,
-                    S_AUDIO, S_NONE, shape == WS_TALL);   // (the user 2026-11-17: behind only where no room for it)
+                    S_AUDIO, S_NONE, shape == WS_TALL ? ART_COVER : ART_NONE);   // (the user 2026-11-17: behind only
+                                                                                    // where no room for it)
     wchar_t title[96], sub[200], s[48], a[16], b[16];
     double pos = 0, len = 0;
     if (PlayerNow(title, sub, 96, &pos, &len)) {
