@@ -21,13 +21,14 @@ if errorlevel 1 goto fail
 "%VC%\bin\rc.exe" /fo obj\vh_payload.res resources.rc
 if errorlevel 1 goto fail
 
-"%VC%\ce\bin\x86_arm\cl.exe" /nologo /O2 /W3 /GS- /TP /c spipower_install.cpp /Foobj\arm\ ^
+rem VHCheck's pecheck / pefile: the setup's gate (gate.h, needs.inc)
+"%VC%\ce\bin\x86_arm\cl.exe" /nologo /O2 /W3 /GS- /TP /c spipower_install.cpp ..\..\VHCheck\native\pecheck.cpp ..\..\VHCheck\native\pefile.cpp /Foobj\arm\ ^
   /DUNICODE /D_UNICODE /DUNDER_CE=0x420 /D_WIN32_WCE=0x420 /DWINCE /DARM /D_ARM_ /DARMV4 /DNDEBUG ^
   /I"%SDK%\Include" /I"%VC%\ce\include"
 if errorlevel 1 goto fail
 
 "%VC%\ce\bin\x86_arm\link.exe" /nologo /SUBSYSTEM:WINDOWSCE,4.20 /MACHINE:ARM ^
-  /OUT:"%OUT%\VestaHomeInstall.exe" obj\arm\spipower_install.obj obj\vh_payload.res ^
+  /OUT:"%OUT%\VestaHomeInstall.exe" obj\arm\spipower_install.obj obj\arm\pecheck.obj obj\arm\pefile.obj obj\vh_payload.res ^
   /LIBPATH:"%SDK%\Lib\armv4" /LIBPATH:"%VC%\ce\lib\armv4" ^
   coredll.lib corelibc.lib /NODEFAULTLIB:oldnames.lib
 if errorlevel 1 goto fail

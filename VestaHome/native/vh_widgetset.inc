@@ -407,23 +407,9 @@ static int ShellSw()
     static int s_sw = -1;
     if (s_sw >= 0)
         return s_sw;
-    s_sw = 0;
-    const wchar_t* path[2] = { L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe",
-                               L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe" };
-    for (int i = 0; i < 2 && !s_sw; i++) {
-        HANDLE f = CreateFile(path[i], GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
-        if (f == INVALID_HANDLE_VALUE)
-            continue;
-        static unsigned char buf[64 * 1024 + 32];
-        DWORD got = 0, keep = 0;
-        while (!s_sw && ReadFile(f, buf + keep, 64 * 1024, &got, NULL) && got) {
-            DWORD total = keep + got;
-            s_sw = FwVersion(buf, (int)total, 2);
-            keep = total < 32 ? total : 32;   // (its last 32 bytes on: a string across two pieces)
-            memmove(buf, buf + total - keep, keep);
-        }
-        CloseHandle(f);
-    }
+    s_sw = FwFileVersion(L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe", 2);
+    if (!s_sw)
+        s_sw = FwFileVersion(L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", 2);
     return s_sw;
 }
 

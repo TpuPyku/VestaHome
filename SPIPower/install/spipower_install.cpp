@@ -96,6 +96,9 @@
 #include "md5.h"            // portable MD5 (host-tested: tools\md5_hosttest.bat)
 #include "drilltag.h"       // drill-package tag guard kDrillTag (host-tested: tools\drilltag_hosttest.bat)
 #include "fingerprints.h"   // GENERATED firmware table (tools\gen_fingerprints.py)
+#include "../../VHCheck/native/pefile.h"   // VHCheck's checks (the setup's gate): functions present, the shell's version
+#include "../../VHCheck/native/gate.h"     // ... and the verdict (test_gate)
+#include "../../VHCheck/native/needs.inc"  // the vendor functions our code calls (make_vhcheck_needs.py)
 
 static const wchar_t* kAppDir    = L"\\ResidentFlash\\navigation\\app";
 static const wchar_t* kDll       = L"SPIPowerMgr.dll";
@@ -266,6 +269,57 @@ static bool ForeignFirmware()   // g_status: the refusal, true when this firmwar
     return false;
 }
 
+
+// ---- the gate (the user 2026-11-20: VHCheck's checks in the installer, the setup allowed by them): the vendor's
+// modules have every function our code calls (needs.inc), the stock shell carries this unit's version string, not the
+// CAN panel (its own way, VHCheck first). The vendor's copies *_orig first (the proxies of earlier installs). Into rep:
+// one line per module and what it means; the problems back (gate.h).
+#define GATE_N(a) (int)(sizeof(a) / sizeof(a[0]))
+
+static void AppendStr(wchar_t* dst, int cap, const wchar_t* src);   // (below)
+
+static void GateLine(wchar_t* rep, int cap, const wchar_t* what, int missing, int n)
+{
+    wchar_t line[200];
+    if (missing < 0)
+        _snwprintf(line, 200, L"проверка: %s — нет\n", what);
+    else if (missing)
+        _snwprintf(line, 200, L"проверка: %s — нет %d из %d нужных функций\n", what, missing, n);
+    else
+        _snwprintf(line, 200, L"проверка: %s — все %d функций есть\n", what, n);
+    line[199] = 0;
+    AppendStr(rep, cap, line);
+}
+
+static unsigned GateRun(wchar_t* rep, int cap)
+{
+    GateFacts f;
+    const wchar_t* spm = GetFileAttributes(g_orig) != 0xFFFFFFFF ? g_orig : g_dll;
+    const wchar_t* flc = GetFileAttributes(g_btOrig) != 0xFFFFFFFF ? g_btOrig : g_btDll;
+    f.spm = PeMissingFile(spm, kNeedSpm, GATE_N(kNeedSpm));
+    f.flc = PeMissingFile(flc, kNeedFlc, GATE_N(kNeedFlc));
+    f.btapi = PeMissingFile(L"\\ResidentFlash\\dll\\btapi.dll", kNeedBtapi, GATE_N(kNeedBtapi));
+    f.sv = PeMissingFile(L"\\Windows\\desay_sdk_api.dll", kNeedSv, GATE_N(kNeedSv));
+    f.shellSw = FwFileVersion(GetFileAttributes(kShellOrig) != 0xFFFFFFFF ? kShellOrig : kShellPath, 2);
+    f.canPanel = GetFileAttributes(kForeignFw[0]) != 0xFFFFFFFF;
+    unsigned p = GateProblems(f);
+    wchar_t line[200];
+    if (f.shellSw)
+        _snwprintf(line, 200, L"проверка: штатная оболочка SW 27.0.0.%d\n", f.shellSw);
+    else
+        wcscpy(line, L"проверка: у штатной оболочки нет строки версии — прошивка не этой ГУ\n");
+    AppendStr(rep, cap, line);
+    GateLine(rep, cap, L"SPIPowerMgr (MCU: кнопки, звук, радио)", f.spm, GATE_N(kNeedSpm));
+    GateLine(rep, cap, L"FLC_BLUETOOTH_SDK (Bluetooth)", f.flc, GATE_N(kNeedFlc));
+    GateLine(rep, cap, L"btapi (сопряжение, интернет через телефон)", f.btapi, GATE_N(kNeedBtapi));
+    GateLine(rep, cap, L"desay_sdk_api (маршрут звука)", f.sv, GATE_N(kNeedSv));
+    if (f.canPanel)
+        AppendStr(rep, cap, L"проверка: прошивка с CAN-панелью — пока не поддерживается\n");
+    AppendStr(rep, cap, !GateAllows(p) ? L"ИТОГ проверки: установка НЕ разрешена\n"
+                        : p ? L"ИТОГ проверки: можно, но часть функций работать не будет\n"
+                            : L"ИТОГ проверки: всё нужное на месте, установка разрешена\n");
+    return p;
+}
 
 // ---------------------------------------------------------------- files
 static int FileExists(const wchar_t* p)
@@ -1703,10 +1757,10 @@ static void DoStatus()
     VhStatusLine(line, 512);   // VestaHome: installed against packed in
     AppendStr(g_status, 4096, line);
 
-    // firmware version gate: full report into the log and the message box (see InstallCheck)
+    // the gate (variant B: VHCheck's checks, not the proxies' MD5 of 4120): into the log and the message box
     {
-        wchar_t rep[2048];
-        InstallCheck(1, rep, 2048);
+        wchar_t rep[2048] = L"";
+        GateRun(rep, 2048);
         AppendStr(g_status, 4096, L"\n");
         AppendStr(g_status, 4096, rep);
     }
@@ -2477,9 +2531,24 @@ static void RunAction(int id)
                 LogMsg(g_status);
             }
         }
+        unsigned problems = 0;
+        if (id == B_SETUP && g_tickVh) {   // the gate: VHCheck's checks (GateRun)
+            static wchar_t gate[2048];
+            gate[0] = 0;
+            problems = GateRun(gate, 2048);
+            LogMsg(gate);
+            if (!GateAllows(problems)) {
+                _snwprintf(g_status, 4096, L"Отказ, ничего не изменено:\n%s", gate);
+                g_status[4095] = 0;
+                InvalidateRect(g_hwnd, NULL, TRUE);
+                return;
+            }
+        }
         wchar_t msg[1024];
         if (id == B_SETUP)
-            _snwprintf(msg, 1024, L"Установить / обновить отмеченное?\n%s%s%s%s",
+            _snwprintf(msg, 1024, L"Установить / обновить отмеченное?\n%s%s%s%s%s",
+                       problems ? L"Внимание: проверка ГУ нашла, что часть функций работать не будет (Bluetooth или "
+                                  L"маршрут звука) — подробно в журнале установщика.\n" : L"",
                        g_tickVh ? L"• VestaHome — сейчас (настройки, пароли Wi-Fi и база камер сохранятся; "
                                   L"запущенный будет закрыт и запустится снова).\n" : L"",
                        stubJob ? L"• Загрузчик VestaHome вместо штатной оболочки — при следующей загрузке (оболочка остаётся "
