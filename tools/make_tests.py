@@ -34,6 +34,8 @@ PLAN = (
     (os.path.join(ROOT, 'VestaHome', 'UartProbe', 'UartProbe'), r'SDCard\UartProbe', ('UartProbe.exe',)),
     # McuProbe: the MCU without our proxy - a second client of the stock SPIPowerMgr.dll for 5 min (2026-11-19)
     (os.path.join(ROOT, 'VestaHome', 'McuProbe', 'McuProbe'), r'SDCard\McuProbe', ('McuProbe.exe',)),
+    # HuCheck: the unit's facts before VestaHome moves to the stub alone (2026-11-20): stock firmware and CAN panel
+    (os.path.join(ROOT, 'VestaHome', 'HuCheck', 'HuCheck'), r'SDCard\HuCheck', ('HuCheck.exe',)),
     # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
