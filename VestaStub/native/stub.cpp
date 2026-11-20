@@ -3,8 +3,8 @@
 // Put in place of \ResidentFlash\navigation\app\G3NavHMI.exe; the original is renamed G3NavHMI_orig.exe in the
 // same folder. At the boot it starts VestaHome instead of the stock shell and watches it:
 //   - VestaHome not there, or the flag VestaStub.off on the SD card / USB disk -> the original shell;
-//   - the counter VestaStub.cnt (beside us) counts the starts of VestaHome that did not live 3 minutes: +1 before
-//     each start, 0 once it has run 3 minutes (so at most two writes to the flash per boot); at 3 the original
+//   - the counter VestaStub.cnt (beside us) counts the starts of VestaHome that did not live a minute: +1 before
+//     each start, 0 once it has run a minute (so at most two writes to the flash per boot); at 3 the original
 //     shell is started instead - the stub is off until the counter is deleted (or set to 0);
 //   - VestaHome fell (an exit code that is not 0) -> started again (the counter above stops a loop);
 //   - VestaHome closed itself (code 0) -> the original shell;
@@ -18,7 +18,7 @@
 // The log only on removable media: \SDMemory\VestaLogs\VestaStub.log (only with \SDMMC\VestaLogs.on). At the boot the
 // card is often not mounted yet (2026-10-24: no VestaStub.log ever): the lines go to RAM (\Temp\VestaStub.log, not the
 // flash) and are copied to the card as soon as it is there.
-// The PC build (testing) maps the HU's paths "\X\..." to "<exe folder>\hu\X\..." and takes the 3 minutes from
+// The PC build (testing) maps the HU's paths "\X\..." to "<exe folder>\hu\X\..." and takes the minute from
 // the environment variable VESTASTUB_OKMS.
 #include <windows.h>
 #include <stdio.h>
@@ -1220,7 +1220,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
     wchar_t* slash = wcsrchr(s_dir, L'\\');
     if (slash)
         slash[1] = 0;
-    DWORD okMs = 180000;   // VestaHome alive this long: not a failed start
+    // VestaHome alive this long: not a failed start (the user 2026-11-20: was 3 min - three trips shorter than
+    // that, the engine off before it, turned the stub off; a fall at the start comes in the first seconds)
+    DWORD okMs = 60000;
 #ifndef UNDER_CE
     const char* e = getenv("VESTASTUB_OKMS");
     if (e)
@@ -1280,7 +1282,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
     for (;;) {
         int fails = ReadCount();
         if (fails >= kMaxFails)
-            return RunOriginal(args, L"VestaHome не прожил 3 минуты 3 раза подряд; заново - удалить VestaStub.cnt");
+            return RunOriginal(args, L"VestaHome не прожил минуту 3 раза подряд; заново - удалить VestaStub.cnt");
         WriteCount(fails + 1);   // counted as failed until it has lived okMs
         HANDLE h = Start(vh, NULL);
         if (!h) {
