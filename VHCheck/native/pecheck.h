@@ -20,3 +20,7 @@ int  PeMissing(const unsigned char* b, int len, const char* const* want, int n, 
 // G3NavHMI.exe, FW_SPM by SPIPowerMgr.dll. 4120, 4123, 4125; 0 a build not known.
 enum { FW_OS, FW_SHELL, FW_SPM };
 int  FwKnown(int part, unsigned stamp);
+
+// The vendor's version string "Itelma_TR8005_14_0<part>_<aa>.<bb>" (any letter case) in b: aabb (4125), 0 none.
+// part 2 - the shell's SW (27.0.0.<aabb>), 1 - the MCU's (TR8005-<aabb>, its 0x7902 answer), 3 - the OS's.
+int  FwVersion(const unsigned char* b, int len, int part);

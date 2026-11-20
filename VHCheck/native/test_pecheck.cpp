@@ -137,8 +137,30 @@ static void TestFirmware()
           "firmware: another part's day, none, a part not known - not known");
 }
 
+// The version numbers as the stock "Info" shows them, from the vendor's version strings: "Itelma_TR8005_14_02_41.25"
+// in the shell (SW 27.0.0.4125), "_14_01_" from the MCU (TR8005-4125), "_14_03_" the OS's (27.0.0.4108).
+static void TestVersion()
+{
+    const char* shell = "x\0yItelma_TR8005_14_02_41.25_190828_R\0z";
+    int n = FwVersion((const unsigned char*)shell, 40, 2);
+    Check(n == 4125, "version: the shell's SW 41.25 -> 4125");
+    Check(FwVersion((const unsigned char*)"ITELMA_TR8005_14_03_41.08_170413_R", 34, 3) == 4108, "version: the OS's, upper case");
+    Check(FwVersion((const unsigned char*)"Itelma_TR8005_14_01_41.", 23, 1) == 0, "version: cut before its number - none");
+    Check(FwVersion((const unsigned char*)"Itelma_TR8005_14_01_41.2", 24, 1) == 0, "version: one digit - none");
+    Check(FwVersion((const unsigned char*)"Itelma_TR8005_14_02_41.20", 25, 1) == 0, "version: another part's - none");
+    Check(FwVersion((const unsigned char*)"aaItelma_TR8005_14_01_4x.20Itelma_TR8005_14_01_41.23", 52, 1) == 4123,
+          "version: a broken one skipped, the next found");
+    Check(FwVersion((const unsigned char*)"Ktelma_TR8005_14_01_41.23", 25, 1) == 0, "version: its first letter checked");
+    Check(FwVersion((const unsigned char*)"Itelma_TR8005_14_01_90.09", 25, 1) == 9009, "version: the digits 0 and 9");
+    Check(FwVersion((const unsigned char*)"Itelma_TR8005_14_01_x1.23", 25, 1) == 0 &&
+          FwVersion((const unsigned char*)"Itelma_TR8005_14_01_4x.23", 25, 1) == 0 &&
+          FwVersion((const unsigned char*)"Itelma_TR8005_14_01_41.x3", 25, 1) == 0 &&
+          FwVersion((const unsigned char*)"Itelma_TR8005_14_01_41.2x", 25, 1) == 0, "version: each of its four digits checked");
+}
+
 int main()
 {
+    TestVersion();
     TestFirmware();
     TestMade();
     TestReal();

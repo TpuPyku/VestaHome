@@ -102,3 +102,24 @@ int FwKnown(int part, unsigned stamp)
             return kKnown[i][2];
     return 0;
 }
+
+static bool Digit(unsigned char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+int FwVersion(const unsigned char* b, int len, int part)
+{
+    static const char kTag[] = "itelma_tr8005_14_0";   // then <part>_<aa>.<bb>
+    const int k = sizeof(kTag) - 1;
+    for (int i = 0; i + k + 7 <= len; i++) {
+        int j = 0;
+        while (j < k && (b[i + j] >= 'A' && b[i + j] <= 'Z' ? b[i + j] + 32 : b[i + j]) == kTag[j])
+            j++;
+        const unsigned char* v = b + i + k;
+        if (j == k && v[0] == '0' + part && v[1] == '_' && Digit(v[2]) && Digit(v[3]) && v[4] == '.' && Digit(v[5]) &&
+            Digit(v[6]))
+            return (v[2] - '0') * 1000 + (v[3] - '0') * 100 + (v[5] - '0') * 10 + (v[6] - '0');
+    }
+    return 0;
+}

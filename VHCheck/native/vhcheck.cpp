@@ -260,12 +260,23 @@ static void Part(const wchar_t* label, int part, const wchar_t* orig, const wcha
 static void Firmware()
 {
     wchar_t line[300] = L"";
-    Part(L"ОС", FW_OS, NULL, L"\\Windows\\desay_sdk_api.dll", line, 300);
+    Part(L"ОС из пакета", FW_OS, NULL, L"\\Windows\\desay_sdk_api.dll", line, 300);
     Part(L"оболочка", FW_SHELL, L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe",
          L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", line, 300);
     Part(L"SPIPowerMgr", FW_SPM, L"\\ResidentFlash\\navigation\\app\\SPIPowerMgr_orig.dll",
          L"\\ResidentFlash\\navigation\\app\\SPIPowerMgr.dll", line, 300);
     Sum(L"прошивка: %s", line);
+    int len = 0, sw = 0;
+    unsigned char* b = ReadAll(Firm(L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe"), &len, 8 * 1024 * 1024);
+    if (!b)
+        b = ReadAll(Firm(L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe"), &len, 8 * 1024 * 1024);
+    if (b)
+        sw = FwVersion(b, len, 2);
+    free(b);
+    if (sw)
+        Sum(L"SW 27.0.0.%d (строка оболочки, как в «Инфо»)", sw);
+    else
+        Sum(L"SW: строки версии в оболочке нет");
 }
 
 // ---------------------------------------------------------------- the vendor functions we call
@@ -591,6 +602,8 @@ static void WriteTry()
 
 static volatile LONG s_mcuMsgs, s_mcuKinds;
 static unsigned short s_codes[64];
+static struct { unsigned short code; int len; unsigned char d[48]; } s_info[12];   // "product info"'s answers
+static int s_infoN;
 static CRITICAL_SECTION s_cs;
 struct Skel { void** vtbl; int id; };
 static void SkelDtor(void*)
@@ -608,9 +621,36 @@ static void SkelHandle(void*, unsigned char* p)
         s_codes[i] = code;
         s_mcuKinds++;
     }
+    if ((code == 0x7902 || code == 0x4112 || code == 0x4118 || code == 0x4111 || code == 0x7922) && s_infoN < 12) {
+        s_info[s_infoN].code = code;   // (the answers to "product info": versions, the ID, the BT address)
+        s_info[s_infoN].len = p[2] < sizeof(s_info[0].d) ? p[2] : sizeof(s_info[0].d);
+        memcpy(s_info[s_infoN].d, p + 3, s_info[s_infoN].len);
+        s_infoN++;
+    }
     LeaveCriticalSection(&s_cs);
 }
 static void* s_vtbl[2] = { (void*)SkelDtor, (void*)SkelHandle };
+
+// The answers kept: each as hex and its printable text; the MCU's version from a 0x7902 (TR8005-41xx).
+static void InfoLog()
+{
+    int mcu = 0;
+    for (int i = 0; i < s_infoN; i++) {
+        wchar_t hex[3 * 48 + 1] = L"", txt[49] = L"";
+        for (int k = 0; k < s_info[i].len; k++) {
+            _snwprintf(hex + 3 * k, 4, L"%02X ", s_info[i].d[k]);
+            txt[k] = s_info[i].d[k] >= 0x20 && s_info[i].d[k] < 0x7F ? s_info[i].d[k] : L'.';
+        }
+        txt[s_info[i].len] = 0;
+        Log(L"  ответ 0x%04X: %s «%s»", s_info[i].code, hex, txt);
+        if (s_info[i].code == 0x7902 && !mcu)
+            mcu = FwVersion(s_info[i].d, s_info[i].len, 1);
+    }
+    if (mcu)
+        Sum(L"MCU TR8005-%d (из ответа 0x7902)", mcu);
+    else
+        Sum(L"версия MCU: ответа 0x7902 нет (ответов на запрос сведений %d)", s_infoN);
+}
 
 typedef int (*Fn0)(void);
 typedef int (*Fn2)(int, void*);
@@ -642,6 +682,12 @@ static void Mcu()
         skels[i].id = i + 1;
         skel(i + 1, &skels[i]);
     }
+    Fn0 info = (Fn0)GetProcAddress(sp, L"SPApi_SendRadioRequestProductInfo");   // (as the stock "Info" asks)
+    Fn0 bt = (Fn0)GetProcAddress(sp, L"SPApi_SendRadioRequestBTAddress");
+    if (info)
+        info();
+    if (bt)
+        bt();
     Sleep(20000);
     EnterCriticalSection(&s_cs);
     wchar_t codes[400] = L"";
@@ -649,6 +695,7 @@ static void Mcu()
         _snwprintf(codes + wcslen(codes), 400 - wcslen(codes), L" %04X", s_codes[i]);
     LeaveCriticalSection(&s_cs);
     Log(L"  коды:%s", codes);
+    InfoLog();
     Sum(L"MCU: за 20 с %d сообщений, видов %d (%s)", (int)s_mcuMsgs, (int)s_mcuKinds, path);
 }
 
