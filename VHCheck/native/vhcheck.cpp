@@ -173,8 +173,12 @@ static unsigned char* FileFacts(const wchar_t* path, int* outLen, bool keep)
 {
     int len = 0;
     unsigned char* b = ReadAll(path, &len, 8 * 1024 * 1024);
-    if (!b) {
-        Log(L"  %s: нет", path);
+    if (!b) {   // (HU 2026-11-20: \Windows's modules of the ROM are there, loaded, but no file to read)
+        DWORD a = GetFileAttributes(path);
+        if (a == 0xFFFFFFFF)
+            Log(L"  %s: нет", path);
+        else
+            Log(L"  %s: есть, как файл не читается (модуль ПЗУ; атрибуты 0x%X)", path, a);
         return NULL;
     }
     md5_ctx c;
@@ -281,6 +285,30 @@ static void Firmware()
 
 // ---------------------------------------------------------------- the vendor functions we call
 
+// A module of the ROM (no file to read): its functions asked of the loaded module; -1 - it does not load.
+static int MissingLoaded(const wchar_t* path, const char* const* want, int n)
+{
+    HMODULE h = LoadLibrary(path);
+    if (!h)
+        return -1;
+    int m = 0;
+    for (int i = 0; i < n; i++) {
+#ifdef UNDER_CE
+        wchar_t w[160];
+        MultiByteToWideChar(CP_ACP, 0, want[i], -1, w, 160);
+        FARPROC p = GetProcAddress(h, w);
+#else
+        FARPROC p = GetProcAddress(h, want[i]);
+#endif
+        if (!p) {
+            Log(L"  нет функции %S", want[i]);
+            m++;
+        }
+    }
+    FreeLibrary(h);
+    return m;
+}
+
 // The vendor's DLL (its own copy beside our proxy first: SPIPowerMgr_orig.dll, FLC_BLUETOOTH_SDK_orig.dll) checked
 // for want[]; the count missing.
 static int Needs(const wchar_t* label, const wchar_t* const* paths, int np, const char* const* want, int n)
@@ -293,6 +321,16 @@ static int Needs(const wchar_t* label, const wchar_t* const* paths, int np, cons
             used = paths[i];
             b = FileFacts(Firm(paths[i]), &len, true);
         }
+    if (!b && used) {
+        int m = MissingLoaded(Firm(used), want, n);
+        if (m < 0)
+            Sum(L"%s: модуль ПЗУ не загрузился", label);
+        else if (m)
+            Sum(L"%s: нет %d из %d функций (%s, модуль ПЗУ)", label, m, n, used);
+        else
+            Sum(L"%s: все %d функций есть (модуль ПЗУ)", label, n);
+        return m < 0 ? n : m;
+    }
     if (!b) {
         Sum(L"%s: файла нет", label);
         return n;
@@ -862,7 +900,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    Log(L"=== VHCheck 1.0: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
+    Log(L"=== VHCheck 1.1: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
         ms.dwAvailPhys / 1024, ms.dwTotalPhys / 1024);
     bool th = Toolhelp();
     Firmware();
