@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include "pecheck.h"
+#include "privacy.h"
 #include "needs.inc"
 #include "../../SPIPower/install/md5.h"
 
@@ -609,8 +610,11 @@ static void Port(const wchar_t* name)
     }
     CloseHandle(h);
     Sum(L"%s: открылся, за 3 с %d Б, строк $ %d, @ %d, прочих %d", name, total, gps, can, other);
-    if (first[0])
-        Log(L"  первая строка: %S", first);
+    if (first[0]) {
+        char kind[16];
+        LineKind(first, kind, sizeof(kind));   // the type only: no position or time in the log
+        Log(L"  первая строка: %S…", kind);
+    }
 }
 
 static void Ports()
@@ -676,6 +680,11 @@ static void InfoLog()
     for (int i = 0; i < s_infoN; i++) {
         wchar_t hex[3 * 48 + 1] = L"", txt[49] = L"";
         for (int k = 0; k < s_info[i].len; k++) {
+            if (InfoHidden(s_info[i].code, s_info[i].d, s_info[i].len, k)) {   // the serial, the BT address
+                wcscpy(hex + 3 * k, L"** ");
+                txt[k] = L'*';
+                continue;
+            }
             _snwprintf(hex + 3 * k, 4, L"%02X ", s_info[i].d[k]);
             txt[k] = s_info[i].d[k] >= 0x20 && s_info[i].d[k] < 0x7F ? s_info[i].d[k] : L'.';
         }
@@ -908,7 +917,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    Log(L"=== VHCheck 1.2: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
+    Log(L"=== VHCheck 1.3: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
         ms.dwAvailPhys / 1024, ms.dwTotalPhys / 1024);
     bool th = Toolhelp();
     Firmware();

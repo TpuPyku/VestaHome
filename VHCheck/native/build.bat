@@ -13,6 +13,7 @@ set OUT=..\VHCheck
 cd /d "%~dp0"
 python ..\..\tools\make_vhcheck_needs.py || goto fail
 call .\test_pecheck.bat || goto fail
+call .\test_privacy.bat || goto fail
 if not exist obj\arm mkdir obj\arm
 if not exist "%OUT%" mkdir "%OUT%"
 
