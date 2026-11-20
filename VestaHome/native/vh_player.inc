@@ -172,16 +172,6 @@ static bool IsVideoName(const wchar_t* n)
     return false;
 }
 
-static int CmpName(const void* a, const void* b)
-{
-    const wchar_t* x = *(const wchar_t* const*)a;
-    const wchar_t* y = *(const wchar_t* const*)b;
-    bool dx = x[wcslen(x) - 1] == L'\\', dy = y[wcslen(y) - 1] == L'\\';
-    if (dx != dy)
-        return dx ? -1 : 1;   // folders first
-    return _wcsicmp(x, y);
-}
-
 static void FreeNames(wchar_t** v, int* n)
 {
     for (int i = 0; i < *n; i++)
@@ -193,31 +183,10 @@ static void FreeNames(wchar_t** v, int* n)
 static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders, int kind = 0)   // 0 audio, 1 video,
                                                                                                // 2 photos
 {
-    wchar_t pat[MAX_PATH];
-    _snwprintf(pat, MAX_PATH, L"%s*", dir);
-    WIN32_FIND_DATA fd;
-    HANDLE h = FindFirstFile(pat, &fd);
-    int n = 0;
-    if (h == INVALID_HANDLE_VALUE)
-        return 0;
-    do {
-        bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        if (fd.cFileName[0] == L'.' || (isDir && !folders) ||
-            (!isDir && !(kind == 2 ? PicIsName(fd.cFileName) : kind ? IsVideoName(fd.cFileName)
-                                                                      : IsAudioName(fd.cFileName))) ||
-            (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN))
-            continue;
-        size_t len = wcslen(fd.cFileName);
-        wchar_t* s = (wchar_t*)malloc((len + 2) * sizeof(wchar_t));
-        if (!s)
-            break;
-        wcscpy(s, fd.cFileName);
-        if (isDir)
-            wcscat(s, L"\\");
-        v[n++] = s;
-    } while (n < cap && FindNextFile(h, &fd));
-    FindClose(h);
-    qsort(v, n, sizeof(wchar_t*), CmpName);
+    bool cut;   // (musdir.cpp: the folders read first and kept whole, the files in the room left)
+    int n = DirList(dir, v, cap, folders, kind == 2 ? PicIsName : kind ? IsVideoName : IsAudioName, &cut);
+    if (cut)
+        _snwprintf(s_status, 96, L"показаны не все файлы папки (больше %d) - разложите их по папкам", cap);
     return n;
 }
 
@@ -256,7 +225,7 @@ static int ReadMusicTree(const wchar_t* dir, const wchar_t* sub, wchar_t** v, in
     } while (n < cap && FindNextFile(h, &fd));
     FindClose(h);
     if (!depth)
-        qsort(v + first, n - first, sizeof(wchar_t*), CmpName);
+        qsort(v + first, n - first, sizeof(wchar_t*), DirNameCmp);
     return n;
 }
 
