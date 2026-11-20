@@ -824,7 +824,7 @@ static void ScrAudioBt(HDC dc)
     Ico(dc, playing ? IC_PAUSE : IC_PLAY, 504, 312, 48, ctl ? kInk : kOff);
     IconBtn(dc, IC_FWD, 616, 312, 48, ctl ? kText : kOff, ctl ? A_BTCMD : A_NONE, BT_CMD_NEXT);
     if (!proxy)
-        T(dc, 272, 392, L"Установите proxy Bluetooth", 14, kDim, 400, AL_START, 512);
+        T(dc, 272, 392, L"Bluetooth не запущен (загрузчик VestaHome)", 14, kDim, 400, AL_START, 512);
 }
 
 static void ScrAux(HDC dc)
@@ -904,7 +904,7 @@ static void ScrPhone(HDC dc)
     Disc(dc, 372, 272, 38, !can ? kPanel2 : d ? Mix(kOk, kInk, 160) : kOk);
     Ico(dc, IC_CALL, 356, 256, 32, can ? kInk : kDim);
     if (!proxy) {
-        EmptyList(dc, 436, 150, 348, L"Нет proxy Bluetooth", L"VestaHomeInstall, «Proxy MCU + Bluetooth»");
+        EmptyList(dc, 436, 150, 348, L"Bluetooth не запущен", L"Его запускает загрузчик VestaHome (VestaHomeInstall)");
     } else if (!on) {   // the phone last connected (bt.last) with its name from the paired list
         wchar_t last[48] = L"";
         char a[18];
@@ -1179,8 +1179,8 @@ static bool PbHead(HDC dc, int list, int n, const wchar_t* what)
 {
     BtState bt;
     bool proxy = BtGet(&bt, NULL);
-    const wchar_t* why = !proxy ? L"Нет proxy Bluetooth (VestaHomeInstall)"
-                       : !PbShm() ? L"Proxy Bluetooth старый — переустановите (VestaHomeInstall)"
+    const wchar_t* why = !proxy ? L"Bluetooth не запущен (загрузчик VestaHome)"
+                       : !PbShm() ? L"Загрузчик старый — переустановите (VestaHomeInstall)"
                        : bt.hf != 2 ? L"Телефон не подключён" : NULL;
     if (why) {
         EmptyList(dc, 24, 150, 752, why);
@@ -1578,14 +1578,14 @@ static void ScrSetBt(HDC dc)
         SetScrollEnd(dc);
         // (OBD, kObdOn: its own settings after the release - the user 2026-11-04)
     } else {
-        SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен proxy MCU)");
+        SetRow(dc, 64, L"Адрес Bluetooth ГУ", McuBtAddr(a, 24) ? a : L"MCU ещё не прислал (нужен загрузчик)");
         SetRow(dc, 120, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");
         if (src != 9)
             Button(dc, 560, 126, 200, 44, L"Включить", B_N, IC_BT, 15, 22, A_BTMUSIC);
         // no proxy Bluetooth (not installed or not started - the HU 2026-11-10): no shell under our stub to pair in
-        SetRow(dc, 176, L"Сопряжение и подключение", L"недоступно: proxy Bluetooth не работает", true);
-        EmptyList(dc, 264, 268, 500, L"Телефоны не подключаются без proxy Bluetooth",
-                  L"Переустановите: VestaHomeInstall, «Proxy MCU + Bluetooth»");
+        SetRow(dc, 176, L"Сопряжение и подключение", L"недоступно: Bluetooth не запущен", true);
+        EmptyList(dc, 264, 268, 500, L"Bluetooth не запущен",
+                  L"Его запускает загрузчик VestaHome: VestaHomeInstall → «Установить»");
     }
 }
 
@@ -1605,7 +1605,7 @@ static void ScrBtPaired(HDC dc)
     }
     BtState bt;
     if (!BtGet(&bt, NULL)) {
-        SetRow(dc, 64, L"Сопряжённые", L"нужен proxy Bluetooth (VestaHomeInstall)", true);
+        SetRow(dc, 64, L"Сопряжённые", L"Bluetooth не запущен (загрузчик)", true);
         return;
     }
     int n = bt.paired < BT_PAIRED ? bt.paired : BT_PAIRED;
@@ -1746,7 +1746,7 @@ static void ScrSetObd(HDC dc)
                !strcmp(s_obdFound[i].addr, addr) ? B_SEL : B_N, IC_NONE, 15, 0, A_OBDPICK, i);
     }
     if (!s_obdFoundN)
-        T(dc, 264, 168, !proxy ? L"нужен proxy Bluetooth (VestaHomeInstall)"
+        T(dc, 264, 168, !proxy ? L"Bluetooth не запущен (загрузчик)"
                      : searching ? L"ищу устройства (около 10 с)…"
                      : L"адаптер в разъём OBD, зажигание включено, затем НАЙТИ", 15, kMuted, 400, AL_START, 500);
     T(dc, 264, 296, L"PIN", 15, kMuted, 700);
@@ -1834,7 +1834,7 @@ static void PairTick()   // once a second: the visibility's end, a phone's reque
         bool ours = s_pnPairTick && GetTickCount() - s_pnPairTick < 60000 && !_stricmp(s_pairAsk.addr, s_pnAddr);
         bool shell = FindWindow(NULL, L"RadioCommWindow") != NULL;
         VLog(L"bt: запрос сопряжения %S «%S» код %S%s", s_pairAsk.addr, s_pairAsk.name, s_pairAsk.code,
-             ours ? L" (наш, подтверждает proxy)" : !s_visUntil && shell ? L" (спросит оболочка)" : L"");
+             ours ? L" (наш, подтверждает загрузчик)" : !s_visUntil && shell ? L" (спросит оболочка)" : L"");
         if (!ours && (s_visUntil || !shell)) {
             Go(S_BT_PAIRASK, true);
             if (!IsWindowVisible(s_wnd) || GetForegroundWindow() != s_wnd) {
@@ -1901,7 +1901,7 @@ static void ScrBtPairNew(HDC dc)
                !strcmp(s_obdFound[i].addr, s_pnAddr) ? B_SEL : B_N, IC_NONE, 15, 0, A_PNPICK, i);
     }
     if (!proxy)
-        T(dc, 264, 168, L"Установите proxy Bluetooth", 15, kMuted, 400, AL_START, 500);
+        T(dc, 264, 168, L"Bluetooth не запущен (загрузчик VestaHome)", 15, kMuted, 400, AL_START, 500);
     else if (!s_obdFoundN && !searching)
         T(dc, 264, 168, L"Устройства не найдены", 15, kMuted, 400, AL_START, 500);
     bool can = proxy && s_pnAddr[0];

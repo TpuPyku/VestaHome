@@ -978,7 +978,7 @@ static void WPhone(HDC dc, int x, int y)
     bool d = Widget(dc, x, y, 248, 158, title, IC_PHONE, A_NAV, S_PHONE);
     COLORREF big = d ? kInk : kText, mut = d ? kInk : kMuted;
     if (!proxy) {
-        TWrap(dc, x + 16, y + 92, L"нужен proxy Bluetooth (VestaHomeInstall)", 15, mut, 400, 216, 2, 20);
+        TWrap(dc, x + 16, y + 92, L"Bluetooth не запущен (загрузчик)", 15, mut, 400, 216, 2, 20);
         return;
     }
     if (!on) {

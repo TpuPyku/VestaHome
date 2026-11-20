@@ -71,7 +71,7 @@ static void ScrDiag(HDC dc)
                B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
-    T(dc, 40, 390, L"VestaHome, proxy, загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 600);
+    T(dc, 40, 390, L"VestaHome и загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 600);
     Toggle(dc, 688, 354, T_LOGS);
 }
 
@@ -414,7 +414,7 @@ static void ScrVolume(HDC dc)
         R(dc, 182 + i * 15, 300 - h, 10, h, 2, i < lit ? kOrange : kLine);
     }
     if (!have)
-        T(dc, 182, 316, L"MCU ещё не присылал громкость (нужен proxy)", 13, kDim, 400);
+        T(dc, 182, 316, L"MCU ещё не присылал громкость (нужен загрузчик)", 13, kDim, 400);
 }
 
 // The screen saver: the skin's picture (Skin\saver.png, skin.ini "saver": Lada's X-design, made by

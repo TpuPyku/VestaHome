@@ -36,6 +36,9 @@
 #include "callroute.h"
 #include "stockwatch.h"
 #include "clockfix.h"   // (VestaHome's native\: the MCU's clock without its date)
+#include "../../SPIPower/native/mcushm.h"   // VestaHome's ring of MCU messages (ShmPut)
+#include "../../SPIPower/native/mcucmd.h"   // VestaHome's MCU calls (CmdThread)
+#include "../../SPIPower/bt/g_btproxy.h"   // the SDK's functions (g_real[], bt_proxy.cpp built in with BT_HOST)
 #include "stb_image.h"
 
 static const int kMaxFails = 3;
@@ -423,6 +426,7 @@ static bool   s_btUp;         // our Bluetooth stack runs (BtHostStart)
 static SpFn1  s_spSelDev;     // SPApi_SendSelectedDevice(dev): the media player opened on the SD card (0) / USB (1)
 static SpFn0  s_btPlay, s_btPause;   // the phone's music (Flc_Bluetooth_Av_Play / _Av_Pause, our BT proxy)
 static bool   InCall();       // (a call going on: BtCb's, below)
+static void   ShmPut(int skel, int code, int len, const unsigned char* data);   // (VestaHome's ring, below)
 
 // ---- the inbound trace (2026-10-25): the MCU resets the unit ~40 s after the shell is gone (its watchdog misses the
 // shell's periodic signal). To see what the MCU expected, every message the skeleton handler receives is recorded into
@@ -518,6 +522,7 @@ static void SkelHandle(void* self, unsigned char* p)
 {
     int code = p[0] << 8 | p[1];
     RingRecord(((Skel*)self)->id, code, p[2], p + 3);
+    ShmPut(((Skel*)self)->id, code, p[2], p + 3);
     switch (code) {
     case 0x3901: {   // the MCU's clock: hour, minute, second, year - 2000, month, day -> the system's (CClock);
                      // its date lost (2005, HU 2026-11-20): the time of day only, while the system's date is no real one
@@ -664,6 +669,94 @@ static FARPROC Proc(HMODULE m, const char* name)   // CE's GetProcAddress takes 
 #endif
 }
 
+// ---- VestaHome's ring of MCU messages and its MCU calls (the user 2026-11-20, variant B: no proxy of SPIPowerMgr.dll,
+// its two jobs are the host's - the same layouts, SPIPower/native/mcushm.h and mcucmd.h): every message our skeletons
+// get goes to "VestaMCU2" (SkelHandle); VestaHome's calls queued in "VestaMCUCmd" are made here, in the MCU's host
+// (the sound calls reach the MCU only from the host's process). The vendor's DLL itself, not the proxy: its copy
+// SPIPowerMgr_orig.dll first (a unit with the proxy still installed).
+static McuShm* s_shm;
+static HMODULE s_sp;            // the vendor's SPIPowerMgr in this process
+static McuCmd* s_cmd;
+static HANDLE  s_cmdEv;
+
+static void ShmPut(int skel, int code, int len, const unsigned char* data)
+{
+    if (!s_shm)
+        return;
+    LONG n = InterlockedIncrement((LONG*)&s_shm->seq);
+    McuMsg* m = &s_shm->msg[(n - 1) & (MCU_SHM_SLOTS - 1)];
+    m->seq = 0;
+    m->tick = GetTickCount();
+    m->id = (unsigned short)code;
+    m->len = (unsigned char)len;
+    m->skel = (unsigned char)skel;
+    for (int k = 0; k < MCU_SHM_DATA; k++)
+        m->data[k] = k < len ? data[k] : 0;
+    m->seq = n;
+}
+
+static void ShmOpen()
+{
+    HANDLE h = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(McuShm), MCU_SHM_NAME);
+    s_shm = h ? (McuShm*)MapViewOfFile(h, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(McuShm)) : NULL;
+    if (s_shm && s_shm->magic != MCU_SHM_MAGIC) {
+        s_shm->version = 2;
+        s_shm->magic = MCU_SHM_MAGIC;
+    }
+    if (s_shm)
+        InterlockedIncrement((LONG*)&s_shm->attach);
+}
+
+typedef void (*CallFn6)(unsigned, unsigned, unsigned, unsigned, unsigned, unsigned);
+
+static DWORD WINAPI CmdThread(LPVOID)
+{
+    s_cmd->done = s_cmd->seq;   // what an earlier host left is not made again
+    s_cmd->ready = (LONG)GetCurrentProcessId();
+    for (;;) {
+        WaitForSingleObject(s_cmdEv, 1000);
+        while (s_cmd->done != s_cmd->seq) {
+            LONG n = s_cmd->done + 1;
+            if (s_cmd->seq - n >= MCU_CMD_SLOTS)   // fallen behind by a whole queue: from the oldest still there
+                n = s_cmd->seq - MCU_CMD_SLOTS + 1;
+            McuCall c = s_cmd->call[n % MCU_CMD_SLOTS];
+            c.name[sizeof(c.name) - 1] = 0;
+            CallFn6 f = !strncmp(c.name, "SPApi_", 6) ? (CallFn6)Proc(s_sp, c.name) : NULL;
+            if (f)
+                f(c.arg[0], c.arg[1], c.arg[2], c.arg[3], c.arg[4], c.arg[5]);
+            Log(L"mcu: VH %S(%u, %u, %u)%s", c.name, c.arg[0], c.arg[1], c.arg[2], f ? L"" : L" - нет такой");
+            s_cmd->done = n;
+        }
+    }
+    return 0;
+}
+
+static void CmdStart()
+{
+    HANDLE m = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(McuCmd), MCU_CMD_NAME);
+    s_cmd = m ? (McuCmd*)MapViewOfFile(m, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(McuCmd)) : NULL;
+    s_cmdEv = CreateEvent(NULL, FALSE, FALSE, MCU_CMD_EVENT);
+    if (!s_cmd || !s_cmdEv)
+        return;
+    s_cmd->magic = MCU_CMD_MAGIC;
+    HANDLE t = CreateThread(NULL, 0, CmdThread, NULL, 0, NULL);
+    if (t)
+        CloseHandle(t);
+}
+
+// The vendor's DLL beside us: its copy *_orig.dll first (left by the proxies of earlier installs), else the DLL itself.
+static HMODULE LoadVendor(const wchar_t* name, wchar_t* used)
+{
+    _snwprintf(used, MAX_PATH - 1, L"%s%s_orig.dll", s_dir, name);
+    used[MAX_PATH - 1] = 0;
+    HMODULE m = GetFileAttributes(used) != 0xFFFFFFFF ? LoadLibrary(used) : NULL;
+    if (m)
+        return m;
+    _snwprintf(used, MAX_PATH - 1, L"%s%s.dll", s_dir, name);
+    used[MAX_PATH - 1] = 0;
+    return LoadLibrary(used);
+}
+
 // ---- Bluetooth without the stock shell (HU 2026-10-27: "прокси BT не установлен" - nobody started the stack; the
 // phone connected only once the stock shell ran). The shell's NCL_BT.DLL does it (Ghidra 2026-10-27, FUN_10004f5c /
 // FUN_10005018): Flc_Bluetooth_PowerOn(), Flc_Bluetooth_Init(its handler), Flc_Bluetooth_Conn_EnablePairIndForApp(1)
@@ -674,8 +767,12 @@ static FARPROC Proc(HMODULE m, const char* name)   // CE's GetProcAddress takes 
 typedef int (*BtFn0)(void);
 typedef int (*BtFn1)(int);
 typedef void (*BtCbFn)(int* ev);
-typedef int (*BtInitFn)(BtCbFn cb);
+extern "C" void BtProxyAttach(HMODULE real);   // bt_proxy.cpp (BT_HOST): the BT proxy's work in our process
+extern "C" int BtProxyInit(BtCbFn cb);
 static BtFn0 s_btDeinit;
+static int BtDeinitNow() { return ((BtFn0)g_real[IDX_Flc_Bluetooth_Deinit])(); }
+static int BtAvPlay() { return ((BtFn0)g_real[IDX_Flc_Bluetooth_Av_Play])(); }
+static int BtAvPause() { return ((BtFn0)g_real[IDX_Flc_Bluetooth_Av_Pause])(); }
 
 // The calls (HU 2026-10-27-2: without the shell the radio played on through a call, and the call was not heard): the
 // shell tells the MCU the phone's state (Ghidra 2026-10-27: NCL_BT's handler FUN_10005c6c keeps (type, state) and
@@ -823,26 +920,25 @@ static void BtHostStart()
         Log(L"bt: флаг VestaStub.nobt — стек не запускается");
         return;
     }
-    _snwprintf(p, MAX_PATH - 1, L"%sFLC_BLUETOOTH_SDK.dll", s_dir);
-    p[MAX_PATH - 1] = 0;
-    HMODULE m = LoadLibrary(p);
+    HMODULE m = LoadVendor(L"FLC_BLUETOOTH_SDK", p);   // the vendor's SDK; what the BT proxy did - built in
     if (!m) {
         Log(L"bt: нет %s (%u)", p, GetLastError());
         return;
     }
+    Log(L"bt: %s", p);
+    BtProxyAttach(m);   // the SDK's functions into g_real[] (bt_proxy.cpp; "failed" ones while Bluetooth is off)
     BtName();   // the unit's name, before the stack reads it
     BtFn0 powerOn = (BtFn0)Proc(m, "Flc_Bluetooth_PowerOn");
-    BtInitFn init = (BtInitFn)Proc(m, "Flc_Bluetooth_Init");
-    BtFn1 pairInd = (BtFn1)Proc(m, "Flc_Bluetooth_Conn_EnablePairIndForApp");
-    s_btDeinit = (BtFn0)Proc(m, "Flc_Bluetooth_Deinit");
-    s_btPlay = (BtFn0)Proc(m, "Flc_Bluetooth_Av_Play");
-    s_btPause = (BtFn0)Proc(m, "Flc_Bluetooth_Av_Pause");
-    if (!powerOn || !init) {
+    BtFn1 pairInd = (BtFn1)g_real[IDX_Flc_Bluetooth_Conn_EnablePairIndForApp];
+    s_btDeinit = BtDeinitNow;   // (through g_real at each call: "failed" while Bluetooth is off)
+    s_btPlay = BtAvPlay;
+    s_btPause = BtAvPause;
+    if (!powerOn || !Proc(m, "Flc_Bluetooth_Init")) {
         Log(L"bt: в FLC_BLUETOOTH_SDK.dll нет PowerOn / Init");
         return;
     }
     int on = powerOn() & 0xFF;   // (the shell keeps it as a byte: non-zero = loaded)
-    int r = on ? init(BtCb) : -1;
+    int r = on ? BtProxyInit(BtCb) : -1;
     if (r == 0 && pairInd)
         pairInd(1);
     if (r == 0)
@@ -863,13 +959,15 @@ static void BtHostStop()
 static int McuHost()
 {
     wchar_t p[MAX_PATH];
-    _snwprintf(p, MAX_PATH - 1, L"%sSPIPowerMgr.dll", s_dir);   // the proxy (or the factory DLL), by full path
-    p[MAX_PATH - 1] = 0;
-    HMODULE sp = LoadLibrary(p);
+    HMODULE sp = LoadVendor(L"SPIPowerMgr", p);   // the vendor's, by full path
     if (!sp) {
         Log(L"mcu: нет %s (%u)", p, GetLastError());
         return 1;
     }
+    s_sp = sp;
+    Log(L"mcu: %s", p);
+    ShmOpen();
+    CmdStart();
     InitializeCriticalSection(&s_ringCs);   // before the skeletons: SkelHandle records into the ring
     SpFn0 load = (SpFn0)Proc(sp, "SPApi_LoadRadioEngine");
     SpFn0 inited = (SpFn0)Proc(sp, "SPApi_IsInitialized");
@@ -904,6 +1002,8 @@ static int McuHost()
         skels[i].vtbl = s_skelVtbl;
         skels[i].id = kIds[i];
         skel(kIds[i], &skels[i]);
+        if (s_shm)   // (VestaHome's "Diagnostics": the handlers in place)
+            InterlockedIncrement((LONG*)&s_shm->wraps);
     }
     // then as the shell's CMainDialog::SlotInitModule (Ghidra 2026-10-22): "the navigation started" (SPIPowerMgr's
     // power state 2 - perhaps what keeps the unit from resetting without the shell), "send the current source",

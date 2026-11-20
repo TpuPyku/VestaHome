@@ -2259,7 +2259,7 @@ enum { B_STATUS, B_DRILLOFF, B_EXIT, B_DRILL, B_TESTOFF, B_TICK_VH, B_TICK_PROXY
 enum { kBtnN = 9, kTickY = 300, kServiceY = 444 };
 static const Btn g_btns[kBtnN] = {
     { {  24, kTickY, 396, kTickY + 40 }, L"VestaHome + загрузчик", B_TICK_VH },
-    { { 404, kTickY, 776, kTickY + 40 }, L"Proxy MCU + Bluetooth", B_TICK_PROXY },
+    { { 404, kTickY, 776, kTickY + 40 }, L"Убрать прежние proxy", B_TICK_PROXY },
     { {  24, 348, 396, 388 }, L"УСТАНОВИТЬ / ОБНОВИТЬ", B_SETUP  },
     { { 404, 348, 776, 388 }, L"УДАЛИТЬ ОТМЕЧЕННОЕ",    B_REMOVE },
     { {  24, 396, 266, 436 }, L"СТАТУС",               B_STATUS   },
@@ -2463,13 +2463,11 @@ static void RunAction(int id)
         // the stub's part only when it changes something: the same stub in place - VestaHome alone, no reboot
         int stubJob = g_tickVh && (id == B_SETUP ? !(stub && SameFile(kShellPath, g_stubSrc)) : stub);
         int proxyJob = g_tickProxy;
-        if (id == B_SETUP && proxyJob) {   // both proxies current already: no part of theirs (HU 2026-10-24-2: their
-            char md5[33];                  // "already ours" refusal took the stub's update down with it)
-            if (FileMd5(g_dll, md5, NULL) && HexEq(md5, kProxyMd5) &&
-                (!FileExists(g_btProxySrc) || Md5Is(g_btDll, kBtProxyMd5))) {
-                proxyJob = 0;
-                LogMsg(L"setup: both proxies current - the job without them");
-            }
+        if (id == B_SETUP && proxyJob) {   // variant B (the user 2026-11-20): no proxy DLLs - the stub does their
+            char md5[33];                  // work; a unit with them gets the factory DLLs back, none - nothing to do
+            int mcu = FileMd5(g_dll, md5, NULL) && (HexEq(md5, kProxyMd5) || IsOldProxy(md5));
+            proxyJob = mcu || FileExists(g_orig) || FileExists(g_btOrig);   // (a proxy keeps the factory DLL as _orig)
+            LogMsg(proxyJob ? L"setup: proxies found - the factory DLLs back (rollback)" : L"setup: no proxies in place");
         }
         if (id == B_REMOVE && proxyJob) {   // the factory DLL in place already: only the leftovers, no job
             char md5[33];
@@ -2486,7 +2484,8 @@ static void RunAction(int id)
                                   L"запущенный будет закрыт и запустится снова).\n" : L"",
                        stubJob ? L"• Загрузчик VestaHome вместо штатной оболочки — при следующей загрузке (оболочка остаётся "
                                  L"рядом и вернётся сама, если VestaHome 3 раза подряд не проработает 3 мин).\n" : L"",
-                       proxyJob ? L"• Proxy MCU и Bluetooth — при следующей загрузке.\n" : L"",
+                       proxyJob ? L"• Прежние proxy MCU и Bluetooth убираются, заводские DLL возвращаются — при "
+                                  L"следующей загрузке (их работу теперь делает загрузчик).\n" : L"",
                        stubJob || proxyJob ? L"Потом перезагрузите ГУ, НЕ вынимая SD-карту." : L"");
         else
             _snwprintf(msg, 1024, L"Удалить отмеченное?\n%s%s%s%s",
@@ -2521,7 +2520,7 @@ static void RunAction(int id)
         if (ok && (stubJob || proxyJob)) {
             char verb[48];
             _snprintf(verb, 48, "%s%s%s", stubJob ? (id == B_SETUP ? "stub on" : "stub off") : "",
-                      stubJob && proxyJob ? " " : "", proxyJob ? (id == B_SETUP ? "install p2" : "rollback") : "");
+                      stubJob && proxyJob ? " " : "", proxyJob ? "rollback" : "");
             verb[47] = 0;
             DoBootArm(verb, 0);
             if (vhRes[0]) {   // both results in the window

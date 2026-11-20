@@ -525,7 +525,11 @@ static int PanLowDisconnect(const char* addr)
     unsigned char bd[6];
     HMODULE m = GetModuleHandleW(L"btapi.dll");
     typedef int (*DiscFn)(unsigned char*);
+#ifdef UNDER_CE
     DiscFn f = m ? (DiscFn)GetProcAddressW(m, (LPCWSTR)162) : NULL;
+#else   // (VestaStub's PC build: no btapi.dll there)
+    DiscFn f = m ? (DiscFn)GetProcAddress(m, (LPCSTR)162) : NULL;
+#endif
     if (!f || !PanAddr(addr, bd))
         return -1;
     ResetEvent(s_panEv);
@@ -849,6 +853,32 @@ extern "C" int proxy_Flc_Bluetooth_Init(FlcCb cb)
     return r;
 }
 
+static void* VendorProc(HMODULE m, const wchar_t* name)
+{
+#ifdef UNDER_CE
+    return (void*)GetProcAddressW(m, name);
+#else   // (VestaStub's PC build)
+    char a[64];
+    WideCharToMultiByte(CP_ACP, 0, name, -1, a, 64, NULL, NULL);
+    return (void*)GetProcAddress(m, a);
+#endif
+}
+
+static void Attach(HMODULE real);
+
+#ifdef BT_HOST
+// Compiled into VestaStub (the user 2026-11-20, variant B: no proxy DLLs): the MCU's host loads the vendor's SDK
+// itself and hands it here; its Flc_Bluetooth_Init goes through BtProxyInit, the other calls through g_real[].
+extern "C" void BtProxyAttach(HMODULE real)
+{
+    Attach(real);
+}
+
+extern "C" int BtProxyInit(FlcCb cb)
+{
+    return proxy_Flc_Bluetooth_Init(cb);
+}
+#else
 BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
 {
     if (fdwReason == DLL_PROCESS_ATTACH) {
@@ -860,10 +890,20 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
         else
             path[0] = 0;
         wcscat(path, L"FLC_BLUETOOTH_SDK_orig.dll");
-        s_real = LoadLibraryW(path);
+        Attach(LoadLibraryW(path));
+    }
+    // DLL_PROCESS_DETACH: nothing is undone - the SDK may still call our callback while the process goes down
+    return TRUE;
+}
+#endif
+
+static void Attach(HMODULE real)
+{
+    {
+        s_real = real;
         int resolved = 0;
         for (int i = 0; i < PROXY_COUNT; i++) {
-            g_real[i] = s_real ? (void*)GetProcAddressW(s_real, kProxyNames[i]) : NULL;
+            g_real[i] = s_real ? VendorProc(s_real, kProxyNames[i]) : NULL;
             if (g_real[i])
                 resolved++;
             else
@@ -907,6 +947,4 @@ BOOL WINAPI DllMain(HANDLE hInstDLL, DWORD fdwReason, LPVOID)
                   resolved, PROXY_COUNT, s_shm ? 1 : 0);
         LogLine(b);
     }
-    // DLL_PROCESS_DETACH: nothing is undone - the SDK may still call our callback while the process goes down
-    return TRUE;
 }

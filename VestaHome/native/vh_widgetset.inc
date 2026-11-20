@@ -225,9 +225,9 @@ static void ScrSetCar(HDC dc)
     if (st < 0)
         wcscpy(mcu, L"нет общей памяти");
     else if (!st)
-        wcscpy(mcu, L"proxy SPIPowerMgr не установлен или старый");
+        wcscpy(mcu, L"загрузчик VestaHome не запущен или старый");
     else
-        _snwprintf(mcu, 80, L"proxy работает · сообщений %u", (unsigned)s_mcuTotal);
+        _snwprintf(mcu, 80, L"идут · сообщений %u", (unsigned)s_mcuTotal);
     SetRow(dc, 64 + 3 * H, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU);
     Chevron(dc, 728, 76 + 3 * H);
     wchar_t tank[16];   // (the camera: always ours - the user 2026-10-29; shown by hand from "Diagnostics")
