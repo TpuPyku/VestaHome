@@ -19,18 +19,9 @@ static Pic     s_rlPic, s_rlSized[kRlSizes];  // that logo (32-bit, kRlSize at m
 static Pic     s_rlBack;                     // its dimmed copy behind the tall widget's card (Widget, PicBack: as
                                              // the music's cover there - the user 2026-11-19)
 
-static bool RadioPlace(double* lat, double* lon)
+static bool RadioPlace(double* lat, double* lon)   // (a fix of this run however old, else the last place, home)
 {
-    Gps g;
-    GpsGet(&g);
-    if (g.fixTick && (g.lat != 0 || g.lon != 0)) {
-        *lat = g.lat;
-        *lon = g.lon;
-        return true;
-    }
-    *lat = s_cfg.homeLat;
-    *lon = s_cfg.homeLon;
-    return s_cfg.homeLat != 0 || s_cfg.homeLon != 0;
+    return HerePlace(0xFFFFFFFF, lat, lon) != PLACE_NONE;
 }
 
 // The table read for the place (again when it moved RDB_KM / 4 away).

@@ -50,6 +50,7 @@ struct Cfg {
     int pbAuto;                        // the kept phone book refreshed at each connect (the user 2026-11-12: off)
     wchar_t btName[32];                // the unit's Bluetooth name (VestaStub writes it before the stack starts)
     double  homeLat, homeLon;          // both 0 = not set
+    double  lastLat, lastLon;          // the last place the GPS told (placepick.h), both 0 = none yet
     wchar_t gpsPort[16];               // the shell's NMEA port, only read
     DWORD   gpsBaud;                   // 0 = leave the speed the shell set
     bool    gpsTime;                   // set the clock from GPS
@@ -424,6 +425,10 @@ static void LoadCfg()
             s_cfg.homeLat = wcstod(v, NULL);
         } else if (!wcscmp(k, L"home.lon")) {
             s_cfg.homeLon = wcstod(v, NULL);
+        } else if (!wcscmp(k, L"gps.last.lat")) {
+            s_cfg.lastLat = wcstod(v, NULL);
+        } else if (!wcscmp(k, L"gps.last.lon")) {
+            s_cfg.lastLon = wcstod(v, NULL);
         } else if (!wcscmp(k, L"gps.port")) {
             wcsncpy(s_cfg.gpsPort, v, 15);
             s_cfg.gpsPort[15] = 0;
@@ -659,6 +664,8 @@ static void SaveCfg()
         L"weather.provider=%S\r\nweather.key.owm=%s\r\nweather.key.yandex=%s\r\n"
         L"# Yandex requests made that day (its free tariff: 30 a day)\r\nweather.yandex.day=%d\r\nweather.yandex.count=%d\r\n"
         L"weather.gps=%d\r\nhome.name=%s\r\nhome.lat=%.5f\r\nhome.lon=%.5f\r\n"
+        L"# gps.last: the last place the GPS told (written when 2 km away), used till the next fix\r\n"
+        L"gps.last.lat=%.5f\r\ngps.last.lon=%.5f\r\n"
         L"# bt.name: the unit's name seen by phones (VestaStub sets it at the boot, before Bluetooth starts)\r\n"
         L"bt.name=%s\r\nbt.autoconnect=%d\r\nbt.autoanswer=%d\r\n"
         L"# bt.pbauto: the kept phone book and call log pulled anew at each connect (0: only by \"Обновить\")\r\nbt.pbauto=%d\r\n"
@@ -711,7 +718,7 @@ static void SaveCfg()
         L"# login, password; net.auto: dial when it is in; net.phoneusb: the phone by cable (Android Auto, modem); net.phoneany: any maker's\r\n"
         L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\nnet.phoneusb=%d\r\nnet.phoneany=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
-        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer, s_cfg.pbAuto,
+        s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.lastLat, s_cfg.lastLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer, s_cfg.pbAuto,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
         s_cfg.camOver, s_cfg.camOverBy, s_cfg.beepDev, s_cfg.camDist, s_cfg.camFile, s_cfg.camRegions, s_cfg.camKinds, s_cfg.camWeekly, s_cfg.camUpdated,
         s_cfg.eq[0], s_cfg.eq[1], s_cfg.eq[2], s_cfg.balance, s_cfg.fader, s_cfg.musicDir, s_cfg.musicFile,

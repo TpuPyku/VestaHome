@@ -473,17 +473,14 @@ static int SunEvent(int doy, double lat, double lon, bool rise)
 // else 7:00-20:00). rise / set for the settings' line.
 static bool SunNight(int* rise, int* set)
 {
-    Gps g;
-    GpsGet(&g);
     SYSTEMTIME t;
     GetLocalTime(&t);
     static const int kDays0[12] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
     int doy = kDays0[(t.wMonth + 11) % 12] + t.wDay + (t.wMonth > 2 && t.wYear % 4 == 0 ? 1 : 0);
     int now = t.wHour * 60 + t.wMinute;
-    bool gps = g.fixTick && (g.lat || g.lon), home = s_cfg.homeLat || s_cfg.homeLon;
+    double lat, lon;
     int a = 7 * 60, b = 20 * 60;
-    if (gps || home) {
-        double lat = gps ? g.lat : s_cfg.homeLat, lon = gps ? g.lon : s_cfg.homeLon;
+    if (HerePlace(0xFFFFFFFF, &lat, &lon) != PLACE_NONE) {   // (the fix, else the last place, else home)
         a = SunEvent(doy, lat, lon, true);
         b = SunEvent(doy, lat, lon, false);
     }

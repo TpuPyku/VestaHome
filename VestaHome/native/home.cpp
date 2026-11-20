@@ -75,6 +75,7 @@
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
 #include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
+#include "placepick.h" // where the unit is: the fix, the last place, the home point
 #include "../../VHCheck/native/pefile.h"   // FwFileVersion: the shell's SW number from its own string
 #include "wglayout.h"  // the main screen's widgets in their places
 #include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)
@@ -703,6 +704,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 }
             }
             UiRememberTick();
+            PlaceRemember();
             for (int u = 0; u < s_uwCount; u++) {   // the user widgets' data: re-read as often as each asks
                 UserWg& w = s_uw[u];
                 if (!WgShown(WG_COUNT + u) || GetTickCount() - w.readTick < (DWORD)w.refresh * 1000)

@@ -430,11 +430,13 @@ static DWORD WINAPI WeatherThread(LPVOID)
     Weather w;
     memset(&w, 0, sizeof(w));
     int prov = s_wxProv;
-    Gps g;
-    GpsGet(&g);
-    bool here = s_cfg.weatherGps && GpsFresh(g, 600000);
+    double lat = s_cfg.homeLat, lon = s_cfg.homeLon;
+    // by GPS: the fix of the last 10 min, else the last place it told (placepick.h); else the home point
+    int src = s_cfg.weatherGps ? HerePlace(600000, &lat, &lon) : PLACE_NONE;
+    bool here = src == PLACE_GPS || src == PLACE_LAST;
     bool home = s_cfg.homeLat != 0 || s_cfg.homeLon != 0;
-    double lat = here ? g.lat : s_cfg.homeLat, lon = here ? g.lon : s_cfg.homeLon;
+    if (!here)
+        lat = s_cfg.homeLat, lon = s_cfg.homeLon;
     VLog(L"погода: запрос, провайдер %d, %s", prov, here ? L"по GPS" : home ? L"дом" : L"по адресу");
     char key[64];
     WideCharToMultiByte(CP_UTF8, 0, s_cfg.weatherKey[prov], -1, key, sizeof(key), NULL, NULL);

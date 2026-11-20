@@ -587,6 +587,28 @@ static bool GpsFresh(const Gps& g, DWORD ms)
     return g.valid && GetTickCount() - g.fixTick < ms;
 }
 
+// Where the unit is (placepick.h): a fix newer than freshMs, else the last place, else the home point.
+static int HerePlace(DWORD freshMs, double* lat, double* lon)
+{
+    Gps g;
+    GpsGet(&g);
+    bool fix = GpsFresh(g, freshMs) && (g.lat != 0 || g.lon != 0);
+    return PlacePick(fix, g.lat, g.lon, s_cfg.lastLat, s_cfg.lastLon, s_cfg.homeLat, s_cfg.homeLon, lat, lon);
+}
+
+static void CfgSoon();   // (vh_mcu.inc)
+// Each second: a fresh fix 2 km and more from the place kept - kept (the ini written within a minute).
+static void PlaceRemember()
+{
+    Gps g;
+    GpsGet(&g);
+    if (!GpsFresh(g, 10000) || (g.lat == 0 && g.lon == 0) || !PlaceMoved(s_cfg.lastLat, s_cfg.lastLon, g.lat, g.lon))
+        return;
+    s_cfg.lastLat = g.lat;
+    s_cfg.lastLon = g.lon;
+    CfgSoon();
+}
+
 static bool GpsHasFix()
 {
     Gps g;

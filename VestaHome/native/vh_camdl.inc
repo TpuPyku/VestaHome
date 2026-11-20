@@ -244,12 +244,9 @@ static void CamDownloaded()
     s_cfg.camUpdated = Today();
     SaveCfg();
     s_camLoaded = false;
-    Gps g;
-    GpsGet(&g);
-    if (GpsFresh(g, 10000))
-        LoadCams(g.lat, g.lon);
-    else if (s_cfg.homeLat || s_cfg.homeLon)
-        LoadCams(s_cfg.homeLat, s_cfg.homeLon);
+    double lat, lon;
+    if (HerePlace(10000, &lat, &lon) != PLACE_NONE)   // (the fix, else the last place, else home)
+        LoadCams(lat, lon);
 }
 
 // Once a week by itself when the setting is on (tried again in an hour if the network isn't there).
