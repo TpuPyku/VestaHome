@@ -73,6 +73,7 @@
 #include "photo.h"
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
+#include "../../VHCheck/native/pecheck.h"   // FwVersion: the shell's SW number from its own string
 #include "wglayout.h"  // the main screen's widgets in their places
 #include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)
 #include "callwin.h"   // an incoming call over any program

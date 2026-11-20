@@ -399,6 +399,34 @@ static void ScrTestMcu(HDC dc)
 // with "Request" (product info, BT address). Which message carries which field is decoded from mcu.log later.
 static void McuRequest();
 
+// The stock shell's SW number as its "Info" shows it (27.0.0.<n>): its own string "Itelma_TR8005_14_02_41.25"
+// (the user 2026-11-20: "Details" all zero - it went by G3NavHMI.exe's size: our stub's under VestaStub, and
+// 4125's shell has 4120's size); the vendor's copy beside our stub first. Read once, in pieces (4 MB). 0 none.
+static int ShellSw()
+{
+    static int s_sw = -1;
+    if (s_sw >= 0)
+        return s_sw;
+    s_sw = 0;
+    const wchar_t* path[2] = { L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe",
+                               L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe" };
+    for (int i = 0; i < 2 && !s_sw; i++) {
+        HANDLE f = CreateFile(path[i], GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        if (f == INVALID_HANDLE_VALUE)
+            continue;
+        static unsigned char buf[64 * 1024 + 32];
+        DWORD got = 0, keep = 0;
+        while (!s_sw && ReadFile(f, buf + keep, 64 * 1024, &got, NULL) && got) {
+            DWORD total = keep + got;
+            s_sw = FwVersion(buf, (int)total, 2);
+            keep = total < 32 ? total : 32;   // (its last 32 bytes on: a string across two pieces)
+            memmove(buf, buf + total - keep, keep);
+        }
+        CloseHandle(f);
+    }
+    return s_sw;
+}
+
 static void ScrInfoMore(HDC dc)
 {
     wchar_t s[160], can[64];
@@ -406,14 +434,11 @@ static void ScrInfoMore(HDC dc)
     Panel(dc, 16, 68, 444, 396);
     Panel(dc, 472, 68, 312, 396);
     T(dc, 32, 96, L"Версии", 13, kMuted, 700);
-    WIN32_FIND_DATA fd;
-    HANDLE f = FindFirstFile(L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", &fd);
-    if (f != INVALID_HANDLE_VALUE) {
-        FindClose(f);
-        _snwprintf(s, 160, L"%s", fd.nFileSizeLow == 4077056 ? L"27.0.0.4120" : L"неизвестна");
-    } else {
-        wcscpy(s, L"—");
-    }
+    int shellSw = ShellSw();
+    if (shellSw)
+        _snwprintf(s, 160, L"27.0.0.%d", shellSw);
+    else
+        wcscpy(s, L"неизвестна");
     OSVERSIONINFO vi;
     memset(&vi, 0, sizeof(vi));
     vi.dwOSVersionInfoSize = sizeof(vi);
