@@ -623,11 +623,13 @@ static void WSpeed(HDC dc, int x, int y)
         T(dc, x + 16, y + 144, v, 15, CamOver() ? kStop : kOrange, 700, AL_START, 216);
         return;
     }
-    if (fix)
+    if (fix) {
         _snwprintf(v, 64, L"%s · %d м · спутников %d", kHeadings[((int)(g.course + 22.5) / 45) % 8], (int)g.alt, g.sats);
-    else
+        TWrap(dc, x + 16, y + 144, v, 14, kMuted, 400, 216, 1, 0);
+    } else {   // (no fix: the speed a dash, the status in two lines - it is a long one)
         GpsStatusText(v, 64);
-    TWrap(dc, x + 16, y + 144, v, 14, fix ? kMuted : kDim, 400, 216, 1, 0);
+        TWrap(dc, x + 16, y + 130, v, 13, kDim, 400, 216, 2, 16);
+    }
 }
 
 // The radio widget: the MCU's frequency and RDS name; the arrows step the presets of the page playing.

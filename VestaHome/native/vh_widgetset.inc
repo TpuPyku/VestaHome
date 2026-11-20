@@ -467,7 +467,7 @@ static void ScrInfoMore(HDC dc)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    wchar_t ram[40], up[24], temp[32], sw[32], field[16], gps[40];
+    wchar_t ram[40], up[24], temp[32], sw[32], field[16], gps[80];
     _snwprintf(ram, 40, L"%u из %u МБ", (unsigned)(ms.dwAvailPhys >> 20), (unsigned)(ms.dwTotalPhys >> 20));
     DWORD m = GetTickCount() / 60000;
     _snwprintf(up, 24, L"%u ч %02u мин", (unsigned)(m / 60), (unsigned)(m % 60));
@@ -484,7 +484,7 @@ static void ScrInfoMore(HDC dc)
         _snwprintf(field, 16, L"%d дБ", inf.sys[0x07]);
     else
         wcscpy(field, L"—");
-    _snwprintf(gps, 40, L"%s · %d спутн.", GpsFresh(g, 5000) ? L"фикс" : L"нет фикса", g.sats);
+    _snwprintf(gps, 80, L"%s · %d спутн.", GpsFresh(g, 5000) ? L"фикс" : L"время по GPS недоступно", g.sats);
     CanStatusText(can, 64);
     const wchar_t* right[7][2] = { { L"Память свободно", ram }, { L"Работает", up }, { L"GPS", gps }, { L"CAN", can },
                                    { L"Температура", temp }, { L"Кнопки руля (покой)", sw },

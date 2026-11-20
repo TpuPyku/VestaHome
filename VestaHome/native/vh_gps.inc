@@ -836,7 +836,9 @@ static void GpsStatusText(wchar_t* s, int n, bool brief)
     else if (!g.lines || GetTickCount() - g.dataTick > 10000)
         wcsncpy(s, brief ? L"нет NMEA" : L"нет NMEA: выдачу включает навигация", n);
     else if (!GpsFresh(g, 5000))
-        _snwprintf(s, n, brief ? L"нет фикса · спутников %d" : L"NMEA есть, нет фикса · спутников %d", g.sats);
+        // ("нет фикса" was not understood - the user 2026-11-20: what it means for the clock)
+        _snwprintf(s, n, brief ? L"время по GPS недоступно · %d спутн." : L"время по GPS недоступно · спутников %d",
+                   g.sats);
     else if (brief)
         _snwprintf(s, n, L"фикс · спутников %d", g.sats);
     else

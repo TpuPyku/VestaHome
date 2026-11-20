@@ -10,7 +10,7 @@ Windows only (ctypes, Pillow).
 
 Usage: python VestaHome/tools/make_shots.py [out_dir]   (VH_SHOTS=name,name... - only those; VH_SHOTS_SRC=n - the
 MCU's source, 0 the radio by default, 7 the media; VH_SHOTS_FREQ=f10 - the tuner's frequency, 10120 by default, VH_SHOTS_PS - its RDS name, DFM by default; VH_SHOTS_WIDGETS - the main screen's widgets for the run, as the ini's
-home.widgets:
+home.widgets; VH_SHOTS_NOFIX=1 - the GPS's sentences without a fix:
 the radio's logos tried at other stations)
 """
 import ctypes
@@ -307,8 +307,9 @@ def track(path):   # a drive for the GPS replay (gps.port=<name>.nmea): north-ea
         for i in range(3600):
             t = '%02d%02d%02d.00' % (16 + i // 3600, i // 60 % 60, i % 60)
             la, lo = deg(lat, 2), deg(lon, 3)
-            f.write(nmea('GPGGA,%s,%s,N,%s,E,1,09,0.9,62.0,M,0.0,M,,' % (t, la, lo)))
-            f.write(nmea('GPRMC,%s,A,%s,N,%s,E,33.5,48.0,311026,,,A' % (t, la, lo)))
+            fix = not os.environ.get('VH_SHOTS_NOFIX')
+            f.write(nmea('GPGGA,%s,%s,N,%s,E,%d,%02d,0.9,62.0,M,0.0,M,,' % (t, la, lo, 1 if fix else 0, 9 if fix else 3)))
+            f.write(nmea('GPRMC,%s,%s,%s,N,%s,E,33.5,48.0,311026,,,A' % (t, 'A' if fix else 'V', la, lo)))
             lat += 0.000115
             lon += 0.000190
 

@@ -556,7 +556,7 @@ static void HomeFromGps()
     Gps g;
     GpsGet(&g);
     if (!GpsFresh(g, 10000)) {
-        wcscpy(s_status, L"нет фикса GPS");
+        wcscpy(s_status, L"место по GPS недоступно");
         return;
     }
     s_cfg.homeLat = g.lat;
