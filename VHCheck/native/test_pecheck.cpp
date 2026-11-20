@@ -125,8 +125,21 @@ static void TestReal()
           "real: its functions");
 }
 
+// The firmware by a part's build day: the stamps of MAIN's 4120 and 4125 and the CAN panel's (4123's OS).
+static void TestFirmware()
+{
+    Check(FwKnown(FW_OS, 0x5AD0A21E) == 4120 && FwKnown(FW_OS, 0x5DEF339A) == 4125, "firmware: the OS of 4120, 4125");
+    Check(FwKnown(FW_OS, 17857u * 86400) == 4123 && FwKnown(FW_OS, 17857u * 86400 + 86399) == 4123 &&
+          !FwKnown(FW_OS, 17857u * 86400 - 1) && !FwKnown(FW_OS, 17858u * 86400), "firmware: 4123's OS by its day");
+    Check(FwKnown(FW_SHELL, 0x5AE1448B) == 4120 && FwKnown(FW_SHELL, 0x5D6612D7) == 4125, "firmware: the shell");
+    Check(FwKnown(FW_SPM, 0x5A0D34C7) == 4120 && FwKnown(FW_SPM, 0x5D66113B) == 4125, "firmware: SPIPowerMgr.dll");
+    Check(!FwKnown(FW_SHELL, 0x5AD0A21E) && !FwKnown(FW_OS, 0x5A0D34C7) && !FwKnown(FW_SPM, 0) && !FwKnown(7, 0x5D66113B),
+          "firmware: another part's day, none, a part not known - not known");
+}
+
 int main()
 {
+    TestFirmware();
     TestMade();
     TestReal();
     printf("test_pecheck: %d checks, %d failed\n", s_checks, s_failed);

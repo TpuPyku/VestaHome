@@ -1,4 +1,4 @@
-// needs.inc - made by VestaHome/tools/make_hucheck_needs.py: the vendor functions our code calls by name.
+// needs.inc - made by VestaHome/tools/make_vhcheck_needs.py: the vendor functions our code calls by name.
 static const char* const kNeedSpm[] = {
     "SPApi_DisableTFT",
     "SPApi_EmptySkelonton",

@@ -34,8 +34,8 @@ PLAN = (
     (os.path.join(ROOT, 'VestaHome', 'UartProbe', 'UartProbe'), r'SDCard\UartProbe', ('UartProbe.exe',)),
     # McuProbe: the MCU without our proxy - a second client of the stock SPIPowerMgr.dll for 5 min (2026-11-19)
     (os.path.join(ROOT, 'VestaHome', 'McuProbe', 'McuProbe'), r'SDCard\McuProbe', ('McuProbe.exe',)),
-    # HuCheck: the unit's facts before VestaHome moves to the stub alone (2026-11-20): stock firmware and CAN panel
-    (os.path.join(ROOT, 'VestaHome', 'HuCheck', 'HuCheck'), r'SDCard\HuCheck', ('HuCheck.exe',)),
+    # VHCheck: the unit's facts before VestaHome moves to the stub alone (2026-11-20): stock firmware and CAN panel
+    (os.path.join(ROOT, 'VestaHome', 'VHCheck', 'VHCheck'), r'SDCard\VHCheck', ('VHCheck.exe',)),
     # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
@@ -91,7 +91,8 @@ def copy(src, dst):
 RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaWidgets', r'ResidentFlash\VestaHome',
            r'ResidentFlash\VHContent\VHPlugins\Sample',
            r'SDCard\VestaAuto',     # (the video probe's media: VestaAuto 0.6 shows the phone, no probe - the user 2026-11-15)
-           r'SDCard\TetherProbe')   # (VestaHome registers the phone's driver itself - the user 2026-11-15)
+           r'SDCard\TetherProbe',   # (VestaHome registers the phone's driver itself - the user 2026-11-15)
+           r'SDCard\HuCheck')       # (renamed VHCheck - the user 2026-11-20)
 
 
 def main():

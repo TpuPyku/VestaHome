@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The vendor functions our code calls by name, for HuCheck (HuCheck/native/needs.inc): it checks on a unit that its
+"""The vendor functions our code calls by name, for VHCheck (VHCheck/native/needs.inc): it checks on a unit that its
 DLLs export them all before VestaHome is moved to the stub alone (the user 2026-11-20: one build for the stock
 firmware and the CAN panel's). Scanned: VestaStub, the proxies (SPIPower/native, SPIPower/bt), VestaHome's native
 (not the tests). Grouped by the DLL that has them:
@@ -9,7 +9,7 @@ firmware and the CAN panel's). Scanned: VestaStub, the proxies (SPIPower/native,
     BTDDB_*, BTRF_*, XCBM_*      btapi.dll              (\\ResidentFlash\\dll)
     SV_*                         desay_sdk_api.dll      (\\Windows)
 
-    python make_hucheck_needs.py        (HuCheck/native/build.bat runs it)
+    python make_vhcheck_needs.py        (VHCheck/native/build.bat runs it)
 """
 import os
 import re
@@ -43,7 +43,7 @@ def sources(repo):
 
 
 def include(groups):
-    lines = ['// needs.inc - made by VestaHome/tools/make_hucheck_needs.py: the vendor functions our code calls by name.']
+    lines = ['// needs.inc - made by VestaHome/tools/make_vhcheck_needs.py: the vendor functions our code calls by name.']
     for group, _ in GROUPS:
         lines.append('static const char* const %s[] = {' % group)
         lines += ['    "%s",' % n for n in groups[group]] or ['    "",']
@@ -53,7 +53,7 @@ def include(groups):
 
 def main(argv=None):
     groups = names(sources(REPO))
-    out = os.path.join(REPO, 'HuCheck', 'native', 'needs.inc')
+    out = os.path.join(REPO, 'VHCheck', 'native', 'needs.inc')
     with open(out, 'w', encoding='utf-8', newline='\r\n') as f:
         f.write(include(groups))
     print('needs.inc: ' + ', '.join('%s %d' % (g, len(groups[g])) for g, _ in GROUPS))

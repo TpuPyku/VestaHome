@@ -1,10 +1,10 @@
-"""Tests of make_hucheck_needs.py: the vendor functions our code calls, by their DLL."""
+"""Tests of make_vhcheck_needs.py: the vendor functions our code calls, by their DLL."""
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import make_hucheck_needs as m  # noqa: E402
+import make_vhcheck_needs as m  # noqa: E402
 
 
 class TestNames(unittest.TestCase):

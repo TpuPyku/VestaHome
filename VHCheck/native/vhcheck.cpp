@@ -1,14 +1,17 @@
-﻿// HuCheck - before VestaHome moves to the stub alone, no proxy DLLs (the user 2026-11-20: one build for the stock
+﻿// VHCheck - before VestaHome moves to the stub alone, no proxy DLLs (the user 2026-11-20: one build for the stock
 // firmware and the CAN panel's; the CAN panel brings RadioCommWindow up its own way): what the unit is and has, read
 // and tried without changing it - the firmware's files (size, MD5, build time), whether its DLLs export every vendor
-// function our code calls (needs.inc, made from our sources by tools/make_hucheck_needs.py; read from the files, not
+// function our code calls (needs.inc, made from our sources by tools/make_vhcheck_needs.py; read from the files, not
 // loaded), the start chain (HKLM\init, the active drivers), which process holds the MCU's and Bluetooth's DLLs, every
 // top window and RadioCommWindow (by class and by title, its process; at the start and later), the GPS / CAN ports
 // read-only (COM3: whether the CAN panel's can_panel.exe holds it; VSP4/VSP5: what it hands out), a write into the
 // shell's folder, the MCU as a client for 20 s (as McuProbe), and - asked first, put back after - whether the CAN
 // panel's always-on-top window can be hidden or stayed under a top window of ours (it would lie over VestaHome).
-// The log always (one run by hand, no VestaHome to switch logs on): \SDMemory\VestaLogs\HuCheck.log, else the USB
-// disk's.
+// The log always (one run by hand, no VestaHome to switch logs on): \SDMemory\VestaLogs\VHCheck.log, else the USB
+// disk's. Any firmware of this unit (the user 2026-11-20): its parts named by their build (FwKnown) - the CAN panel
+// carries 4123's OS with 4125's \ResidentFlash. On the PC (VHCheckPC.exe <folders>): the same for a firmware
+// unpacked there - the files, their functions, the firmware - each unit path looked for by its file name in the
+// folders (MAIN's 4125_unpacked, the \ResidentFlash modules of its SwDnl.upg by tools/upg_extract.py).
 #include <windows.h>
 #include <tlhelp32.h>
 #include <stdio.h>
@@ -24,10 +27,60 @@
 static const wchar_t* kApp = L"\\ResidentFlash\\navigation\\app\\";
 static wchar_t s_log[MAX_PATH];
 
+#ifndef UNDER_CE
+static wchar_t** s_roots;   // the PC: the folders of an unpacked firmware
+static int s_nroots;
+
+static bool FindIn(const wchar_t* dir, const wchar_t* name, wchar_t* out)   // name anywhere under dir
+{
+    wchar_t pat[MAX_PATH];
+    _snwprintf(pat, MAX_PATH, L"%s\\*", dir);
+    WIN32_FIND_DATA fd;
+    HANDLE h = FindFirstFile(pat, &fd);
+    bool found = false;
+    for (BOOL ok = h != INVALID_HANDLE_VALUE; ok && !found; ok = FindNextFile(h, &fd)) {
+        _snwprintf(out, MAX_PATH, L"%s\\%s", dir, fd.cFileName);
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            found = !_wcsicmp(fd.cFileName, name);
+        else if (fd.cFileName[0] != L'.') {
+            wchar_t sub[MAX_PATH];
+            wcscpy(sub, out);
+            found = FindIn(sub, name, out);
+        }
+    }
+    if (h != INVALID_HANDLE_VALUE)
+        FindClose(h);
+    return found;
+}
+#endif
+
+// A unit path: as it is on the unit; on the PC the file of that name in the folders given (or the path itself -
+// then not there).
+static const wchar_t* Firm(const wchar_t* path)
+{
+#ifdef UNDER_CE
+    return path;
+#else
+    static wchar_t found[4][MAX_PATH];
+    static int next;
+    wchar_t* out = found[next++ % 4];
+    const wchar_t* name = wcsrchr(path, L'\\') ? wcsrchr(path, L'\\') + 1 : path;
+    for (int i = 0; i < s_nroots; i++)
+        if (FindIn(s_roots[i], name, out))
+            return out;
+    return path;
+#endif
+}
+
 // ---------------------------------------------------------------- the log
 
-static bool LogPlace()   // the SD card, else a USB disk; neither - not run
+static bool LogPlace()   // the SD card, else a USB disk; neither - not run (the PC: VHCheckPC.log here)
 {
+#ifndef UNDER_CE
+    wcscpy(s_log, L"VHCheckPC.log");
+    DeleteFile(s_log);
+    return true;
+#endif
     static const wchar_t* kVol[2] = { L"\\SDMemory", L"\\USBDevice" };
     for (int i = 0; i < 2; i++) {
         DWORD a = GetFileAttributes(kVol[i]);
@@ -36,7 +89,7 @@ static bool LogPlace()   // the SD card, else a USB disk; neither - not run
         wchar_t dir[MAX_PATH];
         _snwprintf(dir, MAX_PATH, L"%s\\VestaLogs", kVol[i]);
         CreateDirectory(dir, NULL);
-        _snwprintf(s_log, MAX_PATH, L"%s\\HuCheck.log", dir);
+        _snwprintf(s_log, MAX_PATH, L"%s\\VHCheck.log", dir);
         return true;
     }
     return false;
@@ -56,6 +109,9 @@ static void Log(const wchar_t* fmt, ...)
     wcscat(line, L"\r\n");
     char u8[1800];
     int len = WideCharToMultiByte(CP_UTF8, 0, line, -1, u8, sizeof(u8), NULL, NULL) - 1;
+#ifndef UNDER_CE
+    printf("%s", u8);   // (the PC: the console too)
+#endif
     HANDLE f = CreateFile(s_log, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, 0, NULL);
     if (f == INVALID_HANDLE_VALUE)
         return;
@@ -154,7 +210,62 @@ static void Files()
     };
     Log(L"== файлы");
     for (int i = 0; i < (int)(sizeof(kFiles) / sizeof(kFiles[0])); i++)
-        FileFacts(kFiles[i], NULL, false);
+        FileFacts(Firm(kFiles[i]), NULL, false);
+}
+
+// ---------------------------------------------------------------- the firmware
+
+static unsigned StampOf(const wchar_t* path)   // a PE's build stamp, 0 none
+{
+    int len = 0;
+    unsigned char* b = ReadAll(Firm(path), &len, 8 * 1024 * 1024);
+    PeFacts f;
+    bool pe = b && PeRead(b, len, &f);
+    free(b);
+    return pe ? f.stamp : 0;
+}
+
+// One part of the firmware by its file's build: the vendor's own copy beside ours first (G3NavHMI_orig.exe under our
+// stub, SPIPowerMgr_orig.dll under our proxy), else the file itself (orig NULL: only it).
+static void Part(const wchar_t* label, int part, const wchar_t* orig, const wchar_t* path, wchar_t* line, int cap)
+{
+    unsigned st = orig ? StampOf(orig) : 0;
+    if (!st)
+        st = StampOf(path);
+    WIN32_FIND_DATA fd;
+    HANDLE h = st ? INVALID_HANDLE_VALUE : FindFirstFile(Firm(path), &fd);
+    if (h != INVALID_HANDLE_VALUE) {   // (an XIP module of the OS, not readable as a file: its time in the ROM - the
+        FindClose(h);                  // same day as its build, nkdiff "list")
+        ULARGE_INTEGER u;
+        u.LowPart = fd.ftLastWriteTime.dwLowDateTime;
+        u.HighPart = fd.ftLastWriteTime.dwHighDateTime;
+        st = u.QuadPart > 116444736000000000ULL ? (unsigned)((u.QuadPart - 116444736000000000ULL) / 10000000) : 0;
+    }
+    wchar_t when[16] = L"", one[96];
+    if (st)
+        StampText(st, when, 16);
+    int fw = st ? FwKnown(part, st) : 0;
+    if (!st)
+        _snwprintf(one, 96, L"%s: не прочитать", label);
+    else if (fw)
+        _snwprintf(one, 96, L"%s %d (%s)", label, fw, when);
+    else
+        _snwprintf(one, 96, L"%s: неизвестная сборка от %s", label, when);
+    if ((int)(wcslen(line) + wcslen(one) + 3) < cap) {
+        wcscat(line, line[0] ? L"; " : L"");
+        wcscat(line, one);
+    }
+}
+
+static void Firmware()
+{
+    wchar_t line[300] = L"";
+    Part(L"ОС", FW_OS, NULL, L"\\Windows\\desay_sdk_api.dll", line, 300);
+    Part(L"оболочка", FW_SHELL, L"\\ResidentFlash\\navigation\\app\\G3NavHMI_orig.exe",
+         L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", line, 300);
+    Part(L"SPIPowerMgr", FW_SPM, L"\\ResidentFlash\\navigation\\app\\SPIPowerMgr_orig.dll",
+         L"\\ResidentFlash\\navigation\\app\\SPIPowerMgr.dll", line, 300);
+    Sum(L"прошивка: %s", line);
 }
 
 // ---------------------------------------------------------------- the vendor functions we call
@@ -167,9 +278,9 @@ static int Needs(const wchar_t* label, const wchar_t* const* paths, int np, cons
     unsigned char* b = NULL;
     const wchar_t* used = NULL;
     for (int i = 0; i < np && !b; i++)
-        if (GetFileAttributes(paths[i]) != 0xFFFFFFFF) {
+        if (GetFileAttributes(Firm(paths[i])) != 0xFFFFFFFF) {
             used = paths[i];
-            b = FileFacts(paths[i], &len, true);
+            b = FileFacts(Firm(paths[i]), &len, true);
         }
     if (!b) {
         Sum(L"%s: файла нет", label);
@@ -204,6 +315,7 @@ static void Functions()
     Needs(L"desay_sdk_api", sv, 1, kNeedSv, COUNT(kNeedSv));
 }
 
+#ifdef UNDER_CE   // (the unit only from here to the run: the registry, processes, windows, ports, MCU)
 // ---------------------------------------------------------------- the registry
 
 static void RegValues(HKEY root, const wchar_t* path)
@@ -465,10 +577,10 @@ static void Ports()
 static void WriteTry()
 {
     wchar_t p[MAX_PATH];
-    _snwprintf(p, MAX_PATH, L"%sHuCheck.tmp", kApp);
+    _snwprintf(p, MAX_PATH, L"%sVHCheck.tmp", kApp);
     HANDLE f = CreateFile(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
     DWORD w = 0;
-    bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, "HuCheck", 7, &w, NULL) && w == 7;
+    bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, "VHCheck", 7, &w, NULL) && w == 7;
     if (f != INVALID_HANDLE_VALUE)
         CloseHandle(f);
     bool gone = DeleteFile(p) != 0;
@@ -617,7 +729,7 @@ static LRESULT CALLBACK CoverProc(HWND w, UINT m, WPARAM wp, LPARAM lp)
         FillRect(dc, &r, (HBRUSH)GetStockObject(BLACK_BRUSH));
         SetTextColor(dc, RGB(255, 255, 255));
         SetBkMode(dc, TRANSPARENT);
-        DrawText(dc, L"HuCheck: наше окно поверх всех (5 с)", -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        DrawText(dc, L"VHCheck: наше окно поверх всех (5 с)", -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         EndPaint(w, &ps);
         return 0;
     }
@@ -631,9 +743,9 @@ static void CoverTry(const CanWin& c)
     memset(&wc, 0, sizeof(wc));
     wc.lpfnWndProc = CoverProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = L"HuCheck_Cover";
+    wc.lpszClassName = L"VHCheck_Cover";
     RegisterClass(&wc);
-    HWND me = CreateWindowEx(WS_EX_TOPMOST, L"HuCheck_Cover", L"HuCheck", WS_POPUP | WS_VISIBLE, 0, 0,
+    HWND me = CreateWindowEx(WS_EX_TOPMOST, L"VHCheck_Cover", L"VHCheck", WS_POPUP | WS_VISIBLE, 0, 0,
                              GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), NULL, NULL, wc.hInstance, NULL);
     if (!me) {
         Sum(L"наше окно поверх всех: не создалось");
@@ -673,7 +785,7 @@ static void CanPanel()
         top += c.vis[i] && (c.ex[i] & WS_EX_TOPMOST) ? 1 : 0;
     Sum(L"can_panel.exe: окон %d, видимых поверх всех %d", c.n, top);
     if (!c.n || MessageBox(NULL, L"Проверить окно CAN-панели? На 5 с оно будет спрятано, затем на 5 с экран закроет "
-                           L"чёрное окно HuCheck. Потом всё вернётся как было.", L"HuCheck",
+                           L"чёрное окно VHCheck. Потом всё вернётся как было.", L"VHCheck",
                            MB_YESNO | MB_TOPMOST) != IDYES) {
         Log(L"  проверка окна CAN-панели пропущена");
         return;
@@ -682,16 +794,19 @@ static void CanPanel()
     CoverTry(c);
 }
 
+#endif   // (the unit only)
+
 // ---------------------------------------------------------------- the run
 
+#ifdef UNDER_CE
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
 {
     if (!LogPlace()) {
-        MessageBox(NULL, L"HuCheck пишет журнал на SD-карту или USB-диск - вставьте их.", L"HuCheck", MB_OK | MB_TOPMOST);
+        MessageBox(NULL, L"VHCheck пишет журнал на SD-карту или USB-диск - вставьте их.", L"VHCheck", MB_OK | MB_TOPMOST);
         return 1;
     }
-    if (MessageBox(NULL, L"HuCheck: сведения о ГУ перед переходом VestaHome на заглушку - около минуты. Ничего не "
-                   L"меняется (кроме проверки окна CAN-панели - о ней спрошу отдельно). Начать?", L"HuCheck",
+    if (MessageBox(NULL, L"VHCheck: сведения о ГУ перед переходом VestaHome на заглушку - около минуты. Ничего не "
+                   L"меняется (кроме проверки окна CAN-панели - о ней спрошу отдельно). Начать?", L"VHCheck",
                    MB_YESNO | MB_TOPMOST) != IDYES)
         return 0;
     OSVERSIONINFO v;
@@ -700,9 +815,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    Log(L"=== HuCheck 1.0: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
+    Log(L"=== VHCheck 1.0: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
         ms.dwAvailPhys / 1024, ms.dwTotalPhys / 1024);
     bool th = Toolhelp();
+    Firmware();
     Files();
     Functions();
     Registry();
@@ -721,7 +837,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     wchar_t end[1700];
     _snwprintf(end, 1700, L"%s\r\nЖурнал: %s - пришлите его.", s_sum, s_log);
     end[1699] = 0;
-    MessageBox(NULL, end, L"HuCheck", MB_OK | MB_TOPMOST);
+    MessageBox(NULL, end, L"VHCheck", MB_OK | MB_TOPMOST);
     ExitProcess(0);   // (the MCU client: no Uninit - our PIC1: node goes with the process)
     return 0;
 }
+#else
+int wmain(int argc, wchar_t** argv)   // the PC: VHCheckPC.exe <folders of an unpacked firmware>
+{
+    if (argc < 2) {
+        printf("VHCheckPC.exe <folder> [folder...]: a firmware unpacked there (its files by name)\n");
+        return 1;
+    }
+    s_roots = argv + 1;
+    s_nroots = argc - 1;
+    LogPlace();
+    Log(L"=== VHCheckPC 1.0: %d папок", s_nroots);
+    Firmware();
+    Files();
+    Functions();
+    Log(L"=== конец");
+    return 0;
+}
+#endif

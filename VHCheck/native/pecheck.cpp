@@ -89,3 +89,16 @@ int PeMissing(const unsigned char* b, int len, const char* const* want, int n, i
         }
     return m;
 }
+
+int FwKnown(int part, unsigned stamp)
+{
+    // (part, the build's UTC day since 1970, the firmware) - from MAIN's 4120 and 4125 and the CAN panel's 4123
+    static const int kKnown[][3] = { { FW_OS, 17634, 4120 }, { FW_OS, 17857, 4123 }, { FW_OS, 18240, 4125 },
+                                     { FW_SHELL, 17647, 4120 }, { FW_SHELL, 18136, 4125 },
+                                     { FW_SPM, 17486, 4120 }, { FW_SPM, 18136, 4125 } };
+    int day = (int)(stamp / 86400);
+    for (int i = 0; i < (int)(sizeof(kKnown) / sizeof(kKnown[0])); i++)
+        if (kKnown[i][0] == part && kKnown[i][1] == day)
+            return kKnown[i][2];
+    return 0;
+}
