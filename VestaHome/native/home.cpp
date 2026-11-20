@@ -324,6 +324,10 @@ static void VLog(const wchar_t* fmt, ...)
 }
 
 static wchar_t s_status[96];    // last action result, shown in the top bar
+// VestaHome is closing (WM_DESTROY on): nothing new started - no widgets rescanned, no fetch (the tester 2026-11-20: an
+// add-on's "bye" at the exit rescanned the widgets, their fetch hung in DNS with no network - the process could not
+// end, TerminateProcess "busy", the setup refused the first time).
+static volatile bool s_quitting;
 static int     s_downX, s_downY;   // where the press started: a horizontal swipe turns the page
 static bool    s_drag;          // a page follows the finger (DragStart .. DragEnd): no other redraws meanwhile
 static bool    s_listDrag;      // a list follows the finger up / down (Scroll)
@@ -1422,6 +1426,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         break;
     }
     case WM_DESTROY:
+        s_quitting = true;
         VLog(L"выход: окно VestaHome закрывается");
         PluginsQuit();
         UiRememberTick();   // the screen and the source as they are now, and what waits for the minute's save

@@ -527,7 +527,7 @@ static DWORD WINAPI UserWgThread(LPVOID)
             due = true;
         }
         LeaveCriticalSection(&s_uwCs);
-        if (due) {
+        if (due && !s_quitting) {   // (closing: no new fetch - a DNS wait would hold the exit)
             UserWgFetchOne(j);
             PostMessage(s_wnd, WM_APP_UWG, 0, 0);
         }

@@ -763,7 +763,8 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             PlugWidgetFree(p->wg[k]);
         p->hwnd = NULL;
         p->ns = p->nw = 0;
-        UserWidgetsScan();
+        if (!s_quitting)   // (at the exit: no rescan - it would start the widgets' fetch)
+            UserWidgetsScan();
         if (s_screen == S_PLUGIN && s_plugCur == (int)(p - s_plug))
             Back();
         Redraw();

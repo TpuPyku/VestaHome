@@ -47,16 +47,17 @@ static int MissingLoaded(const wchar_t* path, const char* const* want, int n)   
 
 int PeMissingFile(const wchar_t* path, const char* const* want, int n)
 {
-    if (GetFileAttributesW(path) == 0xFFFFFFFF)
-        return -1;
+    if (GetFileAttributesW(path) == 0xFFFFFFFF)   // (a module of the ROM may be loaded and not be a file: 4120's SV)
+        return MissingLoaded(path, want, n);
     HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     if (f == INVALID_HANDLE_VALUE)
         return MissingLoaded(path, want, n);
     DWORD size = GetFileSize(f, NULL), got = 0;
     unsigned char* b = size < 16 * 1024 * 1024 ? (unsigned char*)malloc(size + 1) : NULL;
-    bool ok = b && ReadFile(f, b, size, &got, NULL) && got == size;
+    PeFacts pf;
+    bool ok = b && ReadFile(f, b, size, &got, NULL) && got == size && PeRead(b, (int)size, &pf);
     CloseHandle(f);
-    int m = ok ? PeMissing(b, (int)size, want, n, NULL, 0) : n;
+    int m = ok ? PeMissing(b, (int)size, want, n, NULL, 0) : MissingLoaded(path, want, n);
     free(b);
-    return m;
+    return m < 0 ? n : m;   // (read, but no PE in it and no module either: all missing)
 }

@@ -322,19 +322,26 @@ static int Needs(const wchar_t* label, const wchar_t* const* paths, int np, cons
             used = paths[i];
             b = FileFacts(Firm(paths[i]), &len, true);
         }
-    if (!b && used) {
+    PeFacts pf;
+    if (b && !PeRead(b, len, &pf)) {   // read, but no PE in it (a ROM module's file): asked of the loaded module
+        free(b);
+        b = NULL;
+    }
+    // (the tester's 4120, 2026-11-20: \Windows\desay_sdk_api.dll loaded by main.exe and the shell, no file of it)
+    bool asFile = used != NULL;
+    if (!b && !used)
+        used = paths[np - 1];
+    if (!b) {
         int m = MissingLoaded(Firm(used), want, n);
-        if (m < 0)
+        if (m < 0 && !asFile)
+            Sum(L"%s: файла нет", label);
+        else if (m < 0)
             Sum(L"%s: модуль ПЗУ не загрузился", label);
         else if (m)
             Sum(L"%s: нет %d из %d функций (%s, модуль ПЗУ)", label, m, n, used);
         else
             Sum(L"%s: все %d функций есть (модуль ПЗУ)", label, n);
         return m < 0 ? n : m;
-    }
-    if (!b) {
-        Sum(L"%s: файла нет", label);
-        return n;
     }
     int miss[200];
     int m = PeMissing(b, len, want, n, miss, 200);
@@ -917,7 +924,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    Log(L"=== VHCheck 1.3: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
+    Log(L"=== VHCheck 1.4: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
         ms.dwAvailPhys / 1024, ms.dwTotalPhys / 1024);
     bool th = Toolhelp();
     Firmware();

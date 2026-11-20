@@ -54,6 +54,11 @@ static void TestMissing()
     Check(PeMissingFile(k32, want, 2) == 0, "kernel32 has GetTickCount and Sleep");
     Check(PeMissingFile(k32, want, 3) == 1, "but not the third");
     Check(PeMissingFile(L"obj\\no_such.dll", want, 2) == -1, "no file - -1");
+    // (the tester's 4120, 2026-11-20: \Windows\desay_sdk_api.dll is loaded by main.exe and the shell, but not there as
+    // a file - the setup said "3 of 3 missing"): no such file, yet a module that loads - its functions
+    Check(PeMissingFile(L"kernel32.dll", want, 3) == 1, "not a file here, but a module that loads: checked loaded");
+    // (read, but no PE in it - a ROM module's file on the unit - then asked of the loaded module: the desktop loads a
+    // path's own file, so not to be shown here; the unit only)
     const wchar_t* p = L"obj\\notpe.bin";
     Make(p, 100, 0, "not a PE");
     Check(PeMissingFile(p, want, 3) == 3, "a file but no PE - all missing");

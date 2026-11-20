@@ -1354,6 +1354,12 @@ static void VhClose()
         KillProcess(kVhExe, 1);
         Sleep(500);
     }
+    // (the tester 2026-11-20: TerminateProcess "busy" (170) - its window gone, the process ending, a thread of it
+    // held in a network call (DNS with no network) until that returns: waited for, up to 20 s, not refused at once)
+    for (int i = 0; i < 200 && ProcExists(kVhExe) == 1; i++)
+        Sleep(100);
+    if (ProcExists(kVhExe) != 1)
+        LogMsg(L"vh: VestaHome gone");
 }
 
 static int DelTree(const wchar_t* dir);

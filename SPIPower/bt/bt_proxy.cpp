@@ -36,8 +36,12 @@ static int LogOn()
     static DWORD s_checked;
     if (GetTickCount() - s_checked > 10000) {
         s_checked = GetTickCount();
+#ifdef BT_HOST   // (in the stub there is no proxy, nor its flag: the tester 2026-11-20 - no BTProxy.log, PAN failed unseen)
+        s_logging = GetFileAttributesW(L"\\SDMMC\\VestaLogs.on") != 0xFFFFFFFF;
+#else
         s_logging = GetFileAttributesW(L"\\SDMMC\\SPIPower.on") != 0xFFFFFFFF &&
                     GetFileAttributesW(L"\\SDMMC\\VestaLogs.on") != 0xFFFFFFFF;
+#endif
     }
     return s_logging;
 }
