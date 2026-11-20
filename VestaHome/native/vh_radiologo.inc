@@ -369,6 +369,18 @@ static const wchar_t* RadioNow(const Tuner& t, bool* logo)
     const wchar_t* shown = table ? table : t.ps[0] ? t.ps : learned;
     if (!has && t.f10 > 0 && shown[0])
         RadioNetWant(shown);   // (not in the set: from the net)
+    // the log, once per station (the tester 2026-11-20: no logos, the names they were looked for by unknown)
+    static int s_loggedF10;
+    static bool s_loggedPs, s_loggedHas;
+    if (t.f10 > 0 && (t.f10 != s_loggedF10 || (t.ps[0] != 0) != s_loggedPs || has != s_loggedHas)) {
+        s_loggedF10 = t.f10;
+        s_loggedPs = t.ps[0] != 0;
+        s_loggedHas = has;
+        double lat, lon;
+        VLog(L"радио: %d.%02d МГц — по таблице «%s»%s, RDS «%s», логотип %s", t.f10 / 100, t.f10 % 100,
+             table ? table : L"", RadioPlace(&lat, &lon) ? L"" : L" (нет места: GPS или домашняя точка)", t.ps,
+             has ? L"есть" : L"нет");
+    }
     return shown;
 }
 
