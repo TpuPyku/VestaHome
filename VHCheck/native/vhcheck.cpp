@@ -726,6 +726,14 @@ static void Mcu()
         info();
     if (bt)
         bt();
+    // the versions (0x7902) come after key 0x9B - as the stock shell at its start (VHCheck 1.1 on 4120 / 4125: none to
+    // the product info alone); pressed, released
+    typedef int (*Fn3)(int, int, int);
+    Fn3 key = (Fn3)GetProcAddress(sp, L"SPApi_SendKeyEvent");
+    if (key) {
+        key(0x9B, 0, 0);
+        key(0x9B, 1, 1);
+    }
     Sleep(20000);
     EnterCriticalSection(&s_cs);
     wchar_t codes[400] = L"";
@@ -900,7 +908,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    Log(L"=== VHCheck 1.1: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
+    Log(L"=== VHCheck 1.2: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
         ms.dwAvailPhys / 1024, ms.dwTotalPhys / 1024);
     bool th = Toolhelp();
     Firmware();

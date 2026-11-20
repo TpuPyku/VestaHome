@@ -41,7 +41,7 @@
 | `SPApi_SendRadioAutoManualModel` | `0x4404` | 1 |  |
 | `SPApi_SendRadioSKDeMute` | `0x4405` |  |  |
 | `SPApi_SendRadioReceivedRVCStatus` | `0x4406` | 1 | (0) — оболочка подтверждает конец заднего хода |
-| `SPApi_SendRadioRequestProductInfo` | `0x4409` |  | запрос версий/ID → 0x7902, 0x4111, 0x4112, 0x4118 |
+| `SPApi_SendRadioRequestProductInfo` | `0x4409` |  | запрос ID → 0x4111, 0x4112, 0x4118 (версии 0x7902 — после клавиши 0x9B, VHCheck 20.11) |
 | `SPApi_SysSendRadioBackLight` | `0x4410` | 1 | яркость подсветки 1..10 текущего режима день/ночь (у экрана на деле два уровня) |
 | `SPApi_SendRadioNaviMediaMuteStatus` | `0x4414` | 1 | приглушение медиа под навигацию — оболочка |
 | `SPApi_SendRadioNaviLanguage` | `0x4416` | 1 |  |

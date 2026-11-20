@@ -636,6 +636,10 @@ static void McuRequest()
 {
     if (McuSend0("SPApi_SendRadioRequestProductInfo")) {
         McuSend0("SPApi_SendRadioRequestBTAddress");
+        // the MCU's versions (0x7902) come after key 0x9B, as the stock shell sends it at its start - not after the
+        // product info (VHCheck 4120 / 4125 2026-11-20: only 0x4111/4112/4118/7922; SPIPower.log: 0x9B -> 0x4102 00 05
+        // and 0x7902 x2)
+        McuKey(0x9B, false);
         wcscpy(s_status, L"запрос сведений → MCU");
     }
 }
