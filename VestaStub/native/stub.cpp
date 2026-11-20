@@ -35,6 +35,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "callroute.h"
 #include "stockwatch.h"
+#include "clockfix.h"   // (VestaHome's native\: the MCU's clock without its date)
 #include "stb_image.h"
 
 static const int kMaxFails = 3;
@@ -518,23 +519,18 @@ static void SkelHandle(void* self, unsigned char* p)
     int code = p[0] << 8 | p[1];
     RingRecord(((Skel*)self)->id, code, p[2], p + 3);
     switch (code) {
-    case 0x3901: {   // the MCU's clock: hour, minute, second, year - 2000, month, day -> the system's (CClock)
+    case 0x3901: {   // the MCU's clock: hour, minute, second, year - 2000, month, day -> the system's (CClock);
+                     // its date lost (2005, HU 2026-11-20): the time of day only, while the system's date is no real one
         SYSTEMTIME t;
-        memset(&t, 0, sizeof(t));
-        t.wHour = p[4];
-        t.wMinute = p[5];
-        t.wSecond = p[6];
-        t.wYear = (WORD)(2000 + p[7]);
-        t.wMonth = p[8];
-        t.wDay = p[9];
-        if (t.wHour < 24 && t.wMinute < 60 && t.wSecond < 60 && t.wMonth >= 1 && t.wMonth <= 12 && t.wDay >= 1 &&
-            t.wDay <= 31 && p[7] >= 20) {
+        GetLocalTime(&t);
+        int how = McuClock(p + 3, t.wYear, &t);
+        if (how != MCLK_NONE)
             SetLocalTime(&t);
+        if (how == MCLK_FULL)
             Log(L"mcu: часы %02d:%02d:%02d %02d.%02d.%04d", t.wHour, t.wMinute, t.wSecond, t.wDay, t.wMonth, t.wYear);
-        } else {   // (2026-11-20: the clock stayed at 00:00 after the engine off / on - what the MCU sent, whole)
-            Log(L"mcu: часы MCU не приняты (нет даты): %02X %02X %02X %02X %02X %02X %02X", p[3], p[4], p[5], p[6], p[7],
-                p[8], p[9]);
-        }
+        else
+            Log(L"mcu: часы MCU %s: %02X %02X %02X %02X %02X %02X %02X", how == MCLK_TIME ? L"без даты - взято время суток"
+                : L"не приняты", p[3], p[4], p[5], p[6], p[7], p[8], p[9]);
         break;
     }
     case 0x310E: {   // the MCU asks for a source's sound path: the route (5 - 3, 6..10 - 2), then "unmute it"

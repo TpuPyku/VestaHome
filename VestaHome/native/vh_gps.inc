@@ -1012,6 +1012,59 @@ static void ClockWatchTick()   // once a second
     ClockSet(t);
 }
 
+// The date from the net (HU 2026-11-20: a car first fitted with the screenless unit - no GPS lines, the MCU's date
+// 2005 after each engine off): while the clock has no real date, a server's Date once a minute (in its own thread; no
+// net - nothing but a failed request); the UI thread sets it (WM_APP_NETTIME) with the zone, the MCU's too.
+#define WM_APP_NETTIME (WM_APP + 34)
+static SYSTEMTIME s_ntUtc;
+static volatile LONG s_ntBusy;
+
+static DWORD WINAPI NetTimeThread(LPVOID)
+{
+    char date[40] = "";
+    HttpExtra x = { NULL, NULL, 0, date, sizeof(date) };
+    unsigned char* body = NULL;
+    int len = 0, status = 0;
+    HttpGet("ya.ru", false, "/", &body, &len, &status, 0, 0, 0, &x);
+    free(body);
+    SYSTEMTIME t;
+    if (HttpDate(date, &t) && t.wYear >= 2020) {
+        s_ntUtc = t;
+        PostMessage(s_wnd, WM_APP_NETTIME, 0, 0);
+    }
+    InterlockedExchange((LONG*)&s_ntBusy, 0);
+    return 0;
+}
+
+static void NetTimeTick()   // once a second
+{
+    static DWORD s_ntTick;
+    SYSTEMTIME now;
+    GetLocalTime(&now);
+    if (!s_cfg.gpsTime || now.wYear >= 2020 || (s_ntTick && GetTickCount() - s_ntTick < 60000))
+        return;
+    s_ntTick = GetTickCount() | 1;
+    if (InterlockedExchange((LONG*)&s_ntBusy, 1))
+        return;
+    HANDLE h = CreateThread(NULL, 0, NetTimeThread, NULL, 0, NULL);
+    if (h)
+        CloseHandle(h);
+    else
+        InterlockedExchange((LONG*)&s_ntBusy, 0);
+}
+
+static void NetTimeTake()   // WM_APP_NETTIME
+{
+    SYSTEMTIME t = s_ntUtc, now;
+    GetLocalTime(&now);
+    if (now.wYear >= 2020 || !AddMinutes(&t, s_cfg.tzMin))   // (GPS was first)
+        return;
+    VLog(L"часы: дата из сети %02u.%02u.%04u %02u:%02u:%02u (UTC%+d мин), было %02u.%02u.%04u %02u:%02u", t.wDay,
+         t.wMonth, t.wYear, t.wHour, t.wMinute, t.wSecond, s_cfg.tzMin, now.wDay, now.wMonth, now.wYear, now.wHour,
+         now.wMinute);
+    ClockSet(t);
+}
+
 static int TzMinutes()
 {
     return s_cfg.tzMin;

@@ -73,6 +73,7 @@
 #include "photo.h"
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
+#include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
 #include "../../VHCheck/native/pecheck.h"   // FwVersion: the shell's SW number from its own string
 #include "wglayout.h"  // the main screen's widgets in their places
 #include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)
@@ -684,6 +685,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             PairTick();
             BtOwnerTick();
             ClockWatchTick();
+            NetTimeTick();
             TripTick();
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)
                 static DWORD s_tripSig;
@@ -964,6 +966,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_APP_UWG:   // a widget's url fetched: its data read at the next second
         for (int u = 0; u < s_uwCount; u++)
             s_uw[u].readTick = 0;
+        return 0;
+    case WM_APP_NETTIME:   // the date from the net (vh_gps.inc)
+        NetTimeTake();
         return 0;
     case WM_APP_RADIOLOGO:   // a radio station's logo from the net (vh_radiologo.inc)
         if (RadioNetTake((int)wp) && IsWindowVisible(hwnd) && !s_drag)
