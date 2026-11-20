@@ -531,6 +531,9 @@ static void SkelHandle(void* self, unsigned char* p)
             t.wDay <= 31 && p[7] >= 20) {
             SetLocalTime(&t);
             Log(L"mcu: часы %02d:%02d:%02d %02d.%02d.%04d", t.wHour, t.wMinute, t.wSecond, t.wDay, t.wMonth, t.wYear);
+        } else {   // (2026-11-20: the clock stayed at 00:00 after the engine off / on - what the MCU sent, whole)
+            Log(L"mcu: часы MCU не приняты (нет даты): %02X %02X %02X %02X %02X %02X %02X", p[3], p[4], p[5], p[6], p[7],
+                p[8], p[9]);
         }
         break;
     }
