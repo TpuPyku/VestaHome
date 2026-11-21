@@ -894,6 +894,17 @@ static void DoActionOn(const Btn& b)
         BtCmdText(BT_CMD_CONNECT, t);
         break;
     }
+    case A_VOICEDIAL: {   // the phone's assistant through Bluetooth (a probe: the answer in BTProxy.log)
+        BtState bt;
+        if (!BtGet(&bt, NULL) || bt.hf != 2) {
+            wcscpy(s_status, L"телефон не подключён по Bluetooth (звонки)");
+            break;
+        }
+        BtCmdText(BT_CMD_VOICEDIAL, L"1");
+        wcscpy(s_status, L"помощник телефона: команда послана — говорите");
+        VLog(L"помощник телефона: голосовой набор (Hf_VoiceDial) послан");
+        break;
+    }
     case A_RVCVIEW:   // the camera's picture now, whatever the gear (powered only in reverse? - to be seen)
         s_rvcManual = true;
         s_rvcManualTick = GetTickCount();

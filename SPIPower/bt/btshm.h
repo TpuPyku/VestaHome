@@ -76,7 +76,10 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
                        (it ends in a thread of its own: event 0x02) / Flc_Bluetooth_Init + EnablePairIndForApp(1)
                        (event 0x01); never PowerOff - the shell does not, it unloads the stack's drivers. While off
                        every export answers "failed" (1) and every other command -3 (the stack's locks are gone);
-                       the state in BtShm::power */ };
+                       the state in BtShm::power */,
+       BT_CMD_VOICEDIAL /* cmdText "1" / "0": the phone's voice assistant through the hands-free link (the user
+                       2026-11-21, the probe: Alice as the phone's assistant) - Flc_Bluetooth_Hf_VoiceDial(on, 0):
+                       r0 on, r1 the phone's line (as Hf_Answer's; capstone 2026-11-21) */ };
 enum { BT_POW_ON, BT_POW_GOING_OFF, BT_POW_OFF, BT_POW_GOING_ON };   // (0: a proxy older than it - on)
 enum { BT_PAN_IDLE, BT_PAN_CONNECTING, BT_PAN_ONLINE, BT_PAN_FAILED };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };

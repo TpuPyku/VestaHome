@@ -732,6 +732,11 @@ static DWORD WINAPI CmdThread(LPVOID)
             char a[40];
             CopyText(a, s_shm->cmdText, 18);
             r = ((int (*)(char*))g_real[IDX_Flc_Bluetooth_Spp_SetAddr])(a);
+        } else if (cmd == BT_CMD_VOICEDIAL) {   // the phone's assistant (AT+BVRA): on / off, line 0
+            r = ((int (*)(int, int))g_real[IDX_Flc_Bluetooth_Hf_VoiceDial])(s_shm->cmdText[0] == '1', 0);
+            wchar_t b[64];
+            wsprintfW(b, L"VOICEDIAL %d -> %d", s_shm->cmdText[0] == '1', r);
+            LogLine(b);
         } else if (cmd == BT_CMD_PAN) {   // the phone's internet: connect to its NAP (0x1116), or let it go
             char a[40];
             CopyText(a, s_shm->cmdText, 18);

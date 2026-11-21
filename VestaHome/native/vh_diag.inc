@@ -15,7 +15,9 @@ static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L
                                 { L"Кнопки · MCU", A_SCREEN, S_TEST_MCU }, { L"Звук", A_SCREEN, S_TEST_AV },
                                 { L"GPS · CAN · Поток", A_SCREEN, S_TEST_CAN },
                                 { L"Камера заднего хода", A_RVCVIEW, 0 },   // (the user 2026-10-29: here, not in "Car")
-                                { L"Текстовые файлы", A_TEXTFILES, 0 } };
+                                { L"Текстовые файлы", A_TEXTFILES, 0 },
+                                // the phone's assistant by Bluetooth (the user 2026-11-21: a probe - does Alice start)
+                                { L"Помощник телефона", A_VOICEDIAL, 0 } };
                                 // ("Перезапуск Bluetooth" gone: the user 2026-11-16)
 
 static int   s_modemState;   // the USB modem's driver (vh_gps.inc ModemUsbSet): 0 not yet, 1 registered, -1 failed
