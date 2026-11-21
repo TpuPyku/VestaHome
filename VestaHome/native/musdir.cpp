@@ -73,3 +73,49 @@ int DirList(const wchar_t* dir, wchar_t** v, int cap, bool folders, DirWant want
     *cut = !fits;
     return n;
 }
+
+// One folder of the tree (sub: its path inside the top, "" or "A\B\"): its own files, then its subfolders.
+static void TreeIn(const wchar_t* top, const wchar_t* sub, wchar_t** v, int* n, int cap, DirWant want, int depth,
+                   bool* cut)
+{
+    enum { kLevel = 2000 };   // the entries of one folder (a card's root with 400+ files)
+    wchar_t dir[MAX_PATH];
+    _snwprintf(dir, MAX_PATH, L"%s%s", top, sub);
+    dir[MAX_PATH - 1] = 0;
+    wchar_t** e = (wchar_t**)malloc(kLevel * sizeof(wchar_t*));
+    if (!e)
+        return;
+    bool more;
+    int k = DirList(dir, e, kLevel, depth > 0, want, &more);
+    int folders = 0;
+    while (folders < k && e[folders][wcslen(e[folders]) - 1] == L'\\')
+        folders++;
+    for (int i = folders; i < k; i++) {   // the files
+        if (*n == cap) {
+            *cut = true;
+            break;
+        }
+        wchar_t p[MAX_PATH];
+        _snwprintf(p, MAX_PATH, L"%s%s", sub, e[i]);
+        p[MAX_PATH - 1] = 0;
+        v[*n] = _wcsdup(p);
+        if (v[*n])
+            (*n)++;
+    }
+    for (int i = 0; i < folders && !*cut; i++) {   // then each subfolder
+        wchar_t s[MAX_PATH];
+        _snwprintf(s, MAX_PATH, L"%s%s", sub, e[i]);
+        s[MAX_PATH - 1] = 0;
+        TreeIn(top, s, v, n, cap, want, depth - 1, cut);
+    }
+    DirFree(e, k);
+    free(e);
+}
+
+int DirTree(const wchar_t* dir, wchar_t** v, int cap, DirWant want, int depth, bool* cut)
+{
+    int n = 0;
+    *cut = false;
+    TreeIn(dir, L"", v, &n, cap, want, depth, cut);
+    return n;
+}

@@ -190,45 +190,6 @@ static int ReadMusicDir(const wchar_t* dir, wchar_t** v, int cap, bool folders, 
     return n;
 }
 
-// Folder `dir` with all its subfolders (up to 6 deep): the audio files as paths inside it ("Artist\Album\01.mp3"),
-// sorted by path - disc, artist, album, track. For "ИГРАТЬ ВСЁ".
-static int ReadMusicTree(const wchar_t* dir, const wchar_t* sub, wchar_t** v, int n, int cap, int depth)
-{
-    wchar_t pat[MAX_PATH];
-    _snwprintf(pat, MAX_PATH, L"%s%s*", dir, sub);
-    pat[MAX_PATH - 1] = 0;
-    WIN32_FIND_DATA fd;
-    HANDLE h = FindFirstFile(pat, &fd);
-    if (h == INVALID_HANDLE_VALUE)
-        return n;
-    int first = n;
-    do {
-        bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        if (fd.cFileName[0] == L'.' || (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN))
-            continue;
-        if (isDir) {
-            if (depth < 6) {
-                wchar_t s2[MAX_PATH];
-                _snwprintf(s2, MAX_PATH, L"%s%s\\", sub, fd.cFileName);
-                s2[MAX_PATH - 1] = 0;
-                n = ReadMusicTree(dir, s2, v, n, cap, depth + 1);
-            }
-        } else if (IsAudioName(fd.cFileName)) {
-            size_t len = wcslen(sub) + wcslen(fd.cFileName);
-            wchar_t* p = (wchar_t*)malloc((len + 1) * sizeof(wchar_t));
-            if (!p)
-                break;
-            wcscpy(p, sub);
-            wcscat(p, fd.cFileName);
-            v[n++] = p;
-        }
-    } while (n < cap && FindNextFile(h, &fd));
-    FindClose(h);
-    if (!depth)
-        qsort(v + first, n - first, sizeof(wchar_t*), DirNameCmp);
-    return n;
-}
-
 // The volumes that exist, as entries of a browser ("\SDMemory\" ...).
 static int ReadVolumes(wchar_t** v)
 {
@@ -342,7 +303,10 @@ static bool PlayerLoadDir(const wchar_t* dir, const wchar_t* file, bool tree = f
     wcsncpy(s_plDir, dir, MAX_PATH - 1);
     s_plDir[MAX_PATH - 1] = 0;
     s_cfg.musicTree = tree;
-    s_plCount = tree ? ReadMusicTree(s_plDir, L"", s_pl, 0, kPlMax, 0) : ReadMusicDir(s_plDir, s_pl, kPlMax, false);
+    bool cutTree = false;   // ("Играть всё": the first kPlMax by the paths - musdir.cpp DirTree)
+    s_plCount = tree ? DirTree(s_plDir, s_pl, kPlMax, IsAudioName, 6, &cutTree) : ReadMusicDir(s_plDir, s_pl, kPlMax, false);
+    if (cutTree)
+        _snwprintf(s_status, 96, L"играют первые %d треков (по папкам)", kPlMax);
     s_plCur = -1;
     if (!s_plCount)
         return false;

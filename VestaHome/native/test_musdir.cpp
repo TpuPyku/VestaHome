@@ -81,6 +81,39 @@ int main()
     Check(n == 0 && !cut, "no folder: nothing");
 
     wchar_t p[MAX_PATH];
+    // "Играть всё" (DirTree): the folder's own files, then each subfolder's, in the order of the paths - cut at cap in
+    // that order, not the disk's (the user 2026-11-20: 400+ files - the first by the disk were taken)
+    Make(L"Rock\\b2.mp3", false);
+    Make(L"Rock\\a2.mp3", false);
+    Make(L"Rock\\Live", true);
+    Make(L"Rock\\Live\\s.mp3", false);
+    Make(L"2001\\z.mp3", false);
+    wchar_t* t[16];
+    int m = DirTree(s_dir, t, 16, Mp3, 6, &cut);
+    Check(m == 8 && !cut, "the whole tree: 8 mp3, nothing cut");
+    Check(m == 8 && !wcscmp(t[0], L"a.mp3") && !wcscmp(t[3], L"d.mp3") && !wcscmp(t[4], L"2001\\z.mp3") &&
+          !wcscmp(t[5], L"Rock\\a2.mp3") && !wcscmp(t[6], L"Rock\\b2.mp3") && !wcscmp(t[7], L"Rock\\Live\\s.mp3"),
+          "own files first, then the subfolders by name - each the same way");
+    DirFree(t, m);
+    m = DirTree(s_dir, t, 6, Mp3, 6, &cut);
+    Check(m == 6 && cut && !wcscmp(t[5], L"Rock\\a2.mp3"), "room for 6: the first 6 by the paths, cut said");
+    DirFree(t, m);
+    m = DirTree(s_dir, t, 16, Mp3, 1, &cut);
+    Check(m == 7 && !cut, "one level deep: Rock\\Live left out");
+    DirFree(t, m);
+    m = DirTree(s_dir, t, 16, Mp3, 2, &cut);
+    Check(m == 8, "two levels deep: Rock\\Live in");
+    DirFree(t, m);
+    m = DirTree(L"Z:\\no_such_dir\\", t, 16, Mp3, 6, &cut);
+    Check(m == 0 && !cut, "no folder: nothing");
+    const wchar_t* tree[] = { L"Rock\\b2.mp3", L"Rock\\a2.mp3", L"Rock\\Live\\s.mp3", L"2001\\z.mp3" };
+    for (int i = 0; i < 4; i++) {
+        _snwprintf(p, MAX_PATH, L"%s%s", s_dir, tree[i]);
+        DeleteFile(p);
+    }
+    _snwprintf(p, MAX_PATH, L"%sRock\\Live", s_dir);
+    RemoveDirectory(p);
+
     const wchar_t* names[] = { L"b.mp3", L"a.mp3", L"c.mp3", L"d.mp3", L"notes.txt" };
     for (int i = 0; i < 5; i++) {
         _snwprintf(p, MAX_PATH, L"%s%s", s_dir, names[i]);
