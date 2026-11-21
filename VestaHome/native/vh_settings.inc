@@ -224,9 +224,14 @@ static void ApplyAccent()
         s_skinAccent = kOrange;
         kept = true;
     }
-    COLORREF a = s_cfg.accent > 0 && s_cfg.accent < kAccentCount ? kAccents[s_cfg.accent].c : s_skinAccent;
+    static COLORREF facet;   // (user_skin.ini's facet, kept)
+    if (s_userFacet && !facet)
+        facet = kFacet | 0x01000000;
+    // user_skin.ini's accent wins over the one chosen in "Тема" (the user 2026-11-19)
+    COLORREF a = !s_userAccent && s_cfg.accent > 0 && s_cfg.accent < kAccentCount ? kAccents[s_cfg.accent].c
+                                                                                    : s_skinAccent;
     kOrange = a;
-    kFacet = Scale(a, 76);
+    kFacet = s_userFacet ? facet & 0xFFFFFF : Scale(a, 76);
     kTriOr[0] = Scale(a, 56);
     kTriOr[1] = Scale(a, 76);
     kTriOr[2] = Scale(a, 66);
@@ -256,6 +261,8 @@ static void ScrSetTheme(HDC dc)
     }
     Settings(dc, S_SET_THEME);
     T(dc, 264, 96, L"Цвет акцента", 19, kText, 700);
+    if (s_userAccent)   // (its own colour wins: the choice below does not apply)
+        T(dc, 768, 96, L"задан в user_skin.ini", 14, kMuted, 400, AL_END);
     for (int i = 0; i < kAccentCount; i++) {   // 4 + 3 tiles: a circle of the colour, its name
         int x = 256 + (i % 4) * 130, y = 112 + (i / 4) * 112;
         bool on = i == s_cfg.accent, d = Zone(x, y, 122, 104, A_ACCENT, i);

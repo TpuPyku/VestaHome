@@ -76,6 +76,7 @@
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
 #include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
 #include "placepick.h" // where the unit is: the fix, the last place, the home point
+#include "skinline.h"  // a line of skin.ini / user_skin.ini
 #include "../../VHCheck/native/pefile.h"   // FwFileVersion: the shell's SW number from its own string
 #include "wglayout.h"  // the main screen's widgets in their places
 #include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)
@@ -87,7 +88,7 @@
 
 static COLORREF kInk      = RGB(0x0e, 0x10, 0x13);   // background
 static COLORREF kPanel    = RGB(0x1a, 0x1d, 0x22);   // cards, tiles, widgets (no borders)
-static const COLORREF kPanel2   = RGB(0x23, 0x27, 0x2e);   // pills, buttons, nested
+static COLORREF kPanel2   = RGB(0x23, 0x27, 0x2e);   // pills, buttons, nested
 static COLORREF kLine     = RGB(0x2a, 0x2f, 0x37);   // separators, tracks
 static COLORREF kText     = RGB(0xf5, 0xf3, 0xee);
 static COLORREF kMuted    = RGB(0xaa, 0xb0, 0xb8);
@@ -96,10 +97,13 @@ static COLORREF kOrange   = RGB(0xff, 0x6b, 0x1a);   // the one accent: action /
 static COLORREF kFacet    = RGB(0xc2, 0x4a, 0x0b);
 static COLORREF kTri[4]   = { RGB(0x17, 0x1a, 0x20), RGB(0x12, 0x14, 0x19), RGB(0x1b, 0x1e, 0x24), RGB(0x0f, 0x11, 0x14) };   // the mosaic's cell: left, right, top, bottom (design 0.6)
 static COLORREF kTriOr[4] = { RGB(0x8f, 0x36, 0x08), RGB(0xc2, 0x4a, 0x0b), RGB(0xa8, 0x3f, 0x09), RGB(0xe6, 0x5a, 0x12) };   // the accent's facets (ApplyAccent)
-static const COLORREF kOff    = RGB(0x3d, 0x42, 0x4a);   // unavailable
-static const COLORREF kOk     = RGB(0x2f, 0xbf, 0x71);   // call
-static const COLORREF kStop   = RGB(0xe8, 0x48, 0x3b);   // hang up, missed call
-static const COLORREF kMargin = RGB(0x08, 0x09, 0x0a);   // around a photo
+static COLORREF kOff    = RGB(0x3d, 0x42, 0x4a);   // unavailable
+static COLORREF kOk     = RGB(0x2f, 0xbf, 0x71);   // call
+static COLORREF kStop   = RGB(0xe8, 0x48, 0x3b);   // hang up, missed call
+static COLORREF kMargin = RGB(0x08, 0x09, 0x0a);   // around a photo
+// user_skin.ini (VHContent\Skin, the user 2026-11-19): its accent / facet given - they win over "Тема"; its font
+static bool    s_userAccent, s_userFacet;
+static wchar_t s_userFace[48], s_userFont[2][MAX_PATH];   // [fonts] face, regular, bold
 
 // ---------------------------------------------------------------- layout
 
@@ -439,11 +443,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_CREATE: {
         s_wnd = hwnd;
         s_back = MakeDib(800, 480, &s_backBits);
+        LoadSkin();   // (before the fonts: user_skin.ini may name its own)
         {
             int nf = FontsLoad();
             VLog(L"шрифт: %s (своих загружено %d из 2)", s_face, nf);
         }
-        LoadSkin();
         BuildBackground();
 #ifdef UNDER_CE
         s_taskbar = FindWindow(L"HHTaskBar", NULL);

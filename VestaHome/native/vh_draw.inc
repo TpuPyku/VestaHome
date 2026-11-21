@@ -791,6 +791,12 @@ static const wchar_t* s_face = L"Tahoma";
 
 static int FontsLoad()   // the fonts taken (2 = both: the face is ours)
 {
+    if (s_userFace[0] && s_userFont[0][0] && AddFontResource(s_userFont[0]) > 0) {   // user_skin.ini [fonts]
+        if (s_userFont[1][0])
+            AddFontResource(s_userFont[1]);
+        s_face = s_userFace;
+        return 2;
+    }
     static const wchar_t* files[3] = { L"GolosText-Regular.ttf", L"GolosText-Bold.ttf", L"OFL.txt" };
     int ok = 0;
     for (int i = 0; i < 2; i++) {

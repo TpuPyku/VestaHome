@@ -16,6 +16,11 @@ static const SkinColor kSkinColors[] = {
     { L"mosaic2", &kTri[1],  "" },
     { L"mosaic3", &kTri[2],  "" },
     { L"mosaic4", &kTri[3],  "" },
+    { L"panel2",  &kPanel2,  "pills, buttons, nested cards" },
+    { L"off",     &kOff,     "unavailable" },
+    { L"ok",      &kOk,      "call" },
+    { L"stop",    &kStop,    "hang up, missed call" },
+    { L"margin",  &kMargin,  "around a photo" },
 };
 
 // PNG icon into premultiplied RGBA. Up to 256 x 256: icons only, keeps memory bounded.
@@ -42,72 +47,102 @@ static bool LoadImg(const wchar_t* path, Img* im)
     return true;
 }
 
-// Skin\skin.ini: [colors] name=RRGGBB, [images] name=file.png (in the Skin folder). Read once at start.
-static void LoadSkin()
+// One skin file (skin.ini, or user_skin.ini: user - only its lines, they win; its accent / facet / fonts noted):
+// [colors] name = RRGGBB, [images] name = file in dir, [fonts] face / regular / bold (the user's only).
+static void SkinFile(const wchar_t* path, const wchar_t* dir, bool user)
 {
-    wchar_t path[MAX_PATH];
-    _snwprintf(path, MAX_PATH, L"%sSkin\\skin.ini", s_dir);
     DWORD size;
     char* buf = ReadAll(path, &size);
     if (!buf)
         return;
-    bool images = false;
+    int section = SKS_COLORS;
     char* p = Utf8Text(buf);
-    wchar_t line[300];
+    wchar_t line[300], key[32], val[MAX_PATH];
+    COLORREF c;
     while (NextUtf8Line(&p, line, 300)) {
-        wchar_t* semi = wcschr(line, L';');
-        if (semi)
-            *semi = 0;
-        Trim(line);
-        if (line[0] == L'[') {
-            images = !_wcsicmp(line, L"[images]");
-            continue;
-        }
-        wchar_t* eq = wcschr(line, L'=');
-        if (!eq)
-            continue;
-        *eq = 0;
-        wchar_t* val = eq + 1;
-        Trim(line);
-        Trim(val);
-        if (!images) {
-            if (*val == L'#')
-                val++;
-            wchar_t* e;
-            unsigned long v = wcstoul(val, &e, 16);
-            if (e - val != 6)
-                continue;
+        int kind = SkinLine(line, &section, key, 32, val, MAX_PATH - 64, &c);
+        if (kind == SKL_COLOR) {
             for (int k = 0; k < (int)(sizeof(kSkinColors) / sizeof(kSkinColors[0])); k++)
-                if (!_wcsicmp(line, kSkinColors[k].key))
-                    *kSkinColors[k].c = RGB(v >> 16, (v >> 8) & 255, v & 255);
+                if (!_wcsicmp(key, kSkinColors[k].key))
+                    *kSkinColors[k].c = c;
+            s_userAccent = s_userAccent || (user && !_wcsicmp(key, L"accent"));
+            s_userFacet = s_userFacet || (user && !_wcsicmp(key, L"facet"));
             continue;
         }
-        if (!val[0])
+        if (kind != SKL_FILE)
             continue;
         wchar_t file[MAX_PATH];
-        _snwprintf(file, MAX_PATH, L"%sSkin\\%s", s_dir, val);
+        _snwprintf(file, MAX_PATH, L"%s%s", dir, val);
         file[MAX_PATH - 1] = 0;
-        if (!_wcsicmp(line, L"background")) {
-            wcscpy(s_skinBg, file);
+        if (section == SKS_FONTS) {
+            if (user && !_wcsicmp(key, L"face"))
+                wcsncpy(s_userFace, val, 47);
+            else if (user && (!_wcsicmp(key, L"regular") || !_wcsicmp(key, L"bold")))
+                wcscpy(s_userFont[!_wcsicmp(key, L"bold")], file);
             continue;
         }
-        if (!_wcsicmp(line, L"saver")) {
-            wcscpy(s_skinSaver, file);
+        wchar_t* named = !_wcsicmp(key, L"background") ? s_skinBg : !_wcsicmp(key, L"saver") ? s_skinSaver
+                       : !_wcsicmp(key, L"tile") ? s_skinTile : NULL;
+        if (named) {
+            wcscpy(named, file);
             continue;
         }
-        if (!_wcsicmp(line, L"tile")) {
-            wcscpy(s_skinTile, file);
-            continue;
-        }
-        int len = (int)wcslen(line);
-        int down = len > 5 && !_wcsicmp(line + len - 5, L"_down");
+        int len = (int)wcslen(key);
+        int down = len > 5 && !_wcsicmp(key + len - 5, L"_down");
         if (down)
-            line[len - 5] = 0;
+            key[len - 5] = 0;
         for (int ic = 0; ic < IC_COUNT; ic++)   // kept by name: loaded at its first use (Ico) - only the drawn ones
-            if (kIconKey[ic] && !_wcsicmp(line, kIconKey[ic]) && !s_iconPath[ic][down] && !s_icons[ic][down].px)
+            if (kIconKey[ic] && !_wcsicmp(key, kIconKey[ic]) && !s_icons[ic][down].px) {
+                free(s_iconPath[ic][down]);
                 s_iconPath[ic][down] = _wcsdup(file);
+            }
     }
     free(buf);
+}
+
+// A picture of the skin with the same file name in the user's folder: that one (VHContent\Skin\radio.png over
+// Skin\radio.png - the user 2026-11-19).
+static void SkinUserFile(wchar_t* path, const wchar_t* udir)
+{
+    if (!path || !path[0])
+        return;
+    const wchar_t* name = wcsrchr(path, L'\\');
+    wchar_t u[MAX_PATH];
+    _snwprintf(u, MAX_PATH, L"%s%s", udir, name ? name + 1 : path);
+    u[MAX_PATH - 1] = 0;
+    if (GetFileAttributes(u) != 0xFFFFFFFF && wcslen(u) < MAX_PATH)
+        wcscpy(path, u);
+}
+
+// Skin\skin.ini (the installer's), then VHContent\Skin\user_skin.ini on top (the partition's wins over the SD
+// card's; the updates never touch it) and the user's pictures of the same names. Read once at start.
+static void LoadSkin()
+{
+    wchar_t path[MAX_PATH], dir[MAX_PATH], udirs[kContentDirs][MAX_PATH];
+    _snwprintf(dir, MAX_PATH, L"%sSkin\\", s_dir);
+    _snwprintf(path, MAX_PATH, L"%sskin.ini", dir);
+    SkinFile(path, dir, false);
+    int nd = VhContentDirs(L"Skin", udirs);
+    for (int i = nd - 1; i >= 0; i--) {
+        _snwprintf(path, MAX_PATH, L"%suser_skin.ini", udirs[i]);
+        if (GetFileAttributes(path) != 0xFFFFFFFF)
+            VLog(L"оформление: %s", path);
+        SkinFile(path, udirs[i], true);
+        SkinUserFile(s_skinBg, udirs[i]);
+        SkinUserFile(s_skinSaver, udirs[i]);
+        SkinUserFile(s_skinTile, udirs[i]);
+        for (int ic = 0; ic < IC_COUNT; ic++)
+            for (int d = 0; d < 2; d++)
+                if (s_iconPath[ic][d] && wcslen(s_iconPath[ic][d]) < MAX_PATH - 1) {
+                    wchar_t q[MAX_PATH];
+                    wcscpy(q, s_iconPath[ic][d]);
+                    SkinUserFile(q, udirs[i]);
+                    if (wcscmp(q, s_iconPath[ic][d])) {
+                        free(s_iconPath[ic][d]);
+                        s_iconPath[ic][d] = _wcsdup(q);
+                    }
+                }
+    }
 }
 
 #ifndef UNDER_CE
