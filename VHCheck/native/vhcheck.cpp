@@ -879,6 +879,56 @@ static void CoverTry(const CanWin& c)
         Log(L"  вылезла через %d мс", overAt);
 }
 
+// What VestaHome would do on the CAN panel (the user 2026-11-21): ours in front, the panel's windows hidden for 15 s -
+// one shown again by itself hidden again at once (counted); ours still in front? Then all put back and asked: is the
+// panel's bar there again and does it work.
+static void HideKeep(const CanWin& c)
+{
+    HWND me = CreateWindowEx(WS_EX_TOPMOST, L"VHCheck_Cover", L"VHCheck", WS_POPUP | WS_VISIBLE, 0, 0,
+                             GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), NULL, NULL,
+                             GetModuleHandle(NULL), NULL);
+    if (!me) {
+        Sum(L"VestaHome-опыт: наше окно не создалось");
+        return;
+    }
+    SetForegroundWindow(me);
+    int reshown = 0, lostFront = 0, firstAt = -1;
+    for (int ms = 0; ms < 15000; ms += 200) {
+        for (int i = 0; i < c.n; i++)
+            if (IsWindowVisible(c.w[i])) {
+                if (ms > 0) {   // (at 0: our first hiding)
+                    reshown++;
+                    if (firstAt < 0)
+                        firstAt = ms;
+                }
+                SetWindowPos(c.w[i], HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                ShowWindow(c.w[i], SW_HIDE);
+            }
+        if (GetForegroundWindow() != me) {
+            lostFront++;
+            SetForegroundWindow(me);
+        }
+        MSG msg;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+            DispatchMessage(&msg);
+        Sleep(200);
+    }
+    DestroyWindow(me);
+    PutBack(c);
+    Sleep(500);
+    int back = 0;
+    for (int i = 0; i < c.n; i++)
+        back += c.vis[i] && IsWindowVisible(c.w[i]) ? 1 : 0;
+    Sum(L"VestaHome-опыт 15 с (наше впереди, окна панели прячем): показывалась сама %d раз%s, наше окно теряло "
+        L"передний план %d раз; после возврата видимых окон панели %d", reshown, firstAt >= 0 ? L" (первый — см. ниже)"
+        : L"", lostFront, back);
+    if (firstAt >= 0)
+        Log(L"  первый раз через %d мс", firstAt);
+    int ok = MessageBox(NULL, L"Полоса CAN-панели внизу снова видна и работает (кнопки нажимаются)?", L"VHCheck",
+                        MB_YESNO | MB_TOPMOST);
+    Sum(L"VestaHome-опыт: после возврата панель %s (ответ)", ok == IDYES ? L"видна и работает" : L"НЕ работает");
+}
+
 static void CanPanel()
 {
     CanWin c;
@@ -894,13 +944,15 @@ static void CanPanel()
         top += c.vis[i] && (c.ex[i] & WS_EX_TOPMOST) ? 1 : 0;
     Sum(L"can_panel.exe: окон %d, видимых поверх всех %d", c.n, top);
     if (!c.n || MessageBox(NULL, L"Проверить окно CAN-панели? На 5 с оно будет спрятано, затем на 5 с экран закроет "
-                           L"чёрное окно VHCheck. Потом всё вернётся как было.", L"VHCheck",
+                           L"чёрное окно VHCheck, затем ещё на 15 с - чёрное окно, а панель спрятана (как сделает "
+                           L"VestaHome). Потом всё вернётся как было и будет вопрос.", L"VHCheck",
                            MB_YESNO | MB_TOPMOST) != IDYES) {
         Log(L"  проверка окна CAN-панели пропущена");
         return;
     }
     HideTry(c);
-    CoverTry(c);
+    CoverTry(c);   // (registers VHCheck_Cover: HideKeep's window too)
+    HideKeep(c);
 }
 
 #endif   // (the unit only)
@@ -924,7 +976,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    Log(L"=== VHCheck 1.4: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
+    Log(L"=== VHCheck 1.5: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
         ms.dwAvailPhys / 1024, ms.dwTotalPhys / 1024);
     bool th = Toolhelp();
     Firmware();
