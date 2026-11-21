@@ -675,7 +675,9 @@ static void NavChipTap()
 }
 
 // A command from an add-on's window from (WM_COPYDATA). Unknown commands and fields are passed over.
-static void PlugReceive(HWND from, const wchar_t* cmd)
+// An add-on's command; the answer to WM_COPYDATA (1 taken; "voice on=1" on our own music: 2 - play on your own
+// output, we turned ours down).
+static int PlugReceive(HWND from, const wchar_t* cmd)
 {
     wchar_t verb[24], id[24], v[96];
     int n = 0;
@@ -687,7 +689,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
     if (!wcscmp(verb, L"hello")) {
         VhapField(cmd, L"id", id, 24);
         if (!id[0])
-            return;
+            return 1;
         Plugin* p = PlugById(id);
         if (!p && s_plugN < kPlugMax) {   // started from elsewhere: known from now
             p = &s_plug[s_plugN++];
@@ -695,7 +697,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             wcscpy(p->id, id);
         }
         if (!p)
-            return;
+            return 1;
         p->hwnd = VhapField(cmd, L"hwnd", v, 16) ? (HWND)wcstoul(v, NULL, 16) : from;
         if (!p->hwnd)
             p->hwnd = from;
@@ -713,16 +715,26 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
                  s_unitId);
         if (s_screen == S_SET_PLUGINS && IsWindowVisible(s_wnd))
             Redraw();
-        return;
+        return 1;
     }
     Plugin* p = PlugByWnd(from);
     if (!p && VhapField(cmd, L"from", id, 24))
         p = PlugById(id);
     if (!p)
-        return;   // not said hello
+        return 1;   // not said hello
     if (!wcscmp(verb, L"voice")) {   // an add-on's voice prompt: the radio down while it speaks (as the beep's)
         VhapField(cmd, L"on", v, 4);
-        s_plugVoice = v[0] == L'1';
+        bool on = v[0] == L'1';
+        if (!BeepRoute(s_src, 1).navi) {   // our own music plays (the media source): no radio to turn down - it
+            PlayerDuck(on);                // turned down by us, the add-on plays on its own output (answer 2)
+            if (!on && s_plugVoice) {      // (begun over the radio, the source changed since: the radio back)
+                s_plugVoice = false;
+                if (!s_voice)
+                    NaviVoice(false);
+            }
+            return 2;
+        }
+        s_plugVoice = on;
         if (s_plugVoice || !s_voice)
             NaviVoice(s_plugVoice);
     } else if (!wcscmp(verb, L"sound") && VhapField(cmd, L"on", v, 4) && v[0] == L'0') {
@@ -783,7 +795,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             k++;
         if (k == p->nw) {
             if (wcscmp(verb, L"widget") || k == kPlugWidgets)
-                return;
+                return 1;
             memset(&p->wg[k], 0, sizeof(PlugWidget));
             wcscpy(p->wg[k].id, id);
             p->nw++;
@@ -792,7 +804,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
                 PlugWidgetImage(*p, p->wg[k]);
             UserWidgetsScan();   // a new one: on the list (and in "Widgets of home"), hidden or not as set
             Redraw();
-            return;
+            return 1;
         }
         PlugWidgetSet(p->wg[k], cmd);
         PlugWidgetCopy(*p, p->wg[k]);
@@ -812,7 +824,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         PlugScreen* s = PlugScreenOf(*p, id);
         if (!s) {
             if (p->ns == kPlugScreens)
-                return;
+                return 1;
             s = &p->sc[p->ns++];
             memset(s, 0, sizeof(*s));
             wcscpy(s->id, id);
@@ -852,14 +864,14 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         VhapField(cmd, L"screen", v, 24);
         PlugScreen* s = PlugScreenOf(*p, v);
         if (!s)
-            return;
+            return 1;
         VhapField(cmd, L"id", id, 24);
         int k = 0;
         while (k < s->n && wcscmp(s->it[k].id, id))
             k++;
         if (k == s->n) {
             if (wcscmp(verb, L"item") || k == kPlugItems)
-                return;
+                return 1;
             memset(&s->it[k], 0, sizeof(PlugItem));
             wcscpy(s->it[k].id, id);
             s->n++;
@@ -882,6 +894,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             PlugOpen(*p, s);
         }
     }
+    return 1;
 }
 
 // Each second (and on leaving the screen): "screen.open" / "screen.close" to the add-on whose screen came / went;
