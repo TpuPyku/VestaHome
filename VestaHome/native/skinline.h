@@ -28,7 +28,7 @@ static int SkinSection(const wchar_t* s)
                                                   : !_wcsicmp(s, L"[fonts]") ? SKS_FONTS : SKS_OTHER;
 }
 
-static bool SkinColor(const wchar_t* v, COLORREF* c)   // "RRGGBB" or "#RRGGBB", nothing after
+static bool SkinHex(const wchar_t* v, COLORREF* c)   // "RRGGBB" or "#RRGGBB", nothing after
 {
     if (*v == L'#')
         v++;
@@ -73,7 +73,7 @@ static int SkinLine(wchar_t* line, int* section, wchar_t* key, int keyCap, wchar
     if (!v)
         return SKL_NONE;
     if (*section == SKS_COLORS)
-        return SkinColor(v, c) ? SKL_COLOR : SKL_NONE;
+        return SkinHex(v, c) ? SKL_COLOR : SKL_NONE;
     if ((int)wcslen(v) >= valCap)
         return SKL_NONE;
     wcscpy(val, v);
