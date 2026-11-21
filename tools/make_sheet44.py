@@ -1,0 +1,106 @@
+# The HU check sheet generator, sheet 44 (2026-11-21, after sheet 43's answer): VestaHome 1.0.261121 (own skin
+# user_skin.ini, night dims the pictures, "Занято Android Auto" gone after the cable, "Играть всё" by the folders, the
+# installer without the proxy tick, the last GPS place kept, the radio's logo line), VestaAuto 1.9 (the car's GPS
+# experiment), OSMapsCE 2.1.261121 (favourites: search, star, "Заехать"; prompts), VHCheck 1.5 (the CAN panel's test),
+# the loader's power-off logs. OSMapsCE in one section, its first item: it opened. Then the PDF. (Pattern: 43.)
+import io, subprocess, os, time
+D = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'docs') + os.sep
+OUT = 'checklist-2026-11-21'
+old = io.open(D + 'checklist-2026-11-20.html', encoding='utf-8').read()
+head = old[:old.index('</style>') + len('</style>')]
+SECTIONS = [
+ ('Установка (сначала)', 'VestaHome 1.0.261121, VestaAuto 1.9, OSMapsCE 2.1.261121. Журналы включены.', [
+  ('VestaHome закрыть («О системе» → питание → «Выход»). Tests\\ResidentFlash\\VHContent — в \\ResidentFlash\\VHContent '
+   'с заменой. Tests\\SDCard\\VestaHomeInstall → «УСТАНОВИТЬ / ОБНОВИТЬ». Перезагрузка.',
+   'Отметки «Убрать прежние proxy» нет (одна — «VestaHome + загрузчик»); установка с первого раза; VestaHome работает.'),
+  ('OSMapsCE: Tests\\SDCard\\OSMapsCE — в \\SDMMC\\OSMapsCE с заменой.', 'Файлы заменились.'),
+  ('«О системе»; первые строки VestaAuto.log.', 'VestaHome 1.0.261121; «=== VestaAuto 1.9 запущен».'),
+ ]),
+ ('Своё оформление', 'Файл user_skin.ini в \\ResidentFlash\\VHContent\\Skin\\ (папку создать). Пример — в руководстве, '
+  '«Своё оформление».', [
+  ('В user_skin.ini: [colors] accent = 2E7DD7. Перезапустить VestaHome.', 'Акцент синий; «Настройки → Экран → Тема» — '
+   'справа надпись «задан в user_skin.ini».'),
+  ('Положить в ту же папку свой radio.png (любая PNG-картинка 64×64). Перезапуск.', 'Плитка «Радио» — со своей '
+   'картинкой.'),
+  ('Удалить user_skin.ini и radio.png, перезапуск.', 'Всё как было.'),
+ ]),
+ ('Ночь, музыка, место', None, [
+  ('Ночная тема (кнопка на нижней панели). «Радио» с логотипом станции, «Медиа → Музыка» с обложкой.', 'Логотип и '
+   'обложка темнее, как остальной экран.'),
+  ('«Медиа → Музыка → Список» → папка с подпапками → «Играть всё».', 'Играет по папкам и именам; если треков больше 400 '
+   '— вверху «играют первые 400 треков (по папкам)».'),
+  ('Поездить с GPS, выключить ГУ, включить в месте без спутников (гараж) или до фикса.', 'Погода и названия радио '
+   'есть сразу (по последнему месту), не «нет места».'),
+  ('«Радио»: переключить 3–4 станции.', 'В VestaHome.log строки «радио: … МГц — по таблице «…», RDS «…», логотип '
+   'есть/нет».'),
+ ]),
+ ('Android Auto', 'VestaAuto 1.9.', [
+  ('Android Auto, навигация (Яндекс Карты / Google Maps), телефон с выключенной геолокацией или в кармане; ехать.',
+   'Метка движется по GPS машины. Записать: движется ли.'),
+  ('Музыка в Android Auto, вынуть кабель, «Медиа → Bluetooth».', 'Нет «Занято Android Auto»; Bluetooth-музыка '
+   'включается (без MODE).'),
+ ]),
+ ('OSMapsCE', 'Нужно несколько избранных мест (долгое нажатие на карте → «В избранное»).', [
+  ('Открыть OSMapsCE.', 'OSMapsCE открылась, карта видна.'),
+  ('Нажать на карту (маршрута нет): карточка «Куда едем?», справа от поля — звёздочка. Нажать её.', 'Все избранные '
+   'места по три в ряд; ещё нажатие — снова первые три. Нажатие на место — маршрут туда.'),
+  ('Поиск: набрать часть имени избранного места (например «дом») → «НАЙТИ».', 'Избранные места с этим в имени — '
+   'первыми строками, со своими значками.'),
+  ('Во время маршрута нажать на значок избранного места на карте.', 'Кнопки «Маршрут сюда», «Заехать», «Изменить»; '
+   '«Заехать» добавляет остановку с именем места.'),
+  ('Подсказки с VestaHome: маршрут, радио, затем музыка с SD.', 'Подсказки слышно, как раньше; радио приглушается.'),
+  ('(Если есть машина со штатной оболочкой) подсказки при радио и при музыке, громкость «Громко».', 'Подсказки слышно '
+   'поверх радио и музыки, не хрипят.'),
+ ]),
+ ('Загрузчик: сообщение о выключении', 'Для будущей доработки загрузчика.', [
+  ('Включить ГУ, через 2–3 мин выключить зажигание (журналы включены).', 'Прислать VestaStub.log и SPIPower.log этого '
+   'выключения.'),
+ ]),
+ ('Машины с CAN-панелью (если есть доступ)', 'VHCheck 1.5 — ничего не меняет.', [
+  ('Tests\\SDCard\\VHCheck на SD-карту, запустить VHCheck.exe, на вопрос о проверке окна — «Да», ждать «конец» '
+   '(~1,5 мин).', 'После 15 с чёрного экрана вопрос «Полоса CAN-панели внизу снова видна и работает?» — ответить; '
+   'прислать VestaLogs\\VHCheck.log.'),
+ ]),
+]
+TH = '<table>\n<tr><th>№</th><th>Действие</th><th>Что должно быть</th><th></th><th>Заметки</th></tr>\n'
+ROW = '<tr><td class="n">%d</td><td>%s</td><td>%s</td><td class="ok"></td><td class="memo"></td></tr>\n'
+out = [head, '\n</head>\n<body>\n<h1>Проверки на ГУ — сорок четвёртый лист</h1>\n',
+       '<p class="note">2026-11-21. Лист 43: всё ок, кроме GPS машины в Android Auto (здесь опыт VestaAuto 1.9). '
+       'Новое: своё оформление, затемнение картинок ночью, «Занято Android Auto», «Играть всё», последнее место GPS, '
+       'избранное OSMapsCE, подсказки со штатной оболочкой.</p>\n',
+       '<p class="note">☐ — «сделано», «Заметки» — что увидели. Перед проверкой удалите старые журналы из '
+       '\\SDMemory\\VestaLogs.</p>\n']
+s = k = 0
+for t, note, rows in SECTIONS:
+    s += 1
+    out.append('\n<h2>%d. %s</h2>\n' % (s, t))
+    if note:
+        out.append('<p class="note">%s</p>\n' % note)
+    out.append(TH)
+    for a, b in rows:
+        k += 1
+        out.append(ROW % (k, a, b))
+    out.append('</table>\n')
+s += 1
+out.append('\n<h2>%d. Что прислать</h2>\n<ul>\n<li>\\SDMemory\\VestaLogs\\ целиком (VestaHome, VestaAuto, OSMapsCE, '
+           'VestaStub, SPIPower, BTProxy, VHCheck).</li>\n<li>Этот лист с заметками.</li>\n</ul>\n'
+           '</body>\n</html>\n' % s)
+io.open(D + OUT + '.html', 'w', encoding='utf-8', newline='\n').write(''.join(out))
+print(k, 'items,', s, 'sections')
+EDGE = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+pdf = os.path.abspath(D + OUT + '.pdf')
+tmp = pdf + '.new.pdf'
+if os.path.exists(tmp):
+    os.remove(tmp)
+subprocess.run([EDGE, '--headless', '--disable-gpu', '--no-pdf-header-footer', '--print-to-pdf=' + tmp,
+                'file:///' + os.path.abspath(D + OUT + '.html').replace('\\', '/')], check=True)
+for _ in range(30):
+    if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+        break
+    time.sleep(1)
+time.sleep(1)
+try:
+    os.replace(tmp, pdf)
+    print('pdf', os.path.getsize(pdf))
+except OSError as e:
+    print('pdf open elsewhere, left as', tmp, e)
