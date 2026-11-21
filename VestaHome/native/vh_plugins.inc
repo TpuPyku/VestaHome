@@ -725,6 +725,14 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
         s_plugVoice = v[0] == L'1';
         if (s_plugVoice || !s_voice)
             NaviVoice(s_plugVoice);
+    } else if (!wcscmp(verb, L"sound") && VhapField(cmd, L"on", v, 4) && v[0] == L'0') {
+        // its music is over (the user 2026-11-21: AA's cable out, "Занято Android Auto" stayed till MODE)
+        VLog(L"дополнение %s: своего звука больше нет", p->id);
+        if (s_plugSound == (int)(p - s_plug))
+            s_plugSound = -1;
+        if (s_ap.plug == (int)(p - s_plug))
+            s_ap.have = false;
+        Redraw();
     } else if (!wcscmp(verb, L"sound")) {   // an add-on's own music starts (Android Auto): ours paused, the MCU's
         VLog(L"дополнение %s: свой звук - наши плееры на паузу, источник медиа", p->id);   // source to media
         OursQuiet();

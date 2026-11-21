@@ -169,15 +169,21 @@ static void BlitPic(const Pic& p, int x, int y, int rad)
         int x0 = x + cut < s_clip.left ? s_clip.left : x + cut;
         int x1 = x + p.w - cut > s_clip.right ? s_clip.right : x + p.w - cut;
         Pix* dst = s_backBits + (479 - fy) * 800;
+        // the night theme: a third darker, as the colours and the background (the user 2026-11-21: the radio's
+        // logos and the covers stayed bright at night)
         if (p.px32) {
-            if (x1 > x0)
-                memcpy(dst + x0, p.px32 + r * p.w + (x0 - x), (x1 - x0) * sizeof(Pix));
+            const Pix* src32 = p.px32 + r * p.w - x;
+            if (!s_night && x1 > x0)
+                memcpy(dst + x0, src32 + x0, (x1 - x0) * sizeof(Pix));
+            for (int i = x0; s_night && i < x1; i++)
+                dst[i] = DimPix(src32[i]);
             continue;
         }
         const unsigned short* src = p.px + r * p.w - x;
         for (int i = x0; i < x1; i++) {
             unsigned q = src[i];
-            dst[i] = PIX((q >> 8 & 0xF8) | q >> 13, (q >> 3 & 0xFC) | (q >> 9 & 3), (q << 3 & 0xF8) | (q >> 2 & 7));
+            Pix c = PIX((q >> 8 & 0xF8) | q >> 13, (q >> 3 & 0xFC) | (q >> 9 & 3), (q << 3 & 0xF8) | (q >> 2 & 7));
+            dst[i] = s_night ? DimPix(c) : c;
         }
     }
 }

@@ -2309,17 +2309,16 @@ static void BootRun()
 #define C_FACET  RGB(0xc2,0x4a,0x0b)
 
 struct Btn { RECT rc; const wchar_t* label; int id; };
-enum { B_STATUS, B_DRILLOFF, B_EXIT, B_DRILL, B_TESTOFF, B_TICK_VH, B_TICK_PROXY, B_SETUP, B_REMOVE };
+enum { B_STATUS, B_DRILLOFF, B_EXIT, B_DRILL, B_TESTOFF, B_TICK_VH, B_SETUP, B_REMOVE };
 
 // (2026-10-22, the user: too many buttons, no room left for the log) Two ticks - VestaHome with the stub in place
 // of the shell, and the proxies (MCU + Bluetooth) - and two actions on what is ticked: УСТАНОВИТЬ / ОБНОВИТЬ
 // (VestaHome at once; the stub and the proxies one boot job, the stub first) and УДАЛИТЬ ОТМЕЧЕННОЕ. Then the
 // status, cancelling an armed job, exit; below, small ("Сервис"): the test of the rescue path and taking it off.
 // FORCE - the command line only.
-enum { kBtnN = 9, kTickY = 300, kServiceY = 444 };
+enum { kBtnN = 8, kTickY = 300, kServiceY = 444 };
 static const Btn g_btns[kBtnN] = {
-    { {  24, kTickY, 396, kTickY + 40 }, L"VestaHome + загрузчик", B_TICK_VH },
-    { { 404, kTickY, 776, kTickY + 40 }, L"Убрать прежние proxy", B_TICK_PROXY },
+    { {  24, kTickY, 776, kTickY + 40 }, L"VestaHome + загрузчик", B_TICK_VH },
     { {  24, 348, 396, 388 }, L"УСТАНОВИТЬ / ОБНОВИТЬ", B_SETUP  },
     { { 404, 348, 776, 388 }, L"УДАЛИТЬ ОТМЕЧЕННОЕ",    B_REMOVE },
     { {  24, 396, 266, 436 }, L"СТАТУС",               B_STATUS   },
@@ -2328,7 +2327,8 @@ static const Btn g_btns[kBtnN] = {
     { { 404, kServiceY, 586, kServiceY + 30 }, L"ТЕСТ ВОССТ.", B_DRILL   },
     { { 594, kServiceY, 776, kServiceY + 30 }, L"СНЯТЬ ТЕСТ",  B_TESTOFF },
 };
-static int g_tickVh = 1, g_tickProxy = 1;   // what the actions touch
+// what the actions touch (the user 2026-11-21: no tick for the old proxies - they are always taken off)
+static int g_tickVh = 1;
 static HFONT g_font, g_fontB, g_fontS;
 static HWND  g_hwnd  = NULL;
 static int   g_press = -1;
@@ -2453,7 +2453,7 @@ static void Paint(HDC dc)
     for (int i = 0; i < kBtnN; i++) {
         RECT r = g_btns[i].rc;
         int pressed = (g_press == i);
-        int tick = g_btns[i].id == B_TICK_VH ? g_tickVh : g_btns[i].id == B_TICK_PROXY ? g_tickProxy : -1;
+        int tick = g_btns[i].id == B_TICK_VH ? g_tickVh : -1;
         if (tick >= 0) {   // a tick: its box and the label beside it
             RECT b = { r.left + 8, r.top + 6, r.left + 36, r.top + 34 };
             FillC(dc, &b, tick ? C_ORANGE : C_INK);
@@ -2503,18 +2503,15 @@ static void RunAction(int id)
         return;
     }
 
-    if (id == B_TICK_VH || id == B_TICK_PROXY) {
-        if (id == B_TICK_VH)
-            g_tickVh = !g_tickVh;
-        else
-            g_tickProxy = !g_tickProxy;
+    if (id == B_TICK_VH) {
+        g_tickVh = !g_tickVh;
         InvalidateRect(g_hwnd, NULL, TRUE);
         return;
     }
 
     if (id == B_SETUP || id == B_REMOVE) {
-        if (!g_tickVh && !g_tickProxy) {
-            wcscpy(g_status, L"Ничего не отмечено: отметьте VestaHome и / или proxy.");
+        if (!g_tickVh) {
+            wcscpy(g_status, L"Ничего не отмечено: отметьте VestaHome.");
             InvalidateRect(g_hwnd, NULL, TRUE);
             return;
         }
@@ -2522,7 +2519,7 @@ static void RunAction(int id)
         int stub = IsStubFile(kShellPath);
         // the stub's part only when it changes something: the same stub in place - VestaHome alone, no reboot
         int stubJob = g_tickVh && (id == B_SETUP ? !(stub && SameFile(kShellPath, g_stubSrc)) : stub);
-        int proxyJob = g_tickProxy;
+        int proxyJob = 1;   // (old proxies: always taken off where they are)
         if (id == B_SETUP && proxyJob) {   // variant B (the user 2026-11-20): no proxy DLLs - the stub does their
             char md5[33];                  // work; a unit with them gets the factory DLLs back, none - nothing to do
             int mcu = FileMd5(g_dll, md5, NULL) && (HexEq(md5, kProxyMd5) || IsOldProxy(md5));
