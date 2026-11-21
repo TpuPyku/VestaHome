@@ -1414,7 +1414,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         n = n > 1023 ? 1023 : n;
         memcpy(cmd, c->lpData, n * sizeof(wchar_t));
         cmd[n] = 0;
-        return PlugReceive((HWND)wp, cmd);   // (1 taken; 2 - "voice" on our own music)
+        PlugReceive((HWND)wp, cmd);
+        return TRUE;
     }
     case MM_WOM_DONE:   // the camera beep has been played
         VoiceDone();

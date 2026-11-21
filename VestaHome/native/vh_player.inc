@@ -15,7 +15,6 @@ typedef BOOL  (WINAPI *BassPlayFn)(DWORD, BOOL);
 typedef DWORD (WINAPI *BassActiveFn)(DWORD);
 typedef QWORD (WINAPI *BassLenFn)(DWORD, DWORD);
 typedef BOOL  (WINAPI *BassSetPosFn)(DWORD, QWORD, DWORD);
-typedef BOOL  (WINAPI *BassAttrFn)(DWORD, DWORD, float);
 typedef double (WINAPI *BassB2SFn)(DWORD, QWORD);
 typedef void  (CALLBACK *BassSyncProc)(DWORD, DWORD, DWORD, void*);
 typedef DWORD (WINAPI *BassSyncFn)(DWORD, DWORD, QWORD, BassSyncProc, void*);
@@ -47,7 +46,6 @@ static struct {
     BassErrFn        error;
     TagsReadFn       tags;
     BassStreamUserFn streamUser;
-    BassAttrFn       setAttr;   // BASS_ChannelSetAttribute: the volume under a prompt
 } s_bass;
 
 // Only one of the music, the internet radio and the video plays: each one starting stops / pauses the others.
@@ -95,7 +93,6 @@ static bool BassLoad()
     s_bass.streamFile = (BassStreamFileFn)BASS_PROC("BASS_StreamCreateFile");
     s_bass.streamFree = (BassChanFn)BASS_PROC("BASS_StreamFree");
     s_bass.pause = (BassChanFn)BASS_PROC("BASS_ChannelPause");
-    s_bass.setAttr = (BassAttrFn)BASS_PROC("BASS_ChannelSetAttribute");
     s_bass.stop = (BassChanFn)BASS_PROC("BASS_ChannelStop");
     s_bass.play = (BassPlayFn)BASS_PROC("BASS_ChannelPlay");
     s_bass.active = (BassActiveFn)BASS_PROC("BASS_ChannelIsActive");
@@ -586,12 +583,4 @@ static void MusicPick(int i)
     }
     if (PlayerLoadDir(d, file))
         Back();
-}
-
-// A navigator's prompt over our own music (the media source: the MCU turns nothing down there - the users 2026-11-21:
-// quiet prompts over the card's music): our player to 30 % while it speaks, back after.
-static void PlayerDuck(bool on)
-{
-    if (s_chan && s_bass.setAttr)
-        s_bass.setAttr(s_chan, 2 /* BASS_ATTRIB_VOL */, on ? 0.3f : 1.0f);
 }
