@@ -111,7 +111,10 @@ def main():
             if not os.path.exists(src):
                 print('  SKIPPED, not built: %s' % src)
                 continue
-            size = copy(src, os.path.join(TESTS, sub, to))
+            dst = os.path.join(TESTS, sub, to)
+            if os.path.isdir(src) and os.path.isdir(dst):   # a mirror: files gone from the build (then.wav) go here too
+                shutil.rmtree(dst)
+            size = copy(src, dst)
             print('  %-32s %s' % (to + ('\\' if os.path.isdir(src) else ''), size or ''))
     print()
     spec = importlib.util.spec_from_file_location(
