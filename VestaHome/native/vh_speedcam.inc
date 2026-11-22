@@ -5,7 +5,8 @@
 // the car (or the home point) are kept, reloaded after 75 km: a country's list doesn't fit the unit's memory.
 // A camera ahead (see CamCheck) shows on the speed widget and in the top bar, with two beeps when it comes up.
 struct Cam { float lat, lon; unsigned char speed, dirType; short dir; };
-enum { kMaxCams = 12000 };   // 144 KB: Moscow and its region within 150 km are ~7200 (2026-10-24)
+enum { kMaxCams = 16000 };   // 192 KB: Moscow and its region within 150 km are ~7200 (2026-10-24); openspeedcam's
+                             // Moscow region alone 11 212 (2026-11-22)
 static Cam    s_cams[kMaxCams];
 static int    s_camCount, s_camTotal;   // kept / seen in the file
 static double s_camLat, s_camLon;       // centre of the kept ones
