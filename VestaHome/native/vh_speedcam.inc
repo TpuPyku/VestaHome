@@ -81,6 +81,149 @@ static void CamLine(char* line)
     cm.dir = (short)(n > s_camCol[5] ? atoi(f[s_camCol[5]]) : 0);
 }
 
+// The lines of a piece of the file (line: the one not finished yet, 256 chars at most; ll its length).
+static void CamChunk(const char* chunk, DWORD got, char* line, int* ll)
+{
+    for (DWORD i = 0; i < got; i++) {
+        char c = chunk[i];
+        if (c == '\n' || c == '\r') {
+            line[*ll] = 0;
+            CamLine(line);
+            *ll = 0;
+        } else if (*ll < 255) {
+            line[(*ll)++] = c;
+        }
+    }
+}
+
+// One camera file into s_cams (its own header); false when there is no such file.
+static bool CamReadFile(const wchar_t* path)
+{
+    for (int k = 0; k < 6; k++)
+        s_camCol[k] = k;   // the iGO order when there is no header
+    s_camFirst = true;
+    HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return false;
+    VLog(L"камеры: читаю %s (%u Б)", path, (unsigned)GetFileSize(h, NULL));
+    static char chunk[16384];
+    char line[256];
+    int ll = 0;
+    DWORD got = 0;
+    while (ReadFile(h, chunk, sizeof(chunk), &got, NULL) && got)
+        CamChunk(chunk, got, line, &ll);
+    line[ll] = 0;
+    CamLine(line);
+    CloseHandle(h);
+    return true;
+}
+
+// ---- the cameras of OSMapsCE's maps (the user 2026-11-22): the OSMapsCE-Maps loader writes per region
+// OSMapsData\<region>\speedcam.txt (Navitel, openspeedcam.net) at the root of a volume, as OSMapsCE finds its data
+// (offdata.cpp). When there is any, the cameras come from all of them, else from VestaHome's own file. The regions'
+// boxes overlap: a camera in two files (the same lat/lon) is kept once - sorted and made unique after each file.
+static int s_camMapFiles;   // map files read by the last LoadCams; 0: the own file
+
+static int CmpCam(const void* a, const void* b)
+{
+    const Cam* x = (const Cam*)a;
+    const Cam* y = (const Cam*)b;
+    if (x->lat != y->lat)
+        return x->lat < y->lat ? -1 : 1;
+    return x->lon < y->lon ? -1 : x->lon > y->lon ? 1 : 0;
+}
+
+static void CamUnique()
+{
+    qsort(s_cams, s_camCount, sizeof(Cam), CmpCam);
+    int n = 0;
+    for (int i = 0; i < s_camCount; i++)
+        if (!n || CmpCam(&s_cams[n - 1], &s_cams[i]))
+            s_cams[n++] = s_cams[i];
+    s_camCount = n;
+}
+
+static bool CamMapFile(const wchar_t* data, const wchar_t* region)
+{
+    wchar_t path[MAX_PATH];
+    _snwprintf(path, MAX_PATH, L"%s\\%s\\speedcam.txt", data, region);
+    path[MAX_PATH - 1] = 0;
+    int total = s_camTotal, had = s_camCount;
+    if (!CamReadFile(path))
+        return false;
+    int got = s_camCount;
+    if (got > had)
+        CamUnique();
+    VLog(L"камеры: регион %s — строк %d, в 150 км +%d (повторов %d)", region, s_camTotal - total, s_camCount - had,
+         got - s_camCount);
+    return true;
+}
+
+// The regions' files in one OSMapsData folder; their count.
+static int CamMapDir(const wchar_t* data)
+{
+    wchar_t mask[MAX_PATH];
+    _snwprintf(mask, MAX_PATH, L"%s\\*", data);
+    mask[MAX_PATH - 1] = 0;
+    WIN32_FIND_DATA fd;
+    HANDLE ff = FindFirstFile(mask, &fd);
+    if (ff == INVALID_HANDLE_VALUE)
+        return 0;
+    int files = 0;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && fd.cFileName[0] != L'.')
+            files += CamMapFile(data, fd.cFileName) ? 1 : 0;
+    } while (FindNextFile(ff, &fd));
+    FindClose(ff);
+    return files;
+}
+
+// The volumes' roots: CE - every folder of "\" (\SDMemory, \USBDevice...); PC - the drives C:..Z: and, for the
+// tests, the OSMapsCE build folder next to this repo.
+#ifdef UNDER_CE
+static int CamVolumes(wchar_t roots[][MAX_PATH], int cap)
+{
+    int n = 0;
+    WIN32_FIND_DATA fd;
+    HANDLE ff = FindFirstFile(L"\\*", &fd);
+    if (ff == INVALID_HANDLE_VALUE)
+        return 0;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && n < cap)
+            _snwprintf(roots[n++], MAX_PATH, L"\\%s", fd.cFileName);
+    } while (FindNextFile(ff, &fd));
+    FindClose(ff);
+    return n;
+}
+#else
+static int CamVolumes(wchar_t roots[][MAX_PATH], int cap)
+{
+    int n = 0;
+    UINT was = SetErrorMode(SEM_FAILCRITICALERRORS);   // (a drive without its disk: no window)
+    DWORD drives = GetLogicalDrives();
+    for (int d = 2; d < 26 && n < cap - 1; d++)
+        if (drives & (1 << d))
+            _snwprintf(roots[n++], MAX_PATH, L"%c:", L'A' + d);
+    SetErrorMode(was);
+    _snwprintf(roots[n++], MAX_PATH, L"%s..\\..\\..\\OSMapsCE\\OSMapsCE", s_dir);
+    return n;
+}
+#endif
+
+static int CamFromMaps()
+{
+    static wchar_t roots[32][MAX_PATH];
+    int nv = CamVolumes(roots, 32), files = 0;
+    for (int i = 0; i < nv; i++) {
+        wchar_t data[MAX_PATH];
+        _snwprintf(data, MAX_PATH, L"%s\\OSMapsData", roots[i]);
+        data[MAX_PATH - 1] = 0;
+        if (GetFileAttributes(data) != 0xFFFFFFFF)
+            files += CamMapDir(data);
+    }
+    return files;
+}
+
 static void LoadCams(double lat, double lon)
 {
     s_camCount = s_camTotal = 0;
@@ -90,42 +233,35 @@ static void LoadCams(double lat, double lon)
     s_camLon = lon;
     s_camDLat = 150000.0 / 111000;
     s_camDLon = s_camDLat / (cos(lat * 3.14159265 / 180) + 0.01);
-    for (int k = 0; k < 6; k++)
-        s_camCol[k] = k;   // the iGO order when there is no header
-    s_camFirst = true;
+    DWORD t0 = GetTickCount();
+    VLog(L"камеры: загрузка у %.4f, %.4f", lat, lon);
+    s_camMapFiles = CamFromMaps();
     wchar_t path[MAX_PATH];
     CamPath(path);
-    HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (h == INVALID_HANDLE_VALUE) {
+    if (s_camMapFiles)
+        VLog(L"камеры: из карт OSMapsCE (openspeedcam.net), файлов %d; свой файл не читаю", s_camMapFiles);
+    else if (!CamReadFile(path)) {
         VLog(L"камеры: нет файла %s", path);
         return;
     }
-    DWORD t0 = GetTickCount();
-    VLog(L"камеры: читаю %s (%u Б) у %.4f, %.4f", path, (unsigned)GetFileSize(h, NULL), lat, lon);
-    static char chunk[16384];
-    char line[256];
-    int ll = 0;
-    for (;;) {
-        DWORD got = 0;
-        bool eof = !ReadFile(h, chunk, sizeof(chunk), &got, NULL) || !got;
-        for (DWORD i = 0; i < got; i++) {
-            char c = chunk[i];
-            if (c == '\n' || c == '\r') {
-                line[ll] = 0;
-                CamLine(line);
-                ll = 0;
-            } else if (ll < (int)sizeof(line) - 1) {
-                line[ll++] = c;
-            }
-        }
-        if (eof) {
-            line[ll] = 0;
-            CamLine(line);
-            break;
-        }
-    }
-    CloseHandle(h);
     VLog(L"камеры: %d в 150 км из %d за %u мс", s_camCount, s_camTotal, (unsigned)(GetTickCount() - t0));
+}
+
+// The settings' line on the cameras' source: the maps' regions or the own file.
+static void CamSourceText(wchar_t* s, int n)
+{
+    wchar_t path[MAX_PATH];
+    CamPath(path);
+    if (s_camLoaded && s_camMapFiles)
+        _snwprintf(s, n, L"из карт OSMapsCE (openspeedcam.net), регионов %d · рядом %d из %d", s_camMapFiles,
+                   s_camCount, s_camTotal);
+    else if (GetFileAttributes(path) == 0xFFFFFFFF)
+        _snwprintf(s, n, L"%s — нет файла", s_cfg.camFile);
+    else if (!s_camLoaded)
+        _snwprintf(s, n, L"%s · загрузится по GPS", s_cfg.camFile);
+    else
+        _snwprintf(s, n, L"%s · рядом %d из %d", s_cfg.camFile, s_camCount, s_camTotal);
+    s[n - 1] = 0;
 }
 
 // A sound over the radio, as an external navigator says its prompts (Ghidra, PROJECT.md): WM_NAVIGATION_VOICE

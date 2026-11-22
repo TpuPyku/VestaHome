@@ -162,14 +162,7 @@ static void ScrWSetSpeed(HDC dc)
     Stepper(dc, 560, 186, 200, s, 44, 18, A_CAMOVERSTEP);
     WRow(dc, 236, L"Дистанция", L"по скорости: за 10 с, 100–500 м", A_NONE, 0, 340);
     Seg(dc, 352, 242, 416, 44, dist, 4, G_CAMDIST, 14);
-    wchar_t path[MAX_PATH];
-    CamPath(path);
-    if (GetFileAttributes(path) == 0xFFFFFFFF)
-        _snwprintf(s, 160, L"%s — нет файла", s_cfg.camFile);
-    else if (!s_camLoaded)
-        _snwprintf(s, 160, L"%s · загрузится по GPS", s_cfg.camFile);
-    else
-        _snwprintf(s, 160, L"%s · рядом %d из %d", s_cfg.camFile, s_camCount, s_camTotal);
+    CamSourceText(s, 160);
     WRow(dc, 292, L"Файл камер (iGO / Navitel)", s, A_CAMFILE, 0, 776);
     wchar_t regs[160];
     RegionsText(regs, 160);
@@ -538,6 +531,7 @@ static const LicItem kLicenses[] = {
     { L"Яндекс Погода", L"yandex.ru/pogoda. Погода, если выбрана и задан свой ключ (тариф «погода для умного "
                         L"дома», до 30 запросов в день)." },
     { L"speedcamonline.ru", L"База камер скорости: скачивается по кнопке в настройках камер." },
+    { L"openspeedcam.net", L"Камеры скорости в данных регионов загрузчика OSMapsCE-Maps (OSMapsData)." },
     { L"Интернет-радио", L"Потоки станций из radio.txt принадлежат самим станциям." },
     { L"Свои виджеты", L"Загружают адреса из своих .ini (url=) через HTTPS VestaHome; данные принадлежат их источникам. "
                        L"Пример probki.ini - баллы Яндекс Пробок (неофициальный адрес export.yandex.ru)." },

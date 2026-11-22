@@ -260,6 +260,20 @@ static void CamAutoUpdate()
     CamDownload();
 }
 
+// The bottom strip: the download's state; first, when the cameras come from OSMapsCE's maps (vh_speedcam.inc), that.
+static void CamDlStrip(wchar_t* s, int n)
+{
+    if (!s_dlStatus[0] && s_cfg.camUpdated)
+        _snwprintf(s_dlStatus, 100, L"обновлено %02d.%02d.%04d", s_cfg.camUpdated % 100, s_cfg.camUpdated / 100 % 100,
+                   s_cfg.camUpdated / 10000);
+    const wchar_t* st = s_dlStatus[0] ? s_dlStatus : L"файл speedcam\\speedcam.txt (iGO) в папке VestaHome";
+    if (s_camLoaded && s_camMapFiles)
+        _snwprintf(s, n, L"камеры сейчас из карт OSMapsCE (openspeedcam.net): %d в 150 км · %s", s_camCount, st);
+    else
+        _snwprintf(s, n, L"%s", st);
+    s[n - 1] = 0;
+}
+
 static void ScrCamDl(HDC dc)
 {
     Frame(dc, L"База камер · speedcamonline.ru");
@@ -275,11 +289,8 @@ static void ScrCamDl(HDC dc)
         Button(dc, 28 + (k % 4) * 188, 174 + (k / 4) * 43, 180, 37, kCamKinds[k].name, KindOn(k) ? B_SEL : B_N,
                IC_NONE, 12, 0, A_KIND, k);
     Dock(dc);
-    if (!s_dlStatus[0] && s_cfg.camUpdated)
-        _snwprintf(s_dlStatus, 100, L"обновлено %02d.%02d.%04d", s_cfg.camUpdated % 100, s_cfg.camUpdated / 100 % 100,
-                   s_cfg.camUpdated / 10000);
-    TWrap(dc, 96, 436, s_dlStatus[0] ? s_dlStatus : L"файл speedcam\\speedcam.txt (iGO) в папке VestaHome", 13, kMuted,
-          400, 288, 2, 16);   // the bottom strip, right of "back"
+    CamDlStrip(s, 200);
+    TWrap(dc, 96, 436, s, 13, kMuted, 400, 288, 2, 16);   // the bottom strip, right of "back"
     Button(dc, 392, 410, 176, 58, L"Раз в неделю", s_on[T_CAM_WEEKLY] ? B_SEL : B_N, IC_REFRESH, 13, 24, A_TOGGLE,
            T_CAM_WEEKLY);
     Button(dc, 576, 410, 208, 58, s_dlBusy ? L"Загрузка…" : L"Скачать", s_dlBusy ? B_DIS : B_PRI, IC_NONE, 18, 0,
