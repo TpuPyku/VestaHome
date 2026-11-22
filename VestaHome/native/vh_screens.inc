@@ -1506,7 +1506,7 @@ static const wchar_t* BtUnitName();   // (vh_settings.inc: bt.name, "VESTA" with
 
 static void ScrSetBt(HDC dc)
 {
-    Settings(dc, S_SET_BT);   // 8 rows, scrolled (the unit's name added 2026-10-27; the switch in the OBD's place,
+    Settings(dc, S_SET_BT);   // 9 rows, scrolled (the unit's name added 2026-10-27; the switch in the OBD's place,
                               // 2026-11-04)
     wchar_t a[24];
     int vol, mute, src;
@@ -1528,7 +1528,7 @@ static void ScrSetBt(HDC dc)
         wchar_t name[BT_TEXT], s[200];
         int pw = BtPowerState();   // the switch shows the stack's state, not the wish
         s_on[T_BT] = pw == BT_POW_ON || pw == BT_POW_GOING_ON;
-        int y = SetScrollBegin(dc, pw == BT_POW_ON ? 8 : 1);
+        int y = SetScrollBegin(dc, pw == BT_POW_ON ? 9 : 1);   // (9: "Сопряжённые" was cut off at 8, the user 2026-11-22)
         SetRow(dc, y, L"Bluetooth", pw == BT_POW_GOING_OFF ? L"выключаю… (до 10 с)" : pw == BT_POW_GOING_ON ? L"включаю…"
                                     : pw == BT_POW_OFF ? L"выключен — телефоны не подключаются" : L"включён");
         Toggle(dc, 640, y + 10, T_BT);
