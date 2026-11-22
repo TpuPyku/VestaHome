@@ -190,6 +190,9 @@ static void OsmFavsRead()
     wcscpy(path, s_apps[app].path);
     wchar_t* slash = wcsrchr(path, L'\\');
     wcscpy(slash ? slash + 1 : path, L"favorites.txt");
+#ifndef UNDER_CE
+    DemoFavsPath(path);   // the PC: its own demo file (vh_demo.inc), never OSMapsCE's
+#endif
     VFavsLoad(&s_osmFavs, path);
 }
 

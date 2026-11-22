@@ -402,6 +402,7 @@ static void SupportInit()
 #include "vh_settings.inc"
 #include "vh_gps.inc"
 #include "vh_mcu.inc"
+#include "vh_demo.inc"   // (the PC build only: the demo head unit)
 #include "vh_player.inc"
 #include "vh_cover.inc"
 #include "vh_netradio.inc"
@@ -478,6 +479,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         NetInit();
         static const HttpSetup http = { "VestaHome/0.5", "*/*", 3 * 1024 * 1024, NULL };   // (no log: as before)
         HttpInit(&http);
+#ifndef UNDER_CE
+        DemoStart();   // the PC: the head unit's MCU, Bluetooth, GPS made up (vh_demo.inc)
+#endif
         GpsStartCore();
         McuStart();
         VLog(L"поток главный (окно): id %08X", (unsigned)GetCurrentThreadId());
@@ -1392,7 +1396,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         BuildButtons();
         Redraw();
         return 0;
-    case WM_KEYDOWN:   // PC test: N = night, Esc = exit (not while typing)
+    case WM_KEYDOWN:   // PC test: N = night, R = reverse, C = a demo call (again: its end), Esc = exit (not while typing)
         if (s_screen == S_KEYS)
             return 0;
         if (wp == 'N') {
@@ -1400,6 +1404,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
         } else if (wp == 'R') {   // a "reverse" to try the camera window
             s_rvcFake = !s_rvcFake;
+        } else if (wp == 'C') {
+            DemoRing();
         } else if (wp == VK_ESCAPE) {
             DestroyWindow(hwnd);
         }

@@ -816,6 +816,10 @@ static DWORD GpsBaud()
     return GpsCanPort(s_cfg.gpsPort) && NoShell() ? 115200 : 0;
 }
 
+#ifndef UNDER_CE
+static GpsSourceFn DemoGpsSource();   // (vh_demo.inc) the PC: the demo drive, NULL - gps.port's .nmea recording
+#endif
+
 static void GpsStartCore()
 {
     InitializeCriticalSection(&s_gpsCs);
@@ -830,6 +834,9 @@ static void GpsStartCore()
     c.exeDir = s_dir;
     c.onLine = GpsTapLine;
     c.onRaw = GpsTapRaw;
+#ifndef UNDER_CE
+    c.source = DemoGpsSource();
+#endif
     GpsStart(&c);
 }
 

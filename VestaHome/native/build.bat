@@ -51,7 +51,8 @@ if errorlevel 1 goto fail
 if errorlevel 1 goto fail
 
 echo === x86 (desktop test build)
-"%VC%\bin\cl.exe" /nologo /O2 /W3 /MT /TP /c %SRC% /Foobj\pc\ ^
+rem (the PC only: GpsSim's lines for the demo head unit's drive, vh_demo.inc)
+"%VC%\bin\cl.exe" /nologo /O2 /W3 /MT /TP /c %SRC% ..\..\GpsSim\native\simnmea.cpp /Foobj\pc\ ^
   /DUNICODE /D_UNICODE /DWIN32 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS ^
   /I"%VC%\include" /I"%VC%\PlatformSDK\Include" %BRINC%
 if errorlevel 1 goto fail

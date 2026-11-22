@@ -739,8 +739,16 @@ static FARPROC SpmProc(const char* name)
 #endif
 }
 
+#ifndef UNDER_CE
+static bool DemoMcuCall(const char* name, int a, int b, int c);   // (vh_demo.inc) the PC: the demo unit answers
+#endif
+
 static bool McuSend2(const char* name, int a, int b)
 {
+#ifndef UNDER_CE
+    if (DemoMcuCall(name, a, b, 0))
+        return true;
+#endif
     if (!McuIsKey(name) && McuViaShell(name, a, b, 0, 0, 0, 0))
         return true;
     SpmFn2 f = (SpmFn2)SpmProc(name);
@@ -755,6 +763,10 @@ static bool McuSend2(const char* name, int a, int b)
 
 static bool McuSend3(const char* name, int a, int b, int c)
 {
+#ifndef UNDER_CE
+    if (DemoMcuCall(name, a, b, c))
+        return true;
+#endif
     if (!McuIsKey(name) && McuViaShell(name, a, b, c, 0, 0, 0))
         return true;
     SpmFn6 fn = (SpmFn6)SpmProc(name);   // three byte arguments in r0..r2; the rest is not read
@@ -767,6 +779,10 @@ static bool McuSend3(const char* name, int a, int b, int c)
 
 static bool McuSend6(const char* name, int a, int b, int c, int d, int e, int f)
 {
+#ifndef UNDER_CE
+    if (DemoMcuCall(name, a, b, c))
+        return true;
+#endif
     if (McuViaShell(name, a, b, c, d, e, f))
         return true;
     SpmFn6 fn = (SpmFn6)SpmProc(name);
@@ -779,6 +795,10 @@ static bool McuSend6(const char* name, int a, int b, int c, int d, int e, int f)
 
 static bool McuSend0(const char* name)
 {
+#ifndef UNDER_CE
+    if (DemoMcuCall(name, 0, 0, 0))
+        return true;
+#endif
     SpmFn0 f = (SpmFn0)SpmProc(name);
     if (!f) {
         wcscpy(s_status, L"MCU: только на ГУ (нет SPIPowerMgr.dll)");
