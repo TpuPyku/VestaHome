@@ -12,6 +12,7 @@
 #include "wifi.h"
 #include "wifiie.h"
 #include "radiowait.h"
+#include "wifiboot.h"
 
 #ifdef UNDER_CE
 #define PROC(m, n) GetProcAddress(m, L##n)
@@ -108,7 +109,19 @@ static int        s_knownCount;
 static wchar_t    s_connSsid[33], s_connPass[64], s_forgetSsid[33];
 static bool       s_connReq, s_forgetReq, s_scanReq;
 static volatile bool s_stop;
-static HANDLE     s_wake, s_thread;
+// Two threads (the tester 2026-11-19: the Wi-Fi thread stuck in a WZC call, the switch pressed three times in 3 minutes
+// did nothing - one thread served both): the poll (WifiThread: WZC, the SDK's client and access point, NDISUIO, the
+// address - any of them may hang in the driver) and the switch (SwitchThread: only the radio's SetMode, bounded by
+// RadioGuarded). s_wake wakes the switch, s_pollWake the poll.
+static HANDLE     s_wake, s_thread, s_pollWake, s_switch;
+static CRITICAL_SECTION s_modeCs;          // the SDK's SetMode: one at a time (DkModeAt)
+static volatile LONG s_radioGen;           // the switch's radio changes so far: the poll's work begun before one is void
+static volatile bool s_radioOn = true;     // the switch's radio (the unit boots with it on)
+static volatile bool s_dkReady;            // the SDK looked for at the start: the switch may act
+// The watch (WifiWatch, the window's timer): the poll's current step that may block, since when, its number
+static const wchar_t* volatile s_step;
+static volatile DWORD s_stepTick;
+static volatile LONG s_stepNo, s_stallLogged;
 static HWND       s_notify;
 static UINT       s_msg;
 static WifiLogFn  s_log;
@@ -160,6 +173,16 @@ typedef LONG (*DkResetFn)(int);         // 0, as wfdtool does
 static DkFailFn    s_dkFail;
 static DkScanFn    s_dkScan;
 static DkResetFn   s_dkReset;
+// The rest of the shell's start (FUN_004ca86c, PROJECT.md "Справочник Wi-Fi"): WIFI_STA_GetScannerEnabled (#551),
+// WDK_DMW_GetAdapterName(2, buf, 0x80) (#106), WIFI_STA_Get/SetEnableAutoConnect(name, ...) (#553 / #552)
+typedef LONG (*DkScanGetFn)(int*);
+typedef LONG (*DkAdapterFn)(int, wchar_t*, int);
+typedef LONG (*DkAutoGetFn)(const wchar_t*, int*);
+typedef LONG (*DkAutoSetFn)(const wchar_t*, int);
+static DkScanGetFn s_dkScanGet;
+static DkAdapterFn s_dkAdapter;
+static DkAutoGetFn s_dkAutoGet;
+static DkAutoSetFn s_dkAutoSet;
 enum { DK_OFF = 0, DK_AP = 1, DK_STA = 2,
        APS_SIZE = 0x140, APS_SSID = 0x04, APS_BEACON = 0x28, APS_CHANNEL = 0x30, APS_CIPHER = 0x34, APS_WPA = 0x38,
        APS_WEPKEYID = 0x40, APS_KEY = 0xB0, APS_HIDE = 0x134, APS_AUTHTO = 0x138, APS_ASSOCTO = 0x13C,
@@ -489,6 +512,27 @@ static void Publish(const WifiInfo& w)
         PostMessage(s_notify, s_msg, 0, 0);
 }
 
+// The poll's state, unless the switch moved the radio since its round began (gen): then the switch's is shown
+static void PublishAt(const WifiInfo& w, LONG gen)
+{
+    if (gen == s_radioGen)
+        Publish(w);
+}
+
+// The poll enters a step that may block (NULL: waiting, nothing to watch)
+static void Step(const wchar_t* what)
+{
+    s_stepTick = GetTickCount();
+    s_step = what;
+    InterlockedIncrement((LONG*)&s_stepNo);
+}
+
+static void PollWait(DWORD ms)
+{
+    Step(NULL);
+    WaitForSingleObject(s_pollWake, ms);
+}
+
 static int CmpRssi(const void* a, const void* b)
 {
     return ((const WifiNet*)b)->rssi - ((const WifiNet*)a)->rssi;
@@ -531,13 +575,28 @@ static bool LoadDk()
     s_dkFail = (DkFailFn)PROC(m, "WDK_DMW_GetStaConnFailReason");
     s_dkScan = (DkScanFn)PROC(m, "WIFI_STA_SetScannerEnabled");
     s_dkReset = (DkResetFn)PROC(m, "WDK_DMW_ResetDriver");
+    s_dkScanGet = (DkScanGetFn)PROC(m, "WIFI_STA_GetScannerEnabled");
+    s_dkAdapter = (DkAdapterFn)PROC(m, "WDK_DMW_GetAdapterName");
+    s_dkAutoGet = (DkAutoGetFn)PROC(m, "WIFI_STA_GetEnableAutoConnect");
+    s_dkAutoSet = (DkAutoSetFn)PROC(m, "WIFI_STA_SetEnableAutoConnect");
     if (!s_dkList || !s_dkAdd || !s_dkJoin || !s_dkDrop)
         s_dkAdd = NULL;   // (the client through WZC then)
     if (!init || !s_dkSetMode || !s_dkGetMode || !s_dkApGetDef || !s_dkApSetDef || !s_dkApSetCur || !s_dkAssoc) {
         s_dkSetMode = NULL;
         return false;
     }
-    LONG hr = init();
+    // (the tester 2026-11-19: tried once, a failure left no SDK until the next boot) a few tries, the stop cuts them
+    LONG hr;
+    for (int tries = 1;; tries++) {
+        Step(L"SDK: InitApi");
+        hr = init();
+        unsigned gap = InitRetryMs(tries, hr);
+        if (!gap || s_stop)
+            break;
+        Log(L"wifi: WifiDKCore, InitApi 0x%08X - попытка %d из %d, снова через %u с", (unsigned)hr, tries, kInitTries,
+            gap / 1000);
+        PollWait(gap);
+    }
     int mode = -1;
     s_dkGetMode(&mode);
     Log(L"wifi: WifiDKCore, InitApi 0x%08X, режим %d", (unsigned)hr, mode);
@@ -626,9 +685,37 @@ static bool DkMode(int mode)
     return hr >= 0;
 }
 
+// SetMode one at a time, and the poll's only while the switch has not moved since its round began (gen; -1: the
+// switch's own): the switch's SetMode, after its gen, always comes last (it takes the lock after the poll's).
+static bool DkModeAt(int mode, LONG gen)
+{
+    EnterCriticalSection(&s_modeCs);
+    bool ok = false;
+    if (gen < 0 || gen == s_radioGen)
+        ok = DkMode(mode);
+    LeaveCriticalSection(&s_modeCs);
+    return ok;
+}
+
+// The access point's radio in the registry (Comm\ndcufmp1\Parms EnableRadio, the firmware's 0; HU 2026-10-18-2: with
+// it no phone saw our network): 1 for our access point, 0 again when it goes and at the start - the stock shell never
+// has it on (PROJECT.md "Справочник Wi-Fi", the tester 2026-11-19). The adapter reads it when it starts.
+static void ApRadio(DWORD v)
+{
+    HKEY key;
+    DWORD was = (DWORD)-1, size = sizeof(was);
+    LONG rr = -1;
+    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Comm\\ndcufmp1\\Parms", 0, NULL, 0, 0, NULL, &key, NULL) == ERROR_SUCCESS) {
+        RegQueryValueEx(key, L"EnableRadio", NULL, NULL, (LPBYTE)&was, &size);
+        rr = RegSetValueEx(key, L"EnableRadio", 0, REG_DWORD, (const BYTE*)&v, sizeof(v));
+        RegCloseKey(key);
+    }
+    Log(L"wifi: точка: EnableRadio %d -> %u (%ld)", (int)was, (unsigned)v, rr);
+}
+
 // The access point with our network: its settings as the adapter's defaults (the registry, read when it starts)
 // and, once started, as its current ones.
-static bool ApStart()
+static bool ApStart(LONG gen)
 {
     BYTE s[APS_SIZE];
     memset(s, 0, sizeof(s));
@@ -653,16 +740,8 @@ static bool ApStart()
     *(DWORD*)(s + APS_WPA) = WPA_MODE2;
     *(DWORD*)(s + APS_HIDE) = 0;
     LONG def = s_dkApSetDef(s);
-    // the firmware's registry has the access point's radio off (Comm\ndcufmp1\Parms EnableRadio = 0; HU 2026-10-18-2:
-    // every call answered S_OK, no phone saw the network); the adapter reads it when it starts. Reset on boot anyway.
-    HKEY key;
-    DWORD one = 1, rr = (DWORD)-1;
-    if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, L"Comm\\ndcufmp1\\Parms", 0, NULL, 0, 0, NULL, &key, NULL) == ERROR_SUCCESS) {
-        rr = RegSetValueEx(key, L"EnableRadio", 0, REG_DWORD, (const BYTE*)&one, sizeof(one));
-        RegCloseKey(key);
-    }
-    Log(L"wifi: точка: EnableRadio=1 (%lu)", rr);
-    if (!DkMode(DK_AP))
+    ApRadio(1);
+    if (!DkModeAt(DK_AP, gen))
         return false;
     LONG cur = s_dkApSetCur(s);
     Log(L"wifi: точка %S, канал %d (GetDefault 0x%08X, SetDefault 0x%08X, SetCurrent 0x%08X)", (char*)s + APS_SSID,
@@ -683,11 +762,11 @@ static int ApClients()
 
 // The radio on / off: through the vendor's API (mode off / client), otherwise through the power manager, as
 // Windows Mobile's wireless manager does it (the NDIS miniport's power class + the client adapter's name).
-static void RadioPower(bool on)
+static void RadioPower(bool on, LONG gen)
 {
 #ifdef UNDER_CE
     if (s_dkSetMode) {
-        DkMode(on ? DK_STA : DK_OFF);
+        DkModeAt(on ? DK_STA : DK_OFF, gen);
         return;
     }
     typedef DWORD (WINAPI *SetPowFn)(PVOID, DWORD, int);
@@ -699,23 +778,28 @@ static void RadioPower(bool on)
     // POWER_NAME = 1; D0 = on, D4 = off
     DWORD r = fn((PVOID)L"{98C5250D-C29A-4985-AE5F-AFE5367E5006}\\NDCUFMP2", 1, on ? 0 : 4);
     Log(L"wifi: радио %s (SetDevicePower %lu)", on ? L"включено" : L"выключено", r);
+#else
+    (void)on;
+    (void)gen;
 #endif
 }
 
 // The driver's answer can take long or never come (the SDK's mode change, 2026-11-05: BT's off took 12 s): the switch on
 // a thread of its own, its wait bounded, so the Wi-Fi thread always goes on and the radio's state is in the log.
-static DWORD WINAPI RadioThread(LPVOID on)
+// Its argument: on in bit 0, (gen + 1) above it (gen -1: the switch's own, see DkModeAt).
+static DWORD WINAPI RadioThread(LPVOID arg)
 {
-    RadioPower(on != NULL);
+    size_t a = (size_t)arg;
+    RadioPower((a & 1) != 0, (LONG)(a >> 1) - 1);
     return 0;
 }
 
-static void RadioGuarded(bool on)
+static void RadioGuarded(bool on, LONG gen)
 {
     enum { kRadioWaitMs = 10000 };
-    HANDLE h = CreateThread(NULL, 0, RadioThread, on ? (LPVOID)1 : NULL, 0, NULL);
+    HANDLE h = CreateThread(NULL, 0, RadioThread, (LPVOID)(((size_t)(gen + 1) << 1) | (on ? 1 : 0)), 0, NULL);
     if (!h) {
-        RadioPower(on);
+        RadioPower(on, gen);
         return;
     }
     if (WaitForSingleObject(h, kRadioWaitMs) != WAIT_OBJECT_0)
@@ -739,6 +823,65 @@ static bool RadioOnTooSoon(WifiInfo& w, DWORD offTick)
     WaitForSingleObject(s_wake, left < 1000 ? left : 1000);
     return true;
 }
+
+#ifdef UNDER_CE
+// The client's scanner and auto-connect on, as the shell's start (FUN_004ca86c) puts them: Wi-Fi Direct (mode 3) turns
+// both off, and a VestaHome that fell while connecting (RefreshQuiet) leaves the scanner off. Set only when off (or
+// unknown); the old values into the log.
+static void DkScannerOn()
+{
+    int was = -1;
+    LONG get = s_dkScanGet ? s_dkScanGet(&was) : E_NOTIMPL;
+    LONG set = s_dkScan && was != 1 ? s_dkScan(1) : S_FALSE;
+    Log(L"wifi: SDK: сканер был %d (0x%08X), включаю 0x%08X", was, (unsigned)get, (unsigned)set);
+}
+
+static void DkAutoConnectOn()
+{
+    wchar_t name[0x80];
+    name[0] = 0;
+    LONG gn = s_dkAdapter ? s_dkAdapter(DK_STA, name, 0x80) : E_NOTIMPL;
+    name[0x7F] = 0;
+    int was = -1;
+    LONG get = gn >= 0 && s_dkAutoGet ? s_dkAutoGet(name, &was) : E_NOTIMPL;
+    LONG set = gn >= 0 && s_dkAutoSet && was != 1 ? s_dkAutoSet(name, 1) : S_FALSE;
+    Log(L"wifi: SDK: адаптер %s (0x%08X), автоподключение было %d (0x%08X), включаю 0x%08X", name, (unsigned)gn, was,
+        (unsigned)get, (unsigned)set);
+}
+
+// The start as the stock shell's (the tester 2026-11-19, PROJECT.md "Справочник Wi-Fi"): the SDK (InitApi tried a few
+// times), then the switch may act; the access point's radio off; the client switched on over any mode but a client
+// (SetMode(2), bounded), 3 s for the adapter to come up (the switch cuts them short), the scanner and the auto-connect
+// back on. The SDK's saved networks and WZC only after that (0x80070037 - the adapter not there yet).
+// The client switched on at the start, bounded, then its 3 s; false - the switch moved meanwhile (its radio then)
+static bool BootClient(LONG gen)
+{
+    Step(L"SDK: SetMode(2)");
+    RadioGuarded(true, gen);
+    Step(NULL);
+    DWORD t0 = GetTickCount();
+    for (DWORD gone = 0; !s_stop && gen == s_radioGen && gone < (DWORD)kBootSettleMs; gone = GetTickCount() - t0)
+        WaitForSingleObject(s_pollWake, kBootSettleMs - gone);
+    return gen == s_radioGen && !s_stop;
+}
+
+static void WifiBoot()
+{
+    bool dk = LoadDk();
+    s_dkReady = true;
+    SetEvent(s_wake);
+    if (!s_wantAp)
+        ApRadio(0);
+    LONG gen = s_radioGen;
+    if (!dk || !s_wantOn)
+        return;
+    if (BootSetsClient(s_dkBootMode, true) && !BootClient(gen))
+        return;
+    Step(L"SDK: сканер и автоподключение");
+    DkScannerOn();
+    DkAutoConnectOn();
+}
+#endif
 
 #ifdef UNDER_CE
 // The WdkHealthSvc's WzcRefresh rescans the networks every 6 s while the client is not associated (its
@@ -931,58 +1074,43 @@ static DWORD WINAPI WifiThread(LPVOID)
     Log(L"поток Wi-Fi: id %08X", (unsigned)GetCurrentThreadId());
     WifiInfo w;
     memset(&w, 0, sizeof(w));
+    w.state = WIFI_NOWZC;
+    wcscpy(w.msg, L"запуск Wi-Fi…");
 #ifdef UNDER_CE
+    Step(L"wzcsapi.dll");
     if (!LoadWzc()) {
-        w.state = WIFI_NOWZC;
         wcscpy(w.msg, L"нет службы Wi-Fi (wzcsapi.dll)");
         Publish(w);
+        Step(NULL);
         return 0;
     }
-    // Without the stock shell (HU 2026-10-27: "режим 0", no Wi-Fi at all, not even the system's manager) the
-    // adapters stay off: the shell switched the client on at its start. Then VestaHome does it.
-    if (LoadDk() && s_dkBootMode == DK_OFF && s_wantOn)
-        DkMode(DK_STA);
-    DkClearPrefs(L"старт");
+    WifiBoot();
+    Step(L"SDK: сохранённые сети");
+    if (s_wantOn)   // (the radio not switched on: nothing to ask)
+        DkClearPrefs(L"старт");
     DWORD linkTick = 0;    // the link up without an address yet: since when (the log of a slow phone's hotspot)
     bool hadIp = false;
     DWORD encLogged = (DWORD)-1;   // LogEncryption's last
     DWORD lastAuto = 0, connectTick = 0;
-    bool haveAdapter = false, radioOn = true;   // the unit boots with it on
+    bool haveAdapter = false;
     // the access point: ap = it is up; autoAp = raised by the hand-over (s_apAuto), not by hand (s_wantAp)
     bool ap = false, autoAp = false, handover = false;
     DWORD apTick = 0, assocTick = 0, staTick = GetTickCount(), giveUp = 0;
     DWORD quietTick = 0;   // the periodic scan held off since then (RefreshQuiet), 0: scanning as usual
     int attempts = 0;
-    DWORD offTick = 0;   // when the switch put the radio off
-    LONG offsSeen = s_offs;   // the switch-offs acted on
+    LONG gen = s_radioGen;   // the switch's radio this round is for
     while (!s_stop) {
-        int step = RadioStep(s_wantOn, radioOn, (unsigned)s_offs, (unsigned)offsSeen);
-        if (step != RADIO_KEEP) {
-            if (step == RADIO_GO_ON && RadioOnTooSoon(w, offTick))
-                continue;
-            offsSeen = s_offs;   // (off: this one done; on: the ones while it was off do not count)
-            radioOn = step == RADIO_GO_ON;
-            if (!radioOn) {   // (SetMode(0) takes up to 10 s: the line says so meanwhile)
-                w.state = WIFI_OFF;
-                wcscpy(w.msg, L"выключаю Wi-Fi…");
-                Publish(w);
-            }
-            RadioGuarded(radioOn);
-            if (!radioOn)
-                offTick = GetTickCount();
+        if (gen != s_radioGen) {   // the switch moved the radio meanwhile (SwitchThread): all from the start
+            gen = s_radioGen;
+            if (ap)
+                ApRadio(0);
             haveAdapter = false;
             connectTick = lastAuto = 0;
             ap = autoAp = handover = false;
             staTick = GetTickCount();
         }
-        if (!radioOn) {
-            w.state = WIFI_OFF;
-            w.count = 0;
-            w.ssid[0] = 0;
-            w.ip[0] = 0;
-            w.msg[0] = 0;
-            Publish(w);
-            WaitForSingleObject(s_wake, 10000);
+        if (!s_radioOn) {   // (the switch shows it)
+            PollWait(10000);
             continue;
         }
         if (s_dkSetMode) {
@@ -991,23 +1119,30 @@ static DWORD WINAPI WifiThread(LPVOID)
                 autoAp = false;
             bool wantAp = s_wantAp || autoAp;
             if (wantAp && !ap) {
-                ap = ApStart();
+                Step(L"SDK: точка");
+                ap = ApStart(gen);
                 apTick = now;
                 assocTick = 0;
+                if (!ap && gen != s_radioGen)
+                    continue;   // (the switch went off meanwhile)
                 if (!ap) {   // could not: no more tries for now
                     s_wantAp = autoAp = false;
                     giveUp = now;
-                    DkMode(DK_STA);
+                    ApRadio(0);
+                    DkModeAt(DK_STA, gen);
                     wcscpy(w.msg, L"точка ГУ не включилась");
                 }
             } else if (!wantAp && ap) {
-                DkMode(DK_STA);
+                Step(L"SDK: клиент после точки");
+                ApRadio(0);
+                DkModeAt(DK_STA, gen);
                 ap = false;
                 haveAdapter = false;
                 staTick = now;
                 connectTick = lastAuto = 0;
             }
             if (ap) {
+                Step(L"SDK: телефоны у точки");
                 int n = ApClients();
                 if (n > 0 && !assocTick) {
                     assocTick = now;
@@ -1041,19 +1176,20 @@ static DWORD WINAPI WifiThread(LPVOID)
                 else
                     _snwprintf(w.msg, 96, L"жду телефон: подключите его к сети ГУ (%u с)",
                                (unsigned)((kApWaitMs - (now - apTick)) / 1000));
-                Publish(w);
-                WaitForSingleObject(s_wake, 2000);
+                PublishAt(w, gen);
+                PollWait(2000);
                 continue;
             }
         }
         if (!haveAdapter) {
+            Step(L"WZCEnumInterfaces");
             haveAdapter = FindAdapter(w.adapter, 48);
             if (!haveAdapter) {
                 w.state = WIFI_NOADAPTER;
                 w.count = 0;
                 w.ssid[0] = 0;
-                Publish(w);
-                WaitForSingleObject(s_wake, 10000);
+                PublishAt(w, gen);
+                PollWait(10000);
                 continue;
             }
             Log(L"wifi: адаптер %s", w.adapter);
@@ -1061,6 +1197,7 @@ static DWORD WINAPI WifiThread(LPVOID)
         IntfEntry e;
         IntfInit(&e);
         DWORD outFlags = 0;
+        Step(L"WZCQueryInterface");
         if (s_query(NULL, INTF_ALL, &e, &outFlags) != 0) {
             s_delete(&e);
             haveAdapter = false;
@@ -1082,6 +1219,7 @@ static DWORD WINAPI WifiThread(LPVOID)
         // minute): the adapter's own address says it is up
         if (!connected && s_joined[0]) {
             char ip[20];
+            Step(L"адрес (iphlpapi)");
             ReadIp(ip);
             if (ip[0] && strcmp(ip, "0.0.0.0") && strncmp(ip, "169.254.", 8)) {
                 connected = true;
@@ -1125,6 +1263,7 @@ static DWORD WINAPI WifiThread(LPVOID)
             n.ch = ChannelOf(list[i]);
         }
         qsort(w.nets, w.count, sizeof(WifiNet), CmpRssi);
+        Step(L"NDISUIO: маяки");
         LogBeacons(w, NULL);
         {   // how many in sight and how weak the weakest (the user 2026-11-03: dozens around, only the nearest seen)
             static int s_loggedNets = -1;
@@ -1143,6 +1282,7 @@ static DWORD WINAPI WifiThread(LPVOID)
         wcscpy(fs, s_forgetSsid);
         s_scanReq = s_connReq = s_forgetReq = false;
         LeaveCriticalSection(&s_cs);
+        Step(L"WZC / SDK: просьбы окна");
         if (forget) {
             SetPrefs(e, NULL, 0, fs);
             if (s_dkAdd)
@@ -1211,10 +1351,12 @@ static DWORD WINAPI WifiThread(LPVOID)
                 }
             }
         }
+        Step(L"WZCRefreshInterface");
         if (scan)
             s_refresh(NULL, INTF_ALL, &e, &outFlags);
         s_delete(&e);
 
+        Step(L"NDISUIO / SDK: связь");
         {   // the connection's steps into the log: up, the address, lost
             DWORD now = GetTickCount();
             if (connected && !linkTick) {
@@ -1286,6 +1428,7 @@ static DWORD WINAPI WifiThread(LPVOID)
                 staTick = now;
             }
         }
+        Step(L"адрес (iphlpapi)");
         if (connected)
             ReadIp(w.ip);
         else
@@ -1293,19 +1436,26 @@ static DWORD WINAPI WifiThread(LPVOID)
         if (connected && !wcsncmp(w.msg, L"подключение", 11))
             w.msg[0] = 0;   // done
         w.scanning = scan;
-        Publish(w);
+        PublishAt(w, gen);
         bool watch = linkTick && !hadIp && GetTickCount() - linkTick < 15000;   // the handshake: each second
-        WaitForSingleObject(s_wake, scan ? 3000 : watch ? 1000 : connectTick && GetTickCount() - connectTick < 30000 ?
-                            2000 : 5000);
+        PollWait(scan ? 3000 : watch ? 1000 : connectTick && GetTickCount() - connectTick < 30000 ? 2000 : 5000);
     }
 #else
     // PC test build: no WZC; three networks to try the screens, "connecting" takes 2 s
     static const wchar_t* kNames[3] = { L"Keenetic-4213", L"AndroidAP", L"Vesta_Garage" };
     static const int kRssi[3] = { -52, -68, -80 }, kSec[3] = { WSEC_WPA2, WSEC_WPA2, WSEC_OPEN };
     wcscpy(w.adapter, L"ПК: имитация");
+    s_dkReady = true;   // (no SDK: the switch acts at once)
+    SetEvent(s_wake);
     DWORD connectTick = 0;
     while (!s_stop) {
-        w.count = s_wantOn ? 3 : 0;
+        LONG gen = s_radioGen;
+        if (!s_radioOn) {   // (the switch shows it)
+            w.ssid[0] = 0;
+            PollWait(1000);
+            continue;
+        }
+        w.count = 3;
         for (int i = 0; i < w.count; i++) {
             wcscpy(w.nets[i].ssid, kNames[i]);
             w.nets[i].rssi = kRssi[i];
@@ -1326,31 +1476,82 @@ static DWORD WINAPI WifiThread(LPVOID)
         bool scan = s_scanReq;
         s_scanReq = s_connReq = s_forgetReq = false;
         LeaveCriticalSection(&s_cs);
-        if (!s_wantOn)
-            w.ssid[0] = 0;
         static DWORD s_apTick;
-        if (s_wantOn && s_wantAp) {
+        if (s_wantAp) {
             if (!s_apTick)
                 s_apTick = GetTickCount();
             w.state = WIFI_AP;
             w.apClients = GetTickCount() - s_apTick > 5000 ? 1 : 0;
             w.apAuto = false;
             w.count = 0;
-            Publish(w);
-            WaitForSingleObject(s_wake, 1000);
+            PublishAt(w, gen);
+            PollWait(1000);
             continue;
         }
         s_apTick = 0;
-        w.state = !s_wantOn ? WIFI_OFF : !w.ssid[0] ? WIFI_DISCONNECTED : GetTickCount() - connectTick < 2000 ? WIFI_CONNECTING : WIFI_CONNECTED;
+        w.state = !w.ssid[0] ? WIFI_DISCONNECTED : GetTickCount() - connectTick < 2000 ? WIFI_CONNECTING : WIFI_CONNECTED;
         w.rssi = w.state == WIFI_CONNECTED ? -52 : 0;
         strcpy(w.ip, w.state == WIFI_CONNECTED ? "192.168.1.57" : "");
         if (w.state == WIFI_CONNECTED && !wcsncmp(w.msg, L"подключение", 11))
             w.msg[0] = 0;
         w.scanning = scan;
-        Publish(w);
-        WaitForSingleObject(s_wake, 1000);
+        PublishAt(w, gen);
+        PollWait(1000);
     }
 #endif
+    return 0;
+}
+
+// The switch (see s_wake): the radio on / off by RadioStep, never waiting on the poll - only on its own SetMode, bounded
+// (RadioGuarded). Each change of its radio is a new s_radioGen: the poll's round begun before it is void (PublishAt,
+// DkModeAt) and starts anew. Off: s_radioOn false first, then SetMode(0); on: SetMode(2) first, then s_radioOn.
+// The switch's step (RadioStep's answer not RADIO_KEEP): the radio off or on; false - on too soon, the 30 s shown
+static bool SwitchStep(int step, WifiInfo& w, bool& radioOn, DWORD& offTick)
+{
+    if (step == RADIO_GO_ON && RadioOnTooSoon(w, offTick))
+        return false;
+    radioOn = step == RADIO_GO_ON;
+    if (!radioOn) {   // (SetMode(0) takes up to 10 s: the line says so meanwhile)
+        s_radioOn = false;
+        w.state = WIFI_OFF;
+        wcscpy(w.msg, L"выключаю Wi-Fi…");
+    }
+    InterlockedIncrement((LONG*)&s_radioGen);
+    if (!radioOn)
+        Publish(w);
+    RadioGuarded(radioOn, -1);
+    if (!radioOn)
+        offTick = GetTickCount();
+    s_radioOn = radioOn;
+    SetEvent(s_pollWake);
+    return true;
+}
+
+static DWORD WINAPI SwitchThread(LPVOID offsAtStart)
+{
+    LONG offsSeen = (LONG)(size_t)offsAtStart;   // the switch-offs acted on
+    while (!s_stop && !s_dkReady)   // the SDK looked for first (WifiBoot): SetMode is its
+        WaitForSingleObject(s_wake, 1000);
+    Log(L"поток выключателя Wi-Fi: id %08X", (unsigned)GetCurrentThreadId());
+    WifiInfo w;
+    memset(&w, 0, sizeof(w));
+    bool radioOn = true;   // the unit boots with it on
+    DWORD offTick = 0;     // when the switch put the radio off
+    while (!s_stop) {
+        int step = RadioStep(s_wantOn, radioOn, (unsigned)s_offs, (unsigned)offsSeen);
+        if (step != RADIO_KEEP) {
+            LONG offs = s_offs;   // (off: this one done; on: the ones while it was off do not count)
+            if (!SwitchStep(step, w, radioOn, offTick))
+                continue;
+            offsSeen = offs;
+        }
+        if (!radioOn) {
+            w.state = WIFI_OFF;
+            w.msg[0] = 0;
+            Publish(w);
+        }
+        WaitForSingleObject(s_wake, 10000);
+    }
     return 0;
 }
 
@@ -1359,11 +1560,16 @@ void WifiStart(HWND notify, UINT msg, WifiLogFn log)
     if (s_thread)
         return;
     InitializeCriticalSection(&s_cs);
+    InitializeCriticalSection(&s_modeCs);
     s_notify = notify;
     s_msg = msg;
     s_log = log;
+    s_info.state = WIFI_NOWZC;   // (until the poll's first word)
+    wcscpy(s_info.msg, L"запуск Wi-Fi…");
     s_wake = CreateEvent(NULL, FALSE, FALSE, NULL);
+    s_pollWake = CreateEvent(NULL, FALSE, FALSE, NULL);
     s_thread = CreateThread(NULL, 0, WifiThread, NULL, 0, NULL);
+    s_switch = CreateThread(NULL, 0, SwitchThread, (LPVOID)(size_t)s_offs, 0, NULL);
 }
 
 void WifiStop()
@@ -1372,9 +1578,25 @@ void WifiStop()
         return;
     s_stop = true;
     SetEvent(s_wake);
-    WaitForSingleObject(s_thread, 3000);
-    CloseHandle(s_thread);
-    s_thread = NULL;
+    SetEvent(s_pollWake);
+    HANDLE both[2] = { s_thread, s_switch };
+    for (int i = 0; i < 2; i++)
+        if (both[i]) {
+            WaitForSingleObject(both[i], 3000);
+            CloseHandle(both[i]);
+        }
+    s_thread = s_switch = NULL;
+}
+
+void WifiWatch()
+{
+    const wchar_t* step = s_step;
+    DWORD since = s_stepTick, now = GetTickCount();
+    LONG no = s_stepNo;
+    if (!s_thread || !StallDue(step != NULL, since, now, (unsigned)no, (unsigned)s_stallLogged))
+        return;
+    s_stallLogged = no;
+    Log(L"wifi: поток Wi-Fi стоит %u с в %s", (unsigned)((now - since) / 1000), step);
 }
 
 void WifiApSetup(const wchar_t* ssid, const wchar_t* pass, bool autoOn)
@@ -1391,14 +1613,14 @@ void WifiApSetup(const wchar_t* ssid, const wchar_t* pass, bool autoOn)
         LeaveCriticalSection(&s_cs);
     s_apAuto = autoOn;
     if (s_thread)
-        SetEvent(s_wake);
+        SetEvent(s_pollWake);
 }
 
 void WifiApManual(bool on)
 {
     s_wantAp = on;
     if (s_thread)
-        SetEvent(s_wake);
+        SetEvent(s_pollWake);
 }
 
 void WifiEnable(bool on)
@@ -1407,8 +1629,10 @@ void WifiEnable(bool on)
     if (!on)
         InterlockedIncrement((LONG*)&s_offs);   // (CE's takes no volatile)
     s_wantOn = on;
-    if (s_thread)
+    if (s_thread) {
         SetEvent(s_wake);
+        SetEvent(s_pollWake);   // (the start's 3 s cut short)
+    }
 }
 
 void WifiGet(WifiInfo* out)
@@ -1431,7 +1655,7 @@ void WifiScan()
     EnterCriticalSection(&s_cs);
     s_scanReq = true;
     LeaveCriticalSection(&s_cs);
-    SetEvent(s_wake);
+    SetEvent(s_pollWake);
 }
 
 void WifiConnect(const wchar_t* ssid, const wchar_t* pass)
@@ -1445,7 +1669,7 @@ void WifiConnect(const wchar_t* ssid, const wchar_t* pass)
     s_connPass[63] = 0;
     s_connReq = true;
     LeaveCriticalSection(&s_cs);
-    SetEvent(s_wake);
+    SetEvent(s_pollWake);
 }
 
 void WifiForget(const wchar_t* ssid)
@@ -1462,7 +1686,7 @@ void WifiForget(const wchar_t* ssid)
     s_forgetSsid[32] = 0;
     s_forgetReq = true;
     LeaveCriticalSection(&s_cs);
-    SetEvent(s_wake);
+    SetEvent(s_pollWake);
 }
 
 void WifiRemember(const wchar_t* ssid, const wchar_t* pass)

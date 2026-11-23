@@ -1,6 +1,7 @@
 // Wi-Fi of the unit through Windows CE's Wireless Zero Configuration (wzcsapi.dll, loaded at run time; the
 // exe still imports COREDLL + WS2 only) and the address through iphlpapi.dll. The work is done in a thread of
-// its own (WZC answers through RPC); the window learns of changes by a posted message. The unit's registry is
+// its own (WZC answers through RPC), the switch in another (a WZC or driver call may hang - the switch never waits on
+// it); the window learns of changes by a posted message. The unit's registry is
 // reset on every boot, and WZC's preferred networks with it: the known networks come from VestaHome's settings
 // (WifiRemember) and are given to WZC again whenever the adapter is not connected.
 #ifndef VESTA_WIFI_H
@@ -38,6 +39,8 @@ typedef void (*WifiLogFn)(const wchar_t* fmt, ...);
 
 void WifiStart(HWND notify, UINT msg, WifiLogFn log);   // msg is posted when WifiInfo changed
 void WifiStop();
+// The window's timer (each second): the Wi-Fi thread in one call over 15 s - a line into the log (once per call)
+void WifiWatch();
 void WifiGet(WifiInfo* out);
 void WifiScan();
 // A network to connect to (pass: "" for an open one); also kept for the next boots by the caller.

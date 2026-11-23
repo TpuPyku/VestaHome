@@ -628,6 +628,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (wp == 1)
             NetAutoStep();
         if (wp == 1)
+            WifiWatch();   // the Wi-Fi thread stuck in a driver's call: into the log
+        if (wp == 1)
             PlugScreenWatch();   // an add-on's screen came or went: screen.open / screen.close
         if (wp == 1) {
             static int s_appTicks;
