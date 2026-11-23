@@ -1196,7 +1196,8 @@ static void DrawApps(HDC dc)
           d ? 700 : 600, AL_MID, 168);
     }
     if (s_appCount == 0) {
-        EmptyList(dc, 40, 150, 720, L"Список программ пуст", L"Нажмите «Добавить» или впишите программы в apps.txt");
+        EmptyList(dc, 16 + 194 + 8, kAppY + 38, 560, L"Список программ пуст",   // (right of the "Add" tile: over it
+                  L"Нажмите «Добавить» или впишите программы в apps.txt");     // before - HU photo 2026-11-23)
     }
     PageDots(dc, s_page, AppsPages());
 }
