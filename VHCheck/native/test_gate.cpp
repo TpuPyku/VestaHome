@@ -15,7 +15,7 @@ static void Check(bool ok, const char* what)
 
 static GateFacts Good()   // VHCheck 1.1 on 4125 (2026-11-20): all there
 {
-    GateFacts f = { 0, 0, 0, 0, 4125, false };
+    GateFacts f = { 0, 0, 0, 0, 4125, false, false };
     return f;
 }
 
@@ -45,19 +45,26 @@ int main()
     f = Good(); f.shellSw = 0;
     Check(GateProblems(f) == GATE_SHELL && !GateAllows(GateProblems(f)), "no shell version - refused");
     f = Good(); f.canPanel = true;
-    Check(GateProblems(f) == GATE_CANPANEL && !GateAllows(GateProblems(f)), "the CAN panel - refused (for now)");
+    Check(GateProblems(f) == GATE_CANPANEL && !GateAllows(GateProblems(f)),
+          "the CAN panel without \Windows\Init.exe (the second build: who starts the shell - unknown) - refused");
+    f.canInit = true;
+    Check(GateProblems(f) == GATE_CANPANEL_EXP && GateAllows(GateProblems(f)),
+          "the CAN panel with Init.exe (1.3.6: it starts G3NavHMI.exe, where the loader goes) - allowed, told (the user 2026-11-23)");
+    f = Good(); f.canInit = true;
+    Check(GateProblems(f) == 0, "Init.exe without the panel - nothing");
+    f = Good(); f.canPanel = true;
     f.spm = -1; f.flc = 2; f.sv = -1;
     Check(GateProblems(f) == (GATE_CANPANEL | GATE_NO_SPM | GATE_FLC_MISS | GATE_SV), "several at once");
     Check(GateAllows(GATE_NO_FLC | GATE_BTAPI | GATE_SV | GATE_FLC_MISS), "only the told ones - allowed");
     static const unsigned kAll[] = { GATE_NO_SPM, GATE_SPM_MISS, GATE_NO_FLC, GATE_FLC_MISS, GATE_BTAPI, GATE_SV,
-                                     GATE_SHELL, GATE_CANPANEL };
+                                     GATE_SHELL, GATE_CANPANEL, GATE_CANPANEL_EXP };
     unsigned seen = 0;
     bool single = true;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 9; i++) {
         single = single && kAll[i] && !(kAll[i] & (kAll[i] - 1)) && !(seen & kAll[i]);
         seen |= kAll[i];
     }
-    Check(single && seen == 0xFF, "each problem its own bit (the installer words them one by one)");
+    Check(single && seen == 0x1FF, "each problem its own bit (the installer words them one by one)");
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

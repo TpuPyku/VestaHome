@@ -264,8 +264,15 @@ static void LogMsg(const wchar_t* s)
 static const wchar_t* kForeignFw[]  = { L"\\ResidentFlash\\CAN\\can_panel.exe" };
 static const wchar_t* kForeignWhy[] = { L"прошивка с CAN-панелью (can_panel.exe): заводское восстановление на ней делает кирпич" };
 
-static bool ForeignFirmware()   // g_status: the refusal, true when this firmware is one of them
+// The CAN panel 1.3.6's launcher: Main.exe starts it in place of the shell, it starts can_panel.exe and
+// \ResidentFlash\navigation\app\G3NavHMI.exe - the loader's place (its strings, 2026-11-23). With it the loader and
+// VestaHome go on as an experiment (the user 2026-11-23); the proxies never.
+static const wchar_t* kCanInit = L"\\Windows\\Init.exe";
+
+static bool ForeignFirmware(bool proxy = false)   // g_status: the refusal, true when this firmware is one of them
 {
+    if (!proxy && GetFileAttributes(kCanInit) != 0xFFFFFFFF)
+        return false;   // (the CAN panel with Init.exe: the gate tells it, GATE_CANPANEL_EXP)
     for (int i = 0; i < (int)(sizeof(kForeignFw) / sizeof(kForeignFw[0])); i++)
         if (GetFileAttributes(kForeignFw[i]) != 0xFFFFFFFF) {
             _snwprintf(g_status, 512, L"Отказ: %s. Ничего не изменено.", kForeignWhy[i]);
@@ -309,6 +316,7 @@ static unsigned GateRun(wchar_t* rep, int cap)
     f.sv = PeMissingFile(L"\\Windows\\desay_sdk_api.dll", kNeedSv, GATE_N(kNeedSv));
     f.shellSw = FwFileVersion(GetFileAttributes(kShellOrig) != 0xFFFFFFFF ? kShellOrig : kShellPath, 2);
     f.canPanel = GetFileAttributes(kForeignFw[0]) != 0xFFFFFFFF;
+    f.canInit = GetFileAttributes(kCanInit) != 0xFFFFFFFF;
     unsigned p = GateProblems(f);
     wchar_t line[200];
     if (f.shellSw)
@@ -321,7 +329,8 @@ static unsigned GateRun(wchar_t* rep, int cap)
     GateLine(rep, cap, L"btapi (сопряжение, интернет через телефон)", f.btapi, GATE_N(kNeedBtapi));
     GateLine(rep, cap, L"desay_sdk_api (маршрут звука)", f.sv, GATE_N(kNeedSv));
     if (f.canPanel)
-        AppendStr(rep, cap, L"проверка: прошивка с CAN-панелью — пока не поддерживается\n");
+        AppendStr(rep, cap, f.canInit ? L"проверка: прошивка с CAN-панелью (Init.exe) — экспериментально\n"
+                                      : L"проверка: прошивка с CAN-панелью без Init.exe — пока не поддерживается\n");
     AppendStr(rep, cap, !GateAllows(p) ? L"ИТОГ проверки: установка НЕ разрешена\n"
                         : p ? L"ИТОГ проверки: можно, но часть функций работать не будет\n"
                             : L"ИТОГ проверки: всё нужное на месте, установка разрешена\n");
@@ -1072,7 +1081,7 @@ static int DoInstall(int logging, int force)
 {
     SetPaths();
     LogMsg(logging ? L"--- install (logging on) ---" : L"--- install (pass-through) ---");
-    if (ForeignFirmware())
+    if (ForeignFirmware(true))   // (the proxies: never on the CAN panel)
         return 0;
 
     if (FlagByte() >= 0) {
@@ -2526,9 +2535,14 @@ static void RunAction(int id)
         }
         wchar_t msg[1024];
         if (id == B_SETUP)
-            _snwprintf(msg, 1024, L"Установить / обновить?\n%s%s%s%s%s",
-                       problems ? L"Внимание: проверка ГУ нашла, что часть функций работать не будет (Bluetooth или "
-                                  L"маршрут звука) — подробно в журнале установщика.\n" : L"",
+            _snwprintf(msg, 1024, L"Установить / обновить?\n%s%s%s%s%s%s",
+                       problems & GATE_CANPANEL_EXP ?
+                           L"ЭКСПЕРИМЕНТАЛЬНО: прошивка с CAN-панелью. Данные машины (климат, двери, скорость по CAN) "
+                           L"работать не будут; окно панели сверните или отключите её запуск. Если что-то не так — "
+                           L"VestaHome сам вернёт штатную оболочку после 3 неудачных запусков; удаление — «УДАЛИТЬ».\n" : L"",
+                       problems & ~GATE_CANPANEL_EXP ?
+                           L"Внимание: проверка ГУ нашла, что часть функций работать не будет (Bluetooth или "
+                           L"маршрут звука) — подробно в журнале установщика.\n" : L"",
                        L"• VestaHome — сейчас (настройки, пароли Wi-Fi и база камер сохранятся; "
                        L"запущенный будет закрыт и запустится снова).\n",
                        stubJob ? L"• Загрузчик VestaHome вместо штатной оболочки — при следующей загрузке (оболочка остаётся "

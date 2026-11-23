@@ -12,7 +12,9 @@ enum {
     GATE_BTAPI     = 16,    // btapi.dll missing, or without a function (pairing, PAN)
     GATE_SV        = 32,    // desay_sdk_api.dll missing, or without a function (the sound's route)
     GATE_SHELL     = 64,    // the stock shell's own version string not found: not this unit's firmware
-    GATE_CANPANEL  = 128,   // the CAN panel's firmware (can_panel.exe): its own way, not checked yet
+    GATE_CANPANEL  = 128,   // the CAN panel's firmware without \Windows\Init.exe: who starts the shell - unknown
+    GATE_CANPANEL_EXP = 256,   // ... with Init.exe (1.3.6: it starts can_panel.exe and G3NavHMI.exe - the loader's
+                               // place): allowed as an experiment, told (the user 2026-11-23)
 };
 static const unsigned kGateRefuse = GATE_NO_SPM | GATE_SPM_MISS | GATE_SHELL | GATE_CANPANEL;
 
@@ -20,6 +22,7 @@ struct GateFacts {
     int  spm, flc, btapi, sv;   // functions missing in each module; -1 - the module is not there
     int  shellSw;               // the stock shell's SW number (FwVersion part 2, e.g. 4120); 0 - none
     bool canPanel;
+    bool canInit;               // \Windows\Init.exe there (the CAN panel's launcher)
 };
 
 static unsigned GateModule(int missing, unsigned gone, unsigned short_)   // one module's problem, 0 none
@@ -31,7 +34,7 @@ static unsigned GateProblems(const GateFacts& f)
 {
     return GateModule(f.spm, GATE_NO_SPM, GATE_SPM_MISS) | GateModule(f.flc, GATE_NO_FLC, GATE_FLC_MISS) |
            GateModule(f.btapi, GATE_BTAPI, GATE_BTAPI) | GateModule(f.sv, GATE_SV, GATE_SV) |
-           (f.shellSw ? 0 : GATE_SHELL) | (f.canPanel ? GATE_CANPANEL : 0);
+           (f.shellSw ? 0 : GATE_SHELL) | (f.canPanel ? (f.canInit ? GATE_CANPANEL_EXP : GATE_CANPANEL) : 0);
 }
 
 static bool GateAllows(unsigned problems)
