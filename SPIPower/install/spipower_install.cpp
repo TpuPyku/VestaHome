@@ -2309,26 +2309,23 @@ static void BootRun()
 #define C_FACET  RGB(0xc2,0x4a,0x0b)
 
 struct Btn { RECT rc; const wchar_t* label; int id; };
-enum { B_STATUS, B_DRILLOFF, B_EXIT, B_DRILL, B_TESTOFF, B_TICK_VH, B_SETUP, B_REMOVE };
+enum { B_STATUS, B_DRILLOFF, B_EXIT, B_DRILL, B_TESTOFF, B_SETUP, B_REMOVE };
 
-// (2026-10-22, the user: too many buttons, no room left for the log) Two ticks - VestaHome with the stub in place
-// of the shell, and the proxies (MCU + Bluetooth) - and two actions on what is ticked: УСТАНОВИТЬ / ОБНОВИТЬ
-// (VestaHome at once; the stub and the proxies one boot job, the stub first) and УДАЛИТЬ ОТМЕЧЕННОЕ. Then the
-// status, cancelling an armed job, exit; below, small ("Сервис"): the test of the rescue path and taking it off.
+// (2026-10-22, the user: too many buttons, no room left for the log) Two actions: УСТАНОВИТЬ / ОБНОВИТЬ (VestaHome
+// at once; the stub and the old proxies' removal one boot job) and УДАЛИТЬ. No ticks (the user 2026-11-23: one tick
+// is pointless - "Установить" installs at once, no question unless the unit's check warns). Then the status,
+// cancelling an armed job, exit; below, small ("Сервис"): the test of the rescue path and taking it off.
 // FORCE - the command line only.
-enum { kBtnN = 8, kTickY = 300, kServiceY = 444 };
+enum { kBtnN = 7, kServiceY = 444 };
 static const Btn g_btns[kBtnN] = {
-    { {  24, kTickY, 776, kTickY + 40 }, L"VestaHome + загрузчик", B_TICK_VH },
     { {  24, 348, 396, 388 }, L"УСТАНОВИТЬ / ОБНОВИТЬ", B_SETUP  },
-    { { 404, 348, 776, 388 }, L"УДАЛИТЬ ОТМЕЧЕННОЕ",    B_REMOVE },
+    { { 404, 348, 776, 388 }, L"УДАЛИТЬ",               B_REMOVE },
     { {  24, 396, 266, 436 }, L"СТАТУС",               B_STATUS   },
     { { 274, 396, 526, 436 }, L"ОТМЕНИТЬ ЗАДАНИЕ",     B_DRILLOFF },
     { { 534, 396, 776, 436 }, L"ВЫХОД",                B_EXIT     },
     { { 404, kServiceY, 586, kServiceY + 30 }, L"ТЕСТ ВОССТ.", B_DRILL   },
     { { 594, kServiceY, 776, kServiceY + 30 }, L"СНЯТЬ ТЕСТ",  B_TESTOFF },
 };
-// what the actions touch (the user 2026-11-21: no tick for the old proxies - they are always taken off)
-static int g_tickVh = 1;
 static HFONT g_font, g_fontB, g_fontS;
 static HWND  g_hwnd  = NULL;
 static int   g_press = -1;
@@ -2448,27 +2445,11 @@ static void Paint(HDC dc)
 
     if (g_busy) TextL(dc, 30, 268, L"идёт операция, подождите...", C_ORANGE, g_fontS);
 
-    TextL(dc, 24, kServiceY + 6, L"Удаляется только отмеченное.  Сервис:", C_MUTED, g_fontS);
+    TextL(dc, 24, kServiceY + 6, L"Сервис:", C_MUTED, g_fontS);
 
     for (int i = 0; i < kBtnN; i++) {
         RECT r = g_btns[i].rc;
         int pressed = (g_press == i);
-        int tick = g_btns[i].id == B_TICK_VH ? g_tickVh : -1;
-        if (tick >= 0) {   // a tick: its box and the label beside it
-            RECT b = { r.left + 8, r.top + 6, r.left + 36, r.top + 34 };
-            FillC(dc, &b, tick ? C_ORANGE : C_INK);
-            FrameC(dc, &b, pressed ? C_ORANGE : tick ? C_ORANGE : C_LINE);
-            if (tick) {   // the check mark
-                HPEN pen = CreatePen(PS_SOLID, 4, C_INK);
-                HGDIOBJ op = SelectObject(dc, pen);
-                POINT m[3] = { { b.left + 6, b.top + 14 }, { b.left + 12, b.top + 21 }, { b.left + 23, b.top + 7 } };
-                Polyline(dc, m, 3);
-                SelectObject(dc, op);
-                DeleteObject(pen);
-            }
-            TextL(dc, r.left + 48, r.top + 8, g_btns[i].label, C_TEXT, g_font);
-            continue;
-        }
         FillC(dc, &r, pressed ? C_ORANGE : C_PANEL);
         FrameC(dc, &r, pressed ? C_FACET : C_LINE);
         TextC(dc, &r, g_btns[i].label, C_TEXT, g_btns[i].id == B_DRILL || g_btns[i].id == B_TESTOFF ? g_fontS : g_font);
@@ -2503,22 +2484,11 @@ static void RunAction(int id)
         return;
     }
 
-    if (id == B_TICK_VH) {
-        g_tickVh = !g_tickVh;
-        InvalidateRect(g_hwnd, NULL, TRUE);
-        return;
-    }
-
     if (id == B_SETUP || id == B_REMOVE) {
-        if (!g_tickVh) {
-            wcscpy(g_status, L"Ничего не отмечено: отметьте VestaHome.");
-            InvalidateRect(g_hwnd, NULL, TRUE);
-            return;
-        }
         SetPaths();
         int stub = IsStubFile(kShellPath);
         // the stub's part only when it changes something: the same stub in place - VestaHome alone, no reboot
-        int stubJob = g_tickVh && (id == B_SETUP ? !(stub && SameFile(kShellPath, g_stubSrc)) : stub);
+        int stubJob = id == B_SETUP ? !(stub && SameFile(kShellPath, g_stubSrc)) : stub;
         int proxyJob = 1;   // (old proxies: always taken off where they are)
         if (id == B_SETUP && proxyJob) {   // variant B (the user 2026-11-20): no proxy DLLs - the stub does their
             char md5[33];                  // work; a unit with them gets the factory DLLs back, none - nothing to do
@@ -2535,7 +2505,7 @@ static void RunAction(int id)
             }
         }
         unsigned problems = 0;
-        if (id == B_SETUP && g_tickVh) {   // the gate: VHCheck's checks (GateRun)
+        if (id == B_SETUP) {   // the gate: VHCheck's checks (GateRun)
             static wchar_t gate[2048];
             gate[0] = 0;
             problems = GateRun(gate, 2048);
@@ -2549,33 +2519,33 @@ static void RunAction(int id)
         }
         wchar_t msg[1024];
         if (id == B_SETUP)
-            _snwprintf(msg, 1024, L"Установить / обновить отмеченное?\n%s%s%s%s%s",
+            _snwprintf(msg, 1024, L"Установить / обновить?\n%s%s%s%s%s",
                        problems ? L"Внимание: проверка ГУ нашла, что часть функций работать не будет (Bluetooth или "
                                   L"маршрут звука) — подробно в журнале установщика.\n" : L"",
-                       g_tickVh ? L"• VestaHome — сейчас (настройки, пароли Wi-Fi и база камер сохранятся; "
-                                  L"запущенный будет закрыт и запустится снова).\n" : L"",
+                       L"• VestaHome — сейчас (настройки, пароли Wi-Fi и база камер сохранятся; "
+                       L"запущенный будет закрыт и запустится снова).\n",
                        stubJob ? L"• Загрузчик VestaHome вместо штатной оболочки — при следующей загрузке (оболочка остаётся "
                                  L"рядом и вернётся сама, если VestaHome 3 раза подряд не проработает 1 мин).\n" : L"",
                        proxyJob ? L"• Прежние proxy MCU и Bluetooth убираются, заводские DLL возвращаются — при "
                                   L"следующей загрузке (их работу теперь делает загрузчик).\n" : L"",
                        stubJob || proxyJob ? L"Потом перезагрузите ГУ, НЕ вынимая SD-карту." : L"");
         else
-            _snwprintf(msg, 1024, L"Удалить отмеченное?\n%s%s%s%s",
-                       g_tickVh ? L"• VestaHome полностью (\\ResidentFlash\\VestaHome: и настройки, пароли Wi-Fi, ярлыки, "
-                                  L"база камер) — сейчас.\n" : L"",
+            _snwprintf(msg, 1024, L"Удалить VestaHome?\n%s%s%s%s",
+                       L"• VestaHome полностью (\\ResidentFlash\\VestaHome: и настройки, пароли Wi-Fi, ярлыки, "
+                       L"база камер) — сейчас.\n",
                        stubJob ? L"• Загрузчик VestaHome: штатная оболочка вернётся на место при следующей загрузке.\n" : L"",
                        proxyJob ? L"• Proxy MCU и Bluetooth: заводские DLL вернутся при следующей загрузке "
                                   L"(после неё нажмите «Удалить» ещё раз — уберёт SwDnl.exe с SD-карты).\n" : L"",
                        stubJob || proxyJob ? L"Потом перезагрузите ГУ, НЕ вынимая SD-карту." : L"");
         msg[1023] = 0;
-        if (!Confirm(msg))
-            return;
+        if ((id == B_REMOVE || problems) && !Confirm(msg))   // (setup at once - the user 2026-11-23; the result and
+            return;                                           // "reboot the unit" come in the window)
         g_busy = 1;
         InvalidateRect(g_hwnd, NULL, TRUE);
         UpdateWindow(g_hwnd);
         wchar_t vhRes[1024] = L"";
         int ok = 1;
-        if (g_tickVh) {   // VestaHome: plain file work while everything runs
+        {   // VestaHome: plain file work while everything runs
             // No "start it?" (the user 2026-10-22): a running VestaHome comes back by itself - under the stub the
             // stub starts the new one when this mutex is gone (VestaStub: UpdateRunning), else we do; a first
             // install starts at the boot (the stub).
