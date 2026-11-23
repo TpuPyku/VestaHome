@@ -15,8 +15,8 @@ Desay SDK «Prima II», ARMV4I) и через неё шлёт/принимает
   (`PROGRAM=` выбирает программу, по умолчанию `SwDnl.exe`).
 - `ghidra_scripts/` — скрипты разбора: `StrRefDecomp` (поиск строк в обеих кодировках + xrefs +
   декомпиляция), `Callers` (вызывающие, включая ссылки из таблиц), `DecompAt`, `DumpW`.
-- `MAIN.md` — разбор `Main.exe` (триггер сброса/отката, окно ≈6 с); `SWDNL.md` — разбор заводского
-  апдейтера `SwDnl.exe` (байт `SwUpdate.flag`, ключи `SwDnl.cfg`, распаковка `.upg`).
+- Разборы `Main.exe` и заводского апдейтера `SwDnl.exe` (`MAIN.md`, `SWDNL.md`) и утилиты исследования прошивки
+  в репозитории больше не лежат (с 23.11.2026 — только сборка и код); их можно найти в истории git.
 - `tools/make_test_dir.py <outdir>` — собирает папку Уровня 0 (на ПК:
   `python tools\make_test_dir.py hu_test` → `VestaHome\SPIPower\hu_test\`, её и копировать на ГУ целиком):
   `SPIPowerMgr.dll` (proxy) + `SPIPowerMgr_orig.dll` (заводская) + `NCL_BaseCom.dll` +

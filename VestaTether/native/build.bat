@@ -1,5 +1,5 @@
 @echo off
-rem Builds VestaTether.dll and TetherProbe.exe (Windows CE, ARMv4: the phone's USB tethering, the probe) and runs their
+rem Builds VestaTether.dll (Windows CE, ARMv4: the phone's USB tethering) and runs its
 rem desktop tests (test_rndis: the messages; test_vtether: the driver over a made-up USBD and phone).
 setlocal
 if "%VS8%"=="" set VS8=C:\Program Files (x86)\Microsoft Visual Studio 8
@@ -18,7 +18,7 @@ if not exist "%OUT%" mkdir "%OUT%"
 if not exist %VH%\obj\bearssl_arm.lib call %VH%\build_bearssl.bat || goto fail
 
 echo === ARM (Windows CE)
-"%VC%\ce\bin\x86_arm\cl.exe" /nologo /O2 /W3 /GS- /TP /c vtether.cpp rndis.cpp adb.cpp probe.cpp /Foobj\arm\ ^
+"%VC%\ce\bin\x86_arm\cl.exe" /nologo /O2 /W3 /GS- /TP /c vtether.cpp rndis.cpp adb.cpp /Foobj\arm\ ^
   /DUNICODE /D_UNICODE /DUNDER_CE=0x420 /D_WIN32_WCE=0x420 /DWINCE /DARM /D_ARM_ /DARMV4 /DNDEBUG ^
   /I"%BR%\inc" /I"%COMPAT%" /I"%SDK%\Include" /I"%VC%\ce\include"
 if errorlevel 1 goto fail
@@ -31,10 +31,6 @@ if errorlevel 1 goto fail
   /OUT:"%OUT%\VestaTether.dll" /IMPLIB:obj\arm\VestaTether.lib /DEF:vtether.def obj\arm\vtether.obj obj\arm\rndis.obj ^
   obj\arm\adb.obj obj\arm\ndismp.obj %VH%\obj\bearssl_arm.lib ^
   /LIBPATH:"%SDK%\Lib\armv4" /LIBPATH:"%VC%\ce\lib\armv4" coredll.lib corelibc.lib ndis.lib /NODEFAULTLIB:oldnames.lib
-if errorlevel 1 goto fail
-"%VC%\ce\bin\x86_arm\link.exe" /nologo /SUBSYSTEM:WINDOWSCE,4.20 /MACHINE:ARM /OUT:"%OUT%\TetherProbe.exe" obj\arm\probe.obj ^
-  obj\arm\adb.obj obj\arm\rndis.obj %VH%\obj\bearssl_arm.lib ^
-  /LIBPATH:"%SDK%\Lib\armv4" /LIBPATH:"%VC%\ce\lib\armv4" coredll.lib corelibc.lib /NODEFAULTLIB:oldnames.lib
 if errorlevel 1 goto fail
 
 echo === x86 tests

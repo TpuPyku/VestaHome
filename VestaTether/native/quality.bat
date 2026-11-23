@@ -21,7 +21,7 @@ set /a BAD=%BAD%+%errorlevel%
 python %TOOLS%\crapper.py --cobertura obj\pc\cov_adb.xml adb.cpp
 set /a BAD=%BAD%+%errorlevel%
 echo === dryer
-python %TOOLS%\dryer.py vtether.cpp adb.cpp rndis.cpp probe.cpp
+python %TOOLS%\dryer.py vtether.cpp adb.cpp rndis.cpp
 set /a BAD=%BAD%+%errorlevel%
 if "%1"=="mutate" (
   echo === mutator

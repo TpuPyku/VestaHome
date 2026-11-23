@@ -28,12 +28,6 @@ VL    = os.path.join(ROOT, 'VestaLaunch')   # its own repo since 2026-10-13, wit
 PLAN = (
     (os.path.join(ROOT, 'OSMapsCE', 'OSMapsCE'), r'SDCard\OSMapsCE',
         ('OSMapsCE.exe', 'Images', 'Fonts', 'Lang', 'Voice')),   # toolhelp.dll: the firmware's own (\Windows) is used; Fonts: Golos (OFL); Voice: the prompts
-    # GpsSim: a drive in place of the GPS (a unit on a desk; a Shturmann's OSMapsCE too), run from the card
-    (os.path.join(ROOT, 'VestaHome', 'GpsSim', 'GpsSim'), r'SDCard\GpsSim', ('GpsSim.exe', 'GpsSimOSM.exe')),
-    # UartProbe: the radio MCU's own UART on COM1 / COM2 (its 0x8010 sets the current volume; PROJECT.md), from the card
-    (os.path.join(ROOT, 'VestaHome', 'UartProbe', 'UartProbe'), r'SDCard\UartProbe', ('UartProbe.exe',)),
-    # McuProbe: the MCU without our proxy - a second client of the stock SPIPowerMgr.dll for 5 min (2026-11-19)
-    (os.path.join(ROOT, 'VestaHome', 'McuProbe', 'McuProbe'), r'SDCard\McuProbe', ('McuProbe.exe',)),
     # VHCheck: the unit's facts before VestaHome moves to the stub alone (2026-11-20): stock firmware and CAN panel
     (os.path.join(ROOT, 'VestaHome', 'VHCheck', 'VHCheck'), r'SDCard\VHCheck', ('VHCheck.exe',)),
     # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
@@ -60,8 +54,6 @@ PLAN = (
         ('VestaHomeInstall.exe',)),
     (os.path.join(VL, 'LaunchInstall', 'LaunchInstall'), r'SDCard\Updater\UPDATE',
         ('LaunchInstall.exe',)),
-    # (TetherProbe no more: VestaHome registers VestaTether.dll itself - the user 2026-11-15; the probe stays in its repo
-    # for a diagnosis)
     # the add-on "Android Auto" (its own repo VestaAuto; in place of the sample add-on - the user 2026-11-13):
     # VestaHome starts VHContent\VHPlugins\<Name>\<Name>.exe; its test media (make_media.py) on the card
     (os.path.join(ROOT, 'VestaAuto', 'VestaAuto'), r'ResidentFlash\VHContent\VHPlugins\VestaAuto',
@@ -92,7 +84,9 @@ RETIRED = (r'SDMMC', r'SDMemory', r'StorageFlash', r'USBDevice', r'SDCard\VestaW
            r'ResidentFlash\VHContent\VHPlugins\Sample',
            r'SDCard\VestaAuto',     # (the video probe's media: VestaAuto 0.6 shows the phone, no probe - the user 2026-11-15)
            r'SDCard\TetherProbe',   # (VestaHome registers the phone's driver itself - the user 2026-11-15)
-           r'SDCard\HuCheck')       # (renamed VHCheck - the user 2026-11-20)
+           r'SDCard\HuCheck',       # (renamed VHCheck - the user 2026-11-20)
+           # (the repo public - the user 2026-11-23: the probes and GpsSim out of it, kept outside, VestaHome_extra)
+           r'SDCard\GpsSim', r'SDCard\UartProbe', r'SDCard\McuProbe')
 
 
 def main():
