@@ -446,7 +446,6 @@ static void SetLight(bool night)
 }
 
 static DWORD s_lastTouch;   // the last tap: the screen saver counts from it
-enum { kSettleMs = 100, kDragPx = 24 };   // a press settles (its point follows the finger), then a drag past this
 
 // Sunrise or sunset for the day of the year, minutes after local midnight; -1: the sun stays down, -2: up.
 // The almanac's algorithm (zenith 90.833 deg), good to a couple of minutes.

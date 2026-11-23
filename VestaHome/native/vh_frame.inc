@@ -589,10 +589,10 @@ static void DragMove(int dx)
     DragShow(s_dragX);
 }
 
-// Let go: the page turns (dx past 100 px towards a neighbour) or slides back.
-static void DragEnd(int dx)
+// Let go: the page turns to the neighbour (turn: s_dragNb, touchdrag.h PageTurn - dragged past 60 px or flicked) or
+// slides back (0).
+static void DragEnd(int turn)
 {
-    bool turn = s_dragNb && s_dragNb == (dx < 0 ? 1 : -1) && (dx > 60 || dx < -60);   // (was 100: HU 2026-10-24)
     int w = 800 - SlideLeft(), from = s_dragX, to = turn ? (s_dragNb > 0 ? -w : w) : 0;
     const DWORD kMs = 160;
     DWORD t0 = GetTickCount();

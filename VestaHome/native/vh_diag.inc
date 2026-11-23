@@ -5,9 +5,19 @@
 // "About the system". The tests that need the MCU protocol are grey until it is known.
 
 static int s_testStep;            // the screen test's current fill
-enum { kTestSteps = 7, kTouchMax = 256 };
-static POINT s_touch[kTouchMax];  // the touch test's trail, oldest first
-static int   s_touchCount;
+enum { kTestSteps = 7, kTouchMax = 256, kStillMax = 128 };
+// The touch test (the user 2026-11-23: the panel's jitter measured on the unit, to tune kVTouchDragPx): the finger's
+// raw points and vtouch's point after each, oldest first; a press's still points (its wander), whether it dragged
+struct TouchPt {
+    POINT raw, shown;
+    bool  first;   // a press's first point: the line starts anew
+};
+static TouchPt s_touch[kTouchMax];
+static int     s_touchCount;
+static POINT   s_still[kStillMax];
+static int     s_stillCount;
+static bool    s_touchDragged;
+static int     s_wanderMax, s_wanderTaps;   // the most wander of the presses that stayed presses, how many
 
 struct Test { const wchar_t* label; Action a; int arg; };
 static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L"Касания", A_SCREEN, S_TEST_TOUCH },
@@ -111,7 +121,8 @@ static void ScrTestScreen(HDC dc)
     }
 }
 
-// Touch test: every point the finger passes is marked, the last one with a crosshair and its coordinates.
+// Touch test: the finger's raw points (dim dots) and vtouch's filtered way (the orange line); the last press's
+// settled point (a cross), its still finger's wander and whether it became a drag (past kVTouchDragPx).
 static void ScrTestTouch(HDC dc)
 {
     Fill(dc, 0, 0, 800, 480, kInk);
@@ -119,30 +130,70 @@ static void ScrTestTouch(HDC dc)
         Fill(dc, x, 0, x + 1, 480, kPanel2);
     for (int y = 0; y < 480; y += 80)
         Fill(dc, 0, y, 800, y + 1, kPanel2);
-    for (int i = 0; i < s_touchCount; i++)
-        Fill(dc, s_touch[i].x - 2, s_touch[i].y - 2, s_touch[i].x + 3, s_touch[i].y + 3, kOrange);
-    if (s_touchCount) {
-        const POINT& p = s_touch[s_touchCount - 1];
-        Fill(dc, 0, p.y, 800, p.y + 1, kText);
-        Fill(dc, p.x, 0, p.x + 1, 480, kText);
-        wchar_t s[48];
-        _snwprintf(s, 48, L"x %d · y %d · точек %d", p.x, p.y, s_touchCount);
-        T(dc, 16, 36, s, 18, kText, 700);
-    } else {
-        T(dc, 16, 36, L"Проведите пальцем по экрану, углы и края тоже", 18, kMuted, 400);
-    }
+    for (int i = 1; i < s_touchCount; i++)
+        if (!s_touch[i].first)
+            Line(dc, s_touch[i - 1].shown.x, s_touch[i - 1].shown.y, s_touch[i].shown.x, s_touch[i].shown.y, 2, kOrange);
+    for (int i = 0; i < s_touchCount; i++)   // (over the line: the panel's own points)
+        Fill(dc, s_touch[i].raw.x - 1, s_touch[i].raw.y - 1, s_touch[i].raw.x + 2, s_touch[i].raw.y + 2, kMuted);
+    Button(dc, 552, 8, 120, 48, L"Очистить", B_N, IC_NONE, 16, 0, A_TOUCHCLEAR);
     Button(dc, 680, 8, 112, 48, L"Выход", B_FILL, IC_NONE, 16, 0, A_BACK);
+    if (!s_touchCount) {
+        T(dc, 16, 36, L"Нажмите и подержите палец, проведите — точки и след", 18, kMuted, 400);
+        return;
+    }
+    Fill(dc, s_vt.px - 10, s_vt.py, s_vt.px + 11, s_vt.py + 1, kText);
+    Fill(dc, s_vt.px, s_vt.py - 10, s_vt.px + 1, s_vt.py + 11, kText);
+    wchar_t s[96];
+    if (s_touchDragged)
+        _snwprintf(s, 96, L"нажатие %d, %d · перетаскивание", s_vt.px, s_vt.py);
+    else
+        _snwprintf(s, 96, L"нажатие %d, %d · касание, дрожание %d px", s_vt.px, s_vt.py,
+                   TouchWander(s_still, s_stillCount, s_vt.px, s_vt.py));
+    T(dc, 16, 28, s, 18, kText, 700);
+    _snwprintf(s, 96, L"наибольшее дрожание %d px (касаний %d) · порог %d px · точек %d", s_wanderMax, s_wanderTaps,
+               (int)kVTouchDragPx, s_touchCount);
+    T(dc, 16, 52, s, 15, kMuted, 400);
 }
 
-static void AddTouch(int x, int y)
+static void TouchTestAdd(int x, int y)   // a raw point, vtouch's point after it (VTouchMove done)
 {
     if (s_touchCount == kTouchMax) {
-        memmove(s_touch, s_touch + 1, (kTouchMax - 1) * sizeof(POINT));
+        memmove(s_touch, s_touch + 1, (kTouchMax - 1) * sizeof(TouchPt));
         s_touchCount--;
     }
-    s_touch[s_touchCount].x = x;
-    s_touch[s_touchCount].y = y;
-    s_touchCount++;
+    TouchPt& p = s_touch[s_touchCount++];
+    p.raw.x = x;
+    p.raw.y = y;
+    p.shown.x = s_vt.x;
+    p.shown.y = s_vt.y;
+    p.first = false;
+    if (s_vt.state == VT_DRAG)
+        s_touchDragged = true;
+    else if (s_stillCount < kStillMax)
+        s_still[s_stillCount++] = p.raw;
+}
+
+static void TouchTestDown(int x, int y)   // a new press (VTouchDown done)
+{
+    s_stillCount = 0;
+    s_touchDragged = false;
+    TouchTestAdd(x, y);
+    s_touch[s_touchCount - 1].first = true;
+}
+
+static void TouchTestUp()   // the finger lifted (VTouchUp done): a press's wander counted
+{
+    if (s_touchDragged || !s_stillCount)
+        return;
+    int w = TouchWander(s_still, s_stillCount, s_vt.px, s_vt.py);
+    s_wanderMax = w > s_wanderMax ? w : s_wanderMax;
+    s_wanderTaps++;
+}
+
+static void TouchTestClear()
+{
+    s_touchCount = s_stillCount = s_wanderMax = s_wanderTaps = 0;
+    s_touchDragged = false;
 }
 
 // "123 МБ" or "12,3 ГБ".

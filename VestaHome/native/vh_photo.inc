@@ -1052,6 +1052,7 @@ static void DoActionOn(const Btn& b)
     case A_MINIMIZE: MinimizeHome(); break;
     case A_CALIBRATE: Calibrate(); break;
     case A_TEST:     if (++s_testStep >= kTestSteps) Back(); break;
+    case A_TOUCHCLEAR: TouchTestClear(); break;
     case A_EXIT:     s_exitCode = 3; StartExplorer(); DestroyWindow(s_wnd); return;   // (3: not the shell after)
     default:         break;
     }

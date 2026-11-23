@@ -52,6 +52,8 @@
 #include "pbcache.h"   // the phone book kept beside VestaHome, sealed
 #include "netmirror.h" // the radio catalogue's mirror (VestaCore's release "radio")
 #include "vrvc.h"   // VestaCore: the rear view camera
+#include "vtouch.h"   // VestaCore: the finger on the resistive panel, filtered
+#include "touchdrag.h"   // what its drag moves, whether the page turns
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
 #include "ramlog.h"    // the log in RAM while no card is there
 #include "vnight.h"    // VestaCore: the night mode shared with OSMapsCE
@@ -145,7 +147,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
               A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON, A_VOICEDIAL,
               A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_SVCDONE,
-              A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH, A_ADDONKEY };
+              A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH, A_ADDONKEY, A_TOUCHCLEAR };
 
 // S_SETTINGS is the general section; S_VIDEO and S_PHOTO are the file lists.
 // S_INCOMING, S_VOLUME, S_EXIT (closing VestaHome) and S_REBOOT (the knob held) are windows over the previous screen.
@@ -349,10 +351,15 @@ static wchar_t s_status[96];    // last action result, shown in the top bar
 // add-on's "bye" at the exit rescanned the widgets, their fetch hung in DNS with no network - the process could not
 // end, TerminateProcess "busy", the setup refused the first time).
 static volatile bool s_quitting;
-static int     s_downX, s_downY;   // where the press started: a horizontal swipe turns the page
+static int     s_downX, s_downY;   // where the press started (the keyboard's field: a hold moved off is no hold)
+// The finger, filtered (VestaCore vtouch.h; the user 2026-11-23: "smooth, as in the maps"): a tap at its settled press
+// point, a drag past kVTouchDragPx (the panel's wander is no move, HU 2026-10-24-2: a preset's tap turned the page)
+static VTouch  s_vt;
 static bool    s_drag;          // a page follows the finger (DragStart .. DragEnd): no other redraws meanwhile
+static int     s_dragBaseX, s_dragBaseY;   // the finger's way (s_vt.dx, dy) when the page began to follow it
 static bool    s_listDrag;      // a list follows the finger up / down (Scroll)
 static int     s_listDrag0;     // its scroll when the finger started
+static int     s_listBaseY;     // the finger's way (s_vt.dy) then
 #ifdef UNDER_CE
 static HWND    s_taskbar;
 #endif
@@ -450,8 +457,53 @@ static void SupportInit()
 // The list the press started on, which a finger moved up / down scrolls (Scroll: the one drawn last), or NULL.
 static Scroll* ListUnderFinger()
 {
-    POINT p = { s_downX, s_downY };
+    POINT p = { s_vt.px, s_vt.py };
     return s_scroll && PtInRect(&s_scroll->view, p) ? s_scroll : NULL;
+}
+
+// The finger's drag (vtouch: past kVTouchDragPx) taken by a page (clearly sideways on a paged screen) or by the list
+// it began on; neither yet - asked again at its next point. Each follows its way from where it took it: no jump.
+static void FingerDragBegin()
+{
+    Scroll* ls = ListUnderFinger();
+    int what = DragWhat(s_vt.x - s_vt.px, s_vt.y - s_vt.py, CanSwipe() && !s_btHold, ls != NULL);
+    if (what == DRAG_PAGE) {
+        DragStart();   // (no memory for the page's copy: s_drag stays off, the release turns it)
+        s_dragBaseX = s_vt.dx;
+        s_dragBaseY = s_vt.dy;
+    } else if (what == DRAG_LIST) {
+        s_listDrag = true;
+        s_listDrag0 = ls->pos;
+        s_listBaseY = s_vt.dy;
+        KillTimer(s_wnd, TIMER_LONG);
+        s_pressed = -1;
+    }
+}
+
+// The finger moved (its points filtered by vtouch): the balance point, a page or a list follows it
+static void FingerMove(int x, int y)
+{
+    int st = VTouchMove(&s_vt, GetTickCount(), x, y);
+    if (s_screen == S_TEST_TOUCH && s_pressed < 0) {
+        TouchTestAdd(x, y);
+        Redraw();
+        return;
+    }
+    if (s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY) {
+        BalanceAt(s_vt.x, s_vt.y, false);
+        return;
+    }
+    if (st != VT_DRAG)
+        return;
+    if (!s_drag && !s_listDrag)
+        FingerDragBegin();
+    Scroll* ls = s_listDrag ? ListUnderFinger() : NULL;
+    if (s_drag) {
+        DragMove(s_vt.dx - s_dragBaseX);
+    } else if (ls) {
+        ScrollTo(*ls, s_listDrag0 - (s_vt.dy - s_listBaseY));
+        RedrawArea(ls->area.left, ls->area.top, ls->area.right, ls->area.bottom);
+    }
 }
 
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -1258,14 +1310,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
         return 0;
     case WM_LBUTTONDOWN:
-        s_lastTouch = GetTickCount();   // (also the press's settling: WM_MOUSEMOVE)
+        s_lastTouch = GetTickCount();   // (also the finger's press: vtouch)
         s_downX = (short)LOWORD(lp);
         s_downY = (short)HIWORD(lp);
         s_pressed = HitTest((short)LOWORD(lp), (short)HIWORD(lp));
         s_pressAct = s_pressed >= 0 ? s_btns[s_pressed].action : -1;
         s_pressArg = s_pressed >= 0 ? s_btns[s_pressed].arg : 0;
+        VTouchDown(&s_vt, s_lastTouch, s_downX, s_downY);
         if (s_screen == S_TEST_TOUCH && s_pressed < 0)
-            AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
+            TouchTestDown(s_downX, s_downY);
         if (s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD)   // the keyboard's cursor to the finger
             VKeysCursorAt(&s_keys, (short)LOWORD(lp) - kKeyFieldX, kKeyFieldW);
         if (s_pressed >= 0 && (s_btns[s_pressed].action == A_KEYFIELD || s_btns[s_pressed].action == A_PRESET ||
@@ -1288,48 +1341,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             RedrawArea(0, 60, 800, 140);
             return 0;
         }
-        // A resistive panel's point wanders by some px while the finger settles (HU 2026-10-24-2: a tap on a preset
-        // turned the page, the pressed look came and went): for kSettleMs the press point follows it, no drag yet.
-        if ((wp & MK_LBUTTON) && !s_drag && !s_listDrag && GetTickCount() - s_lastTouch < kSettleMs) {
-            s_downX = (short)LOWORD(lp);
-            s_downY = (short)HIWORD(lp);
-            return 0;
-        }
-        {   // (a block: the case labels below)
-            Scroll* ls = (wp & MK_LBUTTON) ? ListUnderFinger() : NULL;
-            if (ls) {
-                int dy = (short)HIWORD(lp) - s_downY;
-                if (!s_listDrag && (dy > kDragPx || dy < -kDragPx)) {
-                    s_listDrag = true;
-                    s_listDrag0 = ls->pos;
-                    KillTimer(hwnd, TIMER_LONG);
-                    s_pressed = -1;
-                }
-                if (s_listDrag) {
-                    ScrollTo(*ls, s_listDrag0 - dy);
-                    RedrawArea(ls->area.left, ls->area.top, ls->area.right, ls->area.bottom);
-                    return 0;
-                }
-            }
-        }
-        if ((wp & MK_LBUTTON) && CanSwipe() && !s_btHold &&
-            !(s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY)) {
-            int dx = (short)LOWORD(lp) - s_downX, dy = (short)HIWORD(lp) - s_downY;
-            // a resistive screen gives few points of a light swipe (HU 2026-10-24): the drag starts early - but past
-            // the finger's own wobble, and clearly sideways (HU 2026-10-24-2)
-            if (!s_drag && (dx > kDragPx || dx < -kDragPx) && abs(dx) > 2 * abs(dy))
-                DragStart();
-            if (s_drag) {
-                DragMove(dx);
-                return 0;
-            }
-        }
-        if (s_screen == S_TEST_TOUCH && (wp & MK_LBUTTON) && s_pressed < 0) {
-            AddTouch((short)LOWORD(lp), (short)HIWORD(lp));
-            Redraw();
-        }
-        if ((wp & MK_LBUTTON) && s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY)
-            BalanceAt((short)LOWORD(lp), (short)HIWORD(lp), false);
+        if (wp & MK_LBUTTON)
+            FingerMove((short)LOWORD(lp), (short)HIWORD(lp));
         return 0;
     case WM_SHOWWINDOW:   // shown again after "Minimize VH": the taskbar goes away again
 #ifdef UNDER_CE
@@ -1342,6 +1355,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_LBUTTONUP: {
         KillTimer(hwnd, TIMER_LONG);
+        double vx, vy;   // (the pen-up point not used: a stray on the panel - the settled press point, the last shown)
+        bool dragged = VTouchUp(&s_vt, GetTickCount(), &vx, &vy);
         if (s_btHold) {   // rewind / fast forward ends with the finger
             BtCmd(s_btHold);
             s_btHold = 0;
@@ -1351,7 +1366,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         ReleaseCapture();
-        int x = (short)LOWORD(lp), dx = x - s_downX;
+        if (s_screen == S_TEST_TOUCH && s_pressed < 0) {   // the touch test: no tap, the press counted
+            TouchTestUp();
+            Redraw();
+            return 0;
+        }
         if (s_listDrag) {   // the list scrolled: no tap; the buttons of the new positions
             s_listDrag = false;
             s_pressed = -1;
@@ -1360,24 +1379,26 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (s_drag) {
             s_pressed = -1;
-            DragEnd(dx);
+            DragEnd(PageTurn(s_vt.dx - s_dragBaseX, s_vt.dy - s_dragBaseY, vx, vy, s_dragNb));
             return 0;
         }
-        int i = HitTest(x, (short)HIWORD(lp));
+        // a tap: at the settled press point; a drag nothing followed: where the finger was last
+        int i = dragged ? HitTest(s_vt.x, s_vt.y) : HitTest(s_vt.px, s_vt.py);
         int was = s_pressed;
         s_pressed = -1;
         if (was >= 0 && s_btns[was].action == A_BALXY) {   // the finger may have left the car: still the point
-            BalanceAt(x, (short)HIWORD(lp), true);
+            BalanceAt(s_vt.x, s_vt.y, true);
             Redraw();
             return 0;
         }
-        // no drag began (the panel lost the finger between): a sideways lift still turns the page, not a tap
-        int dy = (short)HIWORD(lp) - s_downY;
-        if ((CanSwipe() || s_screen == S_PHOTO_VIEW) && (dx > 60 || dx < -60) && abs(dx) > 2 * abs(dy)) {
+        // a drag no page followed (the photo viewer; no memory for the page's copy): its way or a flick turns the page
+        int dir = dragged && (CanSwipe() || s_screen == S_PHOTO_VIEW) ?
+                  PageDir(s_vt.x - s_vt.px, s_vt.y - s_vt.py, vx, vy) : 0;
+        if (dir) {
             Redraw();   // the old page without the pressed look: the frame the new one pushes out
-            if (Swipe(dx < 0 ? 1 : -1)) {
+            if (Swipe(dir)) {
                 BuildButtons();
-                RedrawSlide(dx < 0 ? 1 : -1);
+                RedrawSlide(dir);
             }
             return 0;
         }
