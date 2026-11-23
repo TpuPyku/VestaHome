@@ -321,7 +321,11 @@ static DWORD WINAPI WebCoverThread(LPVOID)
         if (missed || GetFileAttributes(file) != 0xFFFFFFFF)
             continue;
         bool ok = WebCoverFetch(a, t, file);
-        VLog(L"обложка из сети: %S - %S: %s", a, t, ok ? L"есть" : L"не найдена");
+        wchar_t wa[128], wt[128];   // (UTF-8: %S printed it as the ANSI code page - "РҐСЂ..." in the log)
+        MultiByteToWideChar(CP_UTF8, 0, a, -1, wa, 128);
+        MultiByteToWideChar(CP_UTF8, 0, t, -1, wt, 128);
+        wa[127] = wt[127] = 0;
+        VLog(L"обложка из сети: %s - %s: %s", wa, wt, ok ? L"есть" : L"не найдена");
         if (ok)
             PostMessage(s_wnd, WM_APP_WEBCOVER, (WPARAM)key, 0);
         else
