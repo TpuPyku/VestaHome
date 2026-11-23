@@ -8,6 +8,7 @@
 // night), notify, open, media; "Settings -> General -> Add-ons". Not yet: volume (no way to it but the knob).
 
 // (the protocol's send and fields: VestaCore vhap.h)
+#include "plugvol.h"   // the volumes add-ons start from
 enum { kPlugMax = 4, kPlugScreens = 4, kPlugItems = 16, kPlugWidgets = 2, kPlugRows = 6, kPlugApi = 2 };   // (2: type=text)
 
 struct PlugItem { wchar_t id[24], type[12], label[48], sub[64], value[48], options[64], link[24]; bool secret; };
@@ -941,6 +942,14 @@ static void PluginsIn(const wchar_t* dir)
         _snwprintf(exe, MAX_PATH, L"%s%s.exe", p.dir, fd.cFileName);
         if (GetFileAttributes(exe) == 0xFFFFFFFF)
             continue;
+#ifdef UNDER_CE
+        if (!PlugVolumeOk(exe)) {   // (plugvol.h: taken out, the add-on would die with its card)
+            VLog(L"дополнение: %s на съёмном носителе - не запускаю (только \\ResidentFlash или \\SDMMC)", exe);
+            _snwprintf(s_status, 96, L"%s на карте не запускается: перенесите в \\ResidentFlash", p.id);
+            s_status[95] = 0;
+            continue;
+        }
+#endif
         s_plugN++;
         _snwprintf(off, MAX_PATH, L"%sdisabled", p.dir);
         p.off = GetFileAttributes(off) != 0xFFFFFFFF;
@@ -964,11 +973,16 @@ static void PluginsIn(const wchar_t* dir)
     FindClose(f);
 }
 
-// VHContent\VHPlugins on the partition, then on the SD card. Again when a card comes (it can be late for VestaHome's start).
+// VHContent\VHPlugins on the partition, then on the built-in card (\SDMMC); the SD card's only to say they don't start
+// from there (plugvol.h). Again when a card comes or goes.
 static void PluginsStart()
 {
-    wchar_t dirs[kContentDirs][MAX_PATH];
+    wchar_t dirs[kContentDirs + 1][MAX_PATH];
     int n = VhContentDirs(L"VHPlugins", dirs);
+#ifdef UNDER_CE
+    wcscpy(dirs[n++], dirs[1]);   // (the SD card's last)
+    wcscpy(dirs[1], L"\\SDMMC\\VHContent\\VHPlugins\\");
+#endif
     for (int i = 0; i < n; i++)
         PluginsIn(dirs[i]);
 }
@@ -1036,7 +1050,7 @@ static void ScrSetPlugins(HDC dc)
 {
     Settings(dc, S_SET_PLUGINS);
     if (!s_plugN) {
-        EmptyList(dc, 264, 100, 500, L"Дополнений нет", L"программы дополнений — в VHContent\\VHPlugins на \\ResidentFlash или SD");
+        EmptyList(dc, 264, 100, 500, L"Дополнений нет", L"программы дополнений — в VHContent\\VHPlugins на \\ResidentFlash или \\SDMMC");
         return;
     }
     for (int i = 0; i < s_plugN && i < 6; i++) {
