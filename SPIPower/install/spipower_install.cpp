@@ -2050,8 +2050,14 @@ static void DoBootArm(const char* verb, int force)
 
     // Main.exe looks for the updater only at \SDMemory\SwDnl.exe (../MAIN.md §4)
     const wchar_t* sd = SdRoot();
-    if (!sd || _wcsicmp(g_sdName, L"SDMemory") != 0) {
-        wcscpy(g_status, L"Ошибка: нужна SD-карта \\SDMemory (вставлена и доступна для записи) — Main.exe ищет SwDnl.exe только на ней.");
+    if (!sd || _wcsicmp(g_sdName, L"SDMemory") != 0) {   // (the user 2026-11-23, 4125: which of the two - say it)
+        wcscpy(g_status, !FileExists(L"\\SDMemory")
+            ? L"Загрузчик не обновлён: SD-карты нет в слоте (\\SDMemory не найден). Вставьте карту в слот SD "
+              L"(не USB) и нажмите «УСТАНОВИТЬ / ОБНОВИТЬ» ещё раз. VestaHome уже обновлён."
+            : L"Загрузчик не обновлён: на SD-карту нельзя записать. Проверьте переключатель защиты от записи на "
+              L"карте или переходнике и свободное место, затем «УСТАНОВИТЬ / ОБНОВИТЬ» ещё раз. VestaHome уже обновлён.");
+        LogMsg(g_status);
+        g_sd[0] = 0;   // (looked for again next time: \SDMMC kept here made the retry fail until a restart)
         return;
     }
     if (FlagByte() >= 0) {
@@ -2439,9 +2445,8 @@ static void Paint(HDC dc)
     RECT full = { 0, 0, 800, 480 };
     FillC(dc, &full, C_INK);
 
-    TextL(dc, 24, 12, L"VestaHome + proxy SPIPowerMgr.dll (прошивка 4120)", C_TEXT, g_fontB);
-    TextL(dc, 24, 46, L"Отметьте, что ставить или удалять. SD-карта в слоте. Прошивка не 4120 — proxy не встанет.",
-          C_MUTED, g_fontS);
+    TextL(dc, 24, 12, L"Установка VestaHome", C_TEXT, g_fontB);   // (the user 2026-11-23: no ticks, no proxies)
+    TextL(dc, 24, 46, L"SD-карта в слоте; не вынимайте её до перезагрузки ГУ.", C_MUTED, g_fontS);
 
     RECT box = { kBoxL, kBoxT, kBoxR, kBoxB };
     FillC(dc, &box, C_PANEL);
