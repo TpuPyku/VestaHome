@@ -53,6 +53,7 @@
 #include "netmirror.h" // the radio catalogue's mirror (VestaCore's release "radio")
 #include "vrvc.h"   // VestaCore: the rear view camera
 #include "vlogdir.h"   // VestaCore: logs only on the SD card / USB disk
+#include "ramlog.h"    // the log in RAM while no card is there
 #include "vnight.h"    // VestaCore: the night mode shared with OSMapsCE
 #include "vkeys.h"     // VestaCore: the keyboard's text and cursor
 #include "vfavs.h"     // VestaCore: OSMapsCE's favourite places (its map widget before it runs)
@@ -228,8 +229,9 @@ static bool    s_zoneMoved; // a partial frame's button not where the full frame
 static wchar_t s_dir[MAX_PATH];
 
 // Events log VestaHome.log - on the unit only on the SD card / USB disk (VestaCore LogDir: VestaLogs folder), never
-// the built-in flash; without a card no log. What happened just before a hang of the unit. Opened and closed
-// for every line, so a reset keeps it; past kLogMax it becomes VestaHome.old.log. Uptime first - the clock may jump.
+// the built-in flash; without a card the lines wait in RAM for one (ramlog.h). What happened just before a hang of
+// the unit. Opened and closed for every line, so a reset keeps it; past kLogMax it becomes VestaHome.old.log. Uptime
+// first - the clock may jump.
 static CRITICAL_SECTION s_logLock;
 static const DWORD kLogMax = 1024 * 1024;
 
@@ -303,12 +305,21 @@ static void VLog(const wchar_t* fmt, ...)
         return;
     wchar_t path[MAX_PATH];
     EnterCriticalSection(&s_logLock);
-    if (!LogDir(path, s_dir)) {
+    HANDLE h = INVALID_HANDLE_VALUE;
+    if (LogDir(path, s_dir)) {
+        wcscat(path, L"VestaHome.log");
+        h = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, 0, NULL);
+    }
+#ifdef UNDER_CE
+    // no card (or it just went): the line waits in RAM (ramlog.h; the crash note of a card pulled included)
+    static bool s_ramWaits = true;   // (a VestaHome before this one may have left lines there)
+    if (h == INVALID_HANDLE_VALUE) {
+        RamLogPut(L"\\Temp\\VestaHome.log", L"\\Temp\\VestaHome.old.log", buf, n);
+        s_ramWaits = true;
         LeaveCriticalSection(&s_logLock);
         return;
     }
-    wcscat(path, L"VestaHome.log");
-    HANDLE h = CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, 0, NULL);
+#endif
     if (h != INVALID_HANDLE_VALUE && GetFileSize(h, NULL) > kLogMax) {
         // into VestaHome.old.log, a new one started (HU 2026-11-03: emptied at 256 KB, the OBD session lost with it)
         CloseHandle(h);
@@ -321,6 +332,11 @@ static void VLog(const wchar_t* fmt, ...)
     }
     if (h != INVALID_HANDLE_VALUE) {
         SetFilePointer(h, 0, NULL, FILE_END);
+#ifdef UNDER_CE
+        if (s_ramWaits)   // the lines kept in RAM meanwhile, before this one
+            RamLogFlush(L"\\Temp\\VestaHome.log", L"\\Temp\\VestaHome.old.log", h);
+        s_ramWaits = false;
+#endif
         DWORD w;
         WriteFile(h, buf, n, &w, NULL);
         CloseHandle(h);
