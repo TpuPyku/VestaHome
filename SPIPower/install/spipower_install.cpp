@@ -141,6 +141,13 @@ static const int      kDangerN   = 3;
 // boot mode: Main.exe runs \SDMemory\SwDnl.exe when SwUpdate.flag is armed (../MAIN.md §4)
 static const wchar_t* kBootExe   = L"SwDnl.exe";
 static const wchar_t* kBootSub   = L"SPIPower_boot";   // on the SD: proxy + job + boot.log
+// Shown once a boot job is armed (the tester 2026-11-23: updated, took the card out before the reboot, changed its
+// files - every boot then went to the factory "Update Navi ... No Memory Device Detected!").
+static const wchar_t* kBootWarn  =
+    L"Перезагрузите ГУ СЕЙЧАС, не вынимая SD-карту.\n\n"
+    L"До перезагрузки карту не вынимать, файлы SwDnl.exe и папку SPIPower_boot на ней не трогать.\n\n"
+    L"Если всё же появился экран «Update Navi … No Memory Device Detected!»: положите этот установщик "
+    L"в корень карты под именем SwDnl.exe, вставьте карту в выключенное ГУ и включите его.";
 static const wchar_t* kBootJob   = L"job.txt";
 static const wchar_t* kBootLog   = L"boot.log";
 static const wchar_t* kFactSwDnl[] = { L"\\ResidentFlash\\SwDnl.exe", L"\\Windows\\SwDnl.exe" };
@@ -2575,6 +2582,8 @@ static void RunAction(int id)
         g_busy = 0;
         LogMsg(g_status);
         InvalidateRect(g_hwnd, NULL, TRUE);
+        if (FlagByte() >= 0)   // a boot job armed: the card must stay (the tester 2026-11-23: the card out before the
+            MessageBox(g_hwnd, kBootWarn, L"VestaHome Install", MB_OK | MB_ICONWARNING);   // reboot - "Update Navi")
         return;
     }
 
