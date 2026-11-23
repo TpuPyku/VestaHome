@@ -766,19 +766,39 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
             } else {
                 ImgSample(im, w, h, tint, dx, dy, s);
             }
-            if (!s[3])
-                continue;
-            if (s_night)
-                for (int k = 0; k < 3; k++)
-                    s[k] = s[k] * 2 / 3;
-            unsigned p = dst[px];
-            int inv = 255 - s[3];
-            int r = s[0] + PR(p) * inv / 255;
-            int g = s[1] + PG(p) * inv / 255;
-            int b = s[2] + PB(p) * inv / 255;
-            dst[px] = PIX(r > 255 ? 255 : r, g > 255 ? 255 : g, b > 255 ? 255 : b);
+            if (s[3])
+                dst[px] = CardBlend(dst[px], s, s_night);
         }
     }
+}
+
+// The skin's card picture (user_skin.ini [images] card / card_small) over a card at (x, y), w x h, corner rx, in
+// place of its panel colour: stretched (the picture's nearest pixel), cut by the rounding; false = no picture.
+static bool CardPic(int x, int y, int w, int h, int rx)
+{
+    const Img& im = s_card[CardPick(h, s_card[1].px != NULL)];
+    if (!im.px || w <= 0 || h <= 0)
+        return false;
+#ifndef UNDER_CE
+    GdiFlush();
+#endif
+    for (int dy = 0; dy < h; dy++) {
+        int py = y + dy;
+        if (py < s_clip.top || py >= s_clip.bottom)
+            continue;
+        Pix* dst = s_backBits + (479 - py) * 800;
+        const unsigned char* row = im.px + CardPicAt(dy, h, im.h) * im.w * 4;
+        for (int dx = 0; dx < w; dx++) {
+            int px = x + dx;
+            if (px < s_clip.left || px >= s_clip.right || !CardInside(dx, dy, w, h, rx))
+                continue;
+            const unsigned char* q = row + CardPicAt(dx, w, im.w) * 4;
+            int s[4] = { q[0], q[1], q[2], q[3] };
+            if (s[3])
+                dst[px] = CardBlend(dst[px], s, s_night);
+        }
+    }
+    return true;
 }
 
 
@@ -1422,10 +1442,13 @@ static void Marquee(HDC dc, int x, int y, int w, const wchar_t* s, int size, COL
     SelectObject(dc, of);
 }
 
-// Rounded rectangle like SVG <rect rx>: fill and 2 px stroke, CLR_INVALID = none.
+// Rounded rectangle like SVG <rect rx>: fill and 2 px stroke, CLR_INVALID = none. A card (filled in the panel
+// colour, no stroke) takes the skin's card picture when it gives one (CardPic).
 static void R(HDC dc, int x, int y, int w, int h, int rx, COLORREF fill, COLORREF stroke = CLR_INVALID)
 {
     if (w <= 0 || h <= 0)
+        return;
+    if (fill == kPanel && stroke == CLR_INVALID && CardPic(x, y, w, h, rx))
         return;
     if (rx == 0 && stroke == CLR_INVALID) {
         if (fill != CLR_INVALID)
@@ -1518,12 +1541,8 @@ static void TriFill(int x, int y, int w, int h, int rx)
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
         Pix* row = s_backBits + (479 - py) * 800;
-        int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
         for (int px = x; px < x + w; px++) {
-            if (px < s_clip.left || px >= s_clip.right)
-                continue;
-            int dx = px < x + rx ? x + rx - px : px >= x + w - rx ? px - (x + w - rx - 1) : 0;
-            if (dx && dy && dx * dx + dy * dy > rx * rx)
+            if (px < s_clip.left || px >= s_clip.right || !CardInside(px - x, py - y, w, h, rx))
                 continue;
             row[px] = sh[TriIndex(px - x, py - y, 4)];
         }
@@ -1566,12 +1585,8 @@ static void RSoft(int x, int y, int w, int h, int rx)
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
         Pix* row = s_backBits + (479 - py) * 800;
-        int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
         for (int px = x; px < x + w; px++) {
-            if (px < s_clip.left || px >= s_clip.right)
-                continue;
-            int dx = px < x + rx ? x + rx - px : px >= x + w - rx ? px - (x + w - rx - 1) : 0;
-            if (dx && dy && dx * dx + dy * dy > rx * rx)
+            if (px < s_clip.left || px >= s_clip.right || !CardInside(px - x, py - y, w, h, rx))
                 continue;
             unsigned p = row[px];
             int r = PR(p), g = PG(p), b = PB(p);

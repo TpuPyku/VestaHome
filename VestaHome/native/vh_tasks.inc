@@ -230,7 +230,7 @@ static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, I
     bool d = a != A_NONE && Zone(x, y, w, h, a, arg);
     bool hd = settings != S_NONE && Zone(x, y, w, 42, A_SCREEN, settings);
     bool back = !d && (art == ART_COVER ? CoverBack(x, y, w, h, 20) : art == ART_LOGO && PicBack(s_rlPic, &s_rlBack, x, y, w, h, 20));
-    if (!back)
+    if (!back && (d || !CardPic(x, y, w, h, 20)))   // (the skin's card picture, if it gives one)
         R(dc, x, y, w, h, 20, d ? kOrange : kPanel2);   // design 0.6: a card without a border (HU 2026-10-24: lighter)
     if (hd)
         R(dc, x + 2, y + 2, w - 4, 40, 18, kOrange);

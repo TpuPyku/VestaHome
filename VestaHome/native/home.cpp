@@ -76,6 +76,7 @@
 #include "photo.h"
 #include "musdir.h"
 #include "tagtext.h"   // tags in Windows-1251 read as Latin-1
+#include "cardpic.h"   // the skin's card picture: the mask, the pixel, the blend
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
 #include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
@@ -207,6 +208,8 @@ static bool LoadImg(const wchar_t* path, Img* im);
 static wchar_t s_skinBg[MAX_PATH];     // main menu background picture, optional
 static wchar_t s_skinSaver[MAX_PATH];  // the screen saver's picture, optional
 static wchar_t s_skinTile[MAX_PATH];   // the background's tile (all screens), optional: the mosaic otherwise
+static wchar_t s_skinCard[2][MAX_PATH];   // the cards' picture (card), the small tiles' (card_small): optional
+static Img     s_card[2];                 // (cardpic.h: CardPic draws them instead of the panel colour)
 
 static HWND    s_wnd;
 static HBITMAP s_back;          // whole frame, drawn off-screen
@@ -519,6 +522,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             VLog(L"шрифт: %s (своих загружено %d из 2)", s_face, nf);
         }
         BuildBackground();
+        for (int i = 0; i < 2; i++)
+            if (s_skinCard[i][0] && !LoadImg(s_skinCard[i], &s_card[i]))
+                VLog(L"оформление: не прочитана картинка карточки %s", s_skinCard[i]);
 #ifdef UNDER_CE
         s_taskbar = FindWindow(L"HHTaskBar", NULL);
         if (s_taskbar)
