@@ -21,6 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = os.path.normpath(os.path.join(HERE, '..', '..'))   # the folder holding the repos
 GUIDES = [   # (the guide, the PDF's name, its folder on GitHub - relative links point there)
     ('VestaHome/docs/manual.md', 'VestaHome-manual.pdf', 'https://github.com/TpuPyku/VestaHome/blob/master/docs/'),
+    ('VestaHome/docs/skin.md', 'VestaHome-skin.pdf', 'https://github.com/TpuPyku/VestaHome/blob/master/docs/'),
     ('OSMapsCE/docs/manual.md', 'OSMapsCE-manual.pdf', 'https://github.com/TpuPyku/OSMapsCE/blob/master/docs/'),
     ('OSMapsCE/docs/manual.en.md', 'OSMapsCE-manual-en.pdf', 'https://github.com/TpuPyku/OSMapsCE/blob/master/docs/'),
     ('VestaLaunch/docs/manual.md', 'VestaLaunch-manual.pdf', 'https://github.com/TpuPyku/VestaLaunch/blob/main/docs/'),
