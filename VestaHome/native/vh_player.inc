@@ -233,6 +233,9 @@ static void PlayerReadTags()
         t = s_bass.tags(s_chan, "%UTF8(%IFV2(%ALBM,%ALBM,)%IFV2(%YEAR, · %YEAR,))");
         if (t && *t)
             MultiByteToWideChar(CP_UTF8, 0, t, -1, s_tAlbum, 96);
+        TagText1251(s_tTitle);
+        TagText1251(s_tArtist);
+        TagText1251(s_tAlbum);
     }
     if (!s_tTitle[0] && s_plCur >= 0) {   // the file name without its extension (and its folders, "ИГРАТЬ ВСЁ")
         const wchar_t* fn = wcsrchr(s_pl[s_plCur], L'\\');

@@ -75,6 +75,7 @@
 #include "stb_image.h"
 #include "photo.h"
 #include "musdir.h"
+#include "tagtext.h"   // tags in Windows-1251 read as Latin-1
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
 #include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
