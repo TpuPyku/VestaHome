@@ -15,15 +15,11 @@ static void Check(bool ok, const char* what)
 
 int main()
 {
-    // Android's virtual call (HU 2026-11-24, Alice: an app took the car's microphone - SCO under a made-up number)
-    Check(CallVirtual("10000000"), "virtual: Android's made-up number");
-    Check(!CallVirtual("") && !CallVirtual("100000000") && !CallVirtual("1000000") && !CallVirtual("+79161234567") &&
-          !CallVirtual("10000001"), "virtual: a hidden number, a real one, anything else - a call");
-    Check(!CallVirtual(0), "virtual: no number - a call");
     Check(CallStep(1, false, false, false, false) == CA_INCOMING, "a call coming: its window, whatever is in front");
     Check(CallStep(1, true, false, false, false) == CA_NONE, "still ringing, its window shown: nothing");
     Check(CallStep(4, true, false, false, false) == CA_TAKEN, "answered (here or on the phone): the call's window");
-    Check(CallStep(2, true, false, false, false) == CA_TAKEN, "the incoming one turned into a dialing state: the call's window");
+    Check(CallStep(2, true, false, false, false) == CA_TAKEN,
+          "the incoming one turned into a dialing state: the call's window");
     Check(CallStep(4, false, true, false, false) == CA_NONE, "talking, the call's window shown: nothing");
     Check(CallStep(0, true, false, false, false) == CA_CLOSE, "rang off unanswered: closed, the program back");
     Check(CallStep(0, false, true, false, false) == CA_CLOSE, "the call ended: closed, the program back");

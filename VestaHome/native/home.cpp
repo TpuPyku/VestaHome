@@ -718,18 +718,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                          // call's, the end closes them and gives the front back
             BtState bt;
             static int s_lastCall;
-            static bool s_virtualDown;   // Android's virtual call (callwin.h CallVirtual) put down already
             bool got = BtGet(&bt, NULL);
             int line = got ? CallLine(bt.call[0], bt.call[1]) : BT_CALL_NONE;   // (either line, as the widget)
-            bool virt = line != BT_CALL_NONE && CallVirtual(bt.callNumber);
-            if (virt && !s_virtualDown) {
-                VLog(L"Bluetooth: «звонок» 10000000 - телефон взял микрофон машины для приложения (помощник), "
-                     L"не звонок: кладу, телефон вернётся к музыке");
-                BtCmd(BT_CMD_END);
-            }
-            s_virtualDown = virt;
-            if (got && (virt ? BT_CALL_NONE : line) != s_lastCall) {   // (no window for it; one opened before
-                int c = virt ? BT_CALL_NONE : line;                    // its number came - closed)
+            // (Android's virtual call "10000000" is a call too: WhatsApp's, Telegram's - the user 2026-11-24; it is
+            // not put down any more)
+            if (got && line != s_lastCall) {
+                int c = line;
                 bool fresh = s_lastCall == BT_CALL_NONE;
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)

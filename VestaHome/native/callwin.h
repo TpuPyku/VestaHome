@@ -21,10 +21,5 @@ CallAct CallStep(int call, bool onIncoming, bool onCall, bool phoneShows, bool f
 // the phone's second line showed in the widget, no window).
 int CallLine(int line1, int line2);
 
-// Android's virtual call (HU 2026-11-24, Alice): an app taking the car's microphone makes the phone open the call's
-// audio (SCO, narrow-band - all its sound goes there, the music too) under a made-up number, "10000000". Not a call:
-// no window, VestaHome puts it down (the phone goes back to its music channel). A hidden number is "", a call.
-bool CallVirtual(const char* number);
-
 // While a call lasts the panel's and the wheel's buttons are VestaHome's (answer, hang up), not an add-on's.
 bool CallKeysOurs(int call);
