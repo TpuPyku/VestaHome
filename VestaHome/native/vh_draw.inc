@@ -1068,6 +1068,19 @@ static const Pix* GlowBackground(const Pix* t)
     return s_glowBg;
 }
 
+// One row y of the mosaic (its rows counted from anchor) into dst's pixels [x0, x1), the glow over it (gb: the glow's
+// rows made once, GlowBackground).
+static void PatternRow(Pix* dst, const Pix* t, const Pix* gb, int y, int anchor, int x0, int x1)
+{
+    if (gb && y < kGlowH) {
+        memcpy(dst + x0, gb + y * 800 + x0, (x1 - x0) * sizeof(Pix));
+        return;
+    }
+    TileRow(dst, t, y, anchor, x0, x1);
+    if (s_glow && y < kGlowH)
+        GlowRow(dst, y, x0 > kGlowX ? x0 : kGlowX, x1, C(kOrange));
+}
+
 // Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top); the glow over it.
 static void Pattern(int top, int bottom, int anchor)
 {
@@ -1082,17 +1095,8 @@ static void Pattern(int top, int bottom, int anchor)
     if (bottom > s_clip.bottom)
         bottom = s_clip.bottom;
     const Pix* gb = anchor == 0 ? GlowBackground(t) : NULL;
-    int x0 = s_clip.left > kGlowX ? s_clip.left : kGlowX;
-    for (int y = top; y < bottom; y++) {
-        Pix* dst = s_backBits + (479 - y) * 800;
-        if (gb && y < kGlowH) {
-            memcpy(dst + s_clip.left, gb + y * 800 + s_clip.left, (s_clip.right - s_clip.left) * sizeof(Pix));
-            continue;
-        }
-        TileRow(dst, t, y, anchor, s_clip.left, s_clip.right);
-        if (s_glow && y < kGlowH)
-            GlowRow(dst, y, x0, s_clip.right, C(kOrange));
-    }
+    for (int y = top; y < bottom; y++)
+        PatternRow(s_backBits + (479 - y) * 800, t, gb, y, anchor, s_clip.left, s_clip.right);
 }
 
 // ---------------------------------------------------------------- the other screens
@@ -1152,6 +1156,24 @@ static void MainBackground(HDC dc)
         Blit(dc, s_bgDim);
     else
         BlitNight(dc, s_bg);
+}
+
+// The still background's row y (800 pixels) as the frame has it - the main screen's picture or the mosaic: what a
+// sliding page shows where it has gone (SlideBand).
+static void BgRow(Pix* out, int y)
+{
+    if (s_screen == S_HOME && s_bg && s_bgBits) {
+        const Pix* src = (s_night && s_bgDimBits ? s_bgDimBits : s_bgBits) + (479 - y) * 800;
+        bool dim = s_night && !s_bgDimBits;
+        for (int x = 0; x < 800; x++)
+            out[x] = dim ? DimPix(src[x]) : src[x];
+        return;
+    }
+    const Pix* t = s_tile[s_night ? 1 : 0];
+    if (t)
+        PatternRow(out, t, GlowBackground(t), y, 0, 0, 800);
+    else
+        memset(out, 0, 800 * sizeof(Pix));
 }
 
 // The screen saver's background (Settings -> General -> Theme, the user 2026-10-23): 0 the mosaic - the skin's saver

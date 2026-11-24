@@ -395,6 +395,40 @@ static int SlideBottom()   // above the page dots (396), the dock and the bottom
 // A page turn: the new page slides in from the right (dir 1) or the left (dir -1) and pushes the old one out,
 // in the band between the top bar and the bottom bar (they stay). The old frame is what s_back holds now; the
 // copy of it lives only for the animation (1.5 MB).
+// The page's band onto the screen: the page a shifted by x, its neighbour b beside (NULL: the background), over the
+// still background (the user 2026-11-24: it must not move with the pages - the frame was shifted whole). Made a
+// strip of kStripH rows at a time (51 KB, kept) and put on the screen.
+enum { kStripH = 16 };
+static HBITMAP s_strip;
+static Pix*    s_stripBits;
+
+static void SlideBand(HDC hdc, const Pix* a, const Pix* b, int x)
+{
+    if (!s_strip)
+        s_strip = MakeDib(800, kStripH, &s_stripBits);
+    if (!s_strip || !s_stripBits)
+        return;   // (no memory: no slide, the frame comes at its end)
+#ifndef UNDER_CE
+    GdiFlush();
+#endif
+    static Pix bg[800];
+    int top = SlideTop(), bottom = SlideBottom(), l = SlideLeft();
+    HDC sdc = CreateCompatibleDC(hdc);
+    HGDIOBJ os = SelectObject(sdc, s_strip);
+    for (int y0 = top; y0 < bottom; y0 += kStripH) {
+        int n = bottom - y0 < kStripH ? bottom - y0 : kStripH;
+        for (int i = 0; i < n; i++) {
+            int y = y0 + i;
+            BgRow(bg, y);
+            SlideRow(s_stripBits + (kStripH - 1 - i) * 800, a + (479 - y) * 800, b ? b + (479 - y) * 800 : NULL, bg, l,
+                     800, x);
+        }
+        BitBlt(hdc, l, y0, 800 - l, n, sdc, l, 0, SRCCOPY);
+    }
+    SelectObject(sdc, os);
+    DeleteDC(sdc);
+}
+
 static void RedrawSlide(int dir)
 {
     Pix* oldBits = NULL;
@@ -410,8 +444,8 @@ static void RedrawSlide(int dir)
     GetLocalTime(&t);
     s_drawnMinute = t.wMinute;
     HDC hdc = GetDC(s_wnd);
-    HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
-    HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, old);
+    HDC dc = CreateCompatibleDC(hdc);
+    HGDIOBJ ob = SelectObject(dc, s_back);
     DrawFrame(dc);
     int top = SlideTop(), bottom = SlideBottom(), h = bottom - top, l = SlideLeft(), sw = 800 - l;
     BitBlt(hdc, 0, 0, 800, top, dc, 0, 0, SRCCOPY);
@@ -424,20 +458,12 @@ static void RedrawSlide(int dir)
         double p = el >= kMs ? 1.0 : (double)el / kMs;
         p = 1 - (1 - p) * (1 - p) * (1 - p);   // ease-out
         int off = (int)(sw * p + 0.5);
-        if (dir > 0) {
-            BitBlt(hdc, l, top, sw - off, h, odc, l + off, top, SRCCOPY);
-            BitBlt(hdc, 800 - off, top, off, h, dc, l, top, SRCCOPY);
-        } else {
-            BitBlt(hdc, l + off, top, sw - off, h, odc, l, top, SRCCOPY);
-            BitBlt(hdc, l, top, off, h, dc, 800 - off, top, SRCCOPY);
-        }
+        SlideBand(hdc, oldBits, s_backBits, dir > 0 ? -off : off);   // (the new page: the neighbour coming in)
         if (el >= kMs)
             break;
         Sleep(10);
     }
-    SelectObject(odc, oo);
     SelectObject(dc, ob);
-    DeleteDC(odc);
     DeleteDC(dc);
     ReleaseDC(s_wnd, hdc);
     DeleteObject(old);
@@ -539,25 +565,7 @@ static bool DrawNeighbour(int dir)
 static void DragShow(int x)
 {
     HDC hdc = GetDC(s_wnd);
-    HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
-    HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, s_dragOld);
-    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top, l = SlideLeft(), w = 800 - l;
-    if (x > 0)
-        BitBlt(hdc, l + x, top, w - x, h, odc, l, top, SRCCOPY);
-    else
-        BitBlt(hdc, l, top, w + x, h, odc, l - x, top, SRCCOPY);
-    if (s_dragNb && x > 0)
-        BitBlt(hdc, l, top, x, h, dc, 800 - x, top, SRCCOPY);
-    else if (s_dragNb && x < 0)
-        BitBlt(hdc, 800 + x, top, -x, h, dc, l, top, SRCCOPY);
-    else if (x) {
-        RECT rc = { x > 0 ? l : 800 + x, top, x > 0 ? l + x : 800, bottom };
-        FillRect(hdc, &rc, SolidBrush(C(kInk)));
-    }
-    SelectObject(odc, oo);
-    SelectObject(dc, ob);
-    DeleteDC(odc);
-    DeleteDC(dc);
+    SlideBand(hdc, s_dragOldBits, s_dragNb ? s_backBits : NULL, x);   // (at an end: the background beside it)
     ReleaseDC(s_wnd, hdc);
 }
 

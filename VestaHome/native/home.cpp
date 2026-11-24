@@ -78,6 +78,7 @@
 #include "tagtext.h"   // tags in Windows-1251 read as Latin-1
 #include "cardpic.h"   // the skin's card picture: the mask, the pixel, the blend
 #include "camlimit.h"  // a speed camera's limit: fillers (5, 160) are none
+#include "slide.h"     // a page sliding over the still background
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
 #include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
