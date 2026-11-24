@@ -997,7 +997,7 @@ static void WPhone(HDC dc, int x, int y)
         }
         return;
     }
-    int call = bt.call[0] ? bt.call[0] : bt.call[1];
+    int call = CallLine(bt.call[0], bt.call[1]);
     if (call) {   // a call: its state, the number, answer / hang up
         const wchar_t* st = call == BT_CALL_INCOMING || call == BT_CALL_WAITING ? L"Входящий"
                           : call == BT_CALL_DIALING || call == BT_CALL_ALERTING ? L"Вызов"
