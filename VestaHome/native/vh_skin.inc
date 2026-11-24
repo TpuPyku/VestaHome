@@ -82,8 +82,7 @@ static void SkinFile(const wchar_t* path, const wchar_t* dir, bool user)
             continue;
         }
         wchar_t* named = !_wcsicmp(key, L"background") ? s_skinBg : !_wcsicmp(key, L"saver") ? s_skinSaver
-                       : !_wcsicmp(key, L"tile") ? s_skinTile : !_wcsicmp(key, L"card") ? s_skinCard[0]
-                       : !_wcsicmp(key, L"card_small") ? s_skinCard[1] : NULL;
+                       : !_wcsicmp(key, L"tile") ? s_skinTile : NULL;
         if (named) {
             wcscpy(named, file);
             continue;
@@ -132,8 +131,6 @@ static void LoadSkin()
         SkinUserFile(s_skinBg, udirs[i]);
         SkinUserFile(s_skinSaver, udirs[i]);
         SkinUserFile(s_skinTile, udirs[i]);
-        SkinUserFile(s_skinCard[0], udirs[i]);
-        SkinUserFile(s_skinCard[1], udirs[i]);
         for (int ic = 0; ic < IC_COUNT; ic++)
             for (int d = 0; d < 2; d++)
                 if (s_iconPath[ic][d] && wcslen(s_iconPath[ic][d]) < MAX_PATH - 1) {

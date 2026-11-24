@@ -85,7 +85,7 @@ struct Cfg {
     double  odoKm;                     // the odometer: typed, then counted on (TripTick); -1 not typed
     double  svcKm;                     // the odometer at the last service (ТО, service.h)
     int     svcYmd;                    // its date, yyyymmdd (0 not known)
-    int     svcEvery;                  // the service interval, km (typed; 0: none - service.h ServiceEveryOf)
+    bool    svc7000;                   // the recommended interval, 7000 km (else the Vesta's 15000)
     bool    time12;                   // the clock 12 h (else 24 h)
     int     startMax;                  // the volume at the start: no louder than this (VestaHome's own), 0 = no cap
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
@@ -563,9 +563,7 @@ static void LoadCfg()
         } else if (!wcscmp(k, L"car.service.date")) {
             s_cfg.svcYmd = _wtoi(v);
         } else if (!wcscmp(k, L"car.service.7000")) {
-            s_cfg.svcEvery = ServiceEveryOf(s_cfg.svcEvery, CfgBool(v));   // (the old switch: 7000)
-        } else if (!wcscmp(k, L"car.service.every")) {
-            s_cfg.svcEvery = ServiceEveryOf(_wtoi(v), false);
+            s_cfg.svc7000 = CfgBool(v);
         } else if (!wcscmp(k, L"car.tank")) {
             s_cfg.tank = _wtoi(v) < 20 ? 20 : _wtoi(v) > 120 ? 120 : _wtoi(v);
         } else if (!wcscmp(k, L"car.sensors")) {   // "0,2,10"
@@ -753,9 +751,9 @@ static void SaveCfg()
     {
         int k = _snwprintf(text + n, 12000 - n, L"# car.odo: the odometer, km (typed in the trip widget's settings, then "
                            L"counted on; -1 not typed);\r\n# car.service.*: the last service (ТО): its km, its date "
-                           L"yyyymmdd, the interval, km\r\ncar.odo=%.1f\r\ncar.service.km=%.0f\r\n"
-                           L"car.service.date=%d\r\ncar.service.every=%d\r\n", s_cfg.odoKm, s_cfg.svcKm, s_cfg.svcYmd,
-                           ServiceEveryOf(s_cfg.svcEvery, false));
+                           L"yyyymmdd, the 7000 km interval (0: the Vesta's 15000)\r\ncar.odo=%.1f\r\ncar.service.km=%.0f\r\n"
+                           L"car.service.date=%d\r\ncar.service.7000=%d\r\n", s_cfg.odoKm, s_cfg.svcKm, s_cfg.svcYmd,
+                           s_cfg.svc7000 ? 1 : 0);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {

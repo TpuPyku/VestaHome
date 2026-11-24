@@ -63,23 +63,6 @@ int main()
     Check(Text(-1, 0, 0, 20261114, 15000, L"ТО: пробег — в настройках виджета", 0), "no odometer typed: the hint");
     Check(Text(1234567, 1220000, 0, 20261114, 15000, L"ТО через 433 км", 1), "a big odometer");
     double km = -5;
-    // the interval typed (the user 2026-11-24: one's own number, not only 7000 / 15000)
-    int every = 5;
-    Check(ParseEvery(L"10000", &every) && every == 10000, "every: plain");
-    Check(ParseEvery(L" 7 500 ", &every) && every == 7500, "every: with spaces");
-    Check(ParseEvery(L"1000", &every) && every == 1000 && ParseEvery(L"100000", &every) && every == 100000,
-          "every: 1000 and 100 000 - the ends");
-    every = 5;
-    Check(!ParseEvery(L"999", &every) && !ParseEvery(L"100001", &every) && every == 5, "every: out of 1000..100 000 - kept");
-    Check(!ParseEvery(L"", &every) && !ParseEvery(L"7a", &every) && every == 5, "every: not a number - kept");
-    Check(ParseEvery(L"7999,6", &every) && every == 8000, "every: a tenth - rounded");
-    every = 5;
-    Check(!ParseEvery(L"999,4", &every) && ParseEvery(L"999,5", &every) && every == 1000, "every: rounded, then its range");
-    Check(ParseEvery(L"100000,4", &every) && every == 100000 && !ParseEvery(L"100000,5", &every), "every: the top, rounded");
-    Check(ServiceEveryOf(1000, 0) == 1000 && ServiceEveryOf(100000, 0) == 100000 && ServiceEveryOf(999, 0) == 15000 &&
-          ServiceEveryOf(100001, 1) == 7000, "every: the settings' value at the ends");
-    Check(ServiceEveryOf(0, 0) == 15000 && ServiceEveryOf(0, 1) == 7000 && ServiceEveryOf(12000, 1) == 12000 &&
-          ServiceEveryOf(500, 0) == 15000, "every: from the settings - its own, else the old 7000 switch, else 15 000");
     Check(ParseKm(L"31200", &km) && km == 31200, "km: plain");
     Check(ParseKm(L" 31 200 ", &km) && km == 31200, "km: with spaces");
     Check(ParseKm(L"31200,5", &km) && km == 31200.5, "km: a comma's tenth");

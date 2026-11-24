@@ -77,7 +77,7 @@ static void CamLine(char* line)
     Cam& cm = s_cams[s_camCount++];
     cm.lat = (float)y;
     cm.lon = (float)x;
-    cm.speed = (unsigned char)(n > s_camCol[3] ? CamLimit(atoi(f[s_camCol[3]])) : 0);   // (fillers: 0)
+    cm.speed = (unsigned char)(n > s_camCol[3] ? atoi(f[s_camCol[3]]) : 0);
     cm.dirType = (unsigned char)(n > s_camCol[4] ? atoi(f[s_camCol[4]]) : 0);
     cm.dir = (short)(n > s_camCol[5] ? atoi(f[s_camCol[5]]) : 0);
 }

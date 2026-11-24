@@ -57,8 +57,7 @@ static void ScrWSetWeather(HDC dc)
 }
 
 // The trip widget's settings: the service (ТО, the user 2026-11-14, service.h) - the odometer, the last service's km
-// and date, the interval (typed, A_KEYS K_ODO / K_SVCKM / K_SVCDATE / K_SVCEVERY - the user 2026-11-24: one's own
-// number, was a 7000 / 15000 switch), "ТО пройдено" (now: twice, "Точно?").
+// and date (typed, A_KEYS K_ODO / K_SVCKM / K_SVCDATE), the 7000 km interval, "ТО пройдено" (now: twice, "Точно?").
 static wchar_t s_svcText[24];   // what the keyboard edits for them
 static int     s_svcKey;        // which of them (K_*)
 static bool    s_svcAsk;        // "ТО пройдено" pressed once
@@ -85,9 +84,9 @@ static void ScrWSetTrip(HDC dc)
     else
         wcscpy(s, L"не задана — ДД.ММ.ГГГГ");
     WRow(dc, 180, L"Прошлое ТО: дата", s, A_KEYS, K_SVCDATE, 776);
-    _snwprintf(s, 96, L"%d км или 1 год — нажмите, чтобы ввести (по регламенту Весты 15000)",
-               ServiceEveryOf(s_cfg.svcEvery, false));
-    WRow(dc, 236, L"Межсервисный пробег", s, A_KEYS, K_SVCEVERY, 776);
+    WRow(dc, 236, L"Межсервисное ТО", s_on[T_SVC7000] ? L"включено: 7000 км или 1 год"
+         : L"выключено: по регламенту Весты — 15 000 км или 1 год", A_NONE, 0, 640);
+    Toggle(dc, 688, 246, T_SVC7000);
     SvcText(s, 96);
     WRow(dc, 292, L"Следующее ТО", s, A_NONE, 0, 568, true);
     Button(dc, 576, 298, 192, 44, s_svcAsk ? L"Точно?" : L"ТО пройдено", s_cfg.odoKm < 0 ? B_DIS : s_svcAsk ? B_PRI : B_N,
@@ -117,16 +116,13 @@ static void SvcKeys(int which)   // the keyboard for one of them, with its value
         _snwprintf(s_svcText, 24, s_cfg.odoKm >= 0 ? L"%.0f" : L"", s_cfg.odoKm);
     else if (which == K_SVCKM)
         _snwprintf(s_svcText, 24, L"%.0f", s_cfg.svcKm);
-    else if (which == K_SVCEVERY)
-        _snwprintf(s_svcText, 24, L"%d", ServiceEveryOf(s_cfg.svcEvery, false));
     else if (s_cfg.svcYmd)
         _snwprintf(s_svcText, 24, L"%02d.%02d.%d", s_cfg.svcYmd % 100, s_cfg.svcYmd / 100 % 100, s_cfg.svcYmd / 10000);
     else
         s_svcText[0] = 0;
     s_svcText[23] = 0;
     OpenNumFor(s_svcText, 23, which == K_ODO ? L"Пробег сейчас, км" : which == K_SVCKM ? L"Пробег на прошлом ТО, км"
-               : which == K_SVCEVERY ? L"Межсервисный пробег, км (1000–100 000)" : L"Дата прошлого ТО, ДД.ММ.ГГГГ",
-               S_WSET_TRIP, which == K_SVCDATE ? NUM_DATE : NUM_INT);
+               : L"Дата прошлого ТО, ДД.ММ.ГГГГ", S_WSET_TRIP, which == K_SVCDATE ? NUM_DATE : NUM_INT);
 }
 
 static void SvcKeysDone()   // (CfgKeysDone) typed: kept when it parses
@@ -136,8 +132,6 @@ static void SvcKeysDone()   // (CfgKeysDone) typed: kept when it parses
         int ymd = ParseDmy(s_svcText);
         if (ymd)
             s_cfg.svcYmd = ymd;
-    } else if (s_svcKey == K_SVCEVERY) {
-        ParseEvery(s_svcText, &s_cfg.svcEvery);   // (out of 1000..100 000: kept)
     } else if (ParseKm(s_svcText, &km)) {
         if (s_svcKey == K_ODO) {
             s_cfg.odoKm = km;

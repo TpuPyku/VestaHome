@@ -230,7 +230,7 @@ static bool Widget(HDC dc, int x, int y, int w, int h, const wchar_t* caption, I
     bool d = a != A_NONE && Zone(x, y, w, h, a, arg);
     bool hd = settings != S_NONE && Zone(x, y, w, 42, A_SCREEN, settings);
     bool back = !d && (art == ART_COVER ? CoverBack(x, y, w, h, 20) : art == ART_LOGO && PicBack(s_rlPic, &s_rlBack, x, y, w, h, 20));
-    if (!back && (d || !CardPic(x, y, w, h, 20)))   // (the skin's card picture, if it gives one)
+    if (!back)
         R(dc, x, y, w, h, 20, d ? kOrange : kPanel2);   // design 0.6: a card without a border (HU 2026-10-24: lighter)
     if (hd)
         R(dc, x + 2, y + 2, w - 4, 40, 18, kOrange);
@@ -804,7 +804,7 @@ static int TodayYmd()   // yyyymmdd, 0 while the clock is not set (the unit boot
 static int SvcText(wchar_t* s, int n)   // the service's line now (service.h ServiceText), its level
 {
     int today = TodayYmd();
-    return ServiceText(s_cfg.odoKm, s_cfg.svcKm, today ? s_cfg.svcYmd : 0, today, ServiceEveryOf(s_cfg.svcEvery, false), s, n);
+    return ServiceText(s_cfg.odoKm, s_cfg.svcKm, today ? s_cfg.svcYmd : 0, today, s_cfg.svc7000 ? 7000 : 15000, s, n);
 }
 
 static void TripTick()   // once a second
@@ -997,7 +997,7 @@ static void WPhone(HDC dc, int x, int y)
         }
         return;
     }
-    int call = CallLine(bt.call[0], bt.call[1]);
+    int call = bt.call[0] ? bt.call[0] : bt.call[1];
     if (call) {   // a call: its state, the number, answer / hang up
         const wchar_t* st = call == BT_CALL_INCOMING || call == BT_CALL_WAITING ? L"Входящий"
                           : call == BT_CALL_DIALING || call == BT_CALL_ALERTING ? L"Вызов"

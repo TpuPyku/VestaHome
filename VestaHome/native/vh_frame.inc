@@ -90,7 +90,6 @@ static DWORD s_partMs[4];
 static void DrawFrame(HDC dc)
 {
     DWORD t0 = GetTickCount();
-    CardMaskClear();   // (the glass of the cards drawn below: their own)
     if (s_screen == S_HOME)
         MainBackground(dc);
     else
@@ -360,8 +359,8 @@ static int SlideTop()   // under what stays: the radio's frequency panel, the ta
     switch (s_screen) {
     case S_PHOTO_VIEW:
         return PhotoFull() ? 0 : 56;
-    case S_RADIO:   // (the presets from 256: 258 left their top 2 rows behind, the user 2026-11-24)
-        return 252;
+    case S_RADIO:
+        return 258;
     case S_PHOTO: case S_VIDEO: case S_AUDIO_LIST:   // the tabs and the path line (with the pages' arrows)
         return 156;
     case S_CONTACTS: case S_CALLS:                   // the phone's pills and the list's head line
@@ -396,65 +395,6 @@ static int SlideBottom()   // above the page dots (396), the dock and the bottom
 // A page turn: the new page slides in from the right (dir 1) or the left (dir -1) and pushes the old one out,
 // in the band between the top bar and the bottom bar (they stay). The old frame is what s_back holds now; the
 // copy of it lives only for the animation (1.5 MB).
-// The page's band onto the screen: the page a shifted by x, its neighbour b beside (NULL: the background), over the
-// still background (the user 2026-11-24: it must not move with the pages - the frame was shifted whole). Made a
-// strip of kStripH rows at a time (51 KB, kept) and put on the screen.
-enum { kStripH = 16 };
-static HBITMAP s_strip;
-static Pix*    s_stripBits;
-
-// The band's still background, its rows made once for a slide (the user 2026-11-24: not every step anew; ~1 MB while
-// it lasts): SlideBgMake at the drag's start and the turn's, SlideBgFree at their end; none (no memory) - each row
-// made at each step as before.
-static Pix* s_slideBg;
-static int  s_slideBgTop, s_slideBgRows;
-
-static void SlideBgMake()
-{
-    s_slideBgTop = SlideTop();
-    s_slideBgRows = SlideBottom() - s_slideBgTop;
-    s_slideBg = s_slideBgRows > 0 ? (Pix*)malloc(s_slideBgRows * 800 * sizeof(Pix)) : NULL;
-    for (int i = 0; s_slideBg && i < s_slideBgRows; i++)
-        BgRow(s_slideBg + i * 800, s_slideBgTop + i);
-}
-
-static void SlideBgFree()
-{
-    free(s_slideBg);
-    s_slideBg = NULL;
-}
-
-static void SlideBand(HDC hdc, const Pix* a, const Pix* b, int x, const unsigned char* ma, const unsigned char* mb)
-{
-    if (!s_strip)
-        s_strip = MakeDib(800, kStripH, &s_stripBits);
-    if (!s_strip || !s_stripBits)
-        return;   // (no memory: no slide, the frame comes at its end)
-#ifndef UNDER_CE
-    GdiFlush();
-#endif
-    static Pix bg[800];
-    int top = SlideTop(), bottom = SlideBottom(), l = SlideLeft();
-    HDC sdc = CreateCompatibleDC(hdc);
-    HGDIOBJ os = SelectObject(sdc, s_strip);
-    for (int y0 = top; y0 < bottom; y0 += kStripH) {
-        int n = bottom - y0 < kStripH ? bottom - y0 : kStripH;
-        for (int i = 0; i < n; i++) {
-            int y = y0 + i;
-            const Pix* row = bg;
-            if (s_slideBg && y >= s_slideBgTop && y < s_slideBgTop + s_slideBgRows)
-                row = s_slideBg + (y - s_slideBgTop) * 800;
-            else
-                BgRow(bg, y);
-            SlideRow(s_stripBits + (kStripH - 1 - i) * 800, a + (479 - y) * 800, b ? b + (479 - y) * 800 : NULL, row, l,
-                     800, x, ma ? ma + y * 800 : NULL, mb ? mb + y * 800 : NULL);
-        }
-        BitBlt(hdc, l, y0, 800 - l, n, sdc, l, 0, SRCCOPY);
-    }
-    SelectObject(sdc, os);
-    DeleteDC(sdc);
-}
-
 static void RedrawSlide(int dir)
 {
     Pix* oldBits = NULL;
@@ -466,21 +406,17 @@ static void RedrawSlide(int dir)
         return;
     }
     memcpy(oldBits, s_backBits, 800 * 480 * sizeof(Pix));
-    unsigned char* oldA = s_cardA ? (unsigned char*)malloc(800 * 480) : NULL;   // (its glass: the new page's comes)
-    if (oldA)
-        memcpy(oldA, s_cardA, 800 * 480);
     SYSTEMTIME t;
     GetLocalTime(&t);
     s_drawnMinute = t.wMinute;
     HDC hdc = GetDC(s_wnd);
-    HDC dc = CreateCompatibleDC(hdc);
-    HGDIOBJ ob = SelectObject(dc, s_back);
+    HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
+    HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, old);
     DrawFrame(dc);
     int top = SlideTop(), bottom = SlideBottom(), h = bottom - top, l = SlideLeft(), sw = 800 - l;
     BitBlt(hdc, 0, 0, 800, top, dc, 0, 0, SRCCOPY);
     BitBlt(hdc, 0, bottom, 800, 480 - bottom, dc, 0, bottom, SRCCOPY);
     BitBlt(hdc, 0, top, l, h, dc, 0, top, SRCCOPY);
-    SlideBgMake();   // (the band's background once for the turn)
     const DWORD kMs = 220;
     DWORD t0 = GetTickCount();
     for (;;) {
@@ -488,17 +424,23 @@ static void RedrawSlide(int dir)
         double p = el >= kMs ? 1.0 : (double)el / kMs;
         p = 1 - (1 - p) * (1 - p) * (1 - p);   // ease-out
         int off = (int)(sw * p + 0.5);
-        SlideBand(hdc, oldBits, s_backBits, dir > 0 ? -off : off, oldA, s_cardA);   // (the new page: the neighbour)
+        if (dir > 0) {
+            BitBlt(hdc, l, top, sw - off, h, odc, l + off, top, SRCCOPY);
+            BitBlt(hdc, 800 - off, top, off, h, dc, l, top, SRCCOPY);
+        } else {
+            BitBlt(hdc, l + off, top, sw - off, h, odc, l, top, SRCCOPY);
+            BitBlt(hdc, l, top, off, h, dc, 800 - off, top, SRCCOPY);
+        }
         if (el >= kMs)
             break;
         Sleep(10);
     }
+    SelectObject(odc, oo);
     SelectObject(dc, ob);
+    DeleteDC(odc);
     DeleteDC(dc);
     ReleaseDC(s_wnd, hdc);
     DeleteObject(old);
-    free(oldA);
-    SlideBgFree();
     VidSync();
 }
 
@@ -515,7 +457,6 @@ static void PhotoStep(int dir);
 static int     s_dragNb, s_dragSide, s_dragX;   // the neighbour in s_back (1 next, -1 previous, 0 none: an end)
 static HBITMAP s_dragOld;
 static Pix* s_dragOldBits;
-static unsigned char* s_dragOldA;   // its cards' glass (s_cardA then)
 
 // The screens that turn pages - by a swipe (the neighbour follows the finger) and by their dots (A_PAGE): each one's
 // page and how many; round = past the last page the first (a swipe; the dots always go round).
@@ -598,8 +539,25 @@ static bool DrawNeighbour(int dir)
 static void DragShow(int x)
 {
     HDC hdc = GetDC(s_wnd);
-    // (the cards' glass of each page with it; at an end the background beside it)
-    SlideBand(hdc, s_dragOldBits, s_dragNb ? s_backBits : NULL, x, s_dragOldA, s_dragNb ? s_cardA : NULL);
+    HDC dc = CreateCompatibleDC(hdc), odc = CreateCompatibleDC(hdc);
+    HGDIOBJ ob = SelectObject(dc, s_back), oo = SelectObject(odc, s_dragOld);
+    int top = SlideTop(), bottom = SlideBottom(), h = bottom - top, l = SlideLeft(), w = 800 - l;
+    if (x > 0)
+        BitBlt(hdc, l + x, top, w - x, h, odc, l, top, SRCCOPY);
+    else
+        BitBlt(hdc, l, top, w + x, h, odc, l - x, top, SRCCOPY);
+    if (s_dragNb && x > 0)
+        BitBlt(hdc, l, top, x, h, dc, 800 - x, top, SRCCOPY);
+    else if (s_dragNb && x < 0)
+        BitBlt(hdc, 800 + x, top, -x, h, dc, l, top, SRCCOPY);
+    else if (x) {
+        RECT rc = { x > 0 ? l : 800 + x, top, x > 0 ? l + x : 800, bottom };
+        FillRect(hdc, &rc, SolidBrush(C(kInk)));
+    }
+    SelectObject(odc, oo);
+    SelectObject(dc, ob);
+    DeleteDC(odc);
+    DeleteDC(dc);
     ReleaseDC(s_wnd, hdc);
 }
 
@@ -616,11 +574,7 @@ static void DragStart()
         return;
     }
     memcpy(s_dragOldBits, s_backBits, 800 * 480 * sizeof(Pix));
-    s_dragOldA = s_cardA ? (unsigned char*)malloc(800 * 480) : NULL;
-    if (s_dragOldA)
-        memcpy(s_dragOldA, s_cardA, 800 * 480);
     s_drag = true;
-    SlideBgMake();   // (the band's background once for the drag)
     s_dragNb = s_dragSide = s_dragX = 0;
 }
 
@@ -652,11 +606,8 @@ static void DragEnd(int turn)
         Sleep(10);
     }
     s_drag = false;
-    SlideBgFree();
     DeleteObject(s_dragOld);
     s_dragOld = NULL;
-    free(s_dragOldA);
-    s_dragOldA = NULL;
     if (turn)
         Swipe(s_dragNb);   // the page for real (the radio: its band too)
     BuildButtons();
