@@ -403,6 +403,27 @@ enum { kStripH = 16 };
 static HBITMAP s_strip;
 static Pix*    s_stripBits;
 
+// The band's still background, its rows made once for a slide (the user 2026-11-24: not every step anew; ~1 MB while
+// it lasts): SlideBgMake at the drag's start and the turn's, SlideBgFree at their end; none (no memory) - each row
+// made at each step as before.
+static Pix* s_slideBg;
+static int  s_slideBgTop, s_slideBgRows;
+
+static void SlideBgMake()
+{
+    s_slideBgTop = SlideTop();
+    s_slideBgRows = SlideBottom() - s_slideBgTop;
+    s_slideBg = s_slideBgRows > 0 ? (Pix*)malloc(s_slideBgRows * 800 * sizeof(Pix)) : NULL;
+    for (int i = 0; s_slideBg && i < s_slideBgRows; i++)
+        BgRow(s_slideBg + i * 800, s_slideBgTop + i);
+}
+
+static void SlideBgFree()
+{
+    free(s_slideBg);
+    s_slideBg = NULL;
+}
+
 static void SlideBand(HDC hdc, const Pix* a, const Pix* b, int x, const unsigned char* ma, const unsigned char* mb)
 {
     if (!s_strip)
@@ -420,8 +441,12 @@ static void SlideBand(HDC hdc, const Pix* a, const Pix* b, int x, const unsigned
         int n = bottom - y0 < kStripH ? bottom - y0 : kStripH;
         for (int i = 0; i < n; i++) {
             int y = y0 + i;
-            BgRow(bg, y);
-            SlideRow(s_stripBits + (kStripH - 1 - i) * 800, a + (479 - y) * 800, b ? b + (479 - y) * 800 : NULL, bg, l,
+            const Pix* row = bg;
+            if (s_slideBg && y >= s_slideBgTop && y < s_slideBgTop + s_slideBgRows)
+                row = s_slideBg + (y - s_slideBgTop) * 800;
+            else
+                BgRow(bg, y);
+            SlideRow(s_stripBits + (kStripH - 1 - i) * 800, a + (479 - y) * 800, b ? b + (479 - y) * 800 : NULL, row, l,
                      800, x, ma ? ma + y * 800 : NULL, mb ? mb + y * 800 : NULL);
         }
         BitBlt(hdc, l, y0, 800 - l, n, sdc, l, 0, SRCCOPY);
@@ -455,6 +480,7 @@ static void RedrawSlide(int dir)
     BitBlt(hdc, 0, 0, 800, top, dc, 0, 0, SRCCOPY);
     BitBlt(hdc, 0, bottom, 800, 480 - bottom, dc, 0, bottom, SRCCOPY);
     BitBlt(hdc, 0, top, l, h, dc, 0, top, SRCCOPY);
+    SlideBgMake();   // (the band's background once for the turn)
     const DWORD kMs = 220;
     DWORD t0 = GetTickCount();
     for (;;) {
@@ -472,6 +498,7 @@ static void RedrawSlide(int dir)
     ReleaseDC(s_wnd, hdc);
     DeleteObject(old);
     free(oldA);
+    SlideBgFree();
     VidSync();
 }
 
@@ -593,6 +620,7 @@ static void DragStart()
     if (s_dragOldA)
         memcpy(s_dragOldA, s_cardA, 800 * 480);
     s_drag = true;
+    SlideBgMake();   // (the band's background once for the drag)
     s_dragNb = s_dragSide = s_dragX = 0;
 }
 
@@ -624,6 +652,7 @@ static void DragEnd(int turn)
         Sleep(10);
     }
     s_drag = false;
+    SlideBgFree();
     DeleteObject(s_dragOld);
     s_dragOld = NULL;
     free(s_dragOldA);
