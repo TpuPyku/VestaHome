@@ -774,11 +774,25 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
 
 // The skin's card picture (user_skin.ini [images] card / card_small) over a card at (x, y), w x h, corner rx, in
 // place of its panel colour: stretched (the picture's nearest pixel), cut by the rounding; false = no picture.
+// The cards' glass in the frame (the user 2026-11-24: their transparency real while a page slides - slide.h
+// GlassMove): each pixel's alpha of the card picture drawn there, 0 elsewhere; 800 x 480, top-down, made at the
+// first card picture (none without one), cleared where a frame is drawn (CardMaskClear).
+static unsigned char* s_cardA;
+
+static void CardMaskClear()
+{
+    if (s_cardA)
+        for (int y = s_clip.top; y < s_clip.bottom; y++)
+            memset(s_cardA + y * 800 + s_clip.left, 0, s_clip.right - s_clip.left);
+}
+
 static bool CardPic(int x, int y, int w, int h, int rx)
 {
     const Img& im = s_card[CardPick(h, s_card[1].px != NULL)];
     if (!im.px || w <= 0 || h <= 0)
         return false;
+    if (!s_cardA && (s_cardA = (unsigned char*)malloc(800 * 480)) != NULL)
+        memset(s_cardA, 0, 800 * 480);
 #ifndef UNDER_CE
     GdiFlush();
 #endif
@@ -796,6 +810,8 @@ static bool CardPic(int x, int y, int w, int h, int rx)
             int s[4] = { q[0], q[1], q[2], q[3] };
             if (s[3])
                 dst[px] = CardBlend(dst[px], s, s_night);
+            if (s_cardA)
+                s_cardA[py * 800 + px] = (unsigned char)s[3];
         }
     }
     return true;
