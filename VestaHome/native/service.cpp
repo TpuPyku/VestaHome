@@ -155,3 +155,22 @@ int ParseDmy(const wchar_t* s)
         return 0;
     return f[2] * 10000 + f[1] * 100 + f[0];
 }
+
+bool ParseEvery(const wchar_t* s, int* km)
+{
+    double v;
+    if (!ParseKm(s, &v))
+        return false;
+    int k = (int)(v + 0.5);
+    if (k < kSvcEveryMin || k > kSvcEveryMax)
+        return false;
+    *km = k;
+    return true;
+}
+
+int ServiceEveryOf(int every, bool old7000)
+{
+    if (every >= kSvcEveryMin && every <= kSvcEveryMax)
+        return every;
+    return old7000 ? 7000 : kSvcEveryVesta;
+}

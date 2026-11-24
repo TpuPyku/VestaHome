@@ -22,3 +22,9 @@ int ServiceText(double odoKm, double lastKm, int lastYmd, int todayYmd, int ever
 // Typed: km ("31 200", "31200,5"; 0..9 999 999) -> true and *km; a date "14.11.2026" -> yyyymmdd (0: not one)
 bool ParseKm(const wchar_t* s, double* km);
 int ParseDmy(const wchar_t* s);
+// The service interval, km (the user 2026-11-24: one's own number by the number pad): typed "10000", "7 500" ->
+// true and *km rounded, kSvcEveryMin..kSvcEveryMax; otherwise false, *km kept. ServiceEveryOf: the settings' value
+// (car.service.every, 0: none) or the old switch car.service.7000 (7000), else the Vesta's 15000.
+enum { kSvcEveryMin = 1000, kSvcEveryMax = 100000, kSvcEveryVesta = 15000 };
+bool ParseEvery(const wchar_t* s, int* km);
+int  ServiceEveryOf(int every, bool old7000);

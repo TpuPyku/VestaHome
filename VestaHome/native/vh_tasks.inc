@@ -804,7 +804,7 @@ static int TodayYmd()   // yyyymmdd, 0 while the clock is not set (the unit boot
 static int SvcText(wchar_t* s, int n)   // the service's line now (service.h ServiceText), its level
 {
     int today = TodayYmd();
-    return ServiceText(s_cfg.odoKm, s_cfg.svcKm, today ? s_cfg.svcYmd : 0, today, s_cfg.svc7000 ? 7000 : 15000, s, n);
+    return ServiceText(s_cfg.odoKm, s_cfg.svcKm, today ? s_cfg.svcYmd : 0, today, ServiceEveryOf(s_cfg.svcEvery, false), s, n);
 }
 
 static void TripTick()   // once a second
