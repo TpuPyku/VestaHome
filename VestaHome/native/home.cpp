@@ -725,7 +725,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             // (the user 2026-11-24: WhatsApp's, Telegram's calls come under it too - off by default)
             bool virt = s_cfg.btVirtualDown && line != BT_CALL_NONE && CallVirtual(bt.callNumber);
             if (virt && !s_virtualDown) {
-                VLog(L"Bluetooth: «звонок» 10000000 - кладу (настройка «Сбрасывать «звонок» 10000000»)");
+                VLog(L"Bluetooth: «звонок» 10000000 - кладу (настройка «Сброс звонка 10000000»)");
                 BtCmd(BT_CMD_END);
             }
             s_virtualDown = virt;

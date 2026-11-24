@@ -1563,7 +1563,7 @@ static void ScrSetBt(HDC dc)
         Toggle(dc, 640, y + 10, T_AUTOCONNECT);
         SetRow(dc, y += kSetH, L"Автоответ", L"входящий звонок принимается через 5 с");
         Toggle(dc, 640, y + 10, T_AUTOANSWER);
-        SetRow(dc, y += kSetH, L"Сбрасывать «звонок» 10000000",
+        SetRow(dc, y += kSetH, L"Сброс звонка 10000000",
                L"так «звонит» Алиса; мессенджеры — тоже");
         Toggle(dc, 640, y + 10, T_BT_VIRTUAL);
         SetRow(dc, y += kSetH, L"Книга при подключении", L"обновлять с телефона сама (иначе — «Обновить»)");
