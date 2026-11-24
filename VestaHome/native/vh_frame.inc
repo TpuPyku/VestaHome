@@ -359,8 +359,8 @@ static int SlideTop()   // under what stays: the radio's frequency panel, the ta
     switch (s_screen) {
     case S_PHOTO_VIEW:
         return PhotoFull() ? 0 : 56;
-    case S_RADIO:
-        return 258;
+    case S_RADIO:   // (the presets from 256: 258 left their top 2 rows behind, the user 2026-11-24)
+        return 252;
     case S_PHOTO: case S_VIDEO: case S_AUDIO_LIST:   // the tabs and the path line (with the pages' arrows)
         return 156;
     case S_CONTACTS: case S_CALLS:                   // the phone's pills and the list's head line
