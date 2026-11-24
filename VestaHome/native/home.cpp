@@ -718,8 +718,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                          // call's, the end closes them and gives the front back
             BtState bt;
             static int s_lastCall;
-            if (BtGet(&bt, NULL) && bt.call[0] != s_lastCall) {
-                int c = bt.call[0];
+            static bool s_virtualDown;   // Android's virtual call (callwin.h CallVirtual) put down already
+            bool got = BtGet(&bt, NULL), virt = got && bt.call[0] != BT_CALL_NONE && CallVirtual(bt.callNumber);
+            if (virt && !s_virtualDown) {
+                VLog(L"Bluetooth: «звонок» 10000000 - телефон взял микрофон машины для приложения (помощник), "
+                     L"не звонок: кладу, телефон вернётся к музыке");
+                BtCmd(BT_CMD_END);
+            }
+            s_virtualDown = virt;
+            if (got && (virt ? BT_CALL_NONE : bt.call[0]) != s_lastCall) {   // (no window for it; one opened
+                int c = virt ? BT_CALL_NONE : bt.call[0];                    // before its number came - closed)
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)
                     s_callTick = GetTickCount();

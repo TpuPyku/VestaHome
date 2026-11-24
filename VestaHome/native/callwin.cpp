@@ -1,5 +1,6 @@
 // callwin.cpp - see callwin.h.
 #include "callwin.h"
+#include <string.h>
 
 enum { kNone = 0, kIncoming = 1, kDialing = 2 };   // (btshm.h BT_CALL_*)
 
@@ -15,4 +16,9 @@ CallAct CallStep(int call, bool onIncoming, bool onCall, bool phoneShows)
 bool CallKeysOurs(int call)
 {
     return call != kNone;
+}
+
+bool CallVirtual(const char* number)
+{
+    return number && !strcmp(number, "10000000");
 }
