@@ -1,5 +1,6 @@
 // callwin.cpp - see callwin.h.
 #include "callwin.h"
+#include <string.h>
 
 enum { kNone = 0, kIncoming = 1 };   // (btshm.h BT_CALL_*)
 
@@ -22,4 +23,9 @@ bool CallKeysOurs(int call)
 int CallLine(int line1, int line2)
 {
     return line1 != kNone ? line1 : line2;
+}
+
+bool CallVirtual(const char* number)
+{
+    return number && !strcmp(number, "10000000");
 }

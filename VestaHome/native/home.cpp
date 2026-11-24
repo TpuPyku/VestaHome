@@ -181,7 +181,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_BT_VIRTUAL, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
@@ -718,12 +718,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                          // call's, the end closes them and gives the front back
             BtState bt;
             static int s_lastCall;
+            static bool s_virtualDown;   // Android's virtual call put down already (callwin.h CallVirtual)
             bool got = BtGet(&bt, NULL);
             int line = got ? CallLine(bt.call[0], bt.call[1]) : BT_CALL_NONE;   // (either line, as the widget)
-            // (Android's virtual call "10000000" is a call too: WhatsApp's, Telegram's - the user 2026-11-24; it is
-            // not put down any more)
-            if (got && line != s_lastCall) {
-                int c = line;
+            // Android's virtual call "10000000": put down, no window, only with "Settings -> Bluetooth" asking so
+            // (the user 2026-11-24: WhatsApp's, Telegram's calls come under it too - off by default)
+            bool virt = s_cfg.btVirtualDown && line != BT_CALL_NONE && CallVirtual(bt.callNumber);
+            if (virt && !s_virtualDown) {
+                VLog(L"Bluetooth: «звонок» 10000000 - кладу (настройка «Сбрасывать «звонок» 10000000»)");
+                BtCmd(BT_CMD_END);
+            }
+            s_virtualDown = virt;
+            if (got && (virt ? BT_CALL_NONE : line) != s_lastCall) {   // (no window for it; one opened before its
+                int c = virt ? BT_CALL_NONE : line;                    // number came - closed)
                 bool fresh = s_lastCall == BT_CALL_NONE;
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)

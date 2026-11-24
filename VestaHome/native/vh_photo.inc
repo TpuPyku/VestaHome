@@ -572,6 +572,10 @@ static void DoActionOn(const Btn& b)
             LogsSet(s_on[T_LOGS]);
         if (b.arg == T_BT)
             BtPowerSet(s_on[T_BT]);
+        if (b.arg == T_BT_VIRTUAL) {   // the virtual call put down (callwin.h CallVirtual; the user 2026-11-24)
+            s_cfg.btVirtualDown = s_on[T_BT_VIRTUAL];
+            SaveCfg();
+        }
         if (b.arg == T_PB_AUTO) {   // the phone book at each connect (the user 2026-11-12: off by default)
             s_cfg.pbAuto = s_on[T_PB_AUTO] ? 1 : 0;
             SaveCfg();

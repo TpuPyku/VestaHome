@@ -1563,6 +1563,9 @@ static void ScrSetBt(HDC dc)
         Toggle(dc, 640, y + 10, T_AUTOCONNECT);
         SetRow(dc, y += kSetH, L"Автоответ", L"входящий звонок принимается через 5 с");
         Toggle(dc, 640, y + 10, T_AUTOANSWER);
+        SetRow(dc, y += kSetH, L"Сбрасывать «звонок» 10000000",
+               L"приложение взяло микрофон (Алиса); мессенджеры тоже звонят так");
+        Toggle(dc, 640, y + 10, T_BT_VIRTUAL);
         SetRow(dc, y += kSetH, L"Книга при подключении", L"обновлять с телефона сама (иначе — «Обновить»)");
         Toggle(dc, 640, y + 10, T_PB_AUTO);
         s[0] = 0;   // the paired ones (0x08), by name

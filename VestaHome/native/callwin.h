@@ -21,5 +21,10 @@ CallAct CallStep(int call, bool onIncoming, bool onCall, bool phoneShows, bool f
 // the phone's second line showed in the widget, no window).
 int CallLine(int line1, int line2);
 
+// Android's virtual call (HU 2026-11-24): an app taking the car's microphone (Alice) makes the phone open the call's
+// audio (SCO, narrow-band - all its sound, the music too) under a made-up number, "10000000"; WhatsApp's and
+// Telegram's calls come under it as well. VestaHome puts it down only when the Bluetooth setting asks it to.
+bool CallVirtual(const char* number);
+
 // While a call lasts the panel's and the wheel's buttons are VestaHome's (answer, hang up), not an add-on's.
 bool CallKeysOurs(int call);

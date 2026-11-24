@@ -474,6 +474,7 @@ static void CfgToControls()
     s_on[T_W_GPS] = s_cfg.weatherGps;
     s_on[T_CAM_ALERT] = s_cfg.camAlert;
     s_on[T_PB_AUTO] = s_cfg.pbAuto != 0;
+    s_on[T_BT_VIRTUAL] = s_cfg.btVirtualDown;
     s_seg[G_TIME_FMT] = s_cfg.time12 ? 0 : 1;
     s_seg[G_CAMSND] = !s_cfg.camSound ? 0 : s_cfg.camOver < 0 ? 1 : 2;   // off / always / over (cam.overby)
     s_on[T_CAM_WEEKLY] = s_cfg.camWeekly;
