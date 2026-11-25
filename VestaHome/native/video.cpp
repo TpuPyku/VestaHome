@@ -23,7 +23,10 @@ static const char* kGstLibs[] = { "libglib.dll", "libgmodule.dll", "libgthread.d
 enum { kLibs = sizeof(kGstLibs) / sizeof(kGstLibs[0]), kGlib = 0, kGobject = 3, kGst = 4, kInterfaces = 5 };
 
 enum { GST_STATE_NULL = 1, GST_STATE_PAUSED = 3, GST_STATE_PLAYING = 4, GST_FORMAT_TIME = 3,
-       GST_SEEK_FLAG_FLUSH = 1, GST_SEEK_FLAG_KEY_UNIT = 4, MSG_EOS = 1, MSG_ERROR = 2, MSG_WARNING = 4 };
+       GST_SEEK_FLAG_FLUSH = 1, GST_SEEK_FLAG_KEY_UNIT = 4, MSG_EOS = 1, MSG_ERROR = 2, MSG_WARNING = 4,
+       MSG_STATE_CHANGED = 0x40, MSG_QOS = 1 << 24 };
+// GstMessage (0.10, 32 bits; CSRMedia reads the same offsets): its type at 0x18, its source object at 0x28.
+enum { kMsgType = 0x18, kMsgSrc = 0x28 };
 // playbin2 "flags". The stock player (CSRMedia.dll, Ghidra 2026-10-18): video 0x01 + native video 0x40 (the hardware
 // decoder's frames straight to the overlay, no colour conversion) + audio 0x02, and 0x40000000 when its OMX init
 // failed. 2026-10-17 we had video + audio + soft volume (0x13): sound, a black picture; 2026-10-18 as the shell: the
@@ -54,6 +57,10 @@ static struct {
     void (*errorFree)(GError_*);
     void (*sliceConfig)(int, int, int);   // (key, gint64 value in two registers), as CSRMedia calls it
     char* (*fileToUri)(const char*, const char*, void**);
+    void (*parseStateChanged)(void*, int*, int*, int*);
+    void (*parseQosStats)(void*, int*, unsigned __int64*, unsigned __int64*);
+    void (*parseQosValues)(void*, __int64*, double*, int*);
+    char* (*objectName)(void*);
 } G;
 
 static int        s_loaded;          // 0 not tried, 1 ready, -1 can't be
@@ -63,6 +70,9 @@ static void*      s_pipe;
 static void*      s_bus;
 static void*      s_sink;            // owned by the pipeline
 static int        s_state;
+static char       s_built[300];      // the elements that came to PLAYING (the log: which decoder)
+static bool       s_builtDone;
+static struct { unsigned count, processed, dropped; int lateMax; DWORD tick; } s_qos;
 
 static void Say(wchar_t* why, int cap, const wchar_t* text)
 {
@@ -130,6 +140,11 @@ bool VideoLoad(VideoLogFn log, wchar_t* why, int whyCap)
               GETP(kInterfaces, expose, "gst_x_overlay_expose") & GETP(kGobject, objectSet, "g_object_set") &
               GETP(kGobject, findProperty, "g_object_class_find_property") & GETP(kGlib, gfree, "g_free") &
               GETP(kGlib, errorFree, "g_error_free");
+    // for the log only (what was built, the frames the sink dropped): may be missing
+    *(FARPROC*)&G.parseStateChanged = PROC(mods[kGst], "gst_message_parse_state_changed");
+    *(FARPROC*)&G.parseQosStats = PROC(mods[kGst], "gst_message_parse_qos_stats");
+    *(FARPROC*)&G.parseQosValues = PROC(mods[kGst], "gst_message_parse_qos_values");
+    *(FARPROC*)&G.objectName = PROC(mods[kGst], "gst_object_get_name");
     *(FARPROC*)&G.fileToUri = PROC(mods[kGlib], "g_filename_to_uri_utf8");   // the CE build's name, as CSRMedia
     if (!G.fileToUri)
         *(FARPROC*)&G.fileToUri = PROC(mods[kGlib], "g_filename_to_uri");
@@ -235,6 +250,10 @@ bool VideoOpen(const wchar_t* path, HWND wnd, bool stretch, wchar_t* why, int wh
     LogU8(L"открываю", uri);
     G.gfree(uri);
     s_bus = G.getBus(s_pipe);
+    s_built[0] = 0;
+    s_builtDone = false;
+    memset(&s_qos, 0, sizeof(s_qos));
+    s_qos.tick = GetTickCount();
     if (G.setState(s_pipe, GST_STATE_PLAYING) == 0) {   // GST_STATE_CHANGE_FAILURE
         VideoStop();
         Say(why, whyCap, L"файл не открылся");
@@ -296,38 +315,107 @@ void VideoExpose()
         G.expose(s_sink);
 }
 
+// An element of the pipeline came to PLAYING: its name (the factory's + a number: "omxdecoder0" or a software
+// "ffdec_h2640") into the list; the pipeline itself playing - the list into the log, once per file.
+static void OnStateChanged(void* m)
+{
+    int was = 0, now = 0;
+    void* src = *(void**)((char*)m + kMsgSrc);
+    if (!G.parseStateChanged || !G.objectName || s_builtDone)
+        return;
+    G.parseStateChanged(m, &was, &now, NULL);
+    if (now != GST_STATE_PLAYING)
+        return;
+    if (src == s_pipe) {
+        s_builtDone = true;
+        LogU8(L"собрано", s_built);
+        return;
+    }
+    char* name = G.objectName(src);
+    if (name && strlen(s_built) + strlen(name) + 2 < sizeof(s_built)) {
+        if (s_built[0])
+            strcat(s_built, " ");
+        strcat(s_built, name);
+    }
+    G.gfree(name);
+}
+
+// The video sink's QoS (a frame late or dropped): the counts it reports, the worst lateness - a minute's sum
+// into the log.
+static void OnQos(void* m)
+{
+    if (*(void**)((char*)m + kMsgSrc) != s_sink || !G.parseQosStats || !G.parseQosValues)
+        return;
+    int fmt = 0, quality = 0;
+    unsigned __int64 processed = 0, dropped = 0;
+    __int64 jitter = 0;
+    double prop = 0;
+    G.parseQosStats(m, &fmt, &processed, &dropped);
+    G.parseQosValues(m, &jitter, &prop, &quality);
+    s_qos.processed = (unsigned)processed;
+    s_qos.dropped = (unsigned)dropped;
+    s_qos.count++;
+    if (jitter / 1000000 > s_qos.lateMax)
+        s_qos.lateMax = (int)(jitter / 1000000);
+}
+
+static void QosMinute()
+{
+    if (GetTickCount() - s_qos.tick < 60000)
+        return;
+    if (s_log && s_qos.count)
+        s_log(L"видео: QoS за минуту %u, кадров %u, выброшено %u (всего с начала), опоздание до %d мс",
+              s_qos.count, s_qos.processed, s_qos.dropped, s_qos.lateMax);
+    s_qos.count = 0;
+    s_qos.lateMax = 0;
+    s_qos.tick = GetTickCount();
+}
+
+static void OnError(void* m, int type, wchar_t* why, int whyCap)
+{
+    GError_* e = NULL;
+    char* dbg = NULL;
+    G.parseError(m, &e, &dbg);   // errors and warnings have the same layout
+    LogU8(type == MSG_ERROR ? L"ОШИБКА" : L"предупреждение", e ? e->message : NULL);
+    if (dbg)
+        LogU8(L"  подробно", dbg);
+    if (type == MSG_ERROR) {
+        s_state = VID_ERROR;
+        wchar_t w[200] = L"ошибка GStreamer";
+        if (e && e->message)
+            MultiByteToWideChar(CP_UTF8, 0, e->message, -1, w, 200);
+        w[199] = 0;
+        Say(why, whyCap, w);
+    }
+    if (e)
+        G.errorFree(e);
+    G.gfree(dbg);
+}
+
+// Every message off the bus, as the stock player's sync handler (it drops each one). Only taking the three we
+// needed left all the others there (state changes, tags, QoS of every late frame): the queue grew all the file
+// long, each pop walked it under the bus's lock - the streaming threads waited to post, frames came late, more
+// QoS (1080p, HU 2026-11-25: 5-15 frames a second of 25, the stock shell all of them).
 int VideoPoll(wchar_t* why, int whyCap)
 {
     if (!s_bus)
         return s_state;
     void* m;
-    while ((m = G.popFiltered(s_bus, MSG_EOS)) != NULL) {
-        G.msgUnref(m);
-        s_state = VID_ENDED;
-        if (s_log)
-            s_log(L"видео: конец файла");
-    }
-    for (int type = MSG_ERROR; type <= MSG_WARNING; type *= 2) {   // the two have the same layout
-        while ((m = G.popFiltered(s_bus, type)) != NULL) {
-            GError_* e = NULL;
-            char* dbg = NULL;
-            G.parseError(m, &e, &dbg);
-            LogU8(type == MSG_ERROR ? L"ОШИБКА" : L"предупреждение", e ? e->message : NULL);
-            if (dbg)
-                LogU8(L"  подробно", dbg);
-            if (type == MSG_ERROR) {
-                s_state = VID_ERROR;
-                wchar_t w[200] = L"ошибка GStreamer";
-                if (e && e->message)
-                    MultiByteToWideChar(CP_UTF8, 0, e->message, -1, w, 200);
-                w[199] = 0;
-                Say(why, whyCap, w);
-            }
-            if (e)
-                G.errorFree(e);
-            G.gfree(dbg);
-            G.msgUnref(m);
+    while ((m = G.popFiltered(s_bus, -1)) != NULL) {   // GST_MESSAGE_ANY
+        int type = *(int*)((char*)m + kMsgType);
+        if (type == MSG_EOS) {
+            s_state = VID_ENDED;
+            if (s_log)
+                s_log(L"видео: конец файла");
+        } else if (type == MSG_ERROR || type == MSG_WARNING) {
+            OnError(m, type, why, whyCap);
+        } else if (type == MSG_STATE_CHANGED) {
+            OnStateChanged(m);
+        } else if (type == MSG_QOS) {
+            OnQos(m);
         }
+        G.msgUnref(m);
     }
+    QosMinute();
     return s_state;
 }
