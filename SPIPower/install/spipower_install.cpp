@@ -1338,6 +1338,34 @@ static void VhDirsFor(const char* name)
     }
 }
 
+// AppLauncher on the unit (2026-11-25, a user: VestaHome installed, then AppLauncher removed by its own uninstall -
+// it wrote its old copy of G3NavHMI.exe over VestaHome's loader, the unit rebooted on the logo for ever). Found by its
+// line in Config\ExternNavi.cfg or its backup of the shell: the warning, how to remove it safely.
+static void AppLauncherWarn(wchar_t* dst, int cap)
+{
+    wchar_t p[MAX_PATH];
+    char t[1024];
+    DWORD n = 0;
+    _snwprintf(p, MAX_PATH, L"%s\\Config\\ExternNavi.cfg", kAppDir);
+    HANDLE f = CreateFile(p, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        ReadFile(f, t, sizeof(t) - 1, &n, NULL);
+        CloseHandle(f);
+    }
+    t[n] = 0;
+    _strlwr(t);
+    wchar_t b1[MAX_PATH], b2[MAX_PATH];
+    _snwprintf(b1, MAX_PATH, L"%s\\G3NavHMI.bak", kAppDir);
+    _snwprintf(b2, MAX_PATH, L"%s\\G3NavHMI.exe.bak", kAppDir);
+    if (!strstr(t, "applauncher") && !FileExists(b1) && !FileExists(b2))
+        return;
+    LogMsg(L"AppLauncher found: the warning shown");
+    AppendStr(dst, cap, L"\n\nВНИМАНИЕ: на ГУ есть AppLauncher. Не удаляйте его его же деинсталлятором, пока стоит "
+              L"VestaHome: он вернёт старую G3NavHMI.exe поверх загрузчика, и ГУ будет перезагружаться на логотипе. Чтобы "
+              L"убрать AppLauncher: УДАЛИТЬ VestaHome -> удалить AppLauncher -> снова УСТАНОВИТЬ; или только уберите его "
+              L"строку из Config\\ExternNavi.cfg.");
+}
+
 // One status line: what is installed against what is packed in.
 static void VhStatusLine(wchar_t* line, int cap)
 {
@@ -1579,6 +1607,7 @@ static int DoVhInstall()
                kVhDir, (unsigned)(n - exAll - (keep ? 1 : 0)), keep ? L"Свой radio.txt оставлен.\n" : L"", exLine,
                moved ? (oldGone ? L"Перенесён с \\SDMMC\\VestaHome вместе с настройками, старая папка удалена.\n"
                                 : L"Перенесён с \\SDMMC\\VestaHome; старую папку удалить не удалось.\n") : L"");
+    AppLauncherWarn(g_status, 4096);   // (how to remove it without the boot loop)
     LogMsg(g_status);
     return 1;
 }
@@ -1800,6 +1829,7 @@ static void DoStatus()
 
     VhStatusLine(line, 512);   // VestaHome: installed against packed in
     AppendStr(g_status, 4096, line);
+    AppLauncherWarn(g_status, 4096);
 
     // the gate (variant B: VHCheck's checks, not the proxies' MD5 of 4120): into the log and the message box
     {
