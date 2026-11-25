@@ -181,7 +181,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_BT_VIRTUAL, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
@@ -534,9 +534,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #endif
         LoadApps();
         {
-            static const wchar_t* kSrc[4] = { L"нет", L"ID устройства", L"MAC адаптеров", L"ПК" };
             int src = SecretInit();   // the key that seals the passwords of the settings
-            VLog(L"ключ паролей: %s", kSrc[src & 3]);
+            VLog(L"ключ паролей: %s", src == LICENSE_SRC_MCU ? L"ID машины (MCU)" : src == LICENSE_SRC_PC ? L"ПК" :
+                 L"ID машины ещё не пришёл - пока старый");
             SupportInit();
         }
         LoadCfg();
@@ -687,6 +687,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         if (wp == 1)
+            MachineAsk();   // the unit's ID: the MCU's machine ID, asked for until it comes
+        if (wp == 1)
             NetAutoStep();
         if (wp == 1)
             WifiWatch();   // the Wi-Fi thread stuck in a driver's call: into the log
@@ -718,12 +720,19 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                          // call's, the end closes them and gives the front back
             BtState bt;
             static int s_lastCall;
+            static bool s_virtualDown;   // Android's virtual call put down already (callwin.h CallVirtual)
             bool got = BtGet(&bt, NULL);
             int line = got ? CallLine(bt.call[0], bt.call[1]) : BT_CALL_NONE;   // (either line, as the widget)
-            // (Android's virtual call "10000000" is a call too: WhatsApp's, Telegram's - the user 2026-11-24; it is
-            // not put down any more)
-            if (got && line != s_lastCall) {
-                int c = line;
+            // Android's virtual call "10000000": put down, no window, only with "Settings -> Bluetooth" asking so
+            // (the user 2026-11-24: WhatsApp's, Telegram's calls come under it too - off by default)
+            bool virt = s_cfg.btVirtualDown && line != BT_CALL_NONE && CallVirtual(bt.callNumber);
+            if (virt && !s_virtualDown) {
+                VLog(L"Bluetooth: «звонок» 10000000 - кладу (настройка «Сброс звонка 10000000»)");
+                BtCmd(BT_CMD_END);
+            }
+            s_virtualDown = virt;
+            if (got && (virt ? BT_CALL_NONE : line) != s_lastCall) {   // (no window for it; one opened before its
+                int c = virt ? BT_CALL_NONE : line;                    // number came - closed)
                 bool fresh = s_lastCall == BT_CALL_NONE;
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)
@@ -1192,6 +1201,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (wp == WP_MCU_HWKEY) {
             HwKey(lp & 0xFF, lp >> 8 & 0xFF, lp >> 16 & 0xFF);
+            return 0;
+        }
+        if (wp == WP_MCU_MACHINE) {
+            MachineKnown();
             return 0;
         }
         if (wp == WP_MCU_REBOOT) {

@@ -48,6 +48,7 @@ struct Cfg {
     wchar_t homeName[48];
     int btAutoConnect, btAutoAnswer;   // the stack's options, -1 never set (VestaStub applies them at each boot)
     int pbAuto;                        // the kept phone book refreshed at each connect (the user 2026-11-12: off)
+    bool btVirtualDown;                // Android's virtual call "10000000" put down (the user 2026-11-24: off)
     wchar_t btName[32];                // the unit's Bluetooth name (VestaStub writes it before the stack starts)
     double  homeLat, homeLon;          // both 0 = not set
     double  lastLat, lastLon;          // the last place the GPS told (placepick.h), both 0 = none yet
@@ -422,6 +423,8 @@ static void LoadCfg()
             s_cfg.btAutoAnswer = _wtoi(v);
         } else if (!wcscmp(k, L"bt.pbauto")) {
             s_cfg.pbAuto = CfgBool(v);
+        } else if (!wcscmp(k, L"bt.virtualdown")) {
+            s_cfg.btVirtualDown = CfgBool(v);
         } else if (!wcscmp(k, L"bt.name")) {
             wcsncpy(s_cfg.btName, v, 31);
             s_cfg.btName[31] = 0;
@@ -640,7 +643,8 @@ static void LoadCfg()
                     s_cfg.wifiLocked[i] = true;
                     wcsncpy(s_cfg.wifiSealed[i], pass, 299);
                     s_cfg.wifiSealed[i][299] = 0;
-                    VLog(L"wifi: пароль сети %s не расшифрован (другое ГУ?)", s_cfg.wifiSsid[i]);
+                    VLog(L"wifi: пароль сети %s пока не расшифрован (ждёт ID машины от MCU или другое ГУ)",
+                         s_cfg.wifiSsid[i]);
                 }
             }
         }
@@ -756,6 +760,12 @@ static void SaveCfg()
                            L"yyyymmdd, the interval, km\r\ncar.odo=%.1f\r\ncar.service.km=%.0f\r\n"
                            L"car.service.date=%d\r\ncar.service.every=%d\r\n", s_cfg.odoKm, s_cfg.svcKm, s_cfg.svcYmd,
                            ServiceEveryOf(s_cfg.svcEvery, false));
+        n += k > 0 ? k : 0;
+    }
+    {
+        int k = _snwprintf(text + n, 12000 - n, L"# bt.virtualdown: Android's virtual call \"10000000\" (an app took the "
+                           L"car's microphone: Alice - WhatsApp's, Telegram's calls too) put down (0: a call as any)\r\n"
+                           L"bt.virtualdown=%d\r\n", s_cfg.btVirtualDown ? 1 : 0);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {

@@ -15,6 +15,12 @@ static void Check(bool ok, const char* what)
 
 int main()
 {
+    // Android's virtual call (an app taking the car's microphone - Alice; WhatsApp's, Telegram's calls too): put
+    // down only when "Settings -> Bluetooth" asks so (the user 2026-11-24)
+    Check(CallVirtual("10000000"), "virtual: Android's made-up number");
+    Check(!CallVirtual("") && !CallVirtual("100000000") && !CallVirtual("1000000") && !CallVirtual("+79161234567") &&
+          !CallVirtual("10000001"), "virtual: a hidden number, a real one, anything else - a call");
+    Check(!CallVirtual(0), "virtual: no number - a call");
     Check(CallStep(1, false, false, false, false) == CA_INCOMING, "a call coming: its window, whatever is in front");
     Check(CallStep(1, true, false, false, false) == CA_NONE, "still ringing, its window shown: nothing");
     Check(CallStep(4, true, false, false, false) == CA_TAKEN, "answered (here or on the phone): the call's window");

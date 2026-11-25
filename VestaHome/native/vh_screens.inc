@@ -1563,6 +1563,9 @@ static void ScrSetBt(HDC dc)
         Toggle(dc, 640, y + 10, T_AUTOCONNECT);
         SetRow(dc, y += kSetH, L"Автоответ", L"входящий звонок принимается через 5 с");
         Toggle(dc, 640, y + 10, T_AUTOANSWER);
+        SetRow(dc, y += kSetH, L"Сброс звонка 10000000",
+               L"интернет-звонки, голосовой помощник");
+        Toggle(dc, 640, y + 10, T_BT_VIRTUAL);
         SetRow(dc, y += kSetH, L"Книга при подключении", L"обновлять с телефона сама (иначе — «Обновить»)");
         Toggle(dc, 640, y + 10, T_PB_AUTO);
         s[0] = 0;   // the paired ones (0x08), by name
@@ -2065,7 +2068,7 @@ static void ScrInfo(HDC dc)
     CanStatusText(can, 64);
     wchar_t ver[64];   // (the support: its key, or the unit's ID to ask the author for one - home.cpp SupportInit)
     _snwprintf(ver, 64, L"%s · %s", VhVersion(), s_support == LICENSE_COAUTHOR ? L"поддержка: Соавтор" :
-               s_support ? L"поддержка: подписчик" : s_unitId);
+               s_support ? L"поддержка: подписчик" : s_unitId[0] ? s_unitId : L"ID ГУ: ждём MCU");
     const wchar_t* rows[5][2] = { { L"Модель", L"LADA Vesta · MMC" }, { L"Прошивка ГУ", shell }, { L"ОС", os },
                                   { L"CAN-модуль", can }, { L"VestaHome", ver } };
     Settings(dc, S_INFO);

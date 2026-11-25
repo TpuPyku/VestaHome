@@ -61,7 +61,7 @@ static volatile LONG s_mcuPosted;
 // source (00 radio, 06 and 07 the media player - USB, SD, video alike (2026-10-18), 09 Bluetooth). -1 = not seen yet. A change of the volume or the mute opens
 // the volume window (the same values sent again - the tuner repeats them - do not).
 enum { kVolMax = 50, WP_MCU_VOLUME = 1, WP_MCU_MARK = 2, WP_MCU_TUNER = 3, WP_MCU_REBOOT = 4, WP_MCU_SOUND = 5,
-       WP_MCU_DAYNIGHT = 6, WP_MCU_HWKEY = 7 };
+       WP_MCU_DAYNIGHT = 6, WP_MCU_HWKEY = 7, WP_MCU_MACHINE = 8 };
 // The screen (2026-10-17 photos + Ghidra on the shell's CSetUpDisplayDlg 2026-10-18): 0x4105 00 <0 day, 1 night>,
 // 0x4107 00 <backlight 1..10> (10 by day, 1 at night as set); the shell's day / night buttons are keys 0x64 / 0x65,
 // its brightness slider SPApi_SysSendRadioBackLight(0..10) (the current mode's level).
@@ -104,6 +104,19 @@ static bool McuBtAddr(wchar_t* s, int n)   // the unit's Bluetooth address, "AA:
 }
 static void McuText(const unsigned char* p, int n, wchar_t* out, bool lead);
 
+// The machine ID as "Details" shows it ("—" not yet; a part may be missing) - and the unit's ID is made of it
+// (2026-11-25: the HAL's device id is the same on every unit): true when all of it is there.
+static bool MachineText(const McuInfo& inf, wchar_t* out, int n)
+{
+    if (!inf.id[0]) {
+        wcsncpy(out, L"—", n);
+        return false;
+    }
+    _snwprintf(out, n, L"%s %s %s", inf.id, inf.idDate, inf.idNum);
+    out[n - 1] = 0;
+    return inf.idDate[0] && inf.idNum[0];
+}
+
 static void McuInfoTake(const McuMsg& m)   // under s_mcuCs
 {
     const unsigned char* p = m.data;
@@ -132,6 +145,9 @@ static void McuInfoTake(const McuMsg& m)   // under s_mcuCs
     } else if (m.id == 0x7905 && len >= 4 && p[1] < 16) {
         s_info.sys[p[1]] = len == 4 ? p[2] << 8 | p[3] : p[2];
     }
+    wchar_t mt[64];
+    if ((m.id == 0x4118 || m.id == 0x4111 || m.id == 0x4112) && MachineText(s_info, mt, 64))
+        PostMessage(s_wnd, WM_APP_MCU, WP_MCU_MACHINE, 0);   // the unit's ID (MachineKnown)
 }
 
 static bool s_mcuCsReady;   // McuStart has made s_mcuCs (SaveCfg may run before it)
@@ -807,6 +823,47 @@ static bool McuSend0(const char* name)
     f();
     VLog(L"mcu: %S()", name);
     return true;
+}
+
+// ---- The unit's ID (2026-11-25: the HAL's device id is the same on every unit - VH-A6R3Y-CJN2Y everywhere): the
+// MCU's machine ID (0x4118 + 0x4111 + 0x4112, as the stock "Info"), asked for every 10 s until it comes, kept for the
+// boot (VestaCore LicenseMachineSet: the add-ons read it); then the passwords' key is the machine's: the ones sealed by
+// it are opened, all sealed with it, the license checked for the new ID.
+static void MachineAsk()
+{
+    static DWORD s_asked;
+    LONG attach, wraps;
+    if (s_unitId[0] || McuState(&attach, &wraps) <= 0 || (s_asked && GetTickCount() - s_asked < 10000))
+        return;
+    s_asked = GetTickCount();
+    McuSend0("SPApi_SendRadioRequestProductInfo");
+}
+
+static void MachineKnown()
+{
+    wchar_t m[64], was[64];
+    EnterCriticalSection(&s_mcuCs);
+    McuInfo inf = s_info;
+    LeaveCriticalSection(&s_mcuCs);
+    if (!MachineText(inf, m, 64) || (LicenseMachineGet(was, 64) && !wcscmp(was, m) && s_unitId[0]))
+        return;
+    if (!LicenseMachineSet(m)) {
+        VLog(L"ID ГУ: ID машины не подходит (%s)", m);
+        return;
+    }
+    SecretInit();
+    int opened = 0;
+    for (int i = 0; i < s_cfg.wifiCount; i++)
+        if (s_cfg.wifiLocked[i] && SecretOpen(s_cfg.wifiSealed[i], s_cfg.wifiPass[i], 64)) {
+            s_cfg.wifiLocked[i] = false;
+            WifiRemember(s_cfg.wifiSsid[i], s_cfg.wifiPass[i]);
+            opened++;
+        }
+    SaveCfg();   // (every password sealed again: the machine's key from now on)
+    SupportInit();
+    VLog(L"ID ГУ из ID машины: %s; паролей Wi-Fi открыто %d", s_unitId, opened);
+    if (IsWindowVisible(s_wnd))
+        Redraw();
 }
 
 static void Go(Screen s, bool push);
