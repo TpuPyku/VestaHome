@@ -1393,9 +1393,9 @@ static void VhStatusLine(wchar_t* line, int cap)
 // The GUI's progress line while VestaHome is waited for (set by the GUI; NULL - the command line, the boot).
 static void (*g_waitShow)(const wchar_t* line);
 
-// VestaHome closed for its files: WM_CLOSE, then killed; up to 60 s for the process to be gone (2026-11-25: a thread of
-// it in a driver's call - Wi-Fi, DNS with no network - holds the process until the call returns; 25 s was too short),
-// the seconds left shown and logged every 5 s.
+// VestaHome closed for its files: WM_CLOSE, then killed; up to 10 s for the process to be gone (2026-11-25: a thread of
+// it in a driver's call - Wi-Fi, DNS with no network - can hold the process for minutes; still there - its install
+// goes with the boot job, the user 2026-11-25: "сократи время", was 60 s), the seconds left shown and logged.
 static void VhClose()
 {
     HWND w = FindWindow(kVhClass, NULL);
@@ -1411,10 +1411,10 @@ static void VhClose()
     }
     // (the tester 2026-11-20: TerminateProcess "busy" (170) - its window gone, the process ending, a thread of it
     // held in a network call (DNS with no network) until that returns: waited for, up to 20 s, not refused at once)
-    for (int i = 0; i < 600 && ProcExists(kVhExe) == 1; i++) {
-        if (i % 50 == 0) {
+    for (int i = 0; i < 100 && ProcExists(kVhExe) == 1; i++) {
+        if (i % 20 == 0) {
             wchar_t m[160];
-            _snwprintf(m, 160, L"VestaHome ещё завершается (поток ждёт драйвер) — жду до %d с…", (600 - i) / 10);
+            _snwprintf(m, 160, L"VestaHome ещё завершается (поток ждёт драйвер) — жду до %d с…", (100 - i) / 10);
             LogMsg(m);
             if (g_waitShow)
                 g_waitShow(m);
@@ -1424,7 +1424,7 @@ static void VhClose()
     if (ProcExists(kVhExe) != 1)
         LogMsg(L"vh: VestaHome gone");
     else
-        LogMsg(L"vh: VestaHome.exe still running after 60 s - its files are held");
+        LogMsg(L"vh: VestaHome.exe still running after 10 s - its files are held");
 }
 
 static int DelTree(const wchar_t* dir);
@@ -1485,7 +1485,7 @@ static int DoVhInstall()
     }
     VhClose();
     if (ProcExists(kVhExe) == 1) {
-        wcscpy(g_status, L"VestaHome не завершился за минуту (процесс VestaHome.exe держит свои файлы). Обновите из "
+        wcscpy(g_status, L"VestaHome не завершился за 10 с (процесс VestaHome.exe держит свои файлы). Обновите из "
                          L"VestaHome: «О системе» → «Обновить» — установка пройдёт при загрузке, до запуска VestaHome.");
         return 0;
     }
