@@ -6,9 +6,9 @@
 
 // The version's mark: the release here, the date the build's (VestaHomeInstall's build reads it from the exe -
 // make_vh_payload.py - and marks the installer with it, 2026-11-25). 1.1: the unit ID from the MCU.
-static const char kVhMark[] = "VHVER:1.1|" __DATE__;
+static const char kVhMark[] = "VHVER:1.2|" __DATE__;
 
-static const wchar_t* VhVersion()   // "1.1.261125"
+static const wchar_t* VhVersion()   // "1.2.261125" (1.2: the update from "О системе", the fine equalizer)
 {
     static wchar_t rel[8];
     if (!rel[0])
