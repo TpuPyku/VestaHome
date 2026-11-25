@@ -376,6 +376,8 @@ static DWORD NetThreadRun(LPVOID p)
             if (st->gen == s_netGen)   // reads the start of the stream to know its format (blocks)
                 chan = s_bass.streamUser(BASS_STREAMFILE_BUFFER_F, BASS_STREAM_BLOCK_F, &kNetProcs, f);
             int berr = chan ? 0 : s_bass.error();
+            if (chan)
+                EqAttach(chan, 1);   // the fine equalizer (flat when off)
             EnterCriticalSection(&s_netCs);
             s_netOpening = NULL;
             LeaveCriticalSection(&s_netCs);

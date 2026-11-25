@@ -193,7 +193,13 @@ static void ScrSetSound(HDC dc)
         McuKey(0xE6, false);
     }
     Settings(dc, S_SET_SOUND);
-    T(dc, 264, 92, L"Эквалайзер", 19, kText, 700);
+    T(dc, 264, 92, L"Эквалайзер", 19, kText, 700);   // the two kinds (vh_eq.inc, 2026-11-25)
+    Button(dc, 448, 70, 150, 34, L"Грубый", s_cfg.eqMode ? B_N : B_SEL, IC_NONE, 13, 0, A_EQMODE, 0);
+    Button(dc, 606, 70, 162, 34, L"Точный", s_cfg.eqMode ? B_SEL : B_N, IC_NONE, 13, 0, A_EQMODE, 1);
+    if (s_cfg.eqMode) {
+        EqFineDraw(dc);
+        return;
+    }
     for (int p = 0; p < 5; p++) {
         bool cur = s_cfg.eq[0] == kEqPresets[p].v[0] && s_cfg.eq[1] == kEqPresets[p].v[1] &&
                    s_cfg.eq[2] == kEqPresets[p].v[2];

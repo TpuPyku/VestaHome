@@ -281,6 +281,8 @@ static bool PlayerPlay(int i)
     _snwprintf(path, MAX_PATH, L"%s%s", s_plDir, s_pl[i]);
     s_plCur = i;
     s_chan = s_bass.streamFile(FALSE, path, 0, 0, BASS_UNICODE_F);
+    if (s_chan)
+        EqAttach(s_chan, 0);   // the fine equalizer (flat when off)
     if (!s_chan) {
         int e = s_bass.error();
         _snwprintf(s_status, 96, L"не играет: %s (BASS %d)", s_pl[i], e);

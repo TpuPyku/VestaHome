@@ -36,6 +36,7 @@
 #include "vjson.h"     // VestaCore: JSON (the catalogue's answers, in netcat.cpp)
 #include "vlicense.h"  // VestaCore: the support license (its ID, its file)
 #include "vupdate.h"   // VestaCore: the installer's version and signature (vh_update.inc)
+#include "veq.h"       // VestaCore: the fine equalizer (vh_eq.inc)
 #include "video.h"
 #include "wifi.h"
 #include "inikey.h"     // Navitel's GPSEpoch (vh_apps.inc)
@@ -150,7 +151,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
-              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_RVCLINES, A_UPDOPEN, A_UPDCHECK, A_UPDGO, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON, A_VOICEDIAL,
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_RVCLINES, A_UPDOPEN, A_UPDCHECK, A_UPDGO, A_EQFINE, A_EQFPRESET, A_EQMODE, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON, A_VOICEDIAL,
               A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_SVCDONE,
               A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH, A_ADDONKEY, A_TOUCHCLEAR };
 
@@ -427,6 +428,10 @@ static void SupportInit()
          s_support ? L"подписчика" : !found ? L"нет" : L"не подходит (другой ГУ или повреждён)");
 }
 
+// (vh_eq.inc, after vh_plugins.inc: the fine equalizer - the channels made earlier attach to it)
+static void EqAttach(DWORD chan, int which);
+static void EqFineDraw(HDC dc);
+static void PlugEqTell();
 #include "vh_draw.inc"
 #include "vh_screens.inc"
 #include "vh_diag.inc"
@@ -452,6 +457,7 @@ static void SupportInit()
 #include "vh_sound.inc"
 #include "vh_camdl.inc"
 #include "vh_plugins.inc"
+#include "vh_eq.inc"
 #include "vh_update.inc"
 #include "vh_frame.inc"
 #include "vh_resume.inc"
@@ -500,6 +506,10 @@ static void FingerMove(int x, int y)
     }
     if (s_pressed >= 0 && s_btns[s_pressed].action == A_BALXY) {
         BalanceAt(s_vt.x, s_vt.y, false);
+        return;
+    }
+    if (s_pressed >= 0 && s_btns[s_pressed].action == A_EQFINE) {   // a fine slider: follows the finger
+        EqFineAt(s_btns[s_pressed].arg, s_vt.y, false);
         return;
     }
     if (st != VT_DRAG)
@@ -1426,6 +1436,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         s_pressed = -1;
         if (was >= 0 && s_btns[was].action == A_BALXY) {   // the finger may have left the car: still the point
             BalanceAt(s_vt.x, s_vt.y, true);
+            Redraw();
+            return 0;
+        }
+        if (was >= 0 && s_btns[was].action == A_EQFINE) {   // the fine slider: where the finger left it
+            EqFineAt(s_btns[was].arg, dragged ? s_vt.y : s_vt.py, true);
             Redraw();
             return 0;
         }

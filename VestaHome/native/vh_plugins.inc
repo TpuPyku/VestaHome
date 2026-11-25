@@ -715,6 +715,7 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
                  VhVersion(), s_night ? 1 : 0,
                  (unsigned)(GetRValue(kOrange) << 16 | GetGValue(kOrange) << 8 | GetBValue(kOrange)), s_support,
                  s_unitId);
+        PlugEqTell();   // (the fine equalizer's gains: an add-on that plays sound filters it the same)
         if (s_screen == S_SET_PLUGINS && IsWindowVisible(s_wnd))
             Redraw();
         return;

@@ -989,6 +989,8 @@ static void DoActionOn(const Btn& b)
     }
     case A_MCUREQ:   McuRequest(); break;
     case A_EQ:       EqSet(b.arg); break;
+    case A_EQFPRESET: EqFinePreset(b.arg); break;
+    case A_EQMODE:   EqModeSet(b.arg); break;
     case A_EQPRESET: EqPresetSet(b.arg); break;
     case A_BAL:      BalanceStep(false, b.arg); break;
     case A_FADE:     BalanceStep(true, b.arg); break;

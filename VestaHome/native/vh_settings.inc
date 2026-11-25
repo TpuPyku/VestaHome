@@ -68,6 +68,9 @@ struct Cfg {
     int     camUpdated;                // yyyymmdd of the last download, 0 = never
     int     yaDay, yaCount;            // Yandex weather requests made on that day (yyyymmdd): its limit, see YaTake
     int     eq[3];                     // equalizer low, mid, high: -6..6 (what was last sent to the MCU)
+    int     eqMode;                    // 0 the coarse one (the MCU's), 1 the fine one (ours, vh_eq.inc)
+    int     eqFine[EQ_BANDS];          // the fine one's gains, tenths of a dB
+    int     eqCoarse[3];               // the coarse one's bands kept while the fine one is on
     int     balance, fader;            // -8..8, 0 = centre (CAudioFieldDlg)
     wchar_t musicDir[MAX_PATH];        // the player's folder and track, to come back to
     wchar_t musicFile[MAX_PATH];
@@ -617,6 +620,16 @@ static void LoadCfg()
             wcsncpy(s_cfg.wifiApPass, v, 63);
         } else if (!wcscmp(k, L"rvc.invert")) {
             s_cfg.rvcInvert = CfgBool(v);
+        } else if (!wcscmp(k, L"eq.mode")) {
+            s_cfg.eqMode = _wtoi(v) == 1;
+        } else if (!wcscmp(k, L"eq.fine") || !wcscmp(k, L"eq.coarse")) {
+            char a[120];
+            int g[EQ_BANDS];
+            WideCharToMultiByte(CP_ACP, 0, v, -1, a, sizeof(a), NULL, NULL);
+            if (k[3] == L'f' && EqGainsParse(a, g))
+                memcpy(s_cfg.eqFine, g, sizeof(g));
+            else if (k[3] == L'c')
+                sscanf(a, "%d,%d,%d", &s_cfg.eqCoarse[0], &s_cfg.eqCoarse[1], &s_cfg.eqCoarse[2]);
         } else if (!wcscmp(k, L"rvc.lines")) {
             int l = _wtoi(v);
             s_cfg.rvcLines = l >= 0 && l < RVC_LINES_COUNT ? l : RVC_LINES_CLASSIC;
@@ -773,6 +786,13 @@ static void SaveCfg()
         n += k > 0 ? k : 0;
         k = _snwprintf(text + n, 12000 - n, L"# rvc.lines: the camera's guide lines - 0 classic, 1 as the stock shell, "
                        L"2 modern, 3 modern with the wheels' tracks\r\nrvc.lines=%d\r\n", s_cfg.rvcLines);
+        n += k > 0 ? k : 0;
+        char fine[120];
+        EqGainsText(s_cfg.eqFine, fine, sizeof(fine));
+        k = _snwprintf(text + n, 12000 - n, L"# eq.mode: 0 the stock equalizer (coarse, 3 bands), 1 ours (fine, 10 bands); "
+                       L"eq.fine: its gains in tenths of a dB, 31 Hz ... 16 kHz; eq.coarse: the stock bands kept\r\n"
+                       L"eq.mode=%d\r\neq.fine=%S\r\neq.coarse=%d,%d,%d\r\n", s_cfg.eqMode, fine, s_cfg.eqCoarse[0],
+                       s_cfg.eqCoarse[1], s_cfg.eqCoarse[2]);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {
