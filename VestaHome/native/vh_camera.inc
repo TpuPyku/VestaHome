@@ -44,7 +44,7 @@ static LRESULT CALLBACK RvcProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         HBRUSH key = CreateSolidBrush(RvcKey());
         FillRect(dc, &rc, key);
         DeleteObject(key);
-        RvcDrawLines(dc, s_rvcAngle, s_rvcValid);
+        RvcDrawLines(dc, s_rvcAngle, s_rvcValid, s_cfg.rvcLines);
         if (s_rvcManual && s_rvcSignal == 0) {   // shown by hand out of reverse: the camera has no power then
             SetBkMode(dc, TRANSPARENT);
             SetTextColor(dc, RGB(240, 240, 240));

@@ -4,9 +4,9 @@
 // date comes by itself; the release ("0.5") raised by hand.
 #include "vversion.h"
 
-static const wchar_t* VhVersion()   // "1.0.261116"
+static const wchar_t* VhVersion()   // "1.1.261125" (1.1: the unit ID from the MCU, 2026-11-25)
 {
-    return AppVersion(L"1.0");
+    return AppVersion(L"1.1");
 }
 
 // ---------------------------------------------------------------- drawing helpers
@@ -2528,7 +2528,9 @@ static void Settings(HDC dc, Screen active)
 // Settings row (rows at 64 + i * kSetH - one height on every page, the user 2026-11-10): label (and a second line),
 // separator under it unless last; the control is drawn by the caller. With an action the label part is a button of
 // its own.
-enum { kSetH = 56 };
+// A page that scrolls (more than six rows): taller rows, five and a half in the card - the half row under shows there
+// is more (the user 2026-11-25); its controls go kSetPad lower than on the other pages.
+enum { kSetH = 56, kSetHS = 61, kSetPad = (kSetHS - kSetH) / 2 };
 
 // A settings row's own part (the settings' and the widgets' settings' rows): the label 18 and the second line 13
 // (design 0.6), the button of the label part (zoneW, with an action), the separator (sepW) unless last; true pressed.
@@ -2552,14 +2554,21 @@ static void SetRow(HDC dc, int y, const wchar_t* label, const wchar_t* sub = NUL
     RowCore(dc, 256, y, h, 420, 512, 400, label, sub, a, arg, last);
 }
 
+static void SetRowS(HDC dc, int y, const wchar_t* label, const wchar_t* sub = NULL, bool last = false,
+                    Action a = A_NONE, int arg = 0)   // a row of a page that scrolls
+{
+    SetRow(dc, y, label, sub, last, a, arg, kSetHS);
+}
+
 static void Chevron(HDC dc, int x, int y)
 {
     Ico(dc, IC_NEXT, x, y, 32, kMuted);
 }
 
 // A settings page of more rows than its card holds (six): they scroll - the finger, the arrows at the card's right
-// (x 720), so their controls end at x 712 (760 on the others). Between them the rows go at the y returned + i * kSetH.
-static Scroll s_setScroll = { 0, 0, 3 * kSetH };
+// (x 720), so their controls end at x 712 (760 on the others). Between them the rows (SetRowS) go at the y returned +
+// i * kSetHS.
+static Scroll s_setScroll = { 0, 0, 3 * kSetHS };
 
 static int SetScrollBegin(HDC dc, int rows)
 {
@@ -2568,7 +2577,7 @@ static int SetScrollBegin(HDC dc, int rows)
         s_seen = s_screenTick;
         s_setScroll.pos = 0;
     }
-    s_setScroll.content = rows * kSetH;
+    s_setScroll.content = rows * kSetHS;
     ScrollBegin(dc, s_setScroll, 256, 64, 712, 400);
     return 64 - s_setScroll.pos;
 }
