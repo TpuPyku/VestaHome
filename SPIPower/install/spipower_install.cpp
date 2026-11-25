@@ -2321,6 +2321,10 @@ static void BootRun()
             if (strstr(jb, "rollback") || strstr(jb, "install"))
                 LogMsg(g_status);   // the proxy's part follows
         }
+        if (strstr(jb, "vh")) {   // VestaHome itself: nothing runs it yet (2026-11-25: a running one held its
+            rc = DoVhInstall();     // process - two threads in drivers - and the update could not replace its files)
+            LogMsg(g_status);
+        }
         if (strstr(jb, "rollback")) {
             rc = Rollback();
             if (rc) wcscpy(g_status, L"boot: rollback done, factory DLL back, shell restarted");
@@ -2332,7 +2336,7 @@ static void BootRun()
                 LogMsg(L"boot: no reset -> starting Main.exe on the new DLL");
                 RestartShell();
             }
-        } else if (!strstr(jb, "stub")) {
+        } else if (!strstr(jb, "stub") && !strstr(jb, "vh")) {
             rc = 0;
             wcscpy(g_status, L"boot: unknown job");
         }
@@ -2623,7 +2627,7 @@ static void RunAction(int id)
         InvalidateRect(g_hwnd, NULL, TRUE);
         UpdateWindow(g_hwnd);
         wchar_t vhRes[1024] = L"";
-        int ok = 1;
+        int ok = 1, vhBoot = 0;
         {   // VestaHome: plain file work while everything runs
             // No "start it?" (the user 2026-10-22): a running VestaHome comes back by itself - under the stub the
             // stub starts the new one when this mutex is gone (VestaStub: UpdateRunning), else we do; a first
@@ -2633,14 +2637,21 @@ static void RunAction(int id)
             ok = id == B_SETUP ? DoVhInstall() : DoVhUninstall();
             if (upd)
                 CloseHandle(upd);
-            if (id == B_SETUP && ok && was && !stub)
+            if (id == B_SETUP && !ok && ProcExists(kVhExe) == 1) {   // held (a thread in a driver): at the boot,
+                vhBoot = 1;                                          // before it starts (2026-11-25)
+                ok = 1;
+                LogMsg(L"vh: VestaHome held - its install goes with the boot job");
+                wcscpy(g_status, L"VestaHome сейчас не завершается (его поток ждёт драйвер) — он установится при "
+                                 L"перезагрузке, до запуска.");
+            }
+            if (id == B_SETUP && ok && was && !stub && !vhBoot)
                 VhStart();
             wcsncpy(vhRes, g_status, 1023);
             vhRes[1023] = 0;
         }
-        if (ok && (stubJob || proxyJob)) {
+        if (ok && (stubJob || proxyJob || vhBoot)) {
             char verb[48];
-            _snprintf(verb, 48, "%s%s%s", stubJob ? (id == B_SETUP ? "stub on" : "stub off") : "",
+            _snprintf(verb, 48, "%s%s%s%s", vhBoot ? "vh " : "", stubJob ? (id == B_SETUP ? "stub on" : "stub off") : "",
                       stubJob && proxyJob ? " " : "", proxyJob ? "rollback" : "");
             verb[47] = 0;
             DoBootArm(verb, 0);
