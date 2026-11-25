@@ -44,6 +44,8 @@ PLAN = (
     (r'SDCard\VestaHomeInstall', (
         (os.path.join(SP, 'deploy', 'help.txt'),   'help.txt',            None,      'how to install / update / remove'),
         (os.path.join(OUT, 'VestaHomeInstall.exe'), 'VestaHomeInstall.exe', None,      'installer: VestaHome + proxy inside'),
+        (os.path.join(OUT, 'VestaHomeInstall.sig'), 'VestaHomeInstall.sig', None,
+         'its signature: VestaHome\'s "Обновить" runs only a signed installer'),
     )),
     (r'SDCard\SafeMode', (
         (os.path.join(ROOT, 'VestaHome', 'Rescue', 'out', 'Cancle60s.exe'), 'Cancle60s.exe', None,

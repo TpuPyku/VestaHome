@@ -13,25 +13,36 @@ cd /d "%~dp0"
 if not exist obj\arm mkdir obj\arm
 if not exist obj\pc  mkdir obj\pc
 if not exist "%OUT%" mkdir "%OUT%"
+rem VestaCore (the update asked from VestaHome, 2026-11-25: vupdate.cpp + vlicense.cpp) - the sibling working repo,
+rem else the submodule core\; BearSSL (SHA-256) - VestaHome's build of it (build VestaHome first)
+set CORE=%~dp0..\..\..\VestaCore
+if not exist "%CORE%\vupdate.cpp" set CORE=%~dp0..\..\core
+set BR=/I"..\..\third_party\bearssl-0.6\inc" /I"..\..\third_party\compat" /I"%CORE%"
+set BRLIB=..\..\VestaHome\native\obj
+if not exist "%BRLIB%\bearssl_arm.lib" echo === BearSSL: build VestaHome first (its native\build.bat) & goto fail
 
 echo === ARM (Windows CE)
 rem bt_proxy.cpp with BT_HOST: the BT proxy's work built in (variant B, 2026-11-20 - no proxy DLLs)
-"%VC%\ce\bin\x86_arm\cl.exe" /nologo /O2 /W3 /GS- /TP /c stub.cpp ..\..\SPIPower\bt\bt_proxy.cpp /DBT_HOST /Foobj\arm\ ^
+"%VC%\ce\bin\x86_arm\cl.exe" /nologo /O2 /W3 /GS- /TP /c stub.cpp ..\..\SPIPower\bt\bt_proxy.cpp "%CORE%\vupdate.cpp" ^
+  "%CORE%\vlicense.cpp" /DBT_HOST /Foobj\arm\ ^
   /DUNICODE /D_UNICODE /DUNDER_CE=0x420 /D_WIN32_WCE=0x420 /DWINCE /DARM /D_ARM_ /DARMV4 /DNDEBUG ^
-  /I"%SDK%\Include" /I"%VC%\ce\include" /I"..\..\VestaHome\native"
+  /I"%SDK%\Include" /I"%VC%\ce\include" /I"..\..\VestaHome\native" %BR%
 if errorlevel 1 goto fail
 "%VC%\ce\bin\x86_arm\link.exe" /nologo /SUBSYSTEM:WINDOWSCE,4.20 /MACHINE:ARM /OUT:"%OUT%\VestaStub.exe" ^
-  obj\arm\stub.obj obj\arm\bt_proxy.obj /LIBPATH:"%SDK%\Lib\armv4" /LIBPATH:"%VC%\ce\lib\armv4" ^
+  obj\arm\stub.obj obj\arm\bt_proxy.obj obj\arm\vupdate.obj obj\arm\vlicense.obj "%BRLIB%\bearssl_arm.lib" ^
+  /LIBPATH:"%SDK%\Lib\armv4" /LIBPATH:"%VC%\ce\lib\armv4" ^
   coredll.lib corelibc.lib /NODEFAULTLIB:oldnames.lib /NODEFAULTLIB:advapi32.lib
 if errorlevel 1 goto fail
 
 echo === x86 (desktop test build)
-"%VC%\bin\cl.exe" /nologo /O2 /W3 /MT /TP /c stub.cpp ..\..\SPIPower\bt\bt_proxy.cpp /DBT_HOST /Foobj\pc\ ^
+"%VC%\bin\cl.exe" /nologo /O2 /W3 /MT /TP /c stub.cpp ..\..\SPIPower\bt\bt_proxy.cpp "%CORE%\vupdate.cpp" ^
+  "%CORE%\vlicense.cpp" /DBT_HOST /Foobj\pc\ ^
   /DUNICODE /D_UNICODE /DWIN32 /DNDEBUG /D_CRT_SECURE_NO_WARNINGS ^
-  /I"%VC%\include" /I"%VC%\PlatformSDK\Include" /I"..\..\VestaHome\native"
+  /I"%VC%\include" /I"%VC%\PlatformSDK\Include" /I"..\..\VestaHome\native" %BR%
 if errorlevel 1 goto fail
 "%VC%\bin\link.exe" /nologo /SUBSYSTEM:WINDOWS /OUT:"%OUT%\VestaStubPC.exe" obj\pc\stub.obj obj\pc\bt_proxy.obj ^
-  /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" user32.lib gdi32.lib kernel32.lib
+  obj\pc\vupdate.obj obj\pc\vlicense.obj "%BRLIB%\bearssl_pc.lib" ^
+  /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" user32.lib gdi32.lib kernel32.lib advapi32.lib
 if errorlevel 1 goto fail
 
 echo === OK

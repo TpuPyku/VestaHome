@@ -35,6 +35,7 @@
 #include "country.h"   // the country by GPS (the catalogue's "Рядом")
 #include "vjson.h"     // VestaCore: JSON (the catalogue's answers, in netcat.cpp)
 #include "vlicense.h"  // VestaCore: the support license (its ID, its file)
+#include "vupdate.h"   // VestaCore: the installer's version and signature (vh_update.inc)
 #include "video.h"
 #include "wifi.h"
 #include "inikey.h"     // Navitel's GPSEpoch (vh_apps.inc)
@@ -149,7 +150,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
               A_VFILE, A_VUP, A_VPLAY, A_VPREV, A_VNEXT, A_VSEEK, A_VFULL,
               A_NRPLAY, A_NRSTEP, A_NRPICK, A_WIFINET, A_WIFIFORGET, A_WIFISCAN, A_PAGESTEP, A_WIFIAP,
-              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_RVCLINES, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON, A_VOICEDIAL,
+              A_OBDSCAN, A_OBDPICK, A_OBDPIN, A_OBDPAIR, A_OBDCONN, A_BTUNPAIR, A_RVCVIEW, A_RVCLINES, A_UPDOPEN, A_UPDCHECK, A_UPDGO, A_TANK, A_DTCREAD, A_DTCCLEAR, A_DTCINFO, A_TELINE, A_TEADD, A_TEDEL, A_TESAVE, A_TEBACK, A_TEXTFILES, A_UWEDIT, A_PNPICK, A_PNPAIR, A_PNCONN, A_BTVISIBLE, A_PAIRANSWER, A_ACCENT, A_SAVERBG, A_PHFULL, A_NMEACOM, A_RFILL, A_MODEMTEST, A_NETOP, A_NETPAN, A_OSMFAV, A_WIFIDEL, A_PLUGEV, A_PLUGOPEN, A_PLUGON, A_VOICEDIAL,
               A_PLUGPAGE, A_CAMOVERSTEP, A_PLUGNAV, A_SVCDONE,
               A_NRLIST, A_NRFAV, A_NCTILE, A_NCPICK, A_NCMORE, A_NCSORT, A_NCSEARCH, A_ADDONKEY, A_TOUCHCLEAR };
 
@@ -166,7 +167,7 @@ enum Screen { S_HOME, S_RADIO, S_RADIO_LIST, S_RADIO_PTY, S_AUDIO, S_AUDIO_LIST,
               S_SET_VIDEO, S_SET_PHOTO, S_INFO, S_WARNING, S_VOLUME, S_SAVER, S_EXIT, S_REBOOT,
               S_CAR, S_APPS, S_EDIT, S_KEYS, S_FILES, S_DIAG, S_TEST_SCREEN, S_TEST_TOUCH, S_TEST_MEM,
               S_WSET_WEATHER, S_WSET_SPEED, S_WSET_CAR, S_SET_HOME, S_CAMDL, S_CAMREG, S_SET_CAR, S_TEST_CAN, S_TEST_MCU,
-              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NETCAT, S_NETCATS, S_WSET_TRIP, S_SET_NET3G, S_THANKS, S_NONE };
+              S_INFO_MORE, S_LICENSES, S_SET_VOLUME, S_TASKS, S_NETRADIO, S_NETRADIO_LIST, S_TEST_AV, S_SET_OBD, S_BT_PAIRED, S_OBD_DTC, S_TEXTEDIT, S_BT_PAIRNEW, S_BT_PAIRASK, S_SET_THEME, S_SAVER_PICK, S_WIFI_SAVED, S_PLUGIN, S_SET_PLUGINS, S_SET_NET, S_NETCAT, S_NETCATS, S_WSET_TRIP, S_SET_NET3G, S_THANKS, S_UPDATE, S_NONE };
 
 struct Btn {
     RECT        rc;
@@ -411,6 +412,7 @@ static const wchar_t* NetErrorText(int err)
 // "О системе" and told to the add-ons ("welcome": support, unit); the key - VestaLicense.key in VestaHome's folder,
 // made by the author for the ID (VestaCore vlicense.h). Nothing in VestaHome is locked without it. Its level
 // (2026-11-18): a subscriber (Android Auto's splash gone) or a co-author (also the smart home add-on).
+static DWORD   s_quitTick;   // the window closed ("Выход"): the exit's log
 static wchar_t s_unitId[LICENSE_ID_LEN];
 static int     s_support;   // LICENSE_NONE / SUPPORTER / COAUTHOR
 
@@ -450,6 +452,7 @@ static void SupportInit()
 #include "vh_sound.inc"
 #include "vh_camdl.inc"
 #include "vh_plugins.inc"
+#include "vh_update.inc"
 #include "vh_frame.inc"
 #include "vh_resume.inc"
 #include "vh_photo.inc"
@@ -540,6 +543,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             SupportInit();
         }
         LoadCfg();
+        UpdResultLoad();   // the last update's outcome (vh_update.inc)
         ApplyAccent();
         CfgToControls();
         s_bootTick = GetTickCount();
@@ -1332,6 +1336,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (IsWindowVisible(hwnd))
             Redraw();
         return 0;
+    case WM_APP_UPDATE:   // the installer on the cards looked at (vh_update.inc)
+        UpdTaken();
+        if (IsWindowVisible(hwnd) && s_screen == S_UPDATE)
+            Redraw();
+        return 0;
     case WM_APP_CAM:   // the camera base download's progress; wp = 1: done well
         if (wp)
             CamDownloaded();
@@ -1507,24 +1516,31 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
     case WM_DESTROY:
         s_quitting = true;
+        s_quitTick = GetTickCount();
         VLog(L"выход: окно VestaHome закрывается");
-        PluginsQuit();
-        UiRememberTick();   // the screen and the source as they are now, and what waits for the minute's save
-        if (s_cfgSoon) {
-            s_cfgSoon = false;
-            SaveCfg();
+        {   // each step's time when it is long (2026-11-25: the process held its files after "Выход" - which waits)
+            DWORD t = GetTickCount();
+#define EXIT_STEP(name, call) do { call; DWORD n_ = GetTickCount(); if (n_ - t > 300) \
+            VLog(L"выход: %s - %u мс", name, (unsigned)(n_ - t)); t = n_; } while (0)
+            EXIT_STEP(L"дополнения", PluginsQuit());
+            UiRememberTick();   // the screen and the source as they are now, and what waits for the minute's save
+            if (s_cfgSoon) {
+                s_cfgSoon = false;
+                EXIT_STEP(L"настройки", SaveCfg());
+            }
+            if (s_voice || s_plugVoice)
+                NaviVoice(false);
+            if (s_rvcWnd)
+                RvcHide();
+            EXIT_STEP(L"видео", VideoStop());
+            EXIT_STEP(L"сеть", NetStop());
+            EXIT_STEP(L"Wi-Fi", WifiStop());
+            EXIT_STEP(L"OBD", ObdStop());
+            EXIT_STEP(L"GPS", GpsStopThread());
+            EXIT_STEP(L"MCU", McuStopThread());
+            EXIT_STEP(L"HTTP", HttpCloseAll());
+#undef EXIT_STEP
         }
-        if (s_voice || s_plugVoice)
-            NaviVoice(false);
-        if (s_rvcWnd)
-            RvcHide();
-        VideoStop();
-        NetStop();
-        WifiStop();
-        ObdStop();
-        GpsStopThread();
-        McuStopThread();
-        HttpCloseAll();
         KillTimer(hwnd, 1);
 #ifdef UNDER_CE
         if (s_taskbar)
@@ -1630,5 +1646,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR cmd, int)
         } __except (CrashNote(GetExceptionInformation(), L"окне")) {
         }
     }
+    // (what holds the process after this is a thread still in a driver's call: the installer's log shows how long)
+    VLog(L"выход: VestaHome завершается, %u мс после закрытия окна", (unsigned)(GetTickCount() - s_quitTick));
     return s_exitCode;
 }

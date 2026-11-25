@@ -620,6 +620,16 @@ static void DoActionOn(const Btn& b)
         }
         break;
     }
+    case A_UPDOPEN:   // "О системе" -> "Обновить": the screen, the cards looked at (vh_update.inc)
+        Go(S_UPDATE, true);
+        UpdCheckStart();
+        break;
+    case A_UPDCHECK:
+        UpdCheckStart();
+        break;
+    case A_UPDGO:
+        UpdGo();
+        break;
     case A_RVCLINES:   // the camera's guide lines: the arrows go round the four looks
         s_cfg.rvcLines = (s_cfg.rvcLines + b.arg + RVC_LINES_COUNT) % RVC_LINES_COUNT;
         SaveCfg();

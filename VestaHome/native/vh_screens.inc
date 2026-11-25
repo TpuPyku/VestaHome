@@ -2101,7 +2101,8 @@ static void ScrInfo(HDC dc)
     }
     T(dc, 760, 304, sd, 17, kText, 700, AL_END, 180);
     // what the stock "Info" and its engineering screens show; diagnostics; closing / minimizing VestaHome
-    Button(dc, 256, 324, 200, 64, L"Подробнее", B_N, IC_INFO, 15, 26, A_SCREEN, S_INFO_MORE);
-    Button(dc, 464, 324, 216, 64, L"Диагностика", B_N, IC_SEARCH, 15, 26, A_SCREEN, S_DIAG);
-    Button(dc, 688, 324, 80, 64, NULL, B_N, IC_POWER, 18, 36, A_SCREEN, S_EXIT);
+    Button(dc, 256, 324, 148, 64, L"Подробнее", B_N, IC_INFO, 14, 24, A_SCREEN, S_INFO_MORE);
+    Button(dc, 410, 324, 140, 64, L"Обновить", B_N, IC_REFRESH, 14, 24, A_UPDOPEN);   // (vh_update.inc, 2026-11-25)
+    Button(dc, 556, 324, 156, 64, L"Диагностика", B_N, IC_SEARCH, 14, 24, A_SCREEN, S_DIAG);
+    Button(dc, 718, 324, 50, 64, NULL, B_N, IC_POWER, 18, 30, A_SCREEN, S_EXIT);
 }

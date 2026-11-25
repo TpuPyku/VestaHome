@@ -71,6 +71,7 @@ static void DrawScreen(HDC dc, Screen s)
     case S_INFO_MORE:   ScrInfoMore(dc); break;
     case S_LICENSES:    ScrLicenses(dc); break;
     case S_THANKS:      ScrThanks(dc); break;
+    case S_UPDATE:      ScrUpdate(dc); break;
     case S_SET_VOLUME:  ScrSetVolume(dc); break;
     case S_CAMDL:       ScrCamDl(dc); break;
     case S_CAMREG:      ScrCamReg(dc); break;

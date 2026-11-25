@@ -71,6 +71,7 @@ GstProbe/GstProbe/GstProbe.txt
 # VestaRescue build output
 Rescue/out/
 SPIPower/install/vh_payload.bin
+SPIPower/install/vh_version.h
 VestaHome/VestaHome/TestMedia/
 # G3patch was moved out of the repo 2026-10-17 (G3Skin\G3patch, MAIN\G3NavHMI_ghidra): never add it back
 G3patch/

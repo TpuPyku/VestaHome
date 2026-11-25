@@ -4,9 +4,17 @@
 // date comes by itself; the release ("0.5") raised by hand.
 #include "vversion.h"
 
-static const wchar_t* VhVersion()   // "1.1.261125" (1.1: the unit ID from the MCU, 2026-11-25)
+// The version's mark: the release here, the date the build's (VestaHomeInstall's build reads it from the exe -
+// make_vh_payload.py - and marks the installer with it, 2026-11-25). 1.1: the unit ID from the MCU.
+static const char kVhMark[] = "VHVER:1.1|" __DATE__;
+
+static const wchar_t* VhVersion()   // "1.1.261125"
 {
-    return AppVersion(L"1.1");
+    static wchar_t rel[8];
+    if (!rel[0])
+        for (int k = 0; k < 7 && kVhMark[6 + k] != '|'; k++)
+            rel[k] = kVhMark[6 + k];
+    return AppVersion(rel);
 }
 
 // ---------------------------------------------------------------- drawing helpers
@@ -2284,7 +2292,7 @@ static int Section(Screen s)
     case S_SETTINGS: case S_SET_SOUND: case S_SET_BALANCE: case S_SET_SCREEN: case S_SET_RADIO: case S_SET_BT:
     case S_SET_WIFI: case S_SET_VIDEO: case S_SET_PHOTO: case S_INFO: case S_SET_CAR: case S_SET_VOLUME:
     case S_SET_OBD: case S_BT_PAIRED: case S_BT_PAIRNEW: case S_SET_THEME: case S_WIFI_SAVED: case S_SET_PLUGINS:
-    case S_SET_NET: case S_SET_NET3G:
+    case S_SET_NET: case S_SET_NET3G: case S_UPDATE:
         return 5;
     default:
         return -1;

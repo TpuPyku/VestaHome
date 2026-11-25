@@ -33,6 +33,13 @@ if errorlevel 1 goto fail
   coredll.lib corelibc.lib /NODEFAULTLIB:oldnames.lib
 if errorlevel 1 goto fail
 
+rem its signature (VestaCore tools\make_license.py sign-installer; the author's key in %USERPROFILE%\.vesta, never in
+rem a repo): VestaHome's Update button runs only a signed installer
+set VC_TOOLS=..\..\..\VestaCore\tools
+if not exist "%VC_TOOLS%\make_license.py" set VC_TOOLS=..\..\core\tools
+python "%VC_TOOLS%\make_license.py" sign-installer - "%OUT%\VestaHomeInstall.exe" "%OUT%\VestaHomeInstall.sig"
+if errorlevel 1 goto fail
+
 echo === OK
 exit /b 0
 :fail

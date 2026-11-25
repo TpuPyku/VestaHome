@@ -40,6 +40,7 @@
 #include "../../SPIPower/native/mcucmd.h"   // VestaHome's MCU calls (CmdThread)
 #include "../../SPIPower/bt/g_btproxy.h"   // the SDK's functions (g_real[], bt_proxy.cpp built in with BT_HOST)
 #include "stb_image.h"
+#include "vupdate.h"   // VestaCore: the update asked from VestaHome (its boot job)
 
 static const int kMaxFails = 3;
 static wchar_t s_dir[MAX_PATH];   // our folder, with the trailing '\'
@@ -402,6 +403,67 @@ static HANDLE Start(const wchar_t* exe, const wchar_t* args)
 #endif
     CloseHandle(pi.hThread);
     return pi.hProcess;
+}
+
+// ---- The update asked from VestaHome ("О системе" -> "Обновить", 2026-11-25; VestaHome's vh_update.inc): its job on
+// \SDMMC names the installer it checked (signed, newer) and that file's SHA-256. Here, before VestaHome and its add-ons
+// start (nobody holds their files), the installer runs without a window ("vh-silent") if the file is still the one
+// checked; the job is deleted first - a failing installer never loops the boots. The outcome: \SDMMC\VestaUpdate.res
+// (the installer writes it; here when it did not run), shown by VestaHome after.
+static void UpdateResult(const wchar_t* ver, const wchar_t* why)
+{
+    wchar_t res[MAX_PATH], r[300];
+    HuPath(res, L"\\SDMMC\\VestaUpdate.res");
+    _snwprintf(r, 300, L"fail\n%s\n%s", ver, why);
+    r[299] = 0;
+    HANDLE f = CreateFile(res, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD w;
+        WriteFile(f, r, (DWORD)wcslen(r) * 2, &w, NULL);
+        CloseHandle(f);
+    }
+    Log(L"обновление не выполнено: %s", why);
+}
+
+static void UpdateRun()
+{
+    wchar_t job[MAX_PATH], exe[MAX_PATH], hu[MAX_PATH], wver[32];
+    char t[800], ver[32];
+    unsigned char sha[32], now[32];
+    DWORD n = 0;
+    HuPath(job, L"\\SDMMC\\VestaUpdate.job");
+    HANDLE f = CreateFile(job, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    ReadFile(f, t, sizeof(t) - 1, &n, NULL);
+    CloseHandle(f);
+    DeleteFile(job);   // (once)
+    if (!UpdateJobParse(t, (int)n, hu, MAX_PATH, ver, 32, sha)) {
+        UpdateResult(L"?", L"задание обновления повреждено");
+        return;
+    }
+    MultiByteToWideChar(CP_ACP, 0, ver, -1, wver, 32);
+    HuPath(exe, hu);
+    for (int i = 0; i < 80 && !There(exe); i++)   // (the card's volume comes a few seconds after us)
+        Sleep(250);
+    if (!UpdateFileScan(exe, now, NULL, 0) || memcmp(now, sha, 32)) {
+        UpdateResult(wver, L"установщика нет на карте или он изменился после проверки");
+        return;
+    }
+    Log(L"обновление до %s: %s vh-silent", wver, exe);
+    HANDLE h = Start(exe, L"vh-silent");
+    if (!h) {
+        UpdateResult(wver, L"установщик не запустился");
+        return;
+    }
+    DWORD code = 99;
+    if (WaitForSingleObject(h, 180000) == WAIT_TIMEOUT) {
+        TerminateProcess(h, 3);
+        Log(L"обновление: установщик не закончил за 3 минуты - остановлен");
+    }
+    GetExitCodeProcess(h, &code);
+    CloseHandle(h);
+    Log(L"обновление: установщик закончил, код %u (0 - готово)", (unsigned)code);
 }
 
 // ---- the MCU's host (McuHost, in "G3NavHMI.exe /mcu")
@@ -1252,6 +1314,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR args, int)
         Log(L"тома: SD %s, VestaHome %s (через %u мс)", There(sd) ? L"есть" : L"нет", FindVesta(vh0) ? vh0 : L"не найден",
             GetTickCount() - t0);
     }
+    UpdateRun();   // the update asked from VestaHome: before it starts
     HuPath(p, L"\\SDMemory\\VestaStub.off");
     if (There(p))
         return RunOriginal(args, L"флаг VestaStub.off на SD");
