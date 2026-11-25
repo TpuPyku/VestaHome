@@ -62,6 +62,7 @@
 #include "vkeys.h"     // VestaCore: the keyboard's text and cursor
 #include "vfavs.h"     // VestaCore: OSMapsCE's favourite places (its map widget before it runs)
 #include "mdm.h"       // VestaModem: the operators' presets (Settings -> Network)
+#include "uarttap.h"   // COM2 listened to while the logs are on (vh_diag.inc)
 #include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -575,6 +576,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #endif
         GpsStartCore();
         McuStart();
+        Com2Start();
         VLog(L"поток главный (окно): id %08X", (unsigned)GetCurrentThreadId());
         if (!s_cfg.wifiApPass[0]) {   // the access point's password: 8 digits, made once
             srand(GetTickCount() ^ (DWORD)(INT_PTR)hwnd);

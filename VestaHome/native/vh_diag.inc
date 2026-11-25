@@ -504,3 +504,90 @@ static void ScrSaver(HDC dc)
 }
 
 static void Trim(wchar_t* s);
+
+// ---- COM2 (the CPU's second UART, driver Serial1): nobody opens it - not the shell, not us; UartProbe heard nothing
+// in 2 s (HU 2026-11-12). The user 2026-11-25: listen to it all the time the logs are on, in case something comes
+// now and then; dropped if the logs show nothing. Read only, its speed as it is (9600 by default), nothing sent.
+// The bytes and the line errors into VestaHome.log (uarttap.h: at most 30 lines a minute). A read waits 1 s at
+// most, so the exit is never held by this thread.
+static HANDLE Com2Open()
+{
+    HANDLE h = CreateFile(L"COM2:", GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        VLog(L"com2: не открывается (ошибка %u)", (unsigned)GetLastError());
+        return h;
+    }
+    COMMTIMEOUTS to;
+    memset(&to, 0, sizeof(to));
+    to.ReadIntervalTimeout = 50;          // a burst ends after 50 ms of quiet
+    to.ReadTotalTimeoutConstant = 1000;   // nothing: back in 1 s
+    SetCommTimeouts(h, &to);
+    DCB d;
+    memset(&d, 0, sizeof(d));
+    d.DCBlength = sizeof(d);
+    GetCommState(h, &d);
+    VLog(L"com2: слушаю, %u бод, %u бит (только чтение)", (unsigned)d.BaudRate, (unsigned)d.ByteSize);
+    return h;
+}
+
+static void Com2Say(TapBudget* bud, const unsigned char* b, DWORD got, DWORD ce)
+{
+    unsigned lines = 0, bytes = 0;
+    if (TapRoll(bud, GetTickCount(), &lines, &bytes))
+        VLog(L"com2: за минуту не записано строк %u (%u байт)", lines, bytes);
+    if ((!got && !ce) || !TapAllow(bud, got))
+        return;
+    wchar_t err[TAP_ERR_CAP], line[260];
+    TapErrors(ce, err);
+    TapLine(b, (int)got, line, 260);
+    VLog(L"com2: %u байт%s%s: %s", (unsigned)got, err[0] ? L", ошибки линии: " : L"", err, line);
+}
+
+static DWORD WINAPI Com2Thread(LPVOID)
+{
+    HANDLE h = INVALID_HANDLE_VALUE;
+    DWORD retry = 0;
+    TapBudget bud;
+    TapBudgetInit(&bud, GetTickCount());
+    while (!s_quitting) {
+        if (!s_logsOn) {   // the logs off: the port closed
+            if (h != INVALID_HANDLE_VALUE) {
+                CloseHandle(h);
+                h = INVALID_HANDLE_VALUE;
+            }
+            Sleep(2000);
+            continue;
+        }
+        if (h == INVALID_HANDLE_VALUE) {
+            if (retry && GetTickCount() - retry < 60000) {   // not there: tried again once a minute
+                Sleep(1000);
+                continue;
+            }
+            h = Com2Open();
+            retry = h == INVALID_HANDLE_VALUE ? GetTickCount() | 1 : 0;
+            continue;
+        }
+        unsigned char b[48];
+        DWORD got = 0, ce = 0;
+        if (!ReadFile(h, b, sizeof(b), &got, NULL))
+            got = 0;
+        COMSTAT cs;
+        ClearCommError(h, &ce, &cs);
+        Com2Say(&bud, b, got, ce);
+    }
+    if (h != INVALID_HANDLE_VALUE)
+        CloseHandle(h);
+    return 0;
+}
+
+static void Com2Start()
+{
+#ifdef UNDER_CE   // (the PC's COM2 is not the unit's)
+    DWORD id = 0;
+    HANDLE t = CreateThread(NULL, 0, Com2Thread, NULL, 0, &id);
+    if (t) {
+        VLog(L"поток COM2: id %08X", (unsigned)id);
+        CloseHandle(t);
+    }
+#endif
+}
