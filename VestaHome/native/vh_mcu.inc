@@ -2,26 +2,9 @@
 
 // ---- MCU: what the head unit's microcontroller sends the shell (climate, keys, versions...), seen through our
 // SPIPowerMgr proxy (VestaHome/SPIPower): it copies every inbound message into a named shared ring. Layout =
-// SPIPower/native/mcushm.h (keep both identical). Without the proxy the ring stays empty (magic 0).
+// VestaCore vmcushm.h (= SPIPower/native/mcushm.h). Without the proxy the ring stays empty (magic 0).
 #define WM_APP_MCU (WM_APP + 20)
-#define MCU_SHM_NAME   L"VestaMCU2"   // v2: 40 data bytes
-#define MCU_SHM_MAGIC  0x55434D56
-#define MCU_SHM_SLOTS  256
-#define MCU_SHM_DATA   40   // v2, as SPIPower/native/mcushm.h
-
-struct McuMsg {
-    volatile LONG  seq;
-    DWORD          tick;
-    unsigned short id;
-    unsigned char  len, skel;
-    unsigned char  data[MCU_SHM_DATA];
-};
-struct McuShm {
-    DWORD         magic, version;
-    volatile LONG seq, attach, wraps;
-    DWORD         reserved[3];
-    McuMsg        msg[MCU_SHM_SLOTS];
-};
+#include "vmcushm.h"
 
 // One line per message id for the monitor.
 struct McuStat {
@@ -84,7 +67,8 @@ static Tuner s_tun;
 // one byte - 0A navigation board °C, 06 amplifier °C, 07 the tuner's field dB; 4 bytes: two - 03 / 0E the
 // steering wheel buttons' voltages, as the shell shows them).
 struct McuInfo {
-    wchar_t sw[40], hw[16], id[16], idDate[8], idNum[12];
+    wchar_t sw[40], hw[16];
+    LicenseMachine mach;        // the machine ID's parts (VestaCore vlicense: the unit's ID is made of them)
     int     cs;                 // -1 not seen
     BYTE    bt[6];
     bool    btHave;
@@ -103,19 +87,6 @@ static bool McuBtAddr(wchar_t* s, int n)   // the unit's Bluetooth address, "AA:
     return have;
 }
 static void McuText(const unsigned char* p, int n, wchar_t* out, bool lead);
-
-// The machine ID as "Details" shows it ("—" not yet; a part may be missing) - and the unit's ID is made of it
-// (2026-11-25: the HAL's device id is the same on every unit): true when all of it is there.
-static bool MachineText(const McuInfo& inf, wchar_t* out, int n)
-{
-    if (!inf.id[0]) {
-        wcsncpy(out, L"—", n);
-        return false;
-    }
-    _snwprintf(out, n, L"%s %s %s", inf.id, inf.idDate, inf.idNum);
-    out[n - 1] = 0;
-    return inf.idDate[0] && inf.idNum[0];
-}
 
 static void McuInfoTake(const McuMsg& m)   // under s_mcuCs
 {
@@ -136,17 +107,13 @@ static void McuInfoTake(const McuMsg& m)   // under s_mcuCs
     } else if (m.id == 0x7922 && len >= 8 && p[1] == 6) {
         memcpy(s_info.bt, p + 2, 6);
         s_info.btHave = true;
-    } else if (m.id == 0x4118 && len >= 5) {
-        _snwprintf(s_info.id, 16, L"%02X%02X%02X%02X", p[1], p[2], p[3], p[4]);
-    } else if (m.id == 0x4111 && len >= 5) {
-        _snwprintf(s_info.idDate, 8, L"%02X%02X%02X", p[2], p[3], p[4]);
-    } else if (m.id == 0x4112 && len >= 3) {
-        McuText(p + 1, len - 1 < 11 ? len - 1 : 11, s_info.idNum, true);
+    } else if (m.id == 0x4118 || m.id == 0x4111 || m.id == 0x4112) {
+        LicenseMachineTake(&s_info.mach, m.id, p, len);
     } else if (m.id == 0x7905 && len >= 4 && p[1] < 16) {
         s_info.sys[p[1]] = len == 4 ? p[2] << 8 | p[3] : p[2];
     }
     wchar_t mt[64];
-    if ((m.id == 0x4118 || m.id == 0x4111 || m.id == 0x4112) && MachineText(s_info, mt, 64))
+    if ((m.id == 0x4118 || m.id == 0x4111 || m.id == 0x4112) && LicenseMachineText(&s_info.mach, mt, 64))
         PostMessage(s_wnd, WM_APP_MCU, WP_MCU_MACHINE, 0);   // the unit's ID (MachineKnown)
 }
 
@@ -826,14 +793,17 @@ static bool McuSend0(const char* name)
 }
 
 // ---- The unit's ID (2026-11-25: the HAL's device id is the same on every unit - VH-A6R3Y-CJN2Y everywhere): the
-// MCU's machine ID (0x4118 + 0x4111 + 0x4112, as the stock "Info"), asked for every 10 s until it comes, kept for the
-// boot (VestaCore LicenseMachineSet: the add-ons read it); then the passwords' key is the machine's: the ones sealed by
-// it are opened, all sealed with it, the license checked for the new ID.
+// MCU's machine ID (0x4118 + 0x4111 + 0x4112, as the stock "Info"), read from the proxy's ring by each program itself
+// (VestaCore LicenseMachineRead: not the registry, any registry editor changes that - the user 2026-11-25). Asked for
+// every 10 s until it comes, then every minute: the ring (256 messages, a minute or two) keeps it for the add-ons
+// that start later. Once here, the passwords' key is the machine's: the ones it sealed opened, all sealed with it,
+// the license checked for the new ID.
 static void MachineAsk()
 {
     static DWORD s_asked;
     LONG attach, wraps;
-    if (s_unitId[0] || McuState(&attach, &wraps) <= 0 || (s_asked && GetTickCount() - s_asked < 10000))
+    DWORD every = s_unitId[0] ? 60000 : 10000;
+    if (McuState(&attach, &wraps) <= 0 || (s_asked && GetTickCount() - s_asked < every))
         return;
     s_asked = GetTickCount();
     McuSend0("SPApi_SendRadioRequestProductInfo");
@@ -841,16 +811,9 @@ static void MachineAsk()
 
 static void MachineKnown()
 {
-    wchar_t m[64], was[64];
-    EnterCriticalSection(&s_mcuCs);
-    McuInfo inf = s_info;
-    LeaveCriticalSection(&s_mcuCs);
-    if (!MachineText(inf, m, 64) || (LicenseMachineGet(was, 64) && !wcscmp(was, m) && s_unitId[0]))
+    wchar_t m[64];
+    if (s_unitId[0] || !LicenseMachineRead(m, 64))
         return;
-    if (!LicenseMachineSet(m)) {
-        VLog(L"ID ГУ: ID машины не подходит (%s)", m);
-        return;
-    }
     SecretInit();
     int opened = 0;
     for (int i = 0; i < s_cfg.wifiCount; i++)

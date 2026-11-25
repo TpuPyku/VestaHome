@@ -205,19 +205,19 @@ static void CanStatusText(wchar_t* s, int n)
 // the CAN stream gives, its monitor. CAN settings gather here as they are decoded.
 static void ScrSetCar(HDC dc)
 {
-    enum { H = kSetH };   // six rows: they fit
     wchar_t port[16], baud[16], gps[160], can[64];
     GpsPortText(port, 16);
     GpsBaudText(baud, 16);
     GpsStatusText(gps, 160, true);
     CanStatusText(can, 64);
     Settings(dc, S_SET_CAR);
-    SetRow(dc, 64, L"Порт GPS · CAN", gps);
-    Stepper(dc, 512, 70, 248, port, 44, 19, A_GPSPORT);
-    SetRow(dc, 64 + H, L"Скорость порта", L"по умолчанию 115200");
-    Stepper(dc, 512, 70 + H, 248, baud, 44, 19, A_GPSBAUD);
-    SetRow(dc, 64 + 2 * H, L"Данные CAN", can, false, A_SCREEN, S_TEST_CAN);
-    Chevron(dc, 728, 76 + 2 * H);
+    int y = SetScrollBegin(dc, 7);   // (seven rows with the camera's lines, 2026-11-25: scrolled)
+    SetRowS(dc, y, L"Порт GPS · CAN", gps);
+    Stepper(dc, 464, y + 6 + kSetPad, 248, port, 44, 19, A_GPSPORT);
+    SetRowS(dc, y += kSetHS, L"Скорость порта", L"по умолчанию 115200");
+    Stepper(dc, 464, y + 6 + kSetPad, 248, baud, 44, 19, A_GPSBAUD);
+    SetRowS(dc, y += kSetHS, L"Данные CAN", can, false, A_SCREEN, S_TEST_CAN);
+    Chevron(dc, 680, y + 12 + kSetPad);
     wchar_t mcu[80];
     LONG attach, wraps;
     int st = McuState(&attach, &wraps);
@@ -227,12 +227,12 @@ static void ScrSetCar(HDC dc)
         wcscpy(mcu, L"загрузчик VestaHome не запущен или старый");
     else
         _snwprintf(mcu, 80, L"идут · сообщений %u", (unsigned)s_mcuTotal);
-    SetRow(dc, 64 + 3 * H, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU);
-    Chevron(dc, 728, 76 + 3 * H);
+    SetRowS(dc, y += kSetHS, L"Данные MCU", mcu, false, A_SCREEN, S_TEST_MCU);
+    Chevron(dc, 680, y + 12 + kSetPad);
     wchar_t tank[16];   // (the camera: always ours - the user 2026-10-29; shown by hand from "Diagnostics")
     _snwprintf(tank, 16, L"%d Л", s_cfg.tank);
-    SetRow(dc, 64 + 4 * H, L"Объём бака", L"для запаса хода");
-    Stepper(dc, 560, 70 + 4 * H, 200, tank, 44, 19, A_TANK);
+    SetRowS(dc, y += kSetHS, L"Объём бака", L"для запаса хода");
+    Stepper(dc, 512, y + 6 + kSetPad, 200, tank, 44, 19, A_TANK);
     wchar_t nm[64], com[8];   // the navigators' port (vh_gps.inc), its number by the arrows
     if (s_nmeaBusy)
         wcscpy(nm, L"загружается…");
@@ -242,10 +242,14 @@ static void ScrSetCar(HDC dc)
         _snwprintf(nm, 64, L"не загрузился (ошибка %lu)", s_nmeaErr);
     else
         _snwprintf(nm, 64, L"только NMEA%s", s_nmeaState > 0 ? L" · работает" : L"");
-    SetRow(dc, 64 + 5 * H, L"Порт для навигаторов", nm, true);
+    SetRowS(dc, y += kSetHS, L"Порт для навигаторов", nm);
     _snwprintf(com, 8, L"COM%d", s_cfg.nmeaCom);
-    Stepper(dc, 508, 70 + 5 * H, 164, com, 44, 19, A_NMEACOM);
-    Toggle(dc, 688, 74 + 5 * H, T_NMEA_PORT);
+    Stepper(dc, 460, y + 6 + kSetPad, 164, com, 44, 19, A_NMEACOM);
+    Toggle(dc, 640, y + 10 + kSetPad, T_NMEA_PORT);
+    static const wchar_t* kLines[RVC_LINES_COUNT] = { L"Классика", L"Как штатная", L"Современная", L"Колея колёс" };
+    SetRowS(dc, y += kSetHS, L"Разметка камеры", L"посмотреть — в «Диагностике»", true);
+    Stepper(dc, 464, y + 6 + kSetPad, 248, kLines[s_cfg.rvcLines], 44, 19, A_RVCLINES);
+    SetScrollEnd(dc);
 }
 
 // Settings -> Wi-Fi -> saved: every network kept in VestaHome.ini (and given to WZC at the start), in sight or not;
@@ -457,7 +461,7 @@ static void ScrInfoMore(HDC dc)
                    inf.bt[5]);
     else
         wcscpy(bt, L"—");
-    MachineText(inf, id, 40);
+    LicenseMachineText(&inf.mach, id, 40);
     const wchar_t* rows[9][2] = { { L"Прошивка ГУ (SW)", s }, { L"Windows CE", os }, { L"MCU (радио)", mcu },
                                   { L"Железо (HW)", hw }, { L"CAN-модуль", canv }, { L"Bluetooth-адрес", bt },
                                   { L"ID устройства", id }, { L"Proxy MCU", st > 0 ? L"работает" : L"нет" },

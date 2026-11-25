@@ -2338,13 +2338,14 @@ enum { B_STATUS, B_DRILLOFF, B_EXIT, B_DRILL, B_TESTOFF, B_SETUP, B_REMOVE };
 // is pointless - "Установить" installs at once, no question unless the unit's check warns). Then the status,
 // cancelling an armed job, exit; below, small ("Сервис"): the test of the rescue path and taking it off.
 // FORCE - the command line only.
-enum { kBtnN = 7, kServiceY = 444 };
+// (2026-11-25, the user: the buttons right under the report, no empty row between)
+enum { kBtnN = 7, kServiceY = 396 };
 static const Btn g_btns[kBtnN] = {
-    { {  24, 348, 396, 388 }, L"УСТАНОВИТЬ / ОБНОВИТЬ", B_SETUP  },
-    { { 404, 348, 776, 388 }, L"УДАЛИТЬ",               B_REMOVE },
-    { {  24, 396, 266, 436 }, L"СТАТУС",               B_STATUS   },
-    { { 274, 396, 526, 436 }, L"ОТМЕНИТЬ ЗАДАНИЕ",     B_DRILLOFF },
-    { { 534, 396, 776, 436 }, L"ВЫХОД",                B_EXIT     },
+    { {  24, 300, 396, 340 }, L"УСТАНОВИТЬ / ОБНОВИТЬ", B_SETUP  },
+    { { 404, 300, 776, 340 }, L"УДАЛИТЬ",               B_REMOVE },
+    { {  24, 348, 266, 388 }, L"СТАТУС",               B_STATUS   },
+    { { 274, 348, 526, 388 }, L"ОТМЕНИТЬ ЗАДАНИЕ",     B_DRILLOFF },
+    { { 534, 348, 776, 388 }, L"ВЫХОД",                B_EXIT     },
     { { 404, kServiceY, 586, kServiceY + 30 }, L"ТЕСТ ВОССТ.", B_DRILL   },
     { { 594, kServiceY, 776, kServiceY + 30 }, L"СНЯТЬ ТЕСТ",  B_TESTOFF },
 };

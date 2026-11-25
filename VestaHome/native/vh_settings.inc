@@ -110,6 +110,7 @@ struct Cfg {
     bool    wifiApAuto;                // the access point for a phone, automatically (wifi.cpp WifiApSetup)
     wchar_t wifiApSsid[33], wifiApPass[65];
     bool    rvcInvert;                 // the trajectory bends the other way (the CAN angle's sign)
+    int     rvcLines;                  // the guide lines' look, RVC_LINES_* (VestaCore vrvc.h; "Car", 2026-11-25)
     wchar_t radioStation[64];          // the internet radio's station (its name)
     wchar_t radioUrl[400];             // its address (radio.url), what finds it in its list
     int     radioList;                 // its list: 0 radio.txt, 1 the favourites, 2 the catalogue (radio.list)
@@ -616,6 +617,9 @@ static void LoadCfg()
             wcsncpy(s_cfg.wifiApPass, v, 63);
         } else if (!wcscmp(k, L"rvc.invert")) {
             s_cfg.rvcInvert = CfgBool(v);
+        } else if (!wcscmp(k, L"rvc.lines")) {
+            int l = _wtoi(v);
+            s_cfg.rvcLines = l >= 0 && l < RVC_LINES_COUNT ? l : RVC_LINES_CLASSIC;
         } else if (!wcsncmp(k, L"radio.c", 7) || !wcscmp(k, L"radio.names")) {
             RadioCacheLoad(k, v);
         } else if (!wcscmp(k, L"radio.url")) {
@@ -766,6 +770,9 @@ static void SaveCfg()
         int k = _snwprintf(text + n, 12000 - n, L"# bt.virtualdown: Android's virtual call \"10000000\" (an app took the "
                            L"car's microphone: Alice - WhatsApp's, Telegram's calls too) put down (0: a call as any)\r\n"
                            L"bt.virtualdown=%d\r\n", s_cfg.btVirtualDown ? 1 : 0);
+        n += k > 0 ? k : 0;
+        k = _snwprintf(text + n, 12000 - n, L"# rvc.lines: the camera's guide lines - 0 classic, 1 as the stock shell, "
+                       L"2 modern, 3 modern with the wheels' tracks\r\nrvc.lines=%d\r\n", s_cfg.rvcLines);
         n += k > 0 ? k : 0;
     }
     if (s_cfg.wifiCount) {

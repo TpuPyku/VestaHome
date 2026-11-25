@@ -1430,20 +1430,20 @@ static void ScrSetGeneral(HDC dc)
     _snwprintf(mm, 8, L"%02d", t.wMinute);
     Settings(dc, S_SETTINGS);
     int y = SetScrollBegin(dc, 7);
-    SetRow(dc, y, L"Часовой пояс", now);
-    Stepper(dc, 464, y + 6, 248, tz, 44, 19, A_TZ);
-    SetRow(dc, y += kSetH, L"Часы");
-    Stepper(dc, 512, y + 6, 200, hh, 44, 19, A_HOUR);
-    SetRow(dc, y += kSetH, L"Минуты");
-    Stepper(dc, 512, y + 6, 200, mm, 44, 19, A_MINUTE);
-    SetRow(dc, y += kSetH, L"Синхронизация по GPS");
-    Toggle(dc, 640, y + 10, T_GPS_TIME);
-    SetRow(dc, y += kSetH, L"Формат времени");
-    Seg(dc, 512, y + 6, 200, 44, fmt, 2, G_TIME_FMT);
-    SetRow(dc, y += kSetH, L"Виджеты главной", NULL, false, A_SCREEN, S_SET_HOME);
-    Chevron(dc, 680, y + 12);
-    SetRow(dc, y += kSetH, L"Дополнения", NULL, true, A_SCREEN, S_SET_PLUGINS);   // (the theme: in "Screen", 2026-10-26)
-    Chevron(dc, 680, y + 12);
+    SetRowS(dc, y, L"Часовой пояс", now);
+    Stepper(dc, 464, y + 6 + kSetPad, 248, tz, 44, 19, A_TZ);
+    SetRowS(dc, y += kSetHS, L"Часы");
+    Stepper(dc, 512, y + 6 + kSetPad, 200, hh, 44, 19, A_HOUR);
+    SetRowS(dc, y += kSetHS, L"Минуты");
+    Stepper(dc, 512, y + 6 + kSetPad, 200, mm, 44, 19, A_MINUTE);
+    SetRowS(dc, y += kSetHS, L"Синхронизация по GPS");
+    Toggle(dc, 640, y + 10 + kSetPad, T_GPS_TIME);
+    SetRowS(dc, y += kSetHS, L"Формат времени");
+    Seg(dc, 512, y + 6 + kSetPad, 200, 44, fmt, 2, G_TIME_FMT);
+    SetRowS(dc, y += kSetHS, L"Виджеты главной", NULL, false, A_SCREEN, S_SET_HOME);
+    Chevron(dc, 680, y + 12 + kSetPad);
+    SetRowS(dc, y += kSetHS, L"Дополнения", NULL, true, A_SCREEN, S_SET_PLUGINS);   // (the theme: in "Screen", 2026-10-26)
+    Chevron(dc, 680, y + 12 + kSetPad);
     SetScrollEnd(dc);
 }
 
@@ -1529,9 +1529,9 @@ static void ScrSetBt(HDC dc)
         int pw = BtPowerState();   // the switch shows the stack's state, not the wish
         s_on[T_BT] = pw == BT_POW_ON || pw == BT_POW_GOING_ON;
         int y = SetScrollBegin(dc, pw == BT_POW_ON ? 9 : 1);   // (9: "Сопряжённые" was cut off at 8, the user 2026-11-22)
-        SetRow(dc, y, L"Bluetooth", pw == BT_POW_GOING_OFF ? L"выключаю… (до 10 с)" : pw == BT_POW_GOING_ON ? L"включаю…"
+        SetRowS(dc, y, L"Bluetooth", pw == BT_POW_GOING_OFF ? L"выключаю… (до 10 с)" : pw == BT_POW_GOING_ON ? L"включаю…"
                                     : pw == BT_POW_OFF ? L"выключен — телефоны не подключаются" : L"включён");
-        Toggle(dc, 640, y + 10, T_BT);
+        Toggle(dc, 640, y + 10 + kSetPad, T_BT);
         if (pw != BT_POW_ON) {
             EmptyList(dc, 264, y + 100, 440, L"Сопряжённые телефоны сохраняются",
                       L"после включения последний подключится сам (с автосоединением)");
@@ -1544,7 +1544,7 @@ static void ScrSetBt(HDC dc)
         } else {
             wcscpy(s, bt.ready ? L"нет" : L"Bluetooth оболочки ещё не запущен");
         }
-        SetRow(dc, y += kSetH, L"Телефон", s);
+        SetRowS(dc, y += kSetHS, L"Телефон", s);
         const wchar_t* av = bt.av == 2 ? L"играет" : bt.av == 1 ? L"подключена" : bt.av == 0 ? L"нет" : L"—";
         const wchar_t* hf = bt.hf == 2 ? L"подключены" : bt.hf == 0 ? L"нет" : L"—";
         wchar_t bs[40] = L"", ss[40] = L"";
@@ -1553,21 +1553,21 @@ static void ScrSetBt(HDC dc)
         if (bt.signal >= 0)
             _snwprintf(ss, 40, L" · сеть %d", bt.signal);
         _snwprintf(s, 200, L"музыка: %s · звонки: %s%s%s · ГУ %s", av, hf, bs, ss, McuBtAddr(a, 24) ? a : L"—");
-        SetRow(dc, y += kSetH, L"Связь", s);
+        SetRowS(dc, y += kSetHS, L"Связь", s);
         _snwprintf(s, 200, L"%s · видно телефонам, меняется после перезагрузки", BtUnitName());
-        SetRow(dc, y += kSetH, L"Имя ГУ", s, false, A_KEYS, K_BTNAME);
-        SetRow(dc, y += kSetH, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");
+        SetRowS(dc, y += kSetHS, L"Имя ГУ", s, false, A_KEYS, K_BTNAME);
+        SetRowS(dc, y += kSetHS, L"Музыка с телефона", src == 9 ? L"играет сейчас" : L"другой источник");
         if (src != 9)
-            Button(dc, 512, y + 8, 200, 40, L"Включить", B_N, IC_BT, 15, 22, A_BTMUSIC);
-        SetRow(dc, y += kSetH, L"Автосоединение", L"последний телефон — при включении ГУ");
-        Toggle(dc, 640, y + 10, T_AUTOCONNECT);
-        SetRow(dc, y += kSetH, L"Автоответ", L"входящий звонок принимается через 5 с");
-        Toggle(dc, 640, y + 10, T_AUTOANSWER);
-        SetRow(dc, y += kSetH, L"Сброс звонка 10000000",
+            Button(dc, 512, y + 8 + kSetPad, 200, 40, L"Включить", B_N, IC_BT, 15, 22, A_BTMUSIC);
+        SetRowS(dc, y += kSetHS, L"Автосоединение", L"последний телефон — при включении ГУ");
+        Toggle(dc, 640, y + 10 + kSetPad, T_AUTOCONNECT);
+        SetRowS(dc, y += kSetHS, L"Автоответ", L"входящий звонок принимается через 5 с");
+        Toggle(dc, 640, y + 10 + kSetPad, T_AUTOANSWER);
+        SetRowS(dc, y += kSetHS, L"Сброс звонка 10000000",
                L"интернет-звонки, голосовой помощник");
-        Toggle(dc, 640, y + 10, T_BT_VIRTUAL);
-        SetRow(dc, y += kSetH, L"Книга при подключении", L"обновлять с телефона сама (иначе — «Обновить»)");
-        Toggle(dc, 640, y + 10, T_PB_AUTO);
+        Toggle(dc, 640, y + 10 + kSetPad, T_BT_VIRTUAL);
+        SetRowS(dc, y += kSetHS, L"Книга при подключении", L"обновлять с телефона сама (иначе — «Обновить»)");
+        Toggle(dc, 640, y + 10 + kSetPad, T_PB_AUTO);
         s[0] = 0;   // the paired ones (0x08), by name
         for (int i = 0; i < bt.paired && i < BT_PAIRED && wcslen(s) < 150; i++) {
             wchar_t nm[48];
@@ -1576,8 +1576,8 @@ static void ScrSetBt(HDC dc)
                 wcscat(s, L", ");
             wcsncat(s, nm, 40);
         }
-        SetRow(dc, y += kSetH, L"Сопряжённые", s[0] ? s : L"—", true, A_SCREEN, S_BT_PAIRED);
-        Chevron(dc, 680, y + 12);
+        SetRowS(dc, y += kSetHS, L"Сопряжённые", s[0] ? s : L"—", true, A_SCREEN, S_BT_PAIRED);
+        Chevron(dc, 680, y + 12 + kSetPad);
         SetScrollEnd(dc);
         // (OBD, kObdOn: its own settings after the release - the user 2026-11-04)
     } else {

@@ -620,6 +620,10 @@ static void DoActionOn(const Btn& b)
         }
         break;
     }
+    case A_RVCLINES:   // the camera's guide lines: the arrows go round the four looks
+        s_cfg.rvcLines = (s_cfg.rvcLines + b.arg + RVC_LINES_COUNT) % RVC_LINES_COUNT;
+        SaveCfg();
+        break;
     case A_TANK:   // the fuel tank, L: 20..120
         s_cfg.tank = s_cfg.tank + b.arg < 20 ? 20 : s_cfg.tank + b.arg > 120 ? 120 : s_cfg.tank + b.arg;
         SaveCfg();
