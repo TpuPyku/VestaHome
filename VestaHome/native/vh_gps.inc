@@ -1335,7 +1335,10 @@ static void PanAuto(const BtState& bt)   // every second while a phone is connec
         PanHealth(bt);
         return;
     }
-    if (!s_cfg.netAuto || s_panHeld || s_panMiss >= 2 || s_cfg.btOwner == BTO_OBD || bt.pan == BT_PAN_CONNECTING || bt.call[0] != BT_CALL_NONE ||
+    // (not before the phone's music link is up - the user 2026-11-25: VestaLogs(6), the first try with A2DP and AVRCP
+    // still coming up went unanswered 20 s, then two refusals and no more tries)
+    if (!s_cfg.netAuto || s_panHeld || s_panMiss >= 2 || s_cfg.btOwner == BTO_OBD || bt.pan == BT_PAN_CONNECTING ||
+        bt.av < 1 || bt.call[0] != BT_CALL_NONE ||
         now - s_panPhone < 10000 || (LONG)(now - s_panNext) < 0 || NetOther())
         return;
     s_panNext = now + s_panWait;
