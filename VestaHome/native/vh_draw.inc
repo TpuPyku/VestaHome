@@ -766,19 +766,55 @@ static void DrawImg(const Img& im, int x, int y, int w, int h, COLORREF tint = C
             } else {
                 ImgSample(im, w, h, tint, dx, dy, s);
             }
-            if (!s[3])
-                continue;
-            if (s_night)
-                for (int k = 0; k < 3; k++)
-                    s[k] = s[k] * 2 / 3;
-            unsigned p = dst[px];
-            int inv = 255 - s[3];
-            int r = s[0] + PR(p) * inv / 255;
-            int g = s[1] + PG(p) * inv / 255;
-            int b = s[2] + PB(p) * inv / 255;
-            dst[px] = PIX(r > 255 ? 255 : r, g > 255 ? 255 : g, b > 255 ? 255 : b);
+            if (s[3])
+                dst[px] = CardBlend(dst[px], s, s_night);
         }
     }
+}
+
+// The skin's card picture (user_skin.ini [images] card / card_small) over a card at (x, y), w x h, corner rx, in
+// place of its panel colour: stretched (the picture's nearest pixel), cut by the rounding; false = no picture.
+// The cards' glass in the frame (the user 2026-11-24: their transparency real while a page slides - slide.h
+// GlassMove): each pixel's alpha of the card picture drawn there, 0 elsewhere; 800 x 480, top-down, made at the
+// first card picture (none without one), cleared where a frame is drawn (CardMaskClear).
+static unsigned char* s_cardA;
+
+static void CardMaskClear()
+{
+    if (s_cardA)
+        for (int y = s_clip.top; y < s_clip.bottom; y++)
+            memset(s_cardA + y * 800 + s_clip.left, 0, s_clip.right - s_clip.left);
+}
+
+static bool CardPic(int x, int y, int w, int h, int rx)
+{
+    const Img& im = s_card[CardPick(h, s_card[1].px != NULL)];
+    if (!im.px || w <= 0 || h <= 0)
+        return false;
+    if (!s_cardA && (s_cardA = (unsigned char*)malloc(800 * 480)) != NULL)
+        memset(s_cardA, 0, 800 * 480);
+#ifndef UNDER_CE
+    GdiFlush();
+#endif
+    for (int dy = 0; dy < h; dy++) {
+        int py = y + dy;
+        if (py < s_clip.top || py >= s_clip.bottom)
+            continue;
+        Pix* dst = s_backBits + (479 - py) * 800;
+        const unsigned char* row = im.px + CardPicAt(dy, h, im.h) * im.w * 4;
+        for (int dx = 0; dx < w; dx++) {
+            int px = x + dx;
+            if (px < s_clip.left || px >= s_clip.right || !CardInside(dx, dy, w, h, rx))
+                continue;
+            const unsigned char* q = row + CardPicAt(dx, w, im.w) * 4;
+            int s[4] = { q[0], q[1], q[2], q[3] };
+            if (s[3])
+                dst[px] = CardBlend(dst[px], s, s_night);
+            if (s_cardA)
+                s_cardA[py * 800 + px] = (unsigned char)s[3];
+        }
+    }
+    return true;
 }
 
 
@@ -1048,6 +1084,19 @@ static const Pix* GlowBackground(const Pix* t)
     return s_glowBg;
 }
 
+// One row y of the mosaic (its rows counted from anchor) into dst's pixels [x0, x1), the glow over it (gb: the glow's
+// rows made once, GlowBackground).
+static void PatternRow(Pix* dst, const Pix* t, const Pix* gb, int y, int anchor, int x0, int x1)
+{
+    if (gb && y < kGlowH) {
+        memcpy(dst + x0, gb + y * 800 + x0, (x1 - x0) * sizeof(Pix));
+        return;
+    }
+    TileRow(dst, t, y, anchor, x0, x1);
+    if (s_glow && y < kGlowH)
+        GlowRow(dst, y, x0 > kGlowX ? x0 : kGlowX, x1, C(kOrange));
+}
+
 // Frame rows [top, bottom) filled with the mosaic, its rows counted from anchor (<= top); the glow over it.
 static void Pattern(int top, int bottom, int anchor)
 {
@@ -1062,17 +1111,8 @@ static void Pattern(int top, int bottom, int anchor)
     if (bottom > s_clip.bottom)
         bottom = s_clip.bottom;
     const Pix* gb = anchor == 0 ? GlowBackground(t) : NULL;
-    int x0 = s_clip.left > kGlowX ? s_clip.left : kGlowX;
-    for (int y = top; y < bottom; y++) {
-        Pix* dst = s_backBits + (479 - y) * 800;
-        if (gb && y < kGlowH) {
-            memcpy(dst + s_clip.left, gb + y * 800 + s_clip.left, (s_clip.right - s_clip.left) * sizeof(Pix));
-            continue;
-        }
-        TileRow(dst, t, y, anchor, s_clip.left, s_clip.right);
-        if (s_glow && y < kGlowH)
-            GlowRow(dst, y, x0, s_clip.right, C(kOrange));
-    }
+    for (int y = top; y < bottom; y++)
+        PatternRow(s_backBits + (479 - y) * 800, t, gb, y, anchor, s_clip.left, s_clip.right);
 }
 
 // ---------------------------------------------------------------- the other screens
@@ -1132,6 +1172,24 @@ static void MainBackground(HDC dc)
         Blit(dc, s_bgDim);
     else
         BlitNight(dc, s_bg);
+}
+
+// The still background's row y (800 pixels) as the frame has it - the main screen's picture or the mosaic: what a
+// sliding page shows where it has gone (SlideBand).
+static void BgRow(Pix* out, int y)
+{
+    if (s_screen == S_HOME && s_bg && s_bgBits) {
+        const Pix* src = (s_night && s_bgDimBits ? s_bgDimBits : s_bgBits) + (479 - y) * 800;
+        bool dim = s_night && !s_bgDimBits;
+        for (int x = 0; x < 800; x++)
+            out[x] = dim ? DimPix(src[x]) : src[x];
+        return;
+    }
+    const Pix* t = s_tile[s_night ? 1 : 0];
+    if (t)
+        PatternRow(out, t, GlowBackground(t), y, 0, 0, 800);
+    else
+        memset(out, 0, 800 * sizeof(Pix));
 }
 
 // The screen saver's background (Settings -> General -> Theme, the user 2026-10-23): 0 the mosaic - the skin's saver
@@ -1422,10 +1480,13 @@ static void Marquee(HDC dc, int x, int y, int w, const wchar_t* s, int size, COL
     SelectObject(dc, of);
 }
 
-// Rounded rectangle like SVG <rect rx>: fill and 2 px stroke, CLR_INVALID = none.
+// Rounded rectangle like SVG <rect rx>: fill and 2 px stroke, CLR_INVALID = none. A card (filled in the panel
+// colour, no stroke) takes the skin's card picture when it gives one (CardPic).
 static void R(HDC dc, int x, int y, int w, int h, int rx, COLORREF fill, COLORREF stroke = CLR_INVALID)
 {
     if (w <= 0 || h <= 0)
+        return;
+    if (fill == kPanel && stroke == CLR_INVALID && CardPic(x, y, w, h, rx))
         return;
     if (rx == 0 && stroke == CLR_INVALID) {
         if (fill != CLR_INVALID)
@@ -1518,12 +1579,8 @@ static void TriFill(int x, int y, int w, int h, int rx)
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
         Pix* row = s_backBits + (479 - py) * 800;
-        int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
         for (int px = x; px < x + w; px++) {
-            if (px < s_clip.left || px >= s_clip.right)
-                continue;
-            int dx = px < x + rx ? x + rx - px : px >= x + w - rx ? px - (x + w - rx - 1) : 0;
-            if (dx && dy && dx * dx + dy * dy > rx * rx)
+            if (px < s_clip.left || px >= s_clip.right || !CardInside(px - x, py - y, w, h, rx))
                 continue;
             row[px] = sh[TriIndex(px - x, py - y, 4)];
         }
@@ -1566,12 +1623,8 @@ static void RSoft(int x, int y, int w, int h, int rx)
         if (py < s_clip.top || py >= s_clip.bottom)
             continue;
         Pix* row = s_backBits + (479 - py) * 800;
-        int dy = py < y + rx ? y + rx - py : py >= y + h - rx ? py - (y + h - rx - 1) : 0;
         for (int px = x; px < x + w; px++) {
-            if (px < s_clip.left || px >= s_clip.right)
-                continue;
-            int dx = px < x + rx ? x + rx - px : px >= x + w - rx ? px - (x + w - rx - 1) : 0;
-            if (dx && dy && dx * dx + dy * dy > rx * rx)
+            if (px < s_clip.left || px >= s_clip.right || !CardInside(px - x, py - y, w, h, rx))
                 continue;
             unsigned p = row[px];
             int r = PR(p), g = PG(p), b = PB(p);

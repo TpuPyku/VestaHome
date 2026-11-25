@@ -76,6 +76,9 @@
 #include "photo.h"
 #include "musdir.h"
 #include "tagtext.h"   // tags in Windows-1251 read as Latin-1
+#include "cardpic.h"   // the skin's card picture: the mask, the pixel, the blend
+#include "camlimit.h"  // a speed camera's limit: fillers (5, 160) are none
+#include "slide.h"     // a page sliding over the still background
 #include "cover.h"     // the track's cover: in its tag or its folder
 #include "radiodb.h"   // the FM station by the city and the frequency, its logo by its name
 #include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
@@ -178,13 +181,13 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_SVC7000, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
 static int s_seg[G_COUNT] = { 1, 2, 1, 0 };
 enum { K_DIAL, K_PASS };   // the number being dialled, the Wi-Fi password
-enum { K_WKEY, K_HOMENAME, K_HOMELAT, K_HOMELON, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS, K_ODO, K_SVCKM, K_SVCDATE };   // typed settings (A_KEYS)
+enum { K_WKEY, K_HOMENAME, K_HOMELAT, K_HOMELON, K_BTNAME, K_NETAPN, K_NETUSER, K_NETPASS, K_ODO, K_SVCKM, K_SVCDATE, K_SVCEVERY };   // typed settings (A_KEYS)
 static wchar_t s_dial[20];          // the number typed on the phone's keypad
 static wchar_t s_callOut[20];       // the number dialled from VestaHome (the stack does not tell it back)
 static wchar_t s_pass[24] = L"vesta2026";
@@ -207,6 +210,8 @@ static bool LoadImg(const wchar_t* path, Img* im);
 static wchar_t s_skinBg[MAX_PATH];     // main menu background picture, optional
 static wchar_t s_skinSaver[MAX_PATH];  // the screen saver's picture, optional
 static wchar_t s_skinTile[MAX_PATH];   // the background's tile (all screens), optional: the mosaic otherwise
+static wchar_t s_skinCard[2][MAX_PATH];   // the cards' picture (card), the small tiles' (card_small): optional
+static Img     s_card[2];                 // (cardpic.h: CardPic draws them instead of the panel colour)
 
 static HWND    s_wnd;
 static HBITMAP s_back;          // whole frame, drawn off-screen
@@ -519,6 +524,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             VLog(L"шрифт: %s (своих загружено %d из 2)", s_face, nf);
         }
         BuildBackground();
+        for (int i = 0; i < 2; i++)
+            if (s_skinCard[i][0] && !LoadImg(s_skinCard[i], &s_card[i]))
+                VLog(L"оформление: не прочитана картинка карточки %s", s_skinCard[i]);
 #ifdef UNDER_CE
         s_taskbar = FindWindow(L"HHTaskBar", NULL);
         if (s_taskbar)
@@ -710,15 +718,22 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                          // call's, the end closes them and gives the front back
             BtState bt;
             static int s_lastCall;
-            if (BtGet(&bt, NULL) && bt.call[0] != s_lastCall) {
-                int c = bt.call[0];
+            bool got = BtGet(&bt, NULL);
+            int line = got ? CallLine(bt.call[0], bt.call[1]) : BT_CALL_NONE;   // (either line, as the widget)
+            // (Android's virtual call "10000000" is a call too: WhatsApp's, Telegram's - the user 2026-11-24; it is
+            // not put down any more)
+            if (got && line != s_lastCall) {
+                int c = line;
+                bool fresh = s_lastCall == BT_CALL_NONE;
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)
                     s_callTick = GetTickCount();
-                CallAct act = CallStep(c, s_screen == S_INCOMING, s_screen == S_CALL, AaInFront());
-                if (act == CA_INCOMING) {
+                CallAct act = CallStep(c, s_screen == S_INCOMING, s_screen == S_CALL, AaInFront(), fresh);
+                if (act == CA_INCOMING || act == CA_CALL) {   // (one dialed on the phone: the call's window)
                     CallFront();
-                    Go(S_INCOMING, true);
+                    Go(act == CA_CALL ? S_CALL : S_INCOMING, true);
+                    if (act == CA_CALL)
+                        s_callTick = GetTickCount();
                 } else if (act == CA_TAKEN) {
                     Back();
                     Go(S_CALL, true);
