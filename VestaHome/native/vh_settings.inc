@@ -643,7 +643,8 @@ static void LoadCfg()
                     s_cfg.wifiLocked[i] = true;
                     wcsncpy(s_cfg.wifiSealed[i], pass, 299);
                     s_cfg.wifiSealed[i][299] = 0;
-                    VLog(L"wifi: пароль сети %s не расшифрован (другое ГУ?)", s_cfg.wifiSsid[i]);
+                    VLog(L"wifi: пароль сети %s пока не расшифрован (ждёт ID машины от MCU или другое ГУ)",
+                         s_cfg.wifiSsid[i]);
                 }
             }
         }

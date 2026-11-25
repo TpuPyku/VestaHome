@@ -534,9 +534,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 #endif
         LoadApps();
         {
-            static const wchar_t* kSrc[4] = { L"нет", L"ID устройства", L"MAC адаптеров", L"ПК" };
             int src = SecretInit();   // the key that seals the passwords of the settings
-            VLog(L"ключ паролей: %s", kSrc[src & 3]);
+            VLog(L"ключ паролей: %s", src == LICENSE_SRC_MCU ? L"ID машины (MCU)" : src == LICENSE_SRC_PC ? L"ПК" :
+                 L"ID машины ещё не пришёл - пока старый");
             SupportInit();
         }
         LoadCfg();
@@ -686,6 +686,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             McuKey(0x54, false);
             return 0;
         }
+        if (wp == 1)
+            MachineAsk();   // the unit's ID: the MCU's machine ID, asked for until it comes
         if (wp == 1)
             NetAutoStep();
         if (wp == 1)
@@ -1199,6 +1201,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         }
         if (wp == WP_MCU_HWKEY) {
             HwKey(lp & 0xFF, lp >> 8 & 0xFF, lp >> 16 & 0xFF);
+            return 0;
+        }
+        if (wp == WP_MCU_MACHINE) {
+            MachineKnown();
             return 0;
         }
         if (wp == WP_MCU_REBOOT) {

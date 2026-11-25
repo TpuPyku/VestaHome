@@ -457,10 +457,7 @@ static void ScrInfoMore(HDC dc)
                    inf.bt[5]);
     else
         wcscpy(bt, L"—");
-    if (inf.id[0])
-        _snwprintf(id, 40, L"%s %s %s", inf.id, inf.idDate, inf.idNum);
-    else
-        wcscpy(id, L"—");
+    MachineText(inf, id, 40);
     const wchar_t* rows[9][2] = { { L"Прошивка ГУ (SW)", s }, { L"Windows CE", os }, { L"MCU (радио)", mcu },
                                   { L"Железо (HW)", hw }, { L"CAN-модуль", canv }, { L"Bluetooth-адрес", bt },
                                   { L"ID устройства", id }, { L"Proxy MCU", st > 0 ? L"работает" : L"нет" },
