@@ -30,4 +30,14 @@ static bool StallDue(bool busy, unsigned since, unsigned now, unsigned step, uns
     return busy && step != logged && now - since >= (unsigned)kStallMs;
 }
 
+// The known networks' auto join (the poll): `last` the last try (0 none), `unlisted` - it found the network not yet in
+// the SDK's list (WZC sees a hotspot seconds before the SDK does, HU 2026-11-26: the boot's one try failed so, then a
+// minute's wait): again in 10 s, else in a minute (a refusal, or the join under way).
+enum { kAutoUnlistedMs = 10000, kAutoGapMs = 60000 };
+
+static bool AutoJoinDue(unsigned last, unsigned now, bool unlisted)
+{
+    return !last || now - last > (unsigned)(unlisted ? kAutoUnlistedMs : kAutoGapMs);
+}
+
 #endif

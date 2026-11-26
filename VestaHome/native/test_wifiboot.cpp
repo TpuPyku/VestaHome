@@ -16,6 +16,15 @@ static void Check(bool ok, const char* what)
 
 int main()
 {
+    // the known network's auto join (HU 2026-11-26: WZC saw the hotspot first, the SDK's list was still empty -
+    // "нет в списке", then a minute's wait; the boot never joined)
+    Check(AutoJoinDue(0, 5000, false), "never tried: due");
+    Check(!AutoJoinDue(1000, 1000 + kAutoUnlistedMs, true), "not in the SDK's list: not before 10 s");
+    Check(AutoJoinDue(1000, 1001 + kAutoUnlistedMs, true), "not in the SDK's list: again after 10 s");
+    Check(!AutoJoinDue(1000, 1000 + kAutoGapMs, false), "tried (refused or joining): not before a minute");
+    Check(AutoJoinDue(1000, 1001 + kAutoGapMs, false), "tried: again after a minute");
+    Check(kAutoUnlistedMs == 10000 && kAutoGapMs == 60000, "10 s / 60 s");
+    Check(AutoJoinDue(0xFFFFF000u, 0x00002000u, false) == false, "the tick's wrap: 8 KB ms later, not yet");
     // the SDK's start (the tester 2026-11-19: InitApi once, its failure - no SDK until the next boot)
     Check(InitRetryMs(1, 0) == 0, "InitApi answered: no retry");
     Check(InitRetryMs(1, 1) == 0, "InitApi answered S_FALSE: no retry");
