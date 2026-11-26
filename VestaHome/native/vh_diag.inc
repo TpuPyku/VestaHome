@@ -73,6 +73,8 @@ static void ModemLabel(wchar_t* s, int n)
     s[n - 1] = 0;
 }
 
+static void CanRecLabel(wchar_t* s, int n, bool* busy);   // (vh_canrec.inc)
+
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
 static void ScrDiag(HDC dc)
 {
@@ -83,8 +85,12 @@ static void ScrDiag(HDC dc)
                B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
-    T(dc, 40, 390, L"VestaHome и загрузчик — в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 600);
+    T(dc, 40, 390, L"в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 260);
     Toggle(dc, 688, 354, T_LOGS);
+    wchar_t cr[64];   // the CAN panel's COM3 (branch canrec, vh_canrec.inc)
+    bool busy;
+    CanRecLabel(cr, 64, &busy);
+    Button(dc, 312, 350, 352, 44, cr, busy ? B_SEL : B_N, IC_NONE, 15, 0, A_CANREC);
 }
 
 // Screen test: full-screen white, red, green, blue, black (dead pixels, uniformity), a grey ramp (banding) and a

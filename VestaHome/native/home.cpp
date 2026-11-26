@@ -65,6 +65,7 @@
 #include "saverink.h"   // the screen saver's text dimmed at night (vh_diag.inc)
 #include "vhseen.h"     // VestaHome seen (drawn) with another program's small window in front
 #include "navimix.h"    // Navitel's voice over the radio, as navione
+#include "canrec.h"     // the CAN panel's COM3 recorded (branch canrec)
 #include "uarttap.h"   // COM2 listened to while the logs are on (vh_diag.inc)
 #include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
@@ -150,7 +151,7 @@ enum Action { A_NONE, A_NIGHT, A_EXIT, A_NAV, A_SCREEN, A_TAB, A_BACK, A_TOGGLE,
               A_RUN, A_ADD, A_EDITMODE, A_FIELD, A_SAVE, A_DELETE, A_CANCEL, A_OK, A_CHAR, A_SHIFT, A_LANG,
               A_BKSP, A_FILE, A_UP, A_NOICON, A_MINIMIZE, A_CALIBRATE, A_TEST,
               A_KEYS, A_HOMEGPS, A_WXNOW, A_CAMFILE, A_KIND, A_KINDS, A_REGION, A_CAMDL, A_TZ,
-              A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
+              A_GPSPORT, A_GPSBAUD, A_HOUR, A_MINUTE, A_CANLOG, A_CANMARK, A_CANREC, A_MCULOG, A_MCUREQ, A_EQ, A_EQPRESET,
               A_BAL, A_FADE, A_BALCENTER, A_BALXY, A_AVTEST, A_AVDEV, A_PRESET, A_RKEY, A_REBOOTNO, A_BTMUSIC, A_BTCMD, A_RPAGE, A_RLIST, A_RSCAN, A_SNDVOL, A_PLAY, A_PREVTRK, A_NEXTTRK, A_SEEK, A_SHUFFLE, A_REPEAT,
               A_MFILE, A_MUP, A_MALL, A_PHONECALL, A_PHONEANS, A_PHONEEND, A_PBCONTACT, A_PBDIAL, A_PBRELOAD, A_PBFAV, A_FAVDIAL, A_PBFIND, A_PBSIM, A_PBDEL, A_BTCONNECT, A_SHELL, A_PTYSEL, A_PTYGO, A_CARSENS, A_THEME, A_LIGHT, A_WGVIS, A_WGMOVE, A_PHFILE, A_PHSTEP, A_PHROT, A_PHSHOW, A_PHINT, A_SCROLL, A_USERWG, A_TASKTAB, A_TASKSORT, A_TASKKILL, A_TASKSWITCH, A_NAVCHIP,
               A_TASKCLOSE, A_KEYFIELD, A_CLIPCOPY, A_CLIPPASTE, A_CLIPCLEAR,
@@ -465,6 +466,7 @@ static bool VhSeen()
 #include "vh_diag.inc"
 #include "vh_settings.inc"
 #include "vh_gps.inc"
+#include "vh_canrec.inc"   // (after vh_gps.inc: can.log)
 #include "vh_mcu.inc"
 #include "vh_demo.inc"   // (the PC build only: the demo head unit)
 #include "vh_player.inc"
@@ -635,6 +637,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     }
     case WM_TIMER: {
+        if (wp == TIMER_CANREC) {   // can.log after the COM3 recording: enough (vh_canrec.inc)
+            CanRecLogEnd();
+            return 0;
+        }
+        if (wp == TIMER_CANRECUI) {
+            if (!s_canRecOn)
+                KillTimer(hwnd, TIMER_CANRECUI);
+            if (IsWindowVisible(hwnd) && s_screen == S_DIAG)
+                Redraw();
+            return 0;
+        }
         if (wp == TIMER_LONG) {   // held on the keyboard's text field: copy / paste
             KillTimer(hwnd, TIMER_LONG);
             if (s_pressed >= 0 && s_btns[s_pressed].action == A_BTCMD) {   // held on ⏮ / ⏭: rewind / fast forward
@@ -1372,6 +1385,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         OnRasEvent((DWORD)wp, (DWORD)lp);
         return 0;
 #endif
+    case WM_APP_CANREC:   // the COM3 recording is over (vh_canrec.inc)
+        CanRecDone(wp != 0, (DWORD)lp);
+        if (IsWindowVisible(hwnd) && s_screen == S_DIAG)
+            Redraw();
+        return 0;
     case WM_APP_MODEM:   // the modem's dial is done (vh_gps.inc ModemDial)
         if (IsWindowVisible(hwnd) && s_screen == S_DIAG)
             Redraw();
@@ -1607,6 +1625,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (s_voice || s_plugVoice)
                 NaviVoice(false);
             NaviMixSet(false, NULL);
+            CanRecQuit();
             if (s_rvcWnd)
                 RvcHide();
             EXIT_STEP(L"видео", VideoStop());

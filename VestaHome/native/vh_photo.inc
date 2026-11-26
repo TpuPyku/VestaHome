@@ -688,6 +688,7 @@ static void DoActionOn(const Btn& b)
     case A_MINUTE:   ClockStep(false, b.arg); break;
     case A_CANLOG:   CanLogToggle(); break;
     case A_CANMARK:  MarkLogs(); break;
+    case A_CANREC:   CanRecToggle(); Redraw(); break;
     case A_MCULOG:   McuLogToggle(); break;
     case A_PLAY:     PlayerToggle(); break;
     case A_PREVTRK:  PlayerPrev(); break;
