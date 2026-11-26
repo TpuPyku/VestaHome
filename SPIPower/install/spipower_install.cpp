@@ -734,6 +734,34 @@ static void StartShell()
     if (pi.hProcess) CloseHandle(pi.hProcess);
 }
 
+static const wchar_t* kInitPath = L"\\Windows\\Init.exe";   // the CAN panel's firmware only (its Main.exe starts it)
+
+// The session after the boot run: Init.exe where the firmware has it - it starts the shell and the CAN panel (the
+// shell alone left the panel off till the next boot, the user 2026-11-26) - else the shell; the canrec job: the
+// shell alone (bootarm.h SessionStartWhat).
+static void StartSession(bool canrec)
+{
+    if (SessionStartWhat(FileExists(kInitPath) != 0, canrec) == START_SHELL) {
+        LogMsg(canrec ? L"boot: the shell alone - the CAN panel off this boot (canrec)" : L"boot: the shell");
+        StartShell();
+        return;
+    }
+    PROCESS_INFORMATION pi;
+    memset(&pi, 0, sizeof(pi));
+    wchar_t cmd[MAX_PATH];
+    wcscpy(cmd, kInitPath);
+    if (CreateProcess(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)) {
+        if (pi.hThread) CloseHandle(pi.hThread);
+        if (pi.hProcess) CloseHandle(pi.hProcess);
+        LogMsg(L"boot: \\Windows\\Init.exe - the shell and the CAN panel");
+        return;
+    }
+    wchar_t m[128];
+    _snwprintf(m, 128, L"boot: \\Windows\\Init.exe failed err=%u -> the shell", (unsigned)GetLastError());
+    LogMsg(m);
+    StartShell();
+}
+
 // ---------------------------------------------------------------- DLL holders
 // StartShell() alone does not bring the session back: everything that fails after the
 // kill has to put Main.exe back too, because Main.exe is the process that starts
@@ -2291,6 +2319,8 @@ static int DoBootArm(const char* verb, int force)
                    : isStub ? L"вернёт штатную оболочку на место" : L"", isStub && (isRollback || isInstall) ? L", затем " : L"",
                    isRollback ? L"вернёт заводскую SPIPowerMgr.dll" : isInstall ? L"поставит proxy MCU и Bluetooth" : L"");
         what[159] = 0;
+        if (strstr(verb, "canrec"))
+            wcscpy(what, L"на эту загрузку оставит CAN-панель выключенной - VestaHome запишет её COM3 и запустит её");
         _snwprintf(g_status, 4096,
             L"Заряжено на следующую загрузку: %s.\nSD: %s (наш SwDnl.exe), %s\\ (задание%s%s)\n"
             L"флаг: \\ResidentFlash\\SwUpdate.flag = 0x02\n\n"
@@ -2327,7 +2357,7 @@ static void HandOver()
     }
     LogMsg(L"boot: no factory updater started -> clearing the flag, starting the shell");
     DeleteFile(kSwFlag);
-    StartShell();
+    StartSession(false);
 }
 
 // This exe started by Main.exe as \SDMemory\SwDnl.exe (SwUpdate.flag armed, no shell yet,
@@ -2336,7 +2366,7 @@ static void BootRun()
 {
     wchar_t dir[MAX_PATH], jobPath[MAX_PATH], m[256];
     char jb[64];
-    int fb, haveJob = 0;
+    int fb, haveJob = 0, canrec = 0;
 
     SetPaths();                      // g_ownDir = the SD root this exe runs from
     Join(dir, g_ownDir, kBootSub);
@@ -2391,6 +2421,13 @@ static void BootRun()
             rc = DoVhInstall();     // process - two threads in drivers - and the update could not replace its files)
             LogMsg(g_status);
         }
+        if (strstr(jb, "canrec")) {   // the CAN panel off this boot: VestaHome records its COM3 (canrec.now: this
+            canrec = 1;                 // boot's own mark - a mark left from an earlier one would race the panel)
+            wchar_t mark[MAX_PATH];
+            Join(mark, dir, L"canrec.now");
+            WriteAnsiFile(mark, "canrec\r\n");
+            wcscpy(g_status, L"boot: canrec - the CAN panel off this boot, VestaHome records COM3");
+        }
         if (strstr(jb, "rollback")) {
             rc = Rollback();
             if (rc) wcscpy(g_status, L"boot: rollback done, factory DLL back, shell restarted");
@@ -2402,7 +2439,7 @@ static void BootRun()
                 LogMsg(L"boot: no reset -> starting Main.exe on the new DLL");
                 RestartShell();
             }
-        } else if (!strstr(jb, "stub") && !strstr(jb, "vh")) {
+        } else if (!strstr(jb, "stub") && !strstr(jb, "vh") && !canrec) {
             rc = 0;
             wcscpy(g_status, L"boot: unknown job");
         }
@@ -2419,7 +2456,7 @@ static void BootRun()
             // every boot (the user 2026-11-26, after AppLauncher was removed) - the flag off, the shell
             LogMsg(L"boot: no job, nothing of ours, no factory package -> the flag off, the shell");
             DeleteFile(kSwFlag);
-            StartShell();
+            StartSession(false);
             return;
         }
         if (stub) {   // the stub in place of the shell: it goes first (the shell failed to start - maybe it)
@@ -2444,7 +2481,7 @@ static void BootRun()
     // Main.exe went down its update branch and will not start the shell itself.
     if (ProcExists(kMain) == 1 && ProcExists(kShell) != 1) {
         LogMsg(L"boot: nothing touched -> starting the shell");
-        StartShell();
+        StartSession(canrec != 0);
     }
 }
 
@@ -2911,6 +2948,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow)
         else if (wcsstr(a, L"stub-on")) DoBootArm("stub on", 0);
         else if (wcsstr(a, L"stub-off")) DoBootArm("stub off", 0);
         else if (wcsstr(a, L"install")) DoBootArm(logging ? "install p2" : "install", force);
+        else if (wcsstr(a, L"canrec")) DoBootArm("canrec", 0);   // (VestaHome's diagnostics: the CAN panel's COM3)
         else wcscpy(g_status, L"Способ: VestaHomeInstall.exe boot install [p2|p3] [force] | boot rollback | boot stub-on | boot stub-off | boot-off");
     } else if (wcsstr(a, L"vh-silent")) {   // (VestaStub at boot, the update asked from VestaHome: no window)
         int ok = DoVhInstall();

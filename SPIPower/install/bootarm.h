@@ -88,3 +88,14 @@ inline bool BootMarkFeed(BootMarkScan* s, const char* p, int n)
     s->tailN = keep;
     return false;
 }
+
+// What starts the session after the boot run (the user 2026-11-26): the CAN panel's firmware has \Windows\Init.exe
+// (its Main.exe starts it, not the shell): Init.exe starts the shell, then the panel unless SwUpdate.flag is there -
+// the shell alone left the panel off till the next boot after every job of ours. The canrec job wants exactly that:
+// the panel off for one boot, its COM3 free for VestaHome to record.
+enum { START_INIT, START_SHELL };
+
+inline int SessionStartWhat(bool initExists, bool canrecJob)
+{
+    return initExists && !canrecJob ? START_INIT : START_SHELL;
+}
