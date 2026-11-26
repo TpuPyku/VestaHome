@@ -1315,7 +1315,9 @@ static void DrawKeys(HDC dc)
             wchar_t ch[2] = { VKeysChar(&s_keys, r, c), 0 };
             bool d = Zone(x, y, 60, 60, A_CHAR, ch[0]);
             R(dc, x, y, 60, 60, 14, d ? kOrange : kPanel);
-            T(dc, x + 30, y + 40, ch, 24, d ? kInk : kText, 700, AL_MID);
+            T(dc, x + 30, y + 42, ch, 24, d ? kInk : kText, 700, AL_MID);
+            wchar_t alt[2] = { VKeysAlt(&s_keys, r, c), 0 };   // its second, a long press (as Android's keyboard)
+            T(dc, x + 48, y + 21, alt, 15, d ? kInk : kMuted, 600, AL_MID);
         }
     Button(dc, 13, 404, 125, 60, NULL, s_keys.shift ? B_SEL : B_FILL, IC_SHIFT, 18, 32, A_SHIFT);
     Button(dc, 143, 404, 125, 60, s_keys.en ? L"ENG" : L"Рус", B_FILL, IC_NONE, 20, 0, A_LANG);

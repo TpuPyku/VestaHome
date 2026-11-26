@@ -626,6 +626,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 Redraw();
                 return 0;
             }
+            if (s_pressed >= 0 && s_btns[s_pressed].action == A_CHAR) {   // held on a key: its second character
+                KeyChar(VKeysAltFor(&s_keys, (wchar_t)s_btns[s_pressed].arg));
+                s_pressed = -1;   // the release does not type the key's own
+                Redraw();
+                return 0;
+            }
             if (s_pressed >= 0 && s_btns[s_pressed].action == A_PRESET) {   // held on a preset: save it
                 RadioPresetSave(s_btns[s_pressed].arg);
                 s_pressed = -1;
@@ -1373,6 +1379,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             VKeysCursorAt(&s_keys, (short)LOWORD(lp) - kKeyFieldX, kKeyFieldW);
         if (s_pressed >= 0 && (s_btns[s_pressed].action == A_KEYFIELD || s_btns[s_pressed].action == A_PRESET ||
                                (s_btns[s_pressed].action == A_KEY && s_btns[s_pressed].arg == K_DIAL * 65536 + L'0') ||
+                               (s_btns[s_pressed].action == A_CHAR && s_keysNum == NUM_TEXT &&
+                                VKeysAltFor(&s_keys, (wchar_t)s_btns[s_pressed].arg)) ||
                                (s_btns[s_pressed].action == A_BTCMD &&
                                 (s_btns[s_pressed].arg == BT_CMD_NEXT || s_btns[s_pressed].arg == BT_CMD_PREV))))
             SetTimer(hwnd, TIMER_LONG, s_btns[s_pressed].action == A_PRESET ? 1200 : kLongMs, NULL);
