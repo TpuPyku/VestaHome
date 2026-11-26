@@ -345,8 +345,105 @@ static void TestPick()
     Check(CoverPick(NULL, 0) == -1, "an empty folder: none");
 }
 
+// The texts of a tag (the user 2026-11-26: "ISO-8859-1" frames are 1251 / 866 - the stock shell shows them)
+static void TestTexts()
+{
+    unsigned char b[256];
+    TagTexts t;
+    // v2.3: 1251 bytes, UTF-16, UTF-8, the year; a picture between
+    Head(3, 0);
+    Frame("TIT2", "\0\xC2\xE5\xF1\xED\xE0", 6, false);
+    Frame("APIC", b, Apic(b, 0, 3, "front", kJpg, sizeof(kJpg)), false);
+    Frame("TPE1", "\x01\xFF\xFE\x2F\x04", 5, false);
+    Frame("TALB", "\x03\xD0\xAF", 3, false);
+    Frame("TYER", "\0" "2004", 5, false);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n, &t), "texts v2.3: found");
+    Check(!wcscmp(t.title, L"\x0412\x0435\x0441\x043D\x0430"), "texts: a one-byte title as 1251 (\"Весна\")");
+    Check(!wcscmp(t.artist, L"\x042F"), "texts: UTF-16 as is");
+    Check(!wcscmp(t.album, L"\x042F"), "texts: UTF-8 as is");
+    Check(!wcscmp(t.year, L"2004"), "texts: the year");
+    // v2.4: syncsafe sizes, TDRC's date cut to its year, 866
+    Head(4, 0);
+    Frame("TDRC", "\0" "2019-05-01", 11, true);
+    Frame("TIT2", "\0\x8F\xE0\xA8\xA2\xA5\xE2", 7, true);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n, &t) && !wcscmp(t.year, L"2019") && !t.artist[0], "texts v2.4: TDRC's year; none missing");
+    Check(!wcscmp(t.title, L"\x041F\x0440\x0438\x0432\x0435\x0442"), "texts v2.4: 866 (\"Привет\")");
+    // v2.2: three-letter frames
+    Head(2, 0);
+    Put("TT2", 3);
+    Put8(0); Put8(0); Put8(4);
+    Put("\0Hey", 4);
+    Put("TP1", 3);
+    Put8(0); Put8(0); Put8(3);
+    Put("\0Me", 3);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n, &t) && !wcscmp(t.title, L"Hey") && !wcscmp(t.artist, L"Me"), "texts v2.2: TT2, TP1");
+    // only the tag's head read (a big picture first): the frames in it; one cut off is not read
+    Head(3, 0);
+    Frame("TIT2", "\0Song", 5, false);
+    Frame("TPE1", "\0Singer", 7, false);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n - 3, &t) && !wcscmp(t.title, L"Song") && !t.artist[0],
+          "texts: the head only - a frame cut off is not read");
+    // a frame the tag can't give (compressed): left
+    Head(3, 0);
+    Frame("TIT2", "\0Song", 5, false, 0x0080);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(!Id3Texts(s_tag, s_n, &t) && !t.title[0], "texts: a compressed frame - none");
+    // the first of two kept; not ID3 - nothing
+    Head(3, 0);
+    Frame("TIT2", "\0One", 4, false);
+    Frame("TIT2", "\0Two", 4, false);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n, &t) && !wcscmp(t.title, L"One"), "texts: the first frame of two");
+    memset(&t, 0, sizeof(t));
+    Check(!Id3Texts((unsigned char*)"RIFF0000000000", 14, &t), "texts: not ID3 - none");
+    // a one-letter title is a title (kept over a second frame); an empty frame (its encoding byte only) is none,
+    // the frames after it still read
+    Head(3, 0);
+    Frame("TIT2", "\0A", 2, false);
+    Frame("TIT2", "\0Two", 4, false);
+    Frame("TALB", "\0", 1, false);
+    Frame("TPE1", "\0B", 2, false);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n, &t) && !wcscmp(t.title, L"A") && !wcscmp(t.artist, L"B") && !t.album[0],
+          "texts: one letter kept; an empty frame skipped, the next read");
+    Head(3, 0);
+    Frame("TIT2", "\0", 1, false);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(!Id3Texts(s_tag, s_n, &t), "texts: only an empty frame - none found");
+    // the file's bytes after the tag (read with it): not frames of the tag
+    Head(3, 0);
+    Frame("TIT2", "\0A", 2, false);
+    End();
+    Frame("TPE1", "\0Audio", 6, false);
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n, &t) && !wcscmp(t.title, L"A") && !t.artist[0], "texts: nothing read past the tag");
+    // v2.3 unsynchronised (FF 00 -> FF): undone before the texts are read
+    Head(3, 0x80);
+    Put("TIT2", 4);
+    PutSize(5, false);   // (v2.3: the size of the frame undone)
+    Put8(0);
+    Put8(0);
+    Put("\x01\xFF\x00\xFE\x41\x00", 6);
+    End();
+    memset(&t, 0, sizeof(t));
+    Check(Id3Texts(s_tag, s_n, &t) && !wcscmp(t.title, L"A"), "texts: an unsynchronised tag (its BOM FF 00 FE)");
+}
+
 int main()
 {
+    TestTexts();
     TestTags();
     TestPick();
     printf("%d checks, %d failed\n", s_checks, s_failed);
