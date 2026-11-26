@@ -246,7 +246,8 @@ static void ScrSetCar(HDC dc)
     _snwprintf(com, 8, L"COM%d", s_cfg.nmeaCom);
     Stepper(dc, 460, y + 6 + kSetPad, 164, com, 44, 19, A_NMEACOM);
     Toggle(dc, 640, y + 10 + kSetPad, T_NMEA_PORT);
-    static const wchar_t* kLines[RVC_LINES_COUNT] = { L"Классика", L"Как штатная", L"Современная", L"Колея колёс" };
+    static const wchar_t* kLines[RVC_LINES_COUNT] = { L"Классика", L"Как штатная", L"Современная", L"Колея колёс",
+                                                      L"Только траектория" };
     SetRowS(dc, y += kSetHS, L"Разметка камеры", L"посмотреть — в «Диагностике»", true);
     Stepper(dc, 464, y + 6 + kSetPad, 248, kLines[s_cfg.rvcLines], 44, 19, A_RVCLINES);
     SetScrollEnd(dc);
