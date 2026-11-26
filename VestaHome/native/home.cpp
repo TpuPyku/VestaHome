@@ -634,6 +634,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             WeatherRefresh();
         BuildButtons();
         SetTimer(hwnd, 1, 1000, NULL);
+        CanRecAtStart();   // (branch canrec: this boot left the CAN panel off for its COM3)
         return 0;
     }
     case WM_TIMER: {
@@ -1386,7 +1387,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 #endif
     case WM_APP_CANREC:   // the COM3 recording is over (vh_canrec.inc)
-        CanRecDone(wp != 0, (DWORD)lp);
+        CanRecDone((int)wp, (DWORD)lp);
         if (IsWindowVisible(hwnd) && s_screen == S_DIAG)
             Redraw();
         return 0;
