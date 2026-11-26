@@ -631,6 +631,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (WeatherWanted())
             WeatherRefresh();
         BuildButtons();
+        CanPanelOwnOff();
         SetTimer(hwnd, 1, 1000, NULL);
         return 0;
     }
