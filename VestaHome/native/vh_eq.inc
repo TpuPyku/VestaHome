@@ -74,7 +74,7 @@ static void EqModeSet(int mode)
 }
 
 // The fine sliders: x 268 + band * 50, from y kFineY (+12 dB) down kFineH (-12 dB); a tap or a drag, 0.5 dB a step.
-enum { kFineX = 290, kFineDX = 52, kFineY = 172, kFineH = 158 };
+enum { kFineX = 290, kFineDX = 52, kFineY = kEqSliderY, kFineH = kEqSliderH };
 
 static void EqFineAt(int band, int y, bool done)
 {
@@ -110,7 +110,7 @@ static void EqFineDraw(HDC dc)
     static const wchar_t* kHz[EQ_BANDS] = { L"31", L"62", L"125", L"250", L"500", L"1к", L"2к", L"4к", L"8к", L"16к" };
     for (int p = 0; p < 5; p++) {
         bool cur = !memcmp(s_cfg.eqFine, kEqFinePresets[p].g, sizeof(s_cfg.eqFine));
-        Button(dc, 256 + p * 104, 112, 98, 38, kEqFinePresets[p].name, cur ? B_SEL : B_N, IC_NONE, 13, 0,
+        Button(dc, 256 + p * 104, 112, 98, 36, kEqFinePresets[p].name, cur ? B_SEL : B_N, IC_NONE, 13, 0,
                A_EQFPRESET, p);
     }
     for (int i = 0; i < EQ_BANDS; i++) {
@@ -126,8 +126,8 @@ static void EqFineDraw(HDC dc)
         VSlider(dc, x, kFineY, kFineH, (g + EQ_MAX) * 100 / (2 * EQ_MAX), kHz[i], v);
         Zone(x - kFineDX / 2, kFineY - 14, kFineDX, kFineH + 28, A_EQFINE, i);   // (a tap or a drag: EqFineAt)
     }
-    T(dc, 264, 392, L"Для музыки, интернет-радио и Android Auto; радио и Bluetooth — без эквалайзера", 12, kDim, 400,
-      AL_START, 512);
+    T(dc, 564, 356, L"Музыка, интернет-радио, AA;", 12, kDim, 400, AL_START, 204);
+    T(dc, 564, 374, L"радио и Bluetooth — без него", 12, kDim, 400, AL_START, 204);
 }
 
 // The add-ons that play sound themselves (VestaAuto) filter it with the same gains: "eq\tmode=<0|1>\tg=<10 gains>"

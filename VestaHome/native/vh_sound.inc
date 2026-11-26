@@ -184,6 +184,9 @@ static McuSound McuSoundGet()   // what the MCU reported last (its decoding thre
 }
 
 // Equalizer: presets, three sliders (a tap on a slider sets the value there), balance and volumes as buttons.
+// Both pages' sliders: values from 156, bands down to 326 (VSlider: the value 14 above, the band 28 below)
+enum { kEqSliderY = 186, kEqSliderH = 108 };
+
 static void ScrSetSound(HDC dc)
 {
     static const wchar_t* bands[3] = { L"Низкие", L"Средние", L"Высокие" };
@@ -196,6 +199,10 @@ static void ScrSetSound(HDC dc)
     T(dc, 264, 92, L"Эквалайзер", 19, kText, 700);   // the two kinds (vh_eq.inc, 2026-11-25)
     Button(dc, 448, 70, 150, 34, L"Грубый", s_cfg.eqMode ? B_N : B_SEL, IC_NONE, 13, 0, A_EQMODE, 0);
     Button(dc, 606, 70, 162, 34, L"Точный", s_cfg.eqMode ? B_SEL : B_N, IC_NONE, 13, 0, A_EQMODE, 1);
+    // both kinds: the presets' row (112..148), the sliders (values above, bands below: 156..326), Balance and
+    // Volume at the bottom (338..382) - the page in 2026-11-26 had them overlapping
+    Button(dc, 256, 338, 140, 44, L"Баланс", B_N, IC_EQ, 15, 24, A_SCREEN, S_SET_BALANCE);
+    Button(dc, 404, 338, 148, 44, L"Громкость", B_N, IC_VOL, 15, 24, A_SCREEN, S_SET_VOLUME);
     if (s_cfg.eqMode) {
         EqFineDraw(dc);
         return;
@@ -203,24 +210,17 @@ static void ScrSetSound(HDC dc)
     for (int p = 0; p < 5; p++) {
         bool cur = s_cfg.eq[0] == kEqPresets[p].v[0] && s_cfg.eq[1] == kEqPresets[p].v[1] &&
                    s_cfg.eq[2] == kEqPresets[p].v[2];
-        Button(dc, 256 + p * 84, 104, 78, 40, kEqPresets[p].name, cur ? B_SEL : B_N, IC_NONE, 13, 0, A_EQPRESET, p);
+        Button(dc, 256 + p * 104, 112, 98, 36, kEqPresets[p].name, cur ? B_SEL : B_N, IC_NONE, 13, 0, A_EQPRESET, p);
     }
-    enum { Y = 186, H = 132 };
+    enum { Y = kEqSliderY, H = kEqSliderH };
     for (int i = 0; i < 3; i++) {
-        int x = 304 + i * 104;
+        int x = 330 + i * 182;
         wchar_t v[8];
         _snwprintf(v, 8, L"%+d", s_cfg.eq[i]);
         VSlider(dc, x, Y, H, (s_cfg.eq[i] + 6) * 100 / 12, bands[i], s_cfg.eq[i] ? v : L"0");
         for (int k = 0; k <= 12; k++)   // 13 tap zones down the slider, top = +6
             Zone(x - 30, Y - 6 + (12 - k) * H / 12, 60, H / 12 + 1, A_EQ, i * 16 + k);
     }
-    Button(dc, 600, 160, 168, 64, L"Баланс", B_N, IC_EQ, 15, 28, A_SCREEN, S_SET_BALANCE);
-    Button(dc, 600, 236, 168, 64, L"Громкость", B_N, IC_VOL, 15, 28, A_SCREEN, S_SET_VOLUME);
-    Sep(dc, 256, 350, 512);
-    s_on[T_NAVI_MIX] = s_cfg.naviMix;   // Navitel's voice over the radio (navimix.h, NaviMixTick)
-    T(dc, 264, 372, L"Голос Навитела", 18, kText, 400);
-    T(dc, 264, 394, L"поверх радио", 14, kDim, 400);
-    Toggle(dc, 688, 358, T_NAVI_MIX);
 }
 
 static void ScrSetBalance(HDC dc)
@@ -283,6 +283,9 @@ static void ScrSetVolume(HDC dc)
         SetRow(dc, 64 + i * kSetH, rows[i][0], rows[i][1]);
         Stepper(dc, 560, 70 + i * kSetH, 200, v, 44, 20, A_SNDVOL, i * 4 + 2);   // (row * 4 + 1 down, + 3 up)
     }
+    s_on[T_NAVI_MIX] = s_cfg.naviMix;   // Navitel's voice over the radio (navimix.h, NaviMixTick)
+    SetRow(dc, 64 + 2 * kSetH, L"Голос Навитела поверх радио", L"пока Навител запущен (без штатной оболочки)", true);
+    Toggle(dc, 688, 74 + 2 * kSetH, T_NAVI_MIX);
 }
 
 // The stream monitor ("Diagnostics -> CAN / UART", "Car -> Data stream"): the port, bytes, the car's values and
