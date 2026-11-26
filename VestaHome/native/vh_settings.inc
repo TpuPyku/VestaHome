@@ -92,6 +92,8 @@ struct Cfg {
     int     svcEvery;                  // the service interval, km (typed; 0: none - service.h ServiceEveryOf)
     bool    time12;                   // the clock 12 h (else 24 h)
     int     startMax;                  // the volume at the start: no louder than this (VestaHome's own), 0 = no cap
+    bool    volAlgo;                   // the shell's "Алгоритм изменения громкости" as last set (the MCU tells not)
+    bool    naviMix;                   // Navitel's voice over the radio (navimix.h): off by default
     int     keyVol;                    // the navigation's / the keys' volume (SendRadioKeyVolData), -1 not set yet
     int     themeMode, lightMode;      // our colours and maps / the unit's backlight: 0 by the sun, 1 day, 2 night
     int     accent;                    // the accent: kAccents' index (0 Марс = the skin's own)
@@ -588,6 +590,10 @@ static void LoadCfg()
             s_cfg.time12 = CfgBool(v);
         } else if (!wcscmp(k, L"sound.startmax")) {
             s_cfg.startMax = _wtoi(v) < 0 ? 0 : _wtoi(v) > 30 ? 30 : _wtoi(v);
+        } else if (!wcscmp(k, L"sound.volalgo")) {
+            s_cfg.volAlgo = CfgBool(v);
+        } else if (!wcscmp(k, L"sound.navimix")) {
+            s_cfg.naviMix = CfgBool(v);
         } else if (!wcscmp(k, L"sound.keyvol")) {
             s_cfg.keyVol = _wtoi(v) < -1 ? -1 : _wtoi(v) > 30 ? 30 : _wtoi(v);
         } else if (!wcscmp(k, L"screen.saverfile") && v[0]) {
@@ -746,7 +752,9 @@ static void SaveCfg()
         L"wifi.ap.ssid=%s\r\nwifi.ap.pass=%s\r\nwifi.ap.auto=%d\r\n"
         L"# net.*: the USB modem (Settings -> Network): the operator (0 by the SIM, then the presets, then own), APN,\r\n"
         L"# login, password; net.auto: dial when it is in; net.phoneusb: the phone by cable (Android Auto, modem); net.phoneany: any maker's\r\n"
-        L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\nnet.phoneusb=%d\r\nnet.phoneany=%d\r\n",
+        L"net.op=%d\r\nnet.apn=%s\r\nnet.user=%s\r\nnet.pass=%s\r\nnet.auto=%d\r\nnet.phoneusb=%d\r\nnet.phoneany=%d\r\n"
+        L"# sound.volalgo: the MCU's volume algorithm (the shell's balance screen); sound.navimix: Navitel's voice over\r\n"
+        L"# the radio (IsNaviSourceCouldIn held while it runs)\r\nsound.volalgo=%d\r\nsound.navimix=%d\r\n",
         kProvKey[s_cfg.weatherProv], s_cfg.weatherKey[W_OWM], s_cfg.weatherKey[W_YANDEX], s_cfg.yaDay, s_cfg.yaCount,
         s_cfg.weatherGps, s_cfg.homeName, s_cfg.homeLat, s_cfg.homeLon, s_cfg.lastLat, s_cfg.lastLon, s_cfg.btName, s_cfg.btAutoConnect, s_cfg.btAutoAnswer, s_cfg.pbAuto,
         s_cfg.gpsPort, (unsigned)s_cfg.gpsBaud, s_cfg.gpsTime, s_cfg.tzMin, s_cfg.camAlert, s_cfg.camSound,
@@ -757,7 +765,7 @@ static void SaveCfg()
         s_cfg.btOwner == BTO_OBD ? L"obd" : L"phone", s_cfg.btPower ? 1 : 0, s_cfg.favs, s_obdAddr, s_cfg.photoDir, s_cfg.photoFile, s_cfg.photoInterval, s_cfg.photoFill,
         s_cfg.photoSlides, s_cfg.photoAutoRot,
         s_cfg.wifiApSsid, s_cfg.wifiApPass, s_cfg.wifiApAuto, s_cfg.netOp, s_cfg.netApn, s_cfg.netUser,
-        s_cfg.netPass, s_cfg.netAuto, s_cfg.phoneUsb, s_cfg.phoneAny);
+        s_cfg.netPass, s_cfg.netAuto, s_cfg.phoneUsb, s_cfg.phoneAny, s_cfg.volAlgo, s_cfg.naviMix);
     if (n < 0)
         return;
     n += RadioCacheText(text + n, 12000 - n);

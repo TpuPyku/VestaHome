@@ -295,6 +295,44 @@ static bool NaviVoice(bool on)
     return sent;
 }
 
+// Navitel's voice over the radio (navimix.h, the user's switch in Sound): IsNaviSourceCouldIn held while it runs
+static bool s_naviMix;
+
+static void NaviMixSet(bool on, const wchar_t* exe)
+{
+    if (on == s_naviMix)
+        return;
+    s_naviMix = on;
+    McuSend3("SPApi_SendRadioIsNaviSourceCouldIn", on ? 1 : 0, 0, 0);
+    VLog(L"голос Навитела поверх радио: %s%s", on ? L"вкл - " : L"выкл", on ? exe : L"");
+}
+
+// The source back to the radio while held (HU 2026-11-05: told once at Navitel's start, its prompts not heard after
+// the switch to FM): told again
+static void NaviMixAgain()
+{
+    if (!s_naviMix)
+        return;
+    McuSend3("SPApi_SendRadioIsNaviSourceCouldIn", 1, 0, 0);
+    VLog(L"голос Навитела поверх радио: снова - источник радио");
+}
+
+static void NaviMixTick()   // every 2 s
+{
+    static TaskInfo s_mixTask;   // (its own: the load log's minute keeps its sample)
+    static wchar_t s_names[TASK_PROC_MAX][40];
+    bool shell = FindWindow(NULL, L"RadioCommWindow") != NULL;
+    int at = -1;
+    if (s_cfg.naviMix && !shell) {
+        TaskSample(&s_mixTask, s_wnd);
+        int n = s_mixTask.procOk ? s_mixTask.procCount : 0;
+        for (int i = 0; i < n; i++)
+            wcscpy(s_names[i], s_mixTask.proc[i].name);
+        at = NaviMixRunning(s_names, n);
+    }
+    NaviMixSet(NaviMixHold(s_cfg.naviMix, shell, at >= 0), at >= 0 ? s_names[at] : NULL);
+}
+
 static HWAVEOUT s_beepOut;
 static WAVEHDR  s_beepHdr;
 static short    s_beep[11025 / 2];   // 2 x 120 ms at 1.2 kHz with a gap, 11 kHz mono

@@ -576,6 +576,15 @@ static void DoActionOn(const Btn& b)
             s_cfg.btVirtualDown = s_on[T_BT_VIRTUAL];
             SaveCfg();
         }
+        if (b.arg == T_VOLALGO) {   // "Алгоритм изменения громкости" (the shell's CAudioFieldDlg: VolData(2, on))
+            McuSend3("SPApi_SendRadioAudioVolData", 2, s_on[T_VOLALGO] ? 1 : 0, 0);
+            s_cfg.volAlgo = s_on[T_VOLALGO];
+            SaveCfg();
+        }
+        if (b.arg == T_NAVI_MIX) {   // Navitel's voice over the radio (NaviMixTick follows it)
+            s_cfg.naviMix = s_on[T_NAVI_MIX];
+            SaveCfg();
+        }
         if (b.arg == T_PB_AUTO) {   // the phone book at each connect (the user 2026-11-12: off by default)
             s_cfg.pbAuto = s_on[T_PB_AUTO] ? 1 : 0;
             SaveCfg();

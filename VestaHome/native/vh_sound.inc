@@ -216,7 +216,11 @@ static void ScrSetSound(HDC dc)
     }
     Button(dc, 600, 160, 168, 64, L"Баланс", B_N, IC_EQ, 15, 28, A_SCREEN, S_SET_BALANCE);
     Button(dc, 600, 236, 168, 64, L"Громкость", B_N, IC_VOL, 15, 28, A_SCREEN, S_SET_VOLUME);
-    // (loudness and the "volume algorithm" switches removed: on the unit they changed nothing, HU sheet 30 p. 4)
+    Sep(dc, 256, 350, 512);
+    s_on[T_NAVI_MIX] = s_cfg.naviMix;   // Navitel's voice over the radio (navimix.h, NaviMixTick)
+    T(dc, 264, 372, L"Голос Навитела", 18, kText, 400);
+    T(dc, 264, 394, L"поверх радио", 14, kDim, 400);
+    Toggle(dc, 688, 358, T_NAVI_MIX);
 }
 
 static void ScrSetBalance(HDC dc)
@@ -252,6 +256,12 @@ static void ScrSetBalance(HDC dc)
     T(dc, 504, 184, L"Фейдер", 19, kText, 700);
     Stepper(dc, 504, 196, 256, f, 48, 20, A_FADE);
     Button(dc, 504, 280, 256, 48, L"В центр", B_N, IC_NONE, 16, 0, A_BALCENTER);
+    // the shell's "Алгоритм изменения громкости" (CAudioFieldDlg, Ghidra 2026-11-10): SPApi_SendRadioAudioVolData(2,
+    // on); the MCU's own (louder with the speed, users say 2026-11-26). Back 26.11 (removed 12.11: tried standing).
+    s_on[T_VOLALGO] = s_cfg.volAlgo;
+    T(dc, 504, 362, L"Громче с ростом", 16, kText, 400);
+    T(dc, 504, 384, L"скорости", 16, kText, 400);
+    Toggle(dc, 688, 350, T_VOLALGO);
 }
 
 // Volumes (the user 2026-10-22, out of the demo) as the stock shell's CAudioVolumeDlg (Ghidra 2026-10-22): the

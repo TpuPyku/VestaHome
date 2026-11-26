@@ -64,6 +64,7 @@
 #include "mdm.h"       // VestaModem: the operators' presets (Settings -> Network)
 #include "saverink.h"   // the screen saver's text dimmed at night (vh_diag.inc)
 #include "vhseen.h"     // VestaHome seen (drawn) with another program's small window in front
+#include "navimix.h"    // Navitel's voice over the radio, as navione
 #include "uarttap.h"   // COM2 listened to while the logs are on (vh_diag.inc)
 #include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
@@ -187,7 +188,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_BT_VIRTUAL, T_PHONE_USB, T_PHONE_ANY, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_BT_VIRTUAL, T_PHONE_USB, T_PHONE_ANY, T_VOLALGO, T_NAVI_MIX, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
@@ -846,6 +847,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             PairTick();
             BtOwnerTick();
             ClockWatchTick();
+            static int s_mixTicks;
+            if (++s_mixTicks % 2 == 0)
+                NaviMixTick();
             NetTimeTick();
             TripTick();
             {   // the trip widget: again when its numbers changed (a tenth of a km, a minute)
@@ -936,6 +940,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 VLog(L"AUX: MCU сказано «штекер вставлен» (для круга MODE)");
             }
             if (src != s_srcSeen) {
+                if (s_srcSeen != -2 && src == 0)
+                    NaviMixAgain();
                 int aux = LearnSource(s_auxSrc, s_auxAsk ? now - s_auxAsk : 0xFFFFFFFF, s_srcSeen, src);
                 if (aux != s_auxSrc) {
                     VLog(L"источник: AUX у MCU - номер %d", aux);
@@ -1600,6 +1606,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             if (s_voice || s_plugVoice)
                 NaviVoice(false);
+            NaviMixSet(false, NULL);
             if (s_rvcWnd)
                 RvcHide();
             EXIT_STEP(L"видео", VideoStop());
