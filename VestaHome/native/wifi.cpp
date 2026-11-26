@@ -615,6 +615,8 @@ static bool BeaconWpa2Psk(const wchar_t* ssid);
 #endif
 
 // A network joined as the shell joins it (see DkListFn); false: not in sight or refused (why: the message)
+static bool s_dkUnlisted;   // the last DkJoin found the network not yet in the SDK's list (AutoJoinDue)
+
 static bool DkJoin(const wchar_t* ssid, const wchar_t* pass, wchar_t* why, int cap)
 {
     int n = kDkSeen;
@@ -624,6 +626,7 @@ static bool DkJoin(const wchar_t* ssid, const wchar_t* pass, wchar_t* why, int c
     for (int i = 0; hr >= 0 && i < n && i < kDkSeen && !ap; i++)
         if (!wcsncmp((const wchar_t*)(list + i * DKE_SIZE + DKE_SSID), ssid, 33))
             ap = list + i * DKE_SIZE + DKE_AP;
+    s_dkUnlisted = !ap;
     if (!ap) {
         Log(L"wifi: SDK: сети %s нет в списке (0x%08X, сетей %d)", ssid, (unsigned)hr, n);
         _snwprintf(why, cap, L"сети %s не видно", ssid);
@@ -645,9 +648,12 @@ static bool DkJoin(const wchar_t* ssid, const wchar_t* pass, wchar_t* why, int c
     LONG drop = s_dkDrop(ssid);   // (a stale one with an older password)
     LONG add = s_dkAdd(ap, sec, 0);
     LONG join = add >= 0 ? s_dkJoin(ssid) : add;
-    Log(L"wifi: SDK: %s (защита %u/%u/%u) - Remove 0x%08X, Add 0x%08X, Connect 0x%08X", ssid,
-        *(DWORD*)(ap + DKAP_AUTH), *(DWORD*)(ap + DKAP_CIPHER), *(DWORD*)(ap + DKAP_PRIV), (unsigned)drop,
-        (unsigned)add, (unsigned)join);
+    int plen = (int)wcslen(pass), wide = 0;   // (the password's shape, never itself: the user 2026-11-26, 9 characters
+    for (int i = 0; i < plen; i++)             // did not join, 8 did - WifiDKCore takes both alike)
+        wide += pass[i] > 0x7E || pass[i] < 0x20;
+    Log(L"wifi: SDK: %s (защита %u/%u/%u, пароль %d симв., не латиница/цифры %d) - Remove 0x%08X, Add 0x%08X, "
+        L"Connect 0x%08X", ssid, *(DWORD*)(ap + DKAP_AUTH), *(DWORD*)(ap + DKAP_CIPHER), *(DWORD*)(ap + DKAP_PRIV),
+        plen, wide, (unsigned)drop, (unsigned)add, (unsigned)join);
     free(list);
     if (join < 0)
         _snwprintf(why, cap, L"%s: отказ 0x%08X", ssid, (unsigned)join);
@@ -1314,7 +1320,7 @@ static DWORD WINAPI WifiThread(LPVOID)
             }
         }
         // not connected: the known networks in sight go to WZC (the registry was reset on boot)
-        if (!connected && !conn && seen && !s_quiet && s_dkAdd && (!lastAuto || GetTickCount() - lastAuto > 60000)) {
+        if (!connected && !conn && seen && !s_quiet && s_dkAdd && AutoJoinDue(lastAuto, GetTickCount(), s_dkUnlisted)) {
             wchar_t pass[64], why[96];   // (the networks are strongest first: the first known one)
             for (int k = 0; k < w.count; k++)
                 if (w.nets[k].known && IsKnown(w.nets[k].ssid, pass)) {
