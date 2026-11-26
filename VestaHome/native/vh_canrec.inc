@@ -56,11 +56,31 @@ static void CanRecPanelBack()
     }
 }
 
+// The panel ended and gone (its handle signalled within 3 s). The shell and VestaHome itself answer
+// TerminateProcess 170 while their threads sit in drivers' calls (PROJECT.md) - the panel may too: then false,
+// it keeps COM3 and runs on, so it is not started a second time.
+static bool CanRecEndPanel()
+{
+    HANDLE h = OpenProcess(0, FALSE, s_canRecPid);
+    if (!h) {
+        VLog(L"COM3 панели: процесс панели не открыть, ошибка %lu", GetLastError());
+        return false;
+    }
+    BOOL ok = TerminateProcess(h, 1);
+    DWORD err = ok ? 0 : GetLastError();
+    bool gone = WaitForSingleObject(h, 3000) == WAIT_OBJECT_0;
+    CloseHandle(h);
+    VLog(L"COM3 панели: TerminateProcess %s (ошибка %lu), процесс %s", ok ? L"да" : L"нет", err,
+         gone ? L"завершился" : L"остался");
+    return gone;
+}
+
 static DWORD WINAPI CanRecThread(LPVOID)
 {
-    if (s_canRecPid) {
-        TaskKill(s_canRecPid, L"can_panel.exe");
-        Sleep(1000);
+    if (s_canRecPid && !CanRecEndPanel()) {
+        PostMessage(s_wnd, WM_APP_CANREC, 0, 0);   // the panel runs on, COM3 is its: nothing recorded, no restart
+        InterlockedExchange((LONG*)&s_canRecOn, 0);
+        return 0;
     }
     HANDLE com = CanRecOpenCom3();
     HANDLE f = com == INVALID_HANDLE_VALUE ? INVALID_HANDLE_VALUE
