@@ -84,8 +84,18 @@ static void MarkChecks()
     Check(!BootMarkFeed(&s, z, 4) && !BootMarkFeed(&s, "INSTVER:", 8), "zeros break the mark");
 }
 
+static void SessionChecks()
+{
+    Check(SessionStartWhat(true, false) == START_INIT,
+          "the CAN panel's firmware (Windows' Init.exe): Init.exe - it starts the shell and the panel");
+    Check(SessionStartWhat(false, false) == START_SHELL, "the stock firmware: the shell");
+    Check(SessionStartWhat(true, true) == START_SHELL, "the canrec job: the shell alone, the panel left off (COM3 free)");
+    Check(SessionStartWhat(false, true) == START_SHELL, "canrec without Init.exe: the shell");
+}
+
 int main()
 {
+    SessionChecks();
     ArmChecks();
     NoJobChecks();
     StubOnChecks();
