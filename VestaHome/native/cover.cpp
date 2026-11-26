@@ -139,10 +139,11 @@ static bool FrameBody(int major, int ff, unsigned char** b, int* bn)
     return major == 4 ? FrameBody24(ff, b, bn) : major == 3 ? FrameBody23(ff, b, bn) : *bn > 0;
 }
 
-// The tag's frames' end (its unsynchronisation of v2.2 / v2.3 undone in place).
-static int TagEnd(unsigned char* tag)
+// The tag's frames' end within its n bytes read (its unsynchronisation of v2.2 / v2.3 undone in place).
+static int TagEnd(unsigned char* tag, int n)
 {
     int end = 10 + Syncsafe(tag + 6);
+    end = end < n ? end : n;
     return tag[3] < 4 && (tag[5] & 0x80) ? 10 + Unsync(tag + 10, end - 10) : end;
 }
 
@@ -175,7 +176,7 @@ bool Id3Picture(unsigned char* tag, int n, int* off, int* len)
     int size = Id3TagSize(tag, n);
     if (!size || size > n)
         return false;
-    int major = tag[3], end = TagEnd(tag), head = major == 2 ? 6 : 10, found = 0;   // 1 a picture, 2 the front cover
+    int major = tag[3], end = TagEnd(tag, n), head = major == 2 ? 6 : 10, found = 0;   // 1 a picture, 2 the front cover
     for (int k = FramesStart(tag, end, major), fs; found < 2 && (fs = NextFrame(tag, k, end, head)) > 0;) {
         int type, po, pl;
         if (FramePic(tag, k, fs, &type, &po, &pl) && (!found || type == 3)) {
@@ -186,6 +187,48 @@ bool Id3Picture(unsigned char* tag, int n, int* off, int* len)
         k += head + fs;
     }
     return found > 0;
+}
+
+// ---- the texts
+
+// The field a text frame fills (0 title, 1 artist, 2 album, 3 the year), -1 another frame.
+static int TextField(const unsigned char* id, bool v22)
+{
+    static const char* const ids[] = { "TIT2", "TPE1", "TALB", "TYER", "TDRC" };
+    static const char* const ids22[] = { "TT2", "TP1", "TAL", "TYE" };
+    for (int i = 0; i < 5; i++)
+        if (v22 ? i < 4 && !memcmp(id, ids22[i], 3) : !memcmp(id, ids[i], 4))
+            return i < 4 ? i : 3;
+    return -1;
+}
+
+// The frame at tag + k (size fs) into its field of t, when it is a text one and that field is still empty.
+static bool FrameText(unsigned char* tag, int k, int fs, TagTexts* t)
+{
+    int major = tag[3];
+    bool v22 = major == 2;
+    wchar_t* dst[4] = { t->title, t->artist, t->album, t->year };
+    const int caps[4] = { TAG_CAP(t->title), TAG_CAP(t->artist), TAG_CAP(t->album), TAG_CAP(t->year) };
+    int f = TextField(tag + k, v22);
+    unsigned char* b = tag + k + (v22 ? 6 : 10);
+    int bn = fs;
+    if (f < 0 || dst[f][0] || !FrameBody(major, v22 ? 0 : tag[k + 9], &b, &bn))
+        return false;
+    TagDecode(b + 1, bn - 1, b[0], dst[f], caps[f]);
+    if (f == 3)
+        dst[f][4] = 0;   // (TDRC: "2019-05-01")
+    return dst[f][0] != 0;
+}
+
+bool Id3Texts(unsigned char* tag, int n, TagTexts* t)
+{
+    if (!Id3TagSize(tag, n))
+        return false;
+    int major = tag[3], end = TagEnd(tag, n), head = major == 2 ? 6 : 10;
+    bool any = false;
+    for (int k = FramesStart(tag, end, major), fs; (fs = NextFrame(tag, k, end, head)) > 0; k += head + fs)
+        any = FrameText(tag, k, fs, t) || any;
+    return any;
 }
 
 // ---- the folder's picture

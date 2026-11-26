@@ -220,9 +220,47 @@ static void MusicOpenDir(const wchar_t* dir)
     s_musCount = s_musDir[0] ? ReadMusicDir(s_musDir, s_mus, kMusMax, true) : ReadVolumes(s_mus);
 }
 
+// The track's own ID3 texts (v2, then v1 for what v2 lacks), their one-byte text 1251 or 866 as the encoding byte
+// says (the user 2026-11-26: the stock shell shows them, ours did not - the tags library gives them as Latin-1). Only
+// the tag's head read: a big picture before the texts leaves them to the tags library.
+enum { kTagHeadMax = 256 * 1024 };
+
+static void TagsOfFile(const wchar_t* path, TagTexts* t)
+{
+    HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return;
+    unsigned char head[10], v1[128];
+    DWORD got = 0;
+    int size = ReadFile(f, head, 10, &got, NULL) ? Id3TagSize(head, (int)got) : 0;
+    int n = size < kTagHeadMax ? size : kTagHeadMax;
+    unsigned char* tag = n > 10 ? (unsigned char*)malloc(n) : NULL;
+    if (tag) {
+        memcpy(tag, head, 10);
+        if (ReadFile(f, tag + 10, n - 10, &got, NULL))
+            Id3Texts(tag, 10 + (int)got, t);
+        free(tag);
+    }
+    if (SetFilePointer(f, -128, NULL, FILE_END) != 0xFFFFFFFF && ReadFile(f, v1, 128, &got, NULL) && got == 128)
+        TagV1(v1, t);
+    CloseHandle(f);
+}
+
+static void TagOwn(wchar_t* dst, const wchar_t* own)   // ours over the tags library's
+{
+    if (own[0]) {
+        wcsncpy(dst, own, 95);
+        dst[95] = 0;
+    }
+}
+
 static void PlayerReadTags()
 {
     s_tTitle[0] = s_tArtist[0] = s_tAlbum[0] = 0;
+    TagTexts own;
+    memset(&own, 0, sizeof(own));
+    if (s_plCur >= 0)
+        TagsOfFile(s_pl[s_plCur], &own);
     if (s_bass.tags && s_chan) {
         const char* t = s_bass.tags(s_chan, "%UTF8(%TITL)");
         if (t && *t)
@@ -237,6 +275,11 @@ static void PlayerReadTags()
         TagText1251(s_tArtist);
         TagText1251(s_tAlbum);
     }
+    TagOwn(s_tTitle, own.title);
+    TagOwn(s_tArtist, own.artist);
+    if (own.album[0] || own.year[0])   // (as the tags library's "%ALBM · %YEAR")
+        _snwprintf(s_tAlbum, 96, L"%s%s%s", own.album, own.album[0] && own.year[0] ? L" · " : L"", own.year);
+    s_tAlbum[95] = 0;
     if (!s_tTitle[0] && s_plCur >= 0) {   // the file name without its extension (and its folders, "ИГРАТЬ ВСЁ")
         const wchar_t* fn = wcsrchr(s_pl[s_plCur], L'\\');
         wcsncpy(s_tTitle, fn ? fn + 1 : s_pl[s_plCur], 95);

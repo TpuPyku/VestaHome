@@ -82,7 +82,7 @@
 #include "stb_image.h"
 #include "photo.h"
 #include "musdir.h"
-#include "tagtext.h"   // tags in Windows-1251 read as Latin-1
+#include "tagtext.h"   // tags: one-byte text 1251 / 866
 #include "cardpic.h"   // the skin's card picture: the mask, the pixel, the blend
 #include "camlimit.h"  // a speed camera's limit: fillers (5, 160) are none
 #include "slide.h"     // a page sliding over the still background
