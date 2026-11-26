@@ -110,6 +110,7 @@ static bool RadioLogoArt(int x, int y, int s, int rad);
 static void McuKey(int code, bool ext);
 static void MainMenuKey(int key);   // (vh_sources.inc: "back" to the MCU's main menu first)
 static void RadioPreset(int i);
+static bool  s_listOpened;   // the list was open: back on the radio page the MCU tells its presets again (0x30)
 static bool McuSend2(const char* name, int a, int b);
 static bool McuSend3(const char* name, int a, int b, int c);
 static bool VolGet(int* vol, int* mute, int* src);
@@ -247,7 +248,10 @@ static void ScrRadio(HDC dc)
             s_radioPage = BandPage(t.band);
         else if (t.cur >= 0 && t.cur < 24)
             s_radioPage = t.cur / 8;
-        if (!t.f10 || !t.presets || !s_tunLive) {
+        // after the list (the user 2026-11-26: back from it the presets showed other stations, after the media and back
+        // the right ones) - the MCU tells them again
+        if (!t.f10 || !t.presets || !s_tunLive || s_listOpened) {
+            s_listOpened = false;
             McuKey(0x30, false);
             if (!s_tunLive)
                 s_radioAsk = GetTickCount();
@@ -483,6 +487,7 @@ static void ScrRadioList(HDC dc)
         s_seen = s_screenTick;
         McuKey(0x3C, false);
         s_listKeyTick = GetTickCount();
+        s_listOpened = true;
     }
     Tuner t;
     TunerGet(&t);
