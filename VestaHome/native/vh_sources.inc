@@ -264,7 +264,7 @@ static void VidTick()
         s_barTick = GetTickCount();
         bar = true;
     }
-    if (IsWindowVisible(s_wnd) && GetForegroundWindow() == s_wnd) {
+    if (VhSeen()) {
         if (redraw)
             Redraw();
         else if (bar && !s_vidFull)

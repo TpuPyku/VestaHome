@@ -903,7 +903,7 @@ static void PlugScreenWatch()
         if (!g || !g->image || !g->view)
             continue;
         RECT r;
-        bool shown = s_screen == S_HOME && IsWindowVisible(s_wnd) && GetForegroundWindow() == s_wnd &&
+        bool shown = s_screen == S_HOME && VhSeen() &&
                      WgShown(WG_COUNT + i) && HomeRect(WG_COUNT + i, &r);
         if (shown != g->shown) {
             g->shown = shown;

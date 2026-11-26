@@ -63,6 +63,7 @@
 #include "vfavs.h"     // VestaCore: OSMapsCE's favourite places (its map widget before it runs)
 #include "mdm.h"       // VestaModem: the operators' presets (Settings -> Network)
 #include "saverink.h"   // the screen saver's text dimmed at night (vh_diag.inc)
+#include "vhseen.h"     // VestaHome seen (drawn) with another program's small window in front
 #include "uarttap.h"   // COM2 listened to while the logs are on (vh_diag.inc)
 #include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
@@ -435,6 +436,29 @@ static void SupportInit()
 static void EqAttach(DWORD chan, int which);
 static void EqFineDraw(HDC dc);
 static void PlugEqTell();
+
+// VestaHome is what the user sees (vhseen.h): its live parts are drawn. A window of another program in front while
+// VestaHome is shown is logged once (which one - HU 2026-11-26, the CAN panel's unit: nothing drawn for 7 minutes).
+static bool VhSeen()
+{
+    HWND fg = GetForegroundWindow();
+    RECT r = { 0, 0, 0, 0 };
+    bool fgShown = fg && IsWindowVisible(fg) && GetWindowRect(fg, &r);
+    long area = (long)(r.right - r.left) * (r.bottom - r.top);
+    bool shown = IsWindowVisible(s_wnd) != 0, seen = VhSeenBy(shown, fg == s_wnd, fgShown, area, 800L * 480);
+    static HWND s_fgLogged;
+    if (shown && fg && fg != s_wnd && fg != s_fgLogged) {
+        s_fgLogged = fg;
+        wchar_t cls[48] = L"";   // (not its title: a call's window may show a number - the logs are sent to us)
+        GetClassName(fg, cls, 48);
+        DWORD pid = 0;
+        GetWindowThreadProcessId(fg, &pid);
+        VLog(L"впереди чужое окно: класс «%s», процесс %08X, %s %dx%d в %d,%d - VestaHome %s", cls,
+             (unsigned)pid, fgShown ? L"видно" : L"скрыто", (int)(r.right - r.left), (int)(r.bottom - r.top),
+             (int)r.left, (int)r.top, seen ? L"рисуется" : L"не рисуется");
+    }
+    return seen;
+}
 #include "vh_draw.inc"
 #include "vh_screens.inc"
 #include "vh_diag.inc"
@@ -673,7 +697,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             return 0;
         }
         if (wp == TIMER_MARQ) {   // the running lines of the radio screen: only its text strip is drawn again
-            if (s_screen != S_RADIO || !s_marqOn || !IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd) {
+            if (s_screen != S_RADIO || !s_marqOn || !VhSeen()) {
                 KillTimer(hwnd, TIMER_MARQ);
                 return 0;
             }
@@ -1030,18 +1054,17 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_mediaMask = m;
                 UserWidgetsScan();   // the card came or went: its widgets
                 PluginsStart();      // (and its add-ons: the ones running are left alone)
-                if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
+                if (VhSeen())
                     Redraw();
             }
         }
         if (s_hvacShowTick && GetTickCount() - s_hvacShowTick > 4000) {   // the climate plate goes away
             s_hvacShowTick = 0;
-            if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
+            if (VhSeen())
                 Redraw();
         }
         // the task manager: a new sample every 2 s, only while it is in front
-        bool tasks = s_screen == S_TASKS && (++s_taskTicks & 1) == 0 && IsWindowVisible(hwnd) &&
-                     GetForegroundWindow() == hwnd;
+        bool tasks = s_screen == S_TASKS && (++s_taskTicks & 1) == 0 && VhSeen();
         if (tasks)
             TaskSample(&s_task, hwnd);
         // only what changed, only when in front: the whole frame for a new minute (the clock, the date) and the
@@ -1049,7 +1072,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         SYSTEMTIME t;
         GetLocalTime(&t);
         RECT wr;
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
+        if (VhSeen()) {
             if (t.wMinute != s_drawnMinute || tasks || s_screen == S_CALL || s_screen == S_TEST_CAN ||
                 s_screen == S_TEST_MCU)   // (Wi-Fi: not each second - WM_APP_WIFI comes with every change, sheet 26)
                 Redraw();
@@ -1098,7 +1121,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             else   // (a play again - MODE to the media, the play key - starts the track ended)
                 VLog(L"плеер: трек кончился, источник %d не наш - следующий не начинаю", src);
         }
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
+        if (VhSeen())
             Redraw();
         return 0;
     case WM_APP_UWG:   // a widget's url fetched: its data read at the next second
@@ -1128,13 +1151,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_APP_NETCAT:   // the radio catalogue's answer
         OnNetCat((NcJob*)lp);
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd &&
+        if (VhSeen() &&
             (s_screen == S_NETCAT || s_screen == S_NETCATS || s_screen == S_NETRADIO_LIST || s_screen == S_NETRADIO))
             Redraw();
         return 0;
     case WM_APP_NET:   // the internet radio: connected, failed, broken, a new song title
         OnNetMessage(wp, lp);
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd) {
+        if (VhSeen()) {
             RECT wr;
             if (s_screen == S_NETRADIO)
                 RedrawArea(272, 130, 800, 390);   // the station's lines and its buttons
@@ -1150,7 +1173,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         WifiGet(&w);
         bool mark = w.state != s_lastState;
         s_lastState = w.state;
-        if (!IsWindowVisible(hwnd) || GetForegroundWindow() != hwnd)
+        if (!VhSeen())
             return 0;
         if (s_screen == S_SET_WIFI || s_screen == S_WIFI_SAVED)
             Redraw();
@@ -1297,7 +1320,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         Hvac h;
         HvacGet(&h);
         s_hvacShowTick = GetTickCount();
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd)
+        if (VhSeen())
             Redraw();
         return 0;
     }
@@ -1327,7 +1350,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         bool spd = s_screen == S_HOME && HomeRect(WG_SPEED, &sr);
         bool shown = spd || s_screen == S_WSET_SPEED || s_screen == S_SET_CAR ||
                      s_screen == S_TEST_CAN || s_screen == S_INFO;
-        if (IsWindowVisible(hwnd) && GetForegroundWindow() == hwnd && (cam || (shown && GetTickCount() - s_drawTick >= 1000))) {
+        if (VhSeen() && (cam || (shown && GetTickCount() - s_drawTick >= 1000))) {
             s_drawTick = GetTickCount();
             if (!cam && spd) {   // the speed widget and the top bar's marks
                 RedrawArea(sr.left, sr.top, sr.right, sr.bottom);
