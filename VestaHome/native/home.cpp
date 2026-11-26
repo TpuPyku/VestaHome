@@ -88,6 +88,7 @@
 #include "clockfix.h"  // the date from the net's Date header (the MCU's clock: VestaStub)
 #include "placepick.h" // where the unit is: the fix, the last place, the home point
 #include "skinline.h"  // a line of skin.ini / user_skin.ini
+#include "ttfname.h"   // a .ttf's family name (user_skin.ini [fonts])
 #include "../../VHCheck/native/pefile.h"   // FwFileVersion: the shell's SW number from its own string
 #include "wglayout.h"  // the main screen's widgets in their places
 #include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)

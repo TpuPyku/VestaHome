@@ -833,14 +833,58 @@ static bool CardPic(int x, int y, int w, int h, int rx)
 // no registry - the unit resets it); not there or not taken - the unit's Tahoma.
 static const wchar_t* s_face = L"Tahoma";
 
+// The family name inside a .ttf (ttfname.h): its directory, then the name table alone (fonts run to megabytes).
+static bool FontFileFamily(const wchar_t* path, wchar_t* out, int cap)
+{
+    HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return false;
+    unsigned char dir[12 + 16 * 64];
+    DWORD got = 0;
+    unsigned off, len;
+    bool ok = false;
+    if (ReadFile(h, dir, sizeof(dir), &got, NULL) && TtfTable(dir, (int)got, "name", &off, &len) && len <= 65536) {
+        unsigned char* t = (unsigned char*)malloc(len);
+        DWORD n = 0;
+        ok = t && SetFilePointer(h, off, NULL, FILE_BEGIN) == off && ReadFile(h, t, len, &n, NULL) && n == len
+             && TtfFamily(t, (int)len, out, cap);
+        free(t);
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+// user_skin.ini [fonts] (the user 2026-11-26: "face" written as the file's name - GDI took another font silently):
+// the face is the family named inside the regular file (TtfFace); a face that differs, a bold of another family, a
+// file not taken - said in the log. True - the user's face is set.
+static bool UserFontLoad()
+{
+    if (!s_userFont[0][0])
+        return false;
+    if (AddFontResource(s_userFont[0]) <= 0) {
+        VLog(L"шрифт: %s не загрузился (нужен TrueType .ttf)", s_userFont[0]);
+        return false;
+    }
+    wchar_t reg[48] = L"", bold[48] = L"", face[48];
+    FontFileFamily(s_userFont[0], reg, 48);
+    if (s_userFont[1][0] && AddFontResource(s_userFont[1]) > 0)
+        FontFileFamily(s_userFont[1], bold, 48);
+    int say = TtfFace(s_userFace, reg, bold, face, 48);
+    if (say & TTF_FACE_DIFFERS)
+        VLog(L"шрифт: в user_skin.ini face = «%s», в файле «%s» — взято из файла", s_userFace, reg);
+    if (say & TTF_BOLD_OTHER)
+        VLog(L"шрифт: жирный файл другого семейства («%s») — жирный текст будет из обычного", bold);
+    wcscpy(s_userFace, face);
+    if (!s_userFace[0])
+        return false;
+    s_face = s_userFace;
+    return true;
+}
+
 static int FontsLoad()   // the fonts taken (2 = both: the face is ours)
 {
-    if (s_userFace[0] && s_userFont[0][0] && AddFontResource(s_userFont[0]) > 0) {   // user_skin.ini [fonts]
-        if (s_userFont[1][0])
-            AddFontResource(s_userFont[1]);
-        s_face = s_userFace;
+    if (UserFontLoad())
         return 2;
-    }
     static const wchar_t* files[3] = { L"GolosText-Regular.ttf", L"GolosText-Bold.ttf", L"OFL.txt" };
     int ok = 0;
     for (int i = 0; i < 2; i++) {
