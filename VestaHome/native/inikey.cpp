@@ -45,18 +45,25 @@ static bool NeedsBreak(const char* in, const char* p, const char* end)
     return p == end && p != in && end[-1] != '\n';
 }
 
-static bool PutLine(char* out, int cap, int* n, const char* key, int kl, const char* val)   // "key = val"
+static bool PutLine(char* out, int cap, int* n, const char* key, int kl, const char* sep, const char* val)
 {
-    return Append(out, cap, n, key, kl) && Append(out, cap, n, " = ", 3) && Append(out, cap, n, val, (int)strlen(val));
+    return Append(out, cap, n, key, kl) && Append(out, cap, n, sep, (int)strlen(sep)) &&
+           Append(out, cap, n, val, (int)strlen(val));
 }
 
 int IniPut(const char* in, int len, const char* key, const char* val, char* out, int cap, bool* changed)
+{
+    return IniPutSep(in, len, key, " = ", val, out, cap, changed);
+}
+
+int IniPutSep(const char* in, int len, const char* key, const char* sep, const char* val, char* out, int cap,
+              bool* changed)
 {
     int kl = (int)strlen(key), n = 0;
     const char *end = in + len, *p = FindKey(in, end, key, kl), *le = LineEnd(p, end);
     bool add = p == end;
     bool ok = Append(out, cap, &n, in, (int)(p - in)) &&
-              (!NeedsBreak(in, p, end) || Append(out, cap, &n, "\r\n", 2)) && PutLine(out, cap, &n, key, kl, val) &&
+              (!NeedsBreak(in, p, end) || Append(out, cap, &n, "\r\n", 2)) && PutLine(out, cap, &n, key, kl, sep, val) &&
               (add ? Append(out, cap, &n, "\r\n", 2) : Append(out, cap, &n, le, (int)(end - le)));
     if (!ok)
         return -1;

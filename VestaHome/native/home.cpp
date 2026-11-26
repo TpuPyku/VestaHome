@@ -633,6 +633,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (WeatherWanted())
             WeatherRefresh();
         BuildButtons();
+        CanPanelOwnOff();
         SetTimer(hwnd, 1, 1000, NULL);
         CanRecAtStart();   // (branch canrec: this boot left the CAN panel off for its COM3)
         return 0;

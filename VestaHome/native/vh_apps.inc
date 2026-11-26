@@ -367,6 +367,49 @@ static void Remember(const wchar_t* path, HANDLE proc, DWORD pid)
     s_running[k].pid = pid;
 }
 
+// An ini file's key set (IniPutSep) and the file written back when that changed: 1 written, 0 already so, -1 not
+// read or not written.
+static int IniFilePut(const wchar_t* path, const char* key, const char* sep, const char* val)
+{
+    DWORD n = 0;
+    char* in = ReadAll(path, &n);
+    char* out = in ? (char*)malloc(n + 64) : NULL;
+    bool changed = false;
+    int m = out ? IniPutSep(in, (int)n, key, sep, val, out, (int)n + 64, &changed) : -1;
+    int r = m < 0 ? -1 : 0;
+    if (m > 0 && changed) {
+        HANDLE h = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        DWORD put = 0;
+        bool ok = h != INVALID_HANDLE_VALUE && WriteFile(h, out, m, &put, NULL) && put == (DWORD)m;
+        if (h != INVALID_HANDLE_VALUE)
+            CloseHandle(h);
+        r = ok ? 1 : -1;
+    }
+    free(out);
+    free(in);
+    return r;
+}
+
+// The CAN panel's day/night and clock off - VestaHome keeps them (the user 2026-11-26): the panel sent the MCU its own
+// day/night key by the side lights and set the clock at each GPS second in its own zone (Ghidra 26.11, PROJECT.md).
+// At its start it reads can_panel.ini, then setting_can.ini (written by its SettingCan.exe; the later wins): both
+// set to 0 at each start of ours, the next boot takes it.
+static void CanPanelOwnOff()
+{
+    static const wchar_t* files[2] = { L"\\ResidentFlash\\CAN\\SETTINGS\\can_panel.ini",
+                                       L"\\ResidentFlash\\CAN\\SETTINGS\\setting_can.ini" };
+    static const char* keys[2] = { "NightMode", "TimeSync" };
+    if (!Exists(L"\\ResidentFlash\\CAN\\can_panel.exe"))
+        return;
+    for (int f = 0; f < 2; f++)
+        for (int k = 0; k < 2 && Exists(files[f]); k++) {
+            int r = IniFilePut(files[f], keys[k], "=", "0");
+            if (r)
+                VLog(L"CAN-панель: %S=0 в %s - %s (со следующей загрузки)", keys[k], files[f],
+                     r > 0 ? L"записано" : L"не записать");
+        }
+}
+
 // Navitel sets the system clock from its GPS time (Ghidra 2026-11-05: settings FixupClock, on by default, at most
 // each 10 s) and dates that time in its GPSEpoch, 1 by default = 1999-2019: on 05.11.2026 the unit's clock went to
 // 22.03.2007 every 10 s while Navitel ran. Its settings get GPSEpoch = 2 (2019-2038) before it starts (it reads
@@ -386,21 +429,9 @@ static void NavitelEpochIn(const wchar_t* dir)
         return;
     do {
         _snwprintf(p, MAX_PATH, L"%s\\Userdata\\%s", dir, fd.cFileName);
-        DWORD n = 0;
-        char* in = ReadAll(p, &n);
-        char* out = in ? (char*)malloc(n + 64) : NULL;
-        bool changed = false;
-        int m = out ? IniPut(in, (int)n, "GPSEpoch", "2", out, (int)n + 64, &changed) : -1;
-        if (m > 0 && changed) {
-            HANDLE h = CreateFile(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-            DWORD put = 0;
-            bool ok = h != INVALID_HANDLE_VALUE && WriteFile(h, out, m, &put, NULL) && put == (DWORD)m;
-            if (h != INVALID_HANDLE_VALUE)
-                CloseHandle(h);
-            VLog(L"навител: GPSEpoch = 2 в %s - %s", p, ok ? L"записано" : L"не записать");
-        }
-        free(out);
-        free(in);
+        int r = IniFilePut(p, "GPSEpoch", " = ", "2");
+        if (r)
+            VLog(L"навител: GPSEpoch = 2 в %s - %s", p, r > 0 ? L"записано" : L"не записать");
     } while (FindNextFile(f, &fd));
     FindClose(f);
 }
