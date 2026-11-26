@@ -470,7 +470,8 @@ static void RadioKey(int arg)
 // (SPApi_SendListItemControl(0, row)); "Автопоиск" sweeps the band, then the list is asked for again.
 static Scroll s_rlist = { 0, 0, 4 * kRowStep };   // the finger scrolls it (HU 2026-11-11, sheet 29 p. 13: not pages)
 static DWORD s_scanStart;   // the search started (0 = none)
-static int   s_fillI = -1;  // "В пресеты": the station being written (-1 = none), its step, when it began
+static DWORD s_listKeyTick;  // the list key 0x3C sent last (the log of preset changes)
+static int   s_fillI = -1;  // "Сохранить список" (was "В пресеты"): the station being written (-1 = none), its step, when it began
 static int   s_fillStep, s_fillN, s_fillOk;
 static DWORD s_fillTick, s_fillArm;   // (s_fillArm: the first tap, the second within 4 s writes)
 
@@ -481,6 +482,7 @@ static void ScrRadioList(HDC dc)
     if (s_seen != s_screenTick) {
         s_seen = s_screenTick;
         McuKey(0x3C, false);
+        s_listKeyTick = GetTickCount();
     }
     Tuner t;
     TunerGet(&t);
@@ -520,7 +522,7 @@ static void ScrRadioList(HDC dc)
     if (s_fillI >= 0)
         _snwprintf(fl, 24, L"Пишу %d из %d", s_fillI + 1, s_fillN);
     else
-        wcscpy(fl, armed ? L"Заменить пресеты?" : L"В пресеты");
+        wcscpy(fl, armed ? L"Заменить пресеты?" : L"Сохранить список");
     bool can = n > 0 && !scanning;
     Button(dc, 632, 148, 152, 72, fl, s_fillI >= 0 || armed ? B_SEL : can ? B_N : B_DIS, IC_NONE, 13, 0,
            can || s_fillI >= 0 ? A_RFILL : A_NONE);
@@ -550,12 +552,14 @@ static void RadioScanTick()
         s_scanStart = 0;
         s_rlist.pos = 0;
         McuKey(0x3C, false);
+        s_listKeyTick = GetTickCount();
     }
 }
 
-// "В пресеты" (the user 2026-10-24): the list's stations one by one into the presets of the same numbers (FM: up to
-// 24 = FM1..FM3; УКВ: 8) - each tuned from the list (0, row, 0), then saved where it plays (1, n, 1), as a long press
-// does. A step waits for the MCU: the frequency, then the preset's new value (or a timeout - noted in the log).
+// "Сохранить список" (the user 2026-10-24; "В пресеты" until 2026-11-26): the list's stations one by one into
+// the presets of the same numbers (FM: up to 24 = FM1..FM3; УКВ: 8) - each tuned from the list (0, row, 0),
+// then saved where it plays (1, n, 1), as a long press does. A step waits for the MCU: the frequency, then the
+// preset's new value (or a timeout - noted in the log).
 enum { TIMER_RFILL = 22 };
 static void RedrawFrom(const char* file, int line);
 

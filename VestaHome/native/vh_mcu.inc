@@ -421,13 +421,24 @@ static void McuTake(const McuMsg& m)
     case 0x0908:
         if (p[1] == 0 && p[3] < kTunList && p[4] <= kTunList) {   // the station list
             s_tun.listCount = p[4];
-            for (int k = 0; k < 8 && p[2] + k < kTunList; k++)
-                s_tun.list[p[2] + k] = p[5 + 2 * k] << 8 | p[6 + 2 * k];
+            for (int k = 0; k < 8 && p[2] + k < kTunList; k++) {
+                int f = p[5 + 2 * k] << 8 | p[6 + 2 * k];
+                if (s_tun.list[p[2] + k] != f)   // another station there: the old one's name is not its (0x0930 later)
+                    s_tun.listName[p[2] + k][0] = 0;
+                s_tun.list[p[2] + k] = f;
+            }
         }
         if (p[1] == 1 && p[3] < 24 && p[4] <= 24) {
+            int now[8], n = 0;
+            for (int k = 0; k < 8 && p[2] + k < 24; k++, n++)
+                now[k] = p[5 + 2 * k] << 8 | p[6 + 2 * k];
+            wchar_t ch[200];   // the user 2026-11-26: the presets changed on opening the list - who did it, in the log
+            if (s_tun.presets == p[4] && PresetChanges(s_tun.preset + p[2], now, p[2], n, ch, 200))
+                VLog(L"радио: MCU сменил пресеты %s (клавиша списка %d с назад, «Сохранить список» %s)", ch,
+                     s_listKeyTick ? (int)((GetTickCount() - s_listKeyTick) / 1000) : -1, s_fillI >= 0 ? L"пишет" : L"нет");
             s_tun.presets = p[4];
-            for (int k = 0; k < 8 && p[2] + k < 24; k++)
-                s_tun.preset[p[2] + k] = p[5 + 2 * k] << 8 | p[6 + 2 * k];
+            for (int k = 0; k < n; k++)
+                s_tun.preset[p[2] + k] = now[k];
         }
         break;
     case 0x0909:   // a preset saved: 00 01 <preset> <frequency BE> (no new 0x0908 follows - HU 2026-10-20)

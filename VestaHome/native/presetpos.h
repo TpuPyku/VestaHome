@@ -8,3 +8,7 @@ int PresetPlaying(int pos, int sent);
 
 // The preset dir (+1 / -1) away on the same page of `per` presets (round); none playing (cur < 0): the page's first.
 int PresetNext(int cur, int dir, int per);
+
+// The presets the MCU changed: was / now = a message's n presets, the first one numbered from+1; one known before
+// (was > 0) and now different counts. out: "3: 98.40 -> 104.70, ..." (cut to cap). The count.
+int PresetChanges(const int* was, const int* now, int from, int n, wchar_t* out, int cap);
