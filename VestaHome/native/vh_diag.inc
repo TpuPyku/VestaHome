@@ -486,6 +486,12 @@ static void ScrSaver(HDC dc)
     CharUpperBuff(date, 1);
     Zone(0, 0, 800, 480, A_BACK);
     SaverBackground(dc);
+    // at night the clock, the date, the weather and what plays dimmed (the user 2026-11-26: in full darkness the clock
+    // dazzled); the camera's red speed stays bright
+    COLORREF text = kText, muted = kMuted, dim = kDim;
+    kText = SaverInk(text, s_night);
+    kMuted = SaverInk(muted, s_night);
+    kDim = SaverInk(dim, s_night);
     T(dc, 400, 218, clock, 132, kText, 700, AL_MID);
     T(dc, 400, 270, date, 24, kMuted, 400, AL_MID);
     SaverWeather(dc, 400, 300);
@@ -501,6 +507,9 @@ static void ScrSaver(HDC dc)
         Ico(dc, ic, 400 - (w + 40) / 2, 424, 30, kMuted);
         T(dc, 400 - (w + 40) / 2 + 40, 446, s, 18, kText, 700, AL_START, 560);
     }
+    kText = text;
+    kMuted = muted;
+    kDim = dim;
 }
 
 static void Trim(wchar_t* s);

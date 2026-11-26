@@ -62,6 +62,7 @@
 #include "vkeys.h"     // VestaCore: the keyboard's text and cursor
 #include "vfavs.h"     // VestaCore: OSMapsCE's favourite places (its map widget before it runs)
 #include "mdm.h"       // VestaModem: the operators' presets (Settings -> Network)
+#include "saverink.h"   // the screen saver's text dimmed at night (vh_diag.inc)
 #include "uarttap.h"   // COM2 listened to while the logs are on (vh_diag.inc)
 #include "../../SPIPower/bt/btshm.h"   // the Bluetooth proxy's shared memory
 
