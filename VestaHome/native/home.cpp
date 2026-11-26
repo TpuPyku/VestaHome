@@ -626,9 +626,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 Redraw();
                 return 0;
             }
-            if (s_pressed >= 0 && s_btns[s_pressed].action == A_CHAR) {   // held on a key: its second character
-                KeyChar(VKeysAltFor(&s_keys, (wchar_t)s_btns[s_pressed].arg));
-                s_pressed = -1;   // the release does not type the key's own
+            if (s_pressed >= 0 && s_btns[s_pressed].action == A_CHAR) {   // held on a key: the bubble of its others
+                KbBubble& b = s_kbBubble;
+                const RECT& rc = s_btns[s_pressed].rc;
+                b.n = VKeysAltsFor(&s_keys, (wchar_t)s_btns[s_pressed].arg, b.ch);
+                b.sel = 0;
+                b.x = VKeysBubbleX(rc.left, rc.right - rc.left, b.n, kKeyW, 800);
+                b.y = rc.top - 66;
                 Redraw();
                 return 0;
             }
@@ -1380,7 +1384,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (s_pressed >= 0 && (s_btns[s_pressed].action == A_KEYFIELD || s_btns[s_pressed].action == A_PRESET ||
                                (s_btns[s_pressed].action == A_KEY && s_btns[s_pressed].arg == K_DIAL * 65536 + L'0') ||
                                (s_btns[s_pressed].action == A_CHAR && s_keysNum == NUM_TEXT &&
-                                VKeysAltFor(&s_keys, (wchar_t)s_btns[s_pressed].arg)) ||
+                                VKeysAltsFor(&s_keys, (wchar_t)s_btns[s_pressed].arg, s_kbBubble.ch)) ||
                                (s_btns[s_pressed].action == A_BTCMD &&
                                 (s_btns[s_pressed].arg == BT_CMD_NEXT || s_btns[s_pressed].arg == BT_CMD_PREV))))
             SetTimer(hwnd, TIMER_LONG, s_btns[s_pressed].action == A_PRESET ? 1200 : kLongMs, NULL);
@@ -1391,6 +1395,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Redraw();
         return 0;
     case WM_MOUSEMOVE:   // the touch test and the balance point follow the finger, a swiped page, a scrolled list
+        if (s_kbBubble.n > 0) {   // the keyboard's bubble: the cell under the finger
+            int sel = VKeysBubbleSel((short)LOWORD(lp), s_kbBubble.x, kKeyW, s_kbBubble.n);
+            if (sel != s_kbBubble.sel) {
+                s_kbBubble.sel = sel;
+                Redraw();
+            }
+            return 0;
+        }
         if ((wp & MK_LBUTTON) && s_pressed >= 0 && s_btns[s_pressed].action == A_KEYFIELD) {   // the cursor follows
             int dx = (short)LOWORD(lp) - s_downX, dy = (short)HIWORD(lp) - s_downY;
             if (dx > 6 || dx < -6 || dy > 6 || dy < -6)
@@ -1415,6 +1427,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         KillTimer(hwnd, TIMER_LONG);
         double vx, vy;   // (the pen-up point not used: a stray on the panel - the settled press point, the last shown)
         bool dragged = VTouchUp(&s_vt, GetTickCount(), &vx, &vy);
+        if (s_kbBubble.n > 0) {   // the keyboard's bubble: the character picked
+            KeyChar(s_kbBubble.ch[s_kbBubble.sel]);
+            s_kbBubble.n = 0;
+            s_pressed = -1;
+            ReleaseCapture();
+            Redraw();
+            return 0;
+        }
         if (s_btHold) {   // rewind / fast forward ends with the finger
             BtCmd(s_btHold);
             s_btHold = 0;

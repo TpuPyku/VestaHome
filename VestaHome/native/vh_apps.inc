@@ -27,6 +27,11 @@ struct App {
 // VestaHome, and the program with it); when it closes, VestaHome is in front again.
 enum { TIMER_WAIT = 3, TIMER_GUARD = 4, kWaitMs = 20000, kGuardMs = 500, kMaxRaised = 16 };
 enum { TIMER_LONG = 6, kLongMs = 600 };   // a long press (the keyboard's text field)
+// A key held on the keyboard: the bubble of its other characters (VestaCore vkeys), the finger picks one, the release
+// types it (the user 2026-11-26). n = 0: none.
+enum { kKeyW = 56 };
+struct KbBubble { int n, sel, x, y; wchar_t ch[2]; };
+static KbBubble s_kbBubble;
 static DWORD s_waitPid;
 static int   s_waitApp = -1;   // -2: a program not in the list (a widget's tap=), found by s_waitPid
 static DWORD s_waitTick;
@@ -1309,22 +1314,36 @@ static void DrawKeys(HDC dc)
         DrawNumPad(dc);
         return;
     }
-    for (int r = 0; r < VKEYS_ROWS; r++)
-        for (int c = 0; c < VKeysRowLen(&s_keys, r); c++) {
-            int x = 13 + c * 65, y = 140 + r * 66;
-            wchar_t ch[2] = { VKeysChar(&s_keys, r, c), 0 };
-            bool d = Zone(x, y, 60, 60, A_CHAR, ch[0]);
-            R(dc, x, y, 60, 60, 14, d ? kOrange : kPanel);
-            T(dc, x + 30, y + 42, ch, 24, d ? kInk : kText, 700, AL_MID);
-            wchar_t alt[2] = { VKeysAlt(&s_keys, r, c), 0 };   // its second, a long press (as Android's keyboard)
-            T(dc, x + 48, y + 21, alt, 15, d ? kInk : kMuted, 600, AL_MID);
+    for (int r = 0; r < VKEYS_ROWS; r++) {   // a PC's rows (VestaCore vkeys: 13, 13, 11, 10), each centred
+        int n = VKeysRowLen(&s_keys, r), x0 = (800 - (n * kKeyW + (n - 1) * 4)) / 2;
+        for (int c = 0; c < n; c++) {
+            int x = x0 + c * (kKeyW + 4), y = 140 + r * 66;
+            wchar_t ch[2] = { VKeysChar(&s_keys, r, c), 0 }, o[2], s1[2] = { 0, 0 }, s2[2] = { 0, 0 };
+            bool d = Zone(x, y, kKeyW, 60, A_CHAR, ch[0]);
+            R(dc, x, y, kKeyW, 60, 14, d ? kOrange : kPanel);
+            T(dc, x + kKeyW / 2, y + 44, ch, 24, d ? kInk : kText, 700, AL_MID);
+            int k = VKeysAlts(&s_keys, r, c, o);   // the others, a long press: the second right, the third left
+            s1[0] = k > 0 ? o[0] : 0;
+            s2[0] = k > 1 ? o[1] : 0;
+            T(dc, x + kKeyW - 10, y + 20, s1, 15, d ? kInk : kMuted, 600, AL_MID);
+            T(dc, x + 10, y + 20, s2, 15, d ? kInk : kMuted, 600, AL_MID);
         }
+    }
     Button(dc, 13, 404, 125, 60, NULL, s_keys.shift ? B_SEL : B_FILL, IC_SHIFT, 18, 32, A_SHIFT);
     Button(dc, 143, 404, 125, 60, s_keys.en ? L"ENG" : L"Рус", B_FILL, IC_NONE, 20, 0, A_LANG);
     bool d = Zone(273, 404, 385, 60, A_CHAR, L' ');
     R(dc, 273, 404, 385, 60, 14, d ? kOrange : kPanel);
     R(dc, 397, 438, 136, 4, 2, d ? kInk : kMuted);
     Button(dc, 663, 404, 125, 60, NULL, B_FILL, IC_BKSP, 18, 36, A_BKSP);
+    if (s_kbBubble.n > 0) {   // a key held: its others over it, the one under the finger on orange
+        const KbBubble& b = s_kbBubble;
+        R(dc, b.x - 4, b.y - 4, b.n * kKeyW + 8, 68, 16, kLine);
+        for (int i = 0; i < b.n; i++) {
+            wchar_t ch[2] = { b.ch[i], 0 };
+            R(dc, b.x + i * kKeyW, b.y, kKeyW, 60, 12, i == b.sel ? kOrange : kPanel);
+            T(dc, b.x + i * kKeyW + kKeyW / 2, b.y + 44, ch, 28, i == b.sel ? kInk : kText, 700, AL_MID);
+        }
+    }
 }
 
 // Choosing the program: the folder's path, folders and .exe files 2 x 5 per page.
