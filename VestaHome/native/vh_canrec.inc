@@ -5,7 +5,8 @@
 #define WM_APP_CANREC (WM_APP + 40)   // wParam 1 recorded, 0 failed; lParam the bytes
 enum { TIMER_CANREC = 40, TIMER_CANRECUI = 41, kCanRecLogMs = 120000 };   // (kCanRecMs: canrec.h)
 
-static volatile LONG s_canRecOn;      // the thread runs
+static volatile LONG s_canRecOn;      // the thread records
+static volatile LONG s_canThread;     // the COM3 thread runs: the recording, or the bridge alone (canrec.h)
 static volatile LONG s_canRecStop;    // "stop" pressed
 static volatile LONG s_canRecBytes;   // read so far
 static DWORD         s_canRecStart;
@@ -20,6 +21,7 @@ static VCan3            s_canLive;
 static wchar_t          s_canMarkPath[MAX_PATH];
 static wchar_t          s_canMarkLast[48];   // the last mark, for the screen
 static int              s_canRecMarkN;
+static int              s_canRecStep;          // the step on the screen (canrec.h CanRecSteps)
 
 static const wchar_t kCanPanelExe[] = L"\\ResidentFlash\\CAN\\can_panel.exe";   // (Init.exe starts it from there)
 
@@ -83,11 +85,59 @@ static bool CanRecEndPanel()
     return gone;
 }
 
-static DWORD WINAPI CanRecThread(LPVOID)
+// The bridge's ports (canrec.h CanBridgeWanted): the panel's own - VSP4 (COM4: RMC, @ANG, "@,"), VSP5 / COM7 (the
+// navigators: RMC, GGA); a port that does not open is left out
+static const wchar_t* const kCanOuts[3] = { L"VSP4:", L"VSP5:", L"COM7:" };
+
+static void CanBridgeOpen(HANDLE* h)
 {
-    if (s_canRecPid && !CanRecEndPanel()) {
+    wchar_t got[48] = L"";
+    for (int i = 0; i < 3; i++) {
+#ifdef UNDER_CE
+        h[i] = CreateFile(kCanOuts[i], GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+#else
+        h[i] = INVALID_HANDLE_VALUE;   // (the PC: the unit's ports only)
+#endif
+        if (h[i] != INVALID_HANDLE_VALUE)
+            wcscat(got, kCanOuts[i]);
+    }
+    VLog(L"CAN без панели: GPS и руль из COM3 в %s", got[0] ? got : L"(ни один порт не открылся)");
+}
+
+static void CanPut(HANDLE h, const char* s)
+{
+    DWORD put;
+    if (h != INVALID_HANDLE_VALUE)
+        WriteFile(h, s, (DWORD)strlen(s), &put, NULL);
+}
+
+static void CanBridgeWrite(const HANDLE* h, const VCan3* c, CanOut* o)
+{
+    char s[128];
+    int due = CanBridgeDue(c, o, GetTickCount());
+    if (due & CBO_POS) {
+        if (VCan3Rmc(c, s, 128))
+            for (int i = 0; i < 3; i++)
+                CanPut(h[i], s);
+        if (VCan3Gga(c, s, 128)) {
+            CanPut(h[1], s);
+            CanPut(h[2], s);
+        }
+        if (VCan3Car(c, s, 128))
+            CanPut(h[0], s);
+    }
+    if ((due & CBO_ANG) && VCan3Ang(c, s, 128))
+        CanPut(h[0], s);
+}
+
+// arg non-NULL: the recording (the panel ended first, the file, the panel back after), NULL: the bridge alone
+static DWORD WINAPI CanRecThread(LPVOID arg)
+{
+    bool rec = arg != NULL;
+    if (rec && s_canRecPid && !CanRecEndPanel()) {
         PostMessage(s_wnd, WM_APP_CANREC, 2, 0);   // the panel runs on, COM3 is its: the boot job instead
         InterlockedExchange((LONG*)&s_canRecOn, 0);
+        InterlockedExchange((LONG*)&s_canThread, 0);
         return 0;
     }
     HANDLE com = CanRecOpenCom3();
@@ -103,9 +153,9 @@ static DWORD WINAPI CanRecThread(LPVOID)
         com = rf;
     }
 #endif
-    HANDLE f = com == INVALID_HANDLE_VALUE ? INVALID_HANDLE_VALUE
+    HANDLE f = com == INVALID_HANDLE_VALUE || !rec ? INVALID_HANDLE_VALUE
                : CreateFile(s_canRecPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    bool ok = f != INVALID_HANDLE_VALUE;
+    bool ok = rec ? f != INVALID_HANDLE_VALUE : com != INVALID_HANDLE_VALUE;
     if (com == INVALID_HANDLE_VALUE)
         VLog(L"COM3 панели: COM3 не открылся, ошибка %lu", GetLastError());
     else if (!ok)
@@ -113,7 +163,14 @@ static DWORD WINAPI CanRecThread(LPVOID)
     static unsigned char buf[512], out[6 + 512];
     static VCan3 dec;
     VCan3Init(&dec);
-    while (ok && !s_canRecStop && GetTickCount() - s_canRecStart < kCanRecMs) {
+    HANDLE outs[3];
+    CanOut sent;
+    memset(&sent, 0, sizeof(sent));
+    if (ok)
+        CanBridgeOpen(outs);   // (while it records too: the navigators keep their GPS)
+    else
+        outs[0] = outs[1] = outs[2] = INVALID_HANDLE_VALUE;
+    while (ok && !s_canRecStop && (!rec || GetTickCount() - s_canRecStart < kCanRecMs)) {
         DWORD got = 0, put;
 #ifndef UNDER_CE
         if (replay) {   // one chunk [ms u32][len u16][bytes], given when its time comes
@@ -129,23 +186,96 @@ static DWORD WINAPI CanRecThread(LPVOID)
 #endif
         if (!ReadFile(com, buf, sizeof(buf), &got, NULL))
             Sleep(50);
-        int n = CanRecPack(out, GetTickCount() - s_canRecStart, buf, (int)got);
+        int n = rec ? CanRecPack(out, GetTickCount() - s_canRecStart, buf, (int)got) : 0;
         if (n && WriteFile(f, out, n, &put, NULL))
             InterlockedExchangeAdd((LONG*)&s_canRecBytes, (LONG)got);
         if (VCan3Feed(&dec, buf, (int)got)) {   // (one writer: this thread; the screen takes a copy)
             EnterCriticalSection(&s_canLiveCs);
             s_canLive = dec;
             LeaveCriticalSection(&s_canLiveCs);
+            CanBridgeWrite(outs, &dec, &sent);
         }
     }
+    for (int i = 0; i < 3; i++)
+        if (outs[i] != INVALID_HANDLE_VALUE)
+            CloseHandle(outs[i]);
     if (f != INVALID_HANDLE_VALUE)
         CloseHandle(f);
     if (com != INVALID_HANDLE_VALUE)
         CloseHandle(com);
-    CanRecPanelBack();
-    PostMessage(s_wnd, WM_APP_CANREC, ok ? 1 : 0, s_canRecBytes);
-    InterlockedExchange((LONG*)&s_canRecOn, 0);
+    if (rec) {
+        CanRecPanelBack();
+        PostMessage(s_wnd, WM_APP_CANREC, ok ? 1 : 0, s_canRecBytes);
+        InterlockedExchange((LONG*)&s_canRecOn, 0);
+    } else {
+        VLog(L"CAN без панели: остановлен, кадров %lu", dec.frames);
+    }
+    InterlockedExchange((LONG*)&s_canThread, 0);
     return 0;
+}
+
+// COM3 let go: the bridge (or the recording) told to stop and waited for (3 s at most)
+static void CanThreadStop()
+{
+    if (!s_canThread)
+        return;
+    InterlockedExchange((LONG*)&s_canRecStop, 1);
+    for (int i = 0; i < 30 && s_canThread; i++)
+        Sleep(100);
+}
+
+static DWORD CanPanelPid()   // the panel's process, 0: not running
+{
+    static TaskInfo s_crTask;
+    static wchar_t s_names[TASK_PROC_MAX][40];
+    TaskSample(&s_crTask, s_wnd);
+    int n = s_crTask.procOk ? s_crTask.procCount : 0;
+    for (int i = 0; i < n; i++)
+        wcscpy(s_names[i], s_crTask.proc[i].name);
+    int at = CanRecPanelAt(s_names, n);
+    return at >= 0 ? s_crTask.proc[at].pid : 0;
+}
+
+static void CanCsMake()
+{
+    static bool s_csMade;
+    if (!s_csMade) {
+        InitializeCriticalSection(&s_canLiveCs);
+        s_csMade = true;
+    }
+}
+
+// Each second (the main tick), every 10 s in fact: the bridge started when the panel is off, stopped when it is back
+// (COM3 is its then - it may have missed it already: a reboot gives it back for sure)
+static void CanBridgeTick(DWORD now)
+{
+    static DWORD s_last, s_up;
+    static int s_exe = -1;
+    if (!s_up)
+        s_up = now;
+    if (now - s_last < 10000 || s_canRecOn)
+        return;
+    s_last = now;
+    if (s_exe < 0)
+        s_exe = GetFileAttributes(kCanPanelExe) != 0xFFFFFFFF;
+    if (!s_exe)
+        return;
+    bool runs = CanPanelPid() != 0;
+    if (runs && s_canThread) {
+        VLog(L"CAN без панели: панель запущена - COM3 отдаю ей");
+        CanThreadStop();
+        return;
+    }
+    if (!CanBridgeWanted(true, runs, now - s_up, s_canThread != 0))
+        return;
+    CanCsMake();
+    s_canRecStop = 0;
+    s_canThread = 1;
+    HANDLE h = CreateThread(NULL, 0, CanRecThread, NULL, 0, NULL);
+    if (h)
+        CloseHandle(h);
+    else
+        s_canThread = 0;
 }
 
 // boot: this boot is the canrec job's (the panel off, nothing to end, started after)
@@ -156,14 +286,8 @@ static void CanRecBegin(bool boot)
         wcscpy(s_canRecLast, L"нет SD-карты или USB-диска");
         return;
     }
-    static TaskInfo s_crTask;
-    static wchar_t s_names[TASK_PROC_MAX][40];
-    TaskSample(&s_crTask, s_wnd);
-    int n = s_crTask.procOk ? s_crTask.procCount : 0;
-    for (int i = 0; i < n; i++)
-        wcscpy(s_names[i], s_crTask.proc[i].name);
-    int at = CanRecPanelAt(s_names, n);
-    s_canRecPid = at >= 0 ? s_crTask.proc[at].pid : 0;
+    CanThreadStop();   // the bridge, if it reads COM3 (the recording writes its lines too)
+    s_canRecPid = CanPanelPid();
     s_canRecBack = s_canRecPid || boot;
     SYSTEMTIME t;
     GetLocalTime(&t);
@@ -175,23 +299,21 @@ static void CanRecBegin(bool boot)
     CanRecMarkPath(s_canMarkPath, MAX_PATH, s_canRecPath);
     s_canMarkLast[0] = 0;
     s_canRecMarkN = 0;
-    static bool s_csMade;
-    if (!s_csMade) {
-        InitializeCriticalSection(&s_canLiveCs);
-        s_csMade = true;
-    }
+    s_canRecStep = 0;
+    CanCsMake();
     EnterCriticalSection(&s_canLiveCs);
     VCan3Init(&s_canLive);
     LeaveCriticalSection(&s_canLiveCs);
     s_canRecStart = GetTickCount();
     s_canRecOn = 1;
+    s_canThread = 1;
     VLog(L"COM3 панели: запись в %s, панель %s", s_canRecPath, s_canRecPid ? L"останавливается"
          : boot ? L"не запущена (задание загрузчика)" : L"не запущена");
-    HANDLE h = CreateThread(NULL, 0, CanRecThread, NULL, 0, NULL);
+    HANDLE h = CreateThread(NULL, 0, CanRecThread, (LPVOID)1, 0, NULL);
     if (h)
         CloseHandle(h);
     else
-        s_canRecOn = 0;
+        s_canRecOn = s_canThread = 0;
     SetTimer(s_wnd, TIMER_CANRECUI, 1000, NULL);   // the button's seconds (COM4 is quiet meanwhile: no WM_APP_GPS)
 }
 
@@ -254,10 +376,8 @@ static void CanRecAtStart()
 // VestaHome closing while it records: the thread told to stop and waited for - the panel must come back
 static void CanRecQuit()
 {
-    if (!s_canRecOn)
-        return;
-    InterlockedExchange((LONG*)&s_canRecStop, 1);
-    for (int i = 0; i < 40 && s_canRecOn; i++)
+    CanThreadStop();   // (the bridge too: COM3 let go)
+    for (int i = 0; i < 10 && s_canThread; i++)
         Sleep(100);
 }
 
@@ -299,25 +419,28 @@ static void CanRecLabel(wchar_t* s, int n, bool* busy)   // the diagnostics' but
     s[n - 1] = 0;
 }
 
-// A mark pressed while recording: its line appended (opened, flushed and closed each time - a reset keeps it)
-static void CanRecMark(int kind)
+// A step's button while recording: "Готово" / "Пропустить" append its mark (opened, flushed and closed each time - a
+// reset keeps it) and go on, "Назад" goes back
+static void CanRecMark(int button)
 {
-    static const wchar_t* const names[CRM_COUNT] = { L"двери", L"руль", L"задний ход", L"еду" };
-    if (!s_canRecOn || kind < 0 || kind >= CRM_COUNT)
+    if (!s_canRecOn || s_canRecStep >= CRS_COUNT && button != CRB_BACK)
         return;
-    DWORD ms = GetTickCount() - s_canRecStart;
-    char line[40];
-    CanRecMarkLine(line, 40, ms, kind);
-    HANDLE f = CreateFile(s_canMarkPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    DWORD put = 0;
-    bool ok = f != INVALID_HANDLE_VALUE && SetFilePointer(f, 0, NULL, FILE_END) != 0xFFFFFFFF &&
-              WriteFile(f, line, (DWORD)strlen(line), &put, NULL) && FlushFileBuffers(f);
-    if (f != INVALID_HANDLE_VALUE)
-        CloseHandle(f);
-    s_canRecMarkN += ok ? 1 : 0;
-    _snwprintf(s_canMarkLast, 48, ok ? L"метка «%s» на %u:%02u" : L"метка «%s» не записана", names[kind],
-               (unsigned)(ms / 60000), (unsigned)(ms / 1000 % 60));
-    s_canMarkLast[47] = 0;
+    if (CanRecStepMarks(button)) {
+        DWORD ms = GetTickCount() - s_canRecStart;
+        char line[48];
+        CanRecMarkLine(line, 48, ms, s_canRecStep, button == CRB_SKIP);
+        HANDLE f = CreateFile(s_canMarkPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        DWORD put = 0;
+        bool ok = f != INVALID_HANDLE_VALUE && SetFilePointer(f, 0, NULL, FILE_END) != 0xFFFFFFFF &&
+                  WriteFile(f, line, (DWORD)strlen(line), &put, NULL) && FlushFileBuffers(f);
+        if (f != INVALID_HANDLE_VALUE)
+            CloseHandle(f);
+        s_canRecMarkN += ok ? 1 : 0;
+        _snwprintf(s_canMarkLast, 48, ok ? L"шаг %d %s на %u:%02u" : L"шаг %d: метка не записана", s_canRecStep + 1,
+                   button == CRB_SKIP ? L"пропущен" : L"отмечен", (unsigned)(ms / 60000), (unsigned)(ms / 1000 % 60));
+        s_canMarkLast[47] = 0;
+    }
+    s_canRecStep = CanRecStepAfter(s_canRecStep, button);
 }
 
 // The diagnostics while it records (instead of its tests): the decoded values, the mark buttons
@@ -325,7 +448,7 @@ static bool CanRecScreen(HDC dc)   // false: not recording
 {
     if (!s_canRecOn)
         return false;
-    static const wchar_t* const labels[CRM_COUNT] = { L"Двери", L"Руль", L"Задний ход", L"Еду" };
+    static const wchar_t* const labels[3] = { L"Готово", L"Пропустить", L"Назад" };
     VCan3 c;
     EnterCriticalSection(&s_canLiveCs);
     c = s_canLive;
@@ -335,10 +458,13 @@ static bool CanRecScreen(HDC dc)   // false: not recording
     T(dc, 40, 84, L"Запись COM3 панели", 19, kText, 700);
     T(dc, 40, 116, a, 17, kText, 400, AL_START, 720);
     T(dc, 40, 144, b, 17, kText, 400, AL_START, 720);
-    T(dc, 40, 178, L"Нажимайте метку в момент действия: открыли дверь, повернули руль, включили задний ход, поехали",
-      14, kMuted, 400, AL_START, 720);
-    for (int i = 0; i < CRM_COUNT; i++)
-        Button(dc, 40 + i * 182, 212, 170, 56, labels[i], B_N, IC_NONE, 16, 0, A_CANRECMARK, i);
+    wchar_t step[160];
+    CanRecStepTitle(step, 160, s_canRecStep);
+    T(dc, 40, 176, step, 17, kOrange, 700, AL_START, 720);
+    bool done = s_canRecStep >= CRS_COUNT;
+    for (int i = 0; i < 3; i++)
+        Button(dc, i ? 90 + i * 182 : 40, 212, i ? 170 : 220, 56, labels[i], done && i < 2 ? B_DIS : i ? B_N : B_SEL, IC_NONE,
+               16, 0, done && i < 2 ? A_NONE : A_CANRECMARK, i);
     wchar_t m[64];
     _snwprintf(m, 64, s_canRecMarkN ? L"Меток: %d · %s" : L"Меток пока нет", s_canRecMarkN, s_canMarkLast);
     m[63] = 0;

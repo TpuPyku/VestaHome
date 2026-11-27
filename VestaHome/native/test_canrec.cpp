@@ -54,49 +54,103 @@ int main()
     Check(!wcscmp(mp, L"\\SDMemory\\VestaLogs\\com3_261127_214806_marks.txt"), "marks: beside it, _marks.txt");
     CanRecMarkPath(mp, MAX_PATH, L"com3");
     Check(!wcscmp(mp, L"com3_marks.txt"), "marks: a name without .bin");
-    char line[40];
-    CanRecMarkLine(line, 40, 123456, CRM_DOORS);
-    Check(!strcmp(line, "123456 doors\r\n"), "mark: ms since the start, the kind");
-    CanRecMarkLine(line, 40, 7, CRM_WHEEL);
-    Check(!strcmp(line, "7 wheel\r\n"), "mark: wheel");
-    CanRecMarkLine(line, 40, 8, CRM_REVERSE);
-    Check(!strcmp(line, "8 reverse\r\n"), "mark: reverse");
-    CanRecMarkLine(line, 40, 9, CRM_DRIVE);
-    Check(!strcmp(line, "9 drive\r\n"), "mark: drive");
-    Check(CRM_COUNT == 4, "four kinds");
+    // the user 2026-11-27 (after vhcan6): a recording step by step through the panel's functions - each step's mark
+    // its number and key; "Пропустить" marks it skipped; "Назад" goes back without a mark
+    char line[48];
+    CanRecMarkLine(line, 48, 123456, 0, false);
+    Check(!strcmp(line, "123456 01 door_fl\r\n"), "mark: ms, the step's number from 1, its key");
+    CanRecMarkLine(line, 48, 7, 4, true);
+    Check(!strcmp(line, "7 05 trunk skip\r\n"), "mark: a skipped step");
+    CanRecMarkLine(line, 48, 9, CRS_COUNT - 1, false);
+    Check(!strcmp(line, "9 21 drive\r\n"), "mark: the last step");
+    bool unique = true;
+    for (int i = 0; i < CRS_COUNT; i++)
+        for (int j = i + 1; j < CRS_COUNT; j++)
+            unique = unique && strcmp(CanRecSteps()[i].key, CanRecSteps()[j].key) != 0;
+    Check(CRS_COUNT == 21 && unique, "21 steps, each its own key");
+    wchar_t title[160];
+    CanRecStepTitle(title, 160, 0);
+    Check(!wcscmp(title, L"Шаг 1 из 21: откройте и закройте переднюю левую дверь"), "the first step's title");
+    CanRecStepTitle(title, 160, CRS_COUNT);
+    Check(!wcscmp(title, L"Все шаги пройдены — нажмите «стоп»"), "after the last: stop");
+    CanRecStepTitle(title, 20, 0);
+    Check(wcslen(title) == 19, "the title cut to its buffer");
+    Check(CanRecStepAfter(0, CRB_DONE) == 1 && CanRecStepAfter(3, CRB_SKIP) == 4, "done / skip: the next step");
+    Check(CanRecStepAfter(CRS_COUNT - 1, CRB_DONE) == CRS_COUNT, "the last done: all done");
+    Check(CanRecStepAfter(CRS_COUNT, CRB_DONE) == CRS_COUNT, "all done: stays");
+    Check(CanRecStepAfter(3, CRB_BACK) == 2 && CanRecStepAfter(0, CRB_BACK) == 0, "back: the step before, not below 1");
+    Check(CanRecStepMarks(CRB_DONE) && CanRecStepMarks(CRB_SKIP) && !CanRecStepMarks(CRB_BACK), "back writes no mark");
 
     // the user 2026-11-27: the decoded values live on the screen while recording
     VCan3 c;
     memset(&c, 0, sizeof(c));
     wchar_t a[96], b[96];
     CanRecLive(a, 96, b, 96, &c);
-    Check(!wcscmp(a, L"Скорость — · руль — · передача —"), "live: nothing seen yet - dashes");
-    Check(!wcscmp(b, L"Двери — · статус — · GPS нет · кадров 0"), "live: second line, nothing yet");
-    c.hasSpeed = true;
-    c.speed10 = 1234;
-    c.hasSteer = true;
-    c.steer = -951;
+    Check(!wcscmp(a, L"Скорость — · руль — · зажигание —"), "live: nothing seen yet - dashes");
+    Check(!wcscmp(b, L"Свет — · GPS нет · кадров 0"), "live: second line, nothing yet");
+    c.hasCar = true;
+    c.carKmh100 = 1234;    // (0xd7: km/h x 100)
+    c.hasWheel = true;
+    c.wheel = 32767 - 464; // (0xc6: (raw - 32767) / 15 degrees)
     c.hasGear = true;
-    c.gear = 5;
+    c.gear = 5;            // (0x50 data[0] & 7: 5 - the ignition on, 4 - off; can_panel 1.3.6.1)
     c.hasDoors = true;
-    c.doors = 0x81;
-    c.hasStatus = true;
-    c.status = 0x8005;
+    c.doors = 0x81;        // (0xde data[0]: the lights' bits)
     c.hasPos = true;
     c.hasMove = true;
     c.kn100 = 1000;        // 10 knots = 18.5 km/h
     c.course100 = 35999;
     c.frames = 19292;
     CanRecLive(a, 96, b, 96, &c);
-    Check(!wcscmp(a, L"Скорость 123,4 км/ч · руль -951 · передача 5"), "live: speed, wheel, gear");
-    Check(!wcscmp(b, L"Двери 81 · статус 8005 · GPS 18,5 км/ч, курс 359° · кадров 19292"), "live: doors, GPS");
+    Check(!wcscmp(a, L"Скорость 12,34 км/ч · руль -30,9° · зажигание вкл"), "live: the car's speed, the wheel in degrees, the ignition");
+    Check(!wcscmp(b, L"Свет 81 · GPS 18,5 км/ч, курс 359° · кадров 19292"), "live: doors, GPS");
     c.hasMove = false;
     CanRecLive(a, 96, b, 96, &c);
-    Check(!wcscmp(b, L"Двери 81 · статус 8005 · GPS есть · кадров 19292"), "live: a position, no speed yet");
+    Check(!wcscmp(b, L"Свет 81 · GPS есть · кадров 19292"), "live: a position, no speed yet");
+    c.gear = 4;
+    c.wheel = 0;
+    CanRecLive(a, 96, b, 96, &c);
+    Check(!wcscmp(a, L"Скорость 12,34 км/ч · руль 0,0° · зажигание выкл"), "live: the ignition off; raw 0 - 0°");
+    c.gear = 3;
+    CanRecLive(a, 96, b, 96, &c);
+    Check(wcsstr(a, L"зажигание 3") != NULL, "live: another value - the number");
     wchar_t s4[4];
     CanRecLive(s4, 4, b, 96, &c);
     Check(s4[3] == 0, "live: a short buffer ended");
 
+    // the bridge (the user 2026-11-27: GPS and the wheel to COM4 / COM5 without the panel)
+    Check(CanBridgeWanted(true, false, 60000, false), "bridge: the panel's firmware, the panel not running, 60 s up");
+    Check(!CanBridgeWanted(false, false, 60000, false), "bridge: no panel firmware (COM3 is not its) - never");
+    Check(!CanBridgeWanted(true, true, 600000, false), "bridge: the panel runs - its COM3");
+    Check(!CanBridgeWanted(true, false, 59999, false), "bridge: the first minute - Init.exe starts the panel then");
+    Check(!CanBridgeWanted(true, false, 60000, true), "bridge: COM3 read already (it, or the recording)");
+    VCan3 d;
+    memset(&d, 0, sizeof(d));
+    CanOut o;
+    memset(&o, 0, sizeof(o));
+    Check(CanBridgeDue(&d, &o, 1000) == 0, "due: nothing new - nothing");
+    d.posN = 1;
+    d.wheelN = 3;
+    Check(CanBridgeDue(&d, &o, 1000) == (CBO_POS | CBO_ANG), "due: a new position and a new wheel - both");
+    Check(CanBridgeDue(&d, &o, 1100) == 0, "due: the same ones again - nothing");
+    d.wheelN = 4;
+    Check(CanBridgeDue(&d, &o, 1399) == 0, "due: the wheel again within 400 ms - not yet");
+    Check(CanBridgeDue(&d, &o, 1400) == CBO_ANG, "due: 400 ms on - the wheel");
+    d.posN = 2;
+    Check(CanBridgeDue(&d, &o, 1401) == CBO_POS, "due: the next position at once (1/s from the module)");
+
+    Check((CBO_POS & CBO_ANG) == 0, "due: two separate bits");
+    CanRecMarkLine(line, 10, 123456, 0, false);
+    Check(strlen(line) == 9, "mark: cut to its buffer, ended");
+    c.hasCar = true;
+    c.carKmh100 = 10000;
+    c.hasPos = c.hasMove = true;
+    c.kn100 = 10000;       // 100 knots = 185.2 km/h
+    CanRecLive(a, 96, b, 96, &c);
+    Check(wcsstr(a, L"Скорость 100,00 км/ч") == a && wcsstr(b, L"GPS 185,2 км/ч") != NULL, "live: 100 km/h, 100 knots");
+    wchar_t b4[4];
+    CanRecLive(a, 96, b4, 4, &c);
+    Check(b4[3] == 0, "live: the second line's short buffer ended");
     Check(kCanRecMs == 30 * 60 * 1000, "the user 2026-11-27: up to 30 min, till stop");
     printf("canrec: %d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
