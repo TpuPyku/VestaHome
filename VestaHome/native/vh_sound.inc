@@ -519,7 +519,8 @@ static bool IsCfgToggle(int id)
 {
     return id == T_GPS_TIME || id == T_W_GPS || id == T_CAM_ALERT ||
            id == T_CAM_WEEKLY || id == T_VIDEO_MOVING || id == T_WIFI ||
-           id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE || id == T_NMEA_PORT;
+           id == T_WIFI_AP_AUTO || id == T_SLIDES_OPEN || id == T_AUTOROTATE || id == T_NMEA_PORT ||
+           id == T_NET_AUTO || id == T_PHONE_USB || id == T_PHONE_ANY;   // (all that ControlsToCfg keeps: test_cfgtoggles.py)
 }
 
 static void ControlsToCfg()

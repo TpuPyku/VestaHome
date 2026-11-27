@@ -52,6 +52,18 @@ int main()
     Check(LearnSource(-1, 500, 0, 7) == -1, "the media (7) after the key: not AUX's");
     Check(LearnSource(-1, 500, 0, 9) == -1, "Bluetooth (9) after the key: not AUX's");
     Check(LearnSource(-1, 500, 0, 1) == 1, "1: an unknown number - learned");
+    Check(SrcJustTurned(9, 7, false, 60000), "the MCU on Bluetooth, the tick not there yet, not ours: just turned (MODE)");
+    Check(SrcJustTurned(9, 9, false, 2999), "turned to it by MODE 3 s ago: just turned");
+    Check(!SrcJustTurned(9, 9, false, 3000), "3 s on it: the user's play takes the media again");
+    Check(!SrcJustTurned(9, 7, true, 60000), "our own asking: not the user's turn");
+    Check(!SrcJustTurned(0, 0, false, 60000), "long on the radio: not just turned");
+    Check(AuxLeft(11, 11, 0), "AUX (11) -> the radio: AUX left - its plug told out");
+    Check(!AuxLeft(11, 0, 9), "not from AUX: nothing");
+    Check(!AuxLeft(-1, -1, 9), "AUX's number not known: nothing");
+    Check(!AuxLeft(11, 11, 11), "still on AUX: nothing");
+    Check(!AuxLeft(0, 0, 9), "0 is the radio, never AUX: nothing");
+    Check(AuxLeft(1, 1, 9), "AUX learned as 1 -> Bluetooth: left");
+    Check(!AuxLeft(11, 11, -1), "the source not known: nothing");
     Check(PhonePaused(0, 60000, 3000, true), "the phone plays by itself under the radio 3 s: paused (as the shell)");
     Check(PhonePaused(7, 60000, 3000, true), "under the media: paused");
     Check(!PhonePaused(9, 60000, 3000, true), "under Bluetooth: it is its music - plays");
