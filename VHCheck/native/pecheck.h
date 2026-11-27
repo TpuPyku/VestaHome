@@ -10,6 +10,9 @@ struct PeFacts {
 };
 
 bool PeRead(const unsigned char* b, int len, PeFacts* f);   // false: not a PE (f->pe false)
+// The file's own version from its VS_FIXEDFILEINFO (signature 0xFEEF04BD at a 4-byte boundary, struct version 1.0):
+// v = a.b.c.d; false none.
+bool PeFileVersion(const unsigned char* b, int len, unsigned v[4]);
 bool PeHasExport(const unsigned char* b, int len, const char* name);
 // The names of want[] not exported: their indexes into miss (at most cap); the count missing (all of them when not
 // a PE).

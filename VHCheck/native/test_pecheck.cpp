@@ -158,8 +158,36 @@ static void TestVersion()
           FwVersion((const unsigned char*)"Itelma_TR8005_14_01_41.2x", 25, 1) == 0, "version: each of its four digits checked");
 }
 
+// The file's own version (VS_FIXEDFILEINFO; the user 2026-11-27: which CAN panel - 1.3.6 says "1.3.6.0" there).
+static void TestFileVersion()
+{
+    static unsigned char b[64];
+    unsigned v[4] = { 9, 9, 9, 9 };
+    memset(b, 0, sizeof(b));
+    Put32(b, 20, 0xFEEF04BD);          // not at a 4-byte boundary: not it
+    Put32(b, 32, 0xFEEF04BD);
+    Put32(b, 36, 0x00020000);          // a struct version not 1.0: not it
+    Check(!PeFileVersion(b, 64, v), "file version: none (unaligned, wrong struct version)");
+    Put32(b, 36, 0x00010000);
+    Put32(b, 40, 0x00010003);          // 1.3
+    Put32(b, 44, 0x00070002);          // .7.2
+    Check(PeFileVersion(b, 64, v) && v[0] == 1 && v[1] == 3 && v[2] == 7 && v[3] == 2, "file version: 1.3.7.2");
+    Check(!PeFileVersion(b, 47, v), "file version: cut before its last number - none");
+    Check(PeFileVersion(b, 48, v) && v[3] == 2, "file version: just fits");
+    FILE* f = fopen("..\\..\\..\\MAIN\\_analysis\\can_panel.exe", "rb");
+    if (!f) {
+        printf("(no MAIN: the real can_panel.exe skipped)\n");
+        return;
+    }
+    static unsigned char e[4 * 1024 * 1024];
+    int len = (int)fread(e, 1, sizeof(e), f);
+    fclose(f);
+    Check(PeFileVersion(e, len, v) && v[0] == 1 && v[1] == 3 && v[2] == 6 && v[3] == 0, "real: CAN panel 1.3.6.0");
+}
+
 int main()
 {
+    TestFileVersion();
     TestVersion();
     TestFirmware();
     TestMade();

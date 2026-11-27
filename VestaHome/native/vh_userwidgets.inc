@@ -15,7 +15,7 @@ static const struct { const wchar_t* name; Icon ic; } kIconNames[] = {
     { L"clock", IC_CLOCK }, { L"photo", IC_PHOTO }, { L"video", IC_VIDEO }, { L"apps", IC_APPS },
     { L"warn", IC_WARN }, { L"eye", IC_EYE }, { L"power", IC_POWER }, { L"folder", IC_FOLDER },
     { L"tasks", IC_TASKS }, { L"star", IC_STAR }, { L"lock", IC_LOCK }, { L"file", IC_FILE },
-    { L"androidauto", IC_AAUTO }, { L"service", IC_SERVICE } };
+    { L"androidauto", IC_AAUTO }, { L"service", IC_SERVICE }, { L"assistant", IC_ASSISTANT }, { L"mic", IC_MIC } };
 
 // VestaHome's content, widgets and add-ons (the user 2026-11-06): on the built-in partition, ready as VestaHome starts,
 // no waiting for a card; or on the SD card, for what writes often (flash wears). Outside VestaHome's folder: an update
@@ -587,6 +587,23 @@ static void UserWgWake(int u)   // shown again: its script, its data, its url no
     LeaveCriticalSection(&s_uwCs);
 }
 
+// tap=vh:refresh (the user 2026-11-27, probki.ini): the widget's data now - its url fetched within a second, its file
+// read; a url not again within kVhRefreshMs (vhaction.h).
+static void UserWgRefresh(int u)
+{
+    EnterCriticalSection(&s_uwCs);
+    bool due = VhRefreshDue(s_uw[u].fetchTick, GetTickCount());
+    LeaveCriticalSection(&s_uwCs);
+    if (s_uw[u].url[0] && !due) {
+        _snwprintf(s_status, 96, L"%s: только что обновлено", s_uw[u].title);
+        s_status[95] = 0;
+        return;
+    }
+    UserWgWake(u);
+    _snwprintf(s_status, 96, L"%s: обновляю", s_uw[u].title);
+    s_status[95] = 0;
+}
+
 static void PlugWidgetsAppend();   // (vh_plugins.inc: the add-ons' widgets join the list)
 
 static void UserWidgetsScan()
@@ -647,7 +664,8 @@ static void WUser(HDC dc, int x, int y, int u)
         Disc(dc, x + ww - 24, y + 21, 7, d ? kInk : dot[w.state]);
     }
     int act = VhActionOf(w.tap);
-    if (!w.have && act != VHA_NONE) {   // a button of VestaHome's action (tap=vh:...), no data of its own: what it does
+    if (!w.have && act != VHA_NONE && act != VHA_REFRESH) {   // a button of VestaHome's action (tap=vh:...), no data
+                                                               // of its own: what it does
         T(dc, x + 16, y + 84, act == VHA_ASSISTANT ? L"Помощник телефона" : L"Нет такого действия", 22, fg, 700,
           AL_START, ww - 32);
         TWrap(dc, x + 16, y + 108, act == VHA_ASSISTANT ? L"нажмите и говорите" : w.tap, 14, mg, 400, ww - 32, 3, 18);

@@ -25,6 +25,12 @@ int main()
     Check(VhActionOf(L"vh:assistantx") == VHA_UNKNOWN, "the whole name only");
     // an add-on's "do\tname=assistant" (VestaSmartHome): the name alone
     Check(VhActionName(L"assistant") == VHA_ASSISTANT && VhActionName(L"x") == VHA_UNKNOWN, "by the name alone");
+    // the user 2026-11-27: probki.ini's tap - its traffic again now, not OSMapsCE
+    Check(VhActionOf(L"vh:refresh") == VHA_REFRESH, "vh:refresh: the widget's data now");
+    Check(VhRefreshDue(0, 5000), "never fetched: now");
+    Check(!VhRefreshDue(100000, 114999), "a tap again within 15 s: nothing");
+    Check(VhRefreshDue(100000, 115000), "15 s on: again");
+    Check(VhRefreshDue(0xFFFFF000, 0xFFFFF000 + 15000), "the tick wrapped: still counted");
     printf("%d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }
