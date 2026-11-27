@@ -74,13 +74,14 @@ static void ModemLabel(wchar_t* s, int n)
 }
 
 static void CanRecLabel(wchar_t* s, int n, bool* busy);   // (vh_canrec.inc)
+static bool CanRecScreen(HDC dc);   // (vh_canrec.inc) while COM3 records: its values and marks
 
 // Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
 static void ScrDiag(HDC dc)
 {
     Frame(dc, L"Диагностика");
     Panel(dc, 16, 68, 768, 336);   // (above y 404: "back" at the bottom left)
-    for (int i = 0; i < 10 && kTests[i].label; i++)
+    for (int i = 0; i < 10 && kTests[i].label && !CanRecScreen(dc); i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
                B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
     Sep(dc, 40, 340, 720);

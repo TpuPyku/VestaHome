@@ -9,7 +9,7 @@ set VC=%VS8%\VC
 set PATH=%VS8%\Common7\IDE;%VC%\bin;%PATH%
 cd /d "%~dp0"
 if not exist obj mkdir obj
-"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_canrec.cpp /Foobj\ /Fdobj\ /Feobj\test_canrec.exe ^
+"%VC%\bin\cl.exe" /nologo %OPT% /W3 /MT /TP test_canrec.cpp /I..\..\..\VestaCore /I..\..\core /Foobj\ /Fdobj\ /Feobj\test_canrec.exe ^
   /DUNICODE /D_UNICODE /DWIN32 /D_CRT_SECURE_NO_WARNINGS /I"%VC%\include" /I"%VC%\PlatformSDK\Include" ^
   /link /LIBPATH:"%VC%\lib" /LIBPATH:"%VC%\PlatformSDK\Lib" kernel32.lib >obj\build_canrec.log || (type obj\build_canrec.log & exit /b 1)
 if "%1"=="build" exit /b 0

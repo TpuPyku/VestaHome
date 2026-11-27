@@ -1,5 +1,6 @@
-// test_canrec.cpp - the CAN panel's COM3 recording (canrec.h), on the PC.
+﻿// test_canrec.cpp - the CAN panel's COM3 recording (canrec.h), on the PC.
 #include <stdio.h>
+#include <string.h>
 #include "canrec.h"
 
 static int s_failed, s_checks;
@@ -47,6 +48,56 @@ int main()
     Check(shortName[9] == 0 && !wcscmp(shortName, L"com3_2611"), "a short buffer: cut and ended");
     wchar_t first[1][40] = { L"can_panel.exe" };
     Check(CanRecPanelAt(first, 1) == 0, "the panel first in the list");
+    // the user 2026-11-27: marks while recording (doors, wheel, reverse, drive) beside the recording
+    wchar_t mp[MAX_PATH];
+    CanRecMarkPath(mp, MAX_PATH, L"\\SDMemory\\VestaLogs\\com3_261127_214806.bin");
+    Check(!wcscmp(mp, L"\\SDMemory\\VestaLogs\\com3_261127_214806_marks.txt"), "marks: beside it, _marks.txt");
+    CanRecMarkPath(mp, MAX_PATH, L"com3");
+    Check(!wcscmp(mp, L"com3_marks.txt"), "marks: a name without .bin");
+    char line[40];
+    CanRecMarkLine(line, 40, 123456, CRM_DOORS);
+    Check(!strcmp(line, "123456 doors\r\n"), "mark: ms since the start, the kind");
+    CanRecMarkLine(line, 40, 7, CRM_WHEEL);
+    Check(!strcmp(line, "7 wheel\r\n"), "mark: wheel");
+    CanRecMarkLine(line, 40, 8, CRM_REVERSE);
+    Check(!strcmp(line, "8 reverse\r\n"), "mark: reverse");
+    CanRecMarkLine(line, 40, 9, CRM_DRIVE);
+    Check(!strcmp(line, "9 drive\r\n"), "mark: drive");
+    Check(CRM_COUNT == 4, "four kinds");
+
+    // the user 2026-11-27: the decoded values live on the screen while recording
+    VCan3 c;
+    memset(&c, 0, sizeof(c));
+    wchar_t a[96], b[96];
+    CanRecLive(a, 96, b, 96, &c);
+    Check(!wcscmp(a, L"Скорость — · руль — · передача —"), "live: nothing seen yet - dashes");
+    Check(!wcscmp(b, L"Двери — · статус — · GPS нет · кадров 0"), "live: second line, nothing yet");
+    c.hasSpeed = true;
+    c.speed10 = 1234;
+    c.hasSteer = true;
+    c.steer = -951;
+    c.hasGear = true;
+    c.gear = 5;
+    c.hasDoors = true;
+    c.doors = 0x81;
+    c.hasStatus = true;
+    c.status = 0x8005;
+    c.hasPos = true;
+    c.hasMove = true;
+    c.kn100 = 1000;        // 10 knots = 18.5 km/h
+    c.course100 = 35999;
+    c.frames = 19292;
+    CanRecLive(a, 96, b, 96, &c);
+    Check(!wcscmp(a, L"Скорость 123,4 км/ч · руль -951 · передача 5"), "live: speed, wheel, gear");
+    Check(!wcscmp(b, L"Двери 81 · статус 8005 · GPS 18,5 км/ч, курс 359° · кадров 19292"), "live: doors, GPS");
+    c.hasMove = false;
+    CanRecLive(a, 96, b, 96, &c);
+    Check(!wcscmp(b, L"Двери 81 · статус 8005 · GPS есть · кадров 19292"), "live: a position, no speed yet");
+    wchar_t s4[4];
+    CanRecLive(s4, 4, b, 96, &c);
+    Check(s4[3] == 0, "live: a short buffer ended");
+
+    Check(kCanRecMs == 30 * 60 * 1000, "the user 2026-11-27: up to 30 min, till stop");
     printf("canrec: %d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }
