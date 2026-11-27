@@ -735,6 +735,7 @@ static void StartShell()
 }
 
 static const wchar_t* kInitPath = L"\\Windows\\Init.exe";   // the CAN panel's firmware only (its Main.exe starts it)
+static const wchar_t* kPanelPath = L"\\ResidentFlash\\CAN\\can_panel.exe";   // what Init.exe starts after the shell
 
 // The session after the boot run: Init.exe where the firmware has it - it starts the shell and the CAN panel (the
 // shell alone left the panel off till the next boot, the user 2026-11-26) - else the shell; the canrec job: the
@@ -746,20 +747,31 @@ static void StartSession(bool canrec)
         StartShell();
         return;
     }
+    // the image named as Main.exe names it (the tester 2026-11-27, 1.3.6.1: the path as the command line alone gave
+    // err 87 and the panel stayed off)
     PROCESS_INFORMATION pi;
     memset(&pi, 0, sizeof(pi));
-    wchar_t cmd[MAX_PATH];
-    wcscpy(cmd, kInitPath);
-    if (CreateProcess(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)) {
+    if (CreateProcess(kInitPath, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi)) {
         if (pi.hThread) CloseHandle(pi.hThread);
         if (pi.hProcess) CloseHandle(pi.hProcess);
         LogMsg(L"boot: \\Windows\\Init.exe - the shell and the CAN panel");
         return;
     }
-    wchar_t m[128];
-    _snwprintf(m, 128, L"boot: \\Windows\\Init.exe failed err=%u -> the shell", (unsigned)GetLastError());
+    wchar_t m[160];
+    _snwprintf(m, 160, L"boot: \\Windows\\Init.exe failed err=%u -> its work here: the shell, then the CAN panel",
+               (unsigned)GetLastError());
     LogMsg(m);
     StartShell();
+    if (!InitFallbackPanel(FileExists(kPanelPath) != 0, FileExists(kSwFlag) != 0)) {
+        LogMsg(L"boot: no CAN panel started (no can_panel.exe or SwUpdate.flag there)");
+        return;
+    }
+    memset(&pi, 0, sizeof(pi));
+    BOOL ok = CreateProcess(kPanelPath, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi);
+    _snwprintf(m, 160, ok ? L"boot: CAN panel started" : L"boot: CAN panel failed err=%u", (unsigned)GetLastError());
+    LogMsg(m);
+    if (pi.hThread) CloseHandle(pi.hThread);
+    if (pi.hProcess) CloseHandle(pi.hProcess);
 }
 
 // ---------------------------------------------------------------- DLL holders
