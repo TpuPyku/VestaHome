@@ -603,6 +603,19 @@ static void PaintIcon(HDC dc, Icon ic, int x, int y, int size, COLORREF c)
         p.L2(9, 39, 26, 22);
         p.ArcP(31, 17, 8, -10, 280);   // (0 right, clockwise: the gap - its jaw - at the top right)
         break;
+    case IC_ASSISTANT:   // the phone's assistant (a skin with no picture): a speech bubble with two eyes
+        p.Box(6, 12, 42, 36, 4);
+        p.L2(12, 36, 8, 43);
+        p.L2(24, 12, 24, 5);
+        p.L2(18, 22, 18, 26);
+        p.L2(30, 22, 30, 26);
+        break;
+    case IC_MIC:   // a microphone (as IC_MIC_OFF, not crossed)
+        p.Box(17, 5, 31, 29, 7);
+        p.ArcP(24, 23, 14, 0, 180);
+        p.L2(24, 37, 24, 43);
+        p.L2(17, 43, 31, 43);
+        break;
     case IC_AAUTO:   // Android Auto (the add-on's button, the user 2026-11-14): its "A" - a road going up to a point
         p.L2(6, 41, 24, 7);
         p.L2(24, 7, 42, 41);
