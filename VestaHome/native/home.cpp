@@ -969,9 +969,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     VLog(L"источник: AUX у MCU - номер %d", aux);
                     s_auxSrc = aux;
                 }
-                if (AuxLeft(s_auxSrc, s_srcSeen, src)) {
+                if (AuxOutOnSource(s_auxIn, s_srcSeen, src, s_auxAsk ? now - s_auxAsk : 0xFFFFFFFF)) {
                     AuxPlug(false);
-                    VLog(L"AUX: источник %d - MCU сказано «штекер не вставлен» (MODE без AUX)", src);
+                    VLog(L"AUX: источник %d -> %d - MCU сказано «штекер не вставлен» (MODE без AUX)", s_srcSeen, src);
                 }
                 bool ours = SrcOurs(now, s_srcByUs, s_srcWant, src);
                 if (s_srcSeen != -2 && !ours)

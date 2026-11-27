@@ -22,9 +22,14 @@ bool SrcJustTurned(int src, int seen, bool ours, unsigned sinceTurnMs)
     return !ours && (src != seen || sinceTurnMs < 3000);
 }
 
-bool AuxLeft(int auxSrc, int was, int now)
+bool AuxOutOnSource(bool plugged, int was, int now, unsigned sinceAskMs)
 {
-    return auxSrc > 0 && was == auxSrc && now >= 0 && now != auxSrc;
+    return plugged && was >= -1 && now >= 0 && was != now && sinceAskMs >= 6000;
+}
+
+bool AuxOutOnScreen(bool plugged, bool wasAuxPage, bool nowAudioPage)
+{
+    return plugged && wasAuxPage && nowAudioPage;
 }
 
 bool TabOpened(int was, int now, int tab)

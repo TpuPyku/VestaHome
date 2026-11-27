@@ -28,9 +28,12 @@ int LearnSource(int known, unsigned askedAgoMs, int was, int now);
 // and not seen by the tick yet (src != seen) or seen less than 3 s ago (sinceTurnMs). Our player then leaves it be.
 bool SrcJustTurned(int src, int seen, bool ours, unsigned sinceTurnMs);
 
-// AUX left (was its learned number auxSrc, now another known source): the MCU told its plug is out again - as the
-// stock shell tells it at its start, so MODE leaves AUX out (sheet 45 p. 6: AUX in MODE's round, nothing plugged in).
-bool AuxLeft(int auxSrc, int was, int now);
+// AUX's plug told to the MCU (it makes MODE go to AUX; the jack itself cannot be read): "in" only on AUX's page, "out"
+// at the start as the stock shell, and at once (the user 2026-11-27, sheet 45 p. 6) when the source turns (MODE or
+// another source: any turn was -> now, both seen, except our own turn to AUX within 6 s of its key - sinceAskMs) ...
+bool AuxOutOnSource(bool plugged, int was, int now, unsigned sinceAskMs);
+// ... or when AUX's page is left for another audio page (to home or the settings AUX keeps playing)
+bool AuxOutOnScreen(bool plugged, bool wasAuxPage, bool nowAudioPage);
 
 // The phone starts playing by itself while another source sounds: paused at once, as the stock shell does (the user
 // 2026-11-11; sheet 29 p. 34: an SMS notification took the radio to Bluetooth) - not under Bluetooth (src 9), not

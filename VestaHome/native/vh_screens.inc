@@ -439,7 +439,8 @@ static void RadioOn()
 // firmware (Ghidra 2026-11-15): desay_sdk_api's SV_DeviceStatusGetStatus reads GPIO pin 0 for every type (its pin
 // table is all zeros), its notifications fail (AppProxy's table the same), the stock shell's SPIPower.log has only
 // "0" - and with "0" MODE leaves AUX out (sheet 36). So VestaHome says "in" only while AUX is chosen (AuxOn), "out" at
-// its start as the shell does and once the source leaves AUX (AuxLeft; sheet 45 p. 6, 2026-11-27: with "in" at the
+// its start as the shell does and at once when the source turns or AUX's page is left for another audio page
+// (AuxOutOnSource / AuxOutOnScreen; the user 2026-11-27, sheet 45 p. 6: with "in" at the
 // start MODE went to AUX with nothing plugged in - the stock shell's round has no AUX).
 // The MCU's source number for AUX is learned from the change that follows (s_auxSrc, LearnSource).
 static int   s_auxSrc = -1;   // the MCU's source number of AUX (-1 not seen yet)
@@ -447,9 +448,12 @@ static DWORD s_auxAsk;        // our key 0x83 sent
 static int   s_srcNow = -2;   // the MCU's source the tick saw last (-2: none yet)
 static DWORD s_srcTurnTick;   // when the tick saw it turned not by us (MODE): SrcJustTurned
 
+static bool  s_auxIn;         // "in" told last
+
 static void AuxPlug(bool in)
 {
     McuSend2("SPApi_SendRadioAuxInOutStatus", in ? 1 : 0, 0);   // (one argument: the second one is not read)
+    s_auxIn = in;
 }
 
 static void AuxOn()
