@@ -91,6 +91,11 @@ static void SessionChecks()
     Check(SessionStartWhat(false, false) == START_SHELL, "the stock firmware: the shell");
     Check(SessionStartWhat(true, true) == START_SHELL, "the canrec job: the shell alone, the panel left off (COM3 free)");
     Check(SessionStartWhat(false, true) == START_SHELL, "canrec without Init.exe: the shell");
+    // Init.exe would not start (the tester's 1.3.6.1, 2026-11-27: err 87): its work done by us - the shell, then the
+    // panel as Init.exe would (its exe there, no SwUpdate.flag)
+    Check(InitFallbackPanel(true, false), "Init.exe failed: the panel after the shell");
+    Check(!InitFallbackPanel(false, false), "no can_panel.exe: no panel");
+    Check(!InitFallbackPanel(true, true), "SwUpdate.flag there: no panel (as Init.exe)");
 }
 
 int main()

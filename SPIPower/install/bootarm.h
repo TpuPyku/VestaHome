@@ -99,3 +99,10 @@ inline int SessionStartWhat(bool initExists, bool canrecJob)
 {
     return initExists && !canrecJob ? START_INIT : START_SHELL;
 }
+
+// Init.exe would not start (the tester 2026-11-27: err 87): we do its work - the shell, then the panel as it would:
+// its exe there and no SwUpdate.flag.
+inline bool InitFallbackPanel(bool panelExists, bool updateFlag)
+{
+    return panelExists && !updateFlag;
+}
