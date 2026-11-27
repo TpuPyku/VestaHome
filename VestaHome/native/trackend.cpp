@@ -17,6 +17,16 @@ int LearnSource(int known, unsigned askedAgoMs, int was, int now)
     return askedAgoMs < 6000 && other && now != was ? now : known;
 }
 
+bool SrcJustTurned(int src, int seen, bool ours, unsigned sinceTurnMs)
+{
+    return !ours && (src != seen || sinceTurnMs < 3000);
+}
+
+bool AuxLeft(int auxSrc, int was, int now)
+{
+    return auxSrc > 0 && was == auxSrc && now >= 0 && now != auxSrc;
+}
+
 bool TabOpened(int was, int now, int tab)
 {
     return now == tab && was != tab;

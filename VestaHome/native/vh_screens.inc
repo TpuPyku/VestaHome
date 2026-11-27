@@ -438,14 +438,18 @@ static void RadioOn()
 // to the MCU first (SPApi_SendRadioAuxInOutStatus, message 0x6C02, one byte). The jack itself cannot be read on this
 // firmware (Ghidra 2026-11-15): desay_sdk_api's SV_DeviceStatusGetStatus reads GPIO pin 0 for every type (its pin
 // table is all zeros), its notifications fail (AppProxy's table the same), the stock shell's SPIPower.log has only
-// "0" - and with "0" MODE leaves AUX out (sheet 36). So VestaHome says "in", at its start and on AUX (AuxPlugIn).
+// "0" - and with "0" MODE leaves AUX out (sheet 36). So VestaHome says "in" only while AUX is chosen (AuxOn), "out" at
+// its start as the shell does and once the source leaves AUX (AuxLeft; sheet 45 p. 6, 2026-11-27: with "in" at the
+// start MODE went to AUX with nothing plugged in - the stock shell's round has no AUX).
 // The MCU's source number for AUX is learned from the change that follows (s_auxSrc, LearnSource).
 static int   s_auxSrc = -1;   // the MCU's source number of AUX (-1 not seen yet)
 static DWORD s_auxAsk;        // our key 0x83 sent
+static int   s_srcNow = -2;   // the MCU's source the tick saw last (-2: none yet)
+static DWORD s_srcTurnTick;   // when the tick saw it turned not by us (MODE): SrcJustTurned
 
-static void AuxPlugIn()
+static void AuxPlug(bool in)
 {
-    McuSend2("SPApi_SendRadioAuxInOutStatus", 1, 0);   // (one argument: the second one is not read)
+    McuSend2("SPApi_SendRadioAuxInOutStatus", in ? 1 : 0, 0);   // (one argument: the second one is not read)
 }
 
 static void AuxOn()
@@ -455,7 +459,7 @@ static void AuxOn()
     BtQuiet();
     int vol, mute, src;
     VolGet(&vol, &mute, &src);
-    AuxPlugIn();
+    AuxPlug(true);
     VLog(L"источник: AUX - штекер «вставлен» (гнездо не читается), клавиша 0x83 главного меню MCU (было %d)", src);
     SrcAsked(kSrcAny);
     s_auxAsk = s_srcByUs;

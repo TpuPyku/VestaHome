@@ -971,9 +971,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_btPathTick = 0;
                 BtQuiet();
             }
-            if (s_srcSeen == -2) {   // the first tick with the MCU: AUX into MODE's round (AuxPlugIn)
-                AuxPlugIn();
-                VLog(L"AUX: MCU сказано «штекер вставлен» (для круга MODE)");
+            if (s_srcSeen == -2 && !s_auxAsk) {   // the first tick with the MCU: AUX out of MODE's round, as the shell
+                AuxPlug(false);
+                VLog(L"AUX: MCU сказано «штекер не вставлен» (MODE без AUX, как в штатной)");
             }
             if (src != s_srcSeen) {
                 if (s_srcSeen != -2 && src == 0)
@@ -983,7 +983,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     VLog(L"источник: AUX у MCU - номер %d", aux);
                     s_auxSrc = aux;
                 }
+                if (AuxLeft(s_auxSrc, s_srcSeen, src)) {
+                    AuxPlug(false);
+                    VLog(L"AUX: источник %d - MCU сказано «штекер не вставлен» (MODE без AUX)", src);
+                }
                 bool ours = SrcOurs(now, s_srcByUs, s_srcWant, src);
+                if (s_srcSeen != -2 && !ours)
+                    s_srcTurnTick = now;
                 if (s_srcSeen != -2 && (src == 0 || src == 9) && !ours) {
                     VLog(L"источник: %s - наши плееры на паузу", src ? L"Bluetooth" : L"радио");
                     OursQuiet();
@@ -1000,6 +1006,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (src == 0 && s_srcSeen > 0 && !s_radioSrcAsk && McuHostOn())
                     s_radioSrcAsk = now - 1000;  // back to the radio under our host: silent until a preset (next tick)
                 s_srcSeen = src;
+                s_srcNow = src;
             }
         }
         if (wp == 1 && (s_screen == S_SET_OBD || s_screen == S_BT_PAIRNEW) && IsWindowVisible(hwnd) &&

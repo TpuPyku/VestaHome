@@ -192,6 +192,12 @@ static void MediaSource()   // one of our players starts
     // source takes the channel from Bluetooth at once)
     if (src == 6 || src == 7 || (src == 9 && !McuHostOn()))
         return;
+    DWORD now = GetTickCount();
+    if ((src == 0 || src == 9) && SrcJustTurned(src, s_srcNow, SrcOurs(now, s_srcByUs, s_srcWant, src), now - s_srcTurnTick)) {
+        VLog(L"источник: %d только что выбран (MODE) - медиа не забираю, наш плеер на паузу", src);
+        OursQuiet();
+        return;
+    }
     if (McuHostOn()) {   // no shell: its main menu's "Media" (FUN_005f7cdc, Ghidra 2026-10-27) - the MCU knows the
         VLog(L"источник: медиа для нашего звука (было %d)", src);   // cards from our host now, MODE turns it 07
         MediaAskSignal(true);

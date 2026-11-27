@@ -23,6 +23,15 @@ bool TabOpened(int was, int now, int tab);
 // stays (-1 none).
 int LearnSource(int known, unsigned askedAgoMs, int was, int now);
 
+// The MCU's source turned by the user just now (MODE; sheet 45 p. 6, 2026-11-27: MODE to the media, our music took 4 s
+// to start, MODE again to Bluetooth meanwhile - and its start took the media back, 6 s of a silent source): not ours,
+// and not seen by the tick yet (src != seen) or seen less than 3 s ago (sinceTurnMs). Our player then leaves it be.
+bool SrcJustTurned(int src, int seen, bool ours, unsigned sinceTurnMs);
+
+// AUX left (was its learned number auxSrc, now another known source): the MCU told its plug is out again - as the
+// stock shell tells it at its start, so MODE leaves AUX out (sheet 45 p. 6: AUX in MODE's round, nothing plugged in).
+bool AuxLeft(int auxSrc, int was, int now);
+
 // The phone starts playing by itself while another source sounds: paused at once, as the stock shell does (the user
 // 2026-11-11; sheet 29 p. 34: an SMS notification took the radio to Bluetooth) - not under Bluetooth (src 9), not
 // within 5 s of our own switching (sinceOursMs: to Bluetooth, the source still to come), only under our host; only
