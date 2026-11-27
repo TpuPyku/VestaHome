@@ -275,11 +275,18 @@ static void LogsSet(bool on)
     wchar_t p[MAX_PATH];
     LogsOnPath(p);
     if (on) {
+        // flushed: the unit writes lazily - the knob's reset 18 s after switching on lost the flag and the switch was
+        // off again after the restart (the tester 2026-11-27, vhcan5; VestaStub's counter 2026-11-08 the same)
         HANDLE h = CreateFile(p, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (h != INVALID_HANDLE_VALUE)
+        bool kept = false;
+        if (h != INVALID_HANDLE_VALUE) {
+            DWORD w = 0;
+            kept = WriteFile(h, "1", 1, &w, NULL) && w == 1 && FlushFileBuffers(h);
             CloseHandle(h);
+        }
         s_logsOn = true;
-        VLog(L"журналы включены");
+        VLog(kept ? L"журналы включены" : L"журналы включены, но флаг %s не записан (%u) - после перезапуска выключатся",
+             p, (unsigned)GetLastError());
     } else {
         VLog(L"журналы выключены");
         s_logsOn = false;
