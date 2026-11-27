@@ -457,6 +457,12 @@ static void DoAction(const Btn& b)
     DoActionOn(b);
     if (TabOpened(was, s_screen, S_AUX))
         AuxOn();
+    bool audio = s_screen == S_RADIO || s_screen == S_AUDIO || s_screen == S_AUDIO_LIST || s_screen == S_AUDIO_BT ||
+                 s_screen == S_NETRADIO || s_screen == S_VIDEO;
+    if (AuxOutOnScreen(s_auxIn, was == S_AUX, audio)) {
+        AuxPlug(false);
+        VLog(L"AUX: со страницы AUX на другой звук - MCU сказано «штекер не вставлен»");
+    }
     if (TabOpened(was, s_screen, S_AUDIO) && MusicBackOnTab(s_musicHeld, PlayerPlaying())) {
         VLog(L"плеер: «Музыка» открыта - продолжаю после паузы источником");
         PlayerToggle();
