@@ -848,6 +848,11 @@ static void PlugReceive(HWND from, const wchar_t* cmd)
             MediaStep(!wcscmp(v, L"next") ? 1 : -1);
         else if (!wcscmp(v, L"toggle") || !wcscmp(v, L"play") || !wcscmp(v, L"pause"))
             MediaToggle();
+    } else if (!wcscmp(verb, L"do")) {   // VestaHome's own action (vhaction.h; VestaSmartHome: the phone's assistant)
+        VhapField(cmd, L"name", v, 24);
+        VhDo(VhActionName(v), p->name);
+        if (IsWindowVisible(s_wnd))
+            Redraw();
     } else if (!wcscmp(verb, L"screen.clear")) {
         VhapField(cmd, L"id", id, 24);
         PlugScreen* s = PlugScreenOf(*p, id);

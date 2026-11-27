@@ -95,6 +95,7 @@
 #include "wglayout.h"  // the main screen's widgets in their places
 #include "webcover.h"  // a song's cover from the net (Bluetooth, the internet radio)
 #include "callwin.h"   // an incoming call over any program
+#include "vhaction.h"  // VestaHome's own actions by name: a widget's tap=vh:assistant, an add-on's "do"
 
 #define APP_CLASS L"VestaHome_Wnd"
 

@@ -579,7 +579,9 @@ static void DoActionOn(const Btn& b)
     case A_USERWG:   // a user widget's tap (an add-on's: to the add-on)
         if (b.arg >= 0 && b.arg < s_uwCount && PlugWidgetTap(s_uw[b.arg]))
             break;
-        if (b.arg >= 0 && b.arg < s_uwCount && s_uw[b.arg].tap[0])
+        if (b.arg >= 0 && b.arg < s_uwCount && VhActionOf(s_uw[b.arg].tap) != VHA_NONE)
+            VhDo(VhActionOf(s_uw[b.arg].tap), s_uw[b.arg].key);
+        else if (b.arg >= 0 && b.arg < s_uwCount && s_uw[b.arg].tap[0])
             UserWgRun(s_uw[b.arg], s_uw[b.arg].tap, L"нажатие");
         break;
     case A_WGVIS:
@@ -975,17 +977,9 @@ static void DoActionOn(const Btn& b)
         BtCmdText(BT_CMD_CONNECT, t);
         break;
     }
-    case A_VOICEDIAL: {   // the phone's assistant through Bluetooth (a probe: the answer in BTProxy.log)
-        BtState bt;
-        if (!BtGet(&bt, NULL) || bt.hf != 2) {
-            wcscpy(s_status, L"телефон не подключён по Bluetooth (звонки)");
-            break;
-        }
-        BtCmdText(BT_CMD_VOICEDIAL, L"1");
-        wcscpy(s_status, L"помощник телефона: команда послана — говорите");
-        VLog(L"помощник телефона: голосовой набор (Hf_VoiceDial) послан");
+    case A_VOICEDIAL:   // the phone's assistant through Bluetooth (the answer in BTProxy.log)
+        VhDo(VHA_ASSISTANT, L"диагностика");
         break;
-    }
     case A_RVCVIEW:   // the camera's picture now, whatever the gear (powered only in reverse? - to be seen)
         s_rvcManual = true;
         s_rvcManualTick = GetTickCount();
