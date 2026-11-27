@@ -13,8 +13,20 @@ static void Check(bool ok, const char* what)
     }
 }
 
+static void TestUnstack()   // (the user 2026-11-27: hung up on the other end - the call's window stayed till red)
+{
+    int h[6] = { 0, 7, 30, 5, 31, 9 };   // 30, 31: the incoming one's and the call's windows under others
+    Check(CallUnstack(h, 6, 30, 31) == 4 && h[0] == 0 && h[1] == 7 && h[2] == 5 && h[3] == 9,
+          "unstack: the call's windows out of the history, the rest in its order");
+    int g[3] = { 1, 2, 3 };
+    Check(CallUnstack(g, 3, 30, 31) == 3 && g[0] == 1 && g[1] == 2 && g[2] == 3, "unstack: none there - as it was");
+    int f[2] = { 31, 30 };
+    Check(CallUnstack(f, 2, 30, 31) == 0, "unstack: only theirs - empty");
+}
+
 int main()
 {
+    TestUnstack();
     // Android's virtual call (an app taking the car's microphone - Alice; WhatsApp's, Telegram's calls too): put
     // down only when "Settings -> Bluetooth" asks so (the user 2026-11-24)
     Check(CallVirtual("10000000"), "virtual: Android's made-up number");

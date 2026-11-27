@@ -20,6 +20,15 @@ bool CallKeysOurs(int call)
     return call != kNone;
 }
 
+int CallUnstack(int* hist, int n, int incoming, int call)
+{
+    int k = 0;
+    for (int i = 0; i < n; i++)
+        if (hist[i] != incoming && hist[i] != call)
+            hist[k++] = hist[i];
+    return k;
+}
+
 int CallLine(int line1, int line2)
 {
     return line1 != kNone ? line1 : line2;

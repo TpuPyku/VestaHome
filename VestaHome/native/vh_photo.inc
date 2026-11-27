@@ -317,6 +317,60 @@ static void PhotoShow(bool on)   // the slide show
         KillTimer(s_wnd, TIMER_PHOTO);
 }
 
+// A file another program asks to open ("open" by WM_COPYDATA, VestaFiles - the user 2026-11-27): music, video, a
+// photo into VestaHome's own player / viewer with its folder as the list, text (.txt .ini .cfg) into the editor;
+// VestaHome comes in front. Anything else - nothing (programs are VestaFiles's own to start, asked first).
+static bool OpenOutside(const wchar_t* path)
+{
+    DWORD a = GetFileAttributes(path);
+    const wchar_t* slash = wcsrchr(path, L'\\');
+    if (a == 0xFFFFFFFF || (a & FILE_ATTRIBUTE_DIRECTORY) || !slash || !slash[1])
+        return false;
+    wchar_t dir[MAX_PATH];
+    const wchar_t* file = slash + 1;
+    wcsncpy(dir, path, slash - path + 1);
+    dir[slash - path + 1] = 0;
+    bool ok;
+    if (IsAudioName(file)) {
+        ok = BassLoad() && PlayerLoadDir(dir, file);
+        if (ok)
+            Go(S_AUDIO, true);
+    } else if (IsVideoName(file)) {
+        VidOpenDir(dir);
+        ok = VidLoadDir(dir, file);
+        if (ok)
+            Go(S_VIDEO_PLAY, true);
+    } else if (PicIsName(file)) {
+        PhotoOpenDir(dir);
+        int i = 0;
+        while (i < s_phCount && _wcsicmp(s_phs[i], file))
+            i++;
+        ok = i < s_phCount;
+        if (ok) {
+            s_phFull = false;
+            PhotoView(i);
+            Go(S_PHOTO_VIEW, true);
+        }
+    } else if ((HasExt(file, L".txt") || HasExt(file, L".ini") || HasExt(file, L".cfg")) &&
+               _wcsicmp(file, L"VestaHome.ini")) {   // (VestaHome.ini: its settings' own, as the editor's browser)
+        ok = TeOpen(path, S_HOME, false);
+    } else {
+        return false;
+    }
+    VLog(L"открыть из другой программы: %s - %s", file, ok ? L"открыт" : L"не открылся");
+    if (!ok)
+        return false;   // (VestaHome stays where it was; the program says so)
+#ifdef UNDER_CE
+    ShowWindow(s_wnd, SW_SHOW);
+    SetWindowPos(s_wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+#else
+    ShowWindow(s_wnd, IsIconic(s_wnd) ? SW_RESTORE : SW_SHOW);
+#endif
+    SetForegroundWindow(s_wnd);
+    Redraw();
+    return true;
+}
+
 static void ScrPhotoView(HDC dc)
 {
     int n = 0, at = 0;
@@ -1207,6 +1261,8 @@ static void HwKey(int key, int st, int kind)
         BtState bt;
         if (BtGet(&bt, NULL) && bt.call[0] == BT_CALL_INCOMING) {
             BtCmd(BT_CMD_ANSWER);
+            if (s_screen == S_INCOMING)
+                Back();   // the call's window instead of the incoming one, as the screen's "answer" (not over it)
             Go(S_CALL, true);
         } else {
             MediaStep(1);

@@ -159,8 +159,11 @@ static void CanRecToggle()   // the diagnostics' button
 // Only an installer signed by the author is run (VestaCore UpdateCheck, as the update from "О системе").
 static void CanRecArm()
 {
-    static const wchar_t* const dirs[2] = { L"\\SDMemory\\VestaHomeInstall\\", L"\\USBDevice\\VestaHomeInstall\\" };
-    for (int i = 0; i < 2; i++) {
+    // (its folder from Tests, or the card's root - the user 2026-11-27: it lay in the root, "нет установщика")
+    static const wchar_t* const dirs[4] = { L"\\SDMemory\\VestaHomeInstall\\", L"\\SDMemory\\",
+                                            L"\\USBDevice\\VestaHomeInstall\\", L"\\USBDevice\\" };
+    bool unsigned_ = false;
+    for (int i = 0; i < 4; i++) {
         wchar_t exe[MAX_PATH], sig[MAX_PATH], args[] = L"boot canrec";
         char ver[32];
         unsigned char sha[32];
@@ -171,6 +174,7 @@ static void CanRecArm()
         int r = UpdateCheck(exe, sig, NULL, 0, ver, 32, sha);
         if (r != UPDATE_OK) {
             VLog(L"COM3 панели: установщик %s не проверен (%d) - задание не ставится", exe, r);
+            unsigned_ = true;
             continue;
         }
         PROCESS_INFORMATION pi;
@@ -182,7 +186,8 @@ static void CanRecArm()
             return;
         }
     }
-    wcscpy(s_canRecLast, L"нет установщика VestaHomeInstall на SD");
+    wcscpy(s_canRecLast, unsigned_ ? L"VestaHomeInstall.exe: подпись (.sig) не прошла"   // (64 at most: s_canRecLast)
+                                   : L"нет VestaHomeInstall.exe на SD или USB");
     VLog(L"COM3 панели: панель не завершилась, установщика с подписью на SD/USB нет - задание не поставлено");
 }
 

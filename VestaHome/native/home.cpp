@@ -805,7 +805,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)
                     s_callTick = GetTickCount();
-                CallAct act = CallStep(c, s_screen == S_INCOMING, s_screen == S_CALL, AaInFront(), fresh);
+                bool under = false;   // a call's window under the one shown (the volume's over it...)
+                for (int k = 0; k < s_histLen; k++)
+                    under = under || s_hist[k] == S_INCOMING || s_hist[k] == S_CALL;
+                bool shownInc = s_screen == S_INCOMING, shownCall = s_screen == S_CALL;
+                CallAct act = CallStep(c, shownInc || (c == BT_CALL_NONE && under), shownCall, AaInFront(), fresh);
                 if (act == CA_INCOMING || act == CA_CALL) {   // (one dialed on the phone: the call's window)
                     CallFront();
                     Go(act == CA_CALL ? S_CALL : S_INCOMING, true);
@@ -814,8 +818,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 } else if (act == CA_TAKEN) {
                     Back();
                     Go(S_CALL, true);
-                } else if (act == CA_CLOSE) {
-                    Back();
+                } else if (act == CA_CLOSE) {   // its windows out of the history too: none comes back after it
+                    int h[16];
+                    for (int k = 0; k < s_histLen; k++)
+                        h[k] = s_hist[k];
+                    s_histLen = CallUnstack(h, s_histLen, S_INCOMING, S_CALL);
+                    for (int k = 0; k < s_histLen; k++)
+                        s_hist[k] = (Screen)h[k];
+                    if (shownInc || shownCall)
+                        Back();
+                    VLog(L"звонок окончен: окно звонка закрыто%s", shownInc || shownCall ? L"" : L" (было под другим)");
                     CallGiveBack();
                 }
                 if (IsWindowVisible(hwnd))
@@ -972,7 +984,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (s_srcSeen != -2 && (src == 6 || src == 7) && !ours && !PlayerPlaying() &&
                     !s_netOn && s_vidState != VID_PLAYING && McuHostOn()) {
                     VLog(L"источник: медиа (MODE) - наша музыка");
-                    PlayerToggle();
+                    PlayerToggle(false);   // (nothing chosen yet: no list popping up - the music screen says so)
                 }
                 if (s_srcSeen != -2 && !ours)
                     FollowSource(src);
@@ -1593,6 +1605,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         n = n > 1023 ? 1023 : n;
         memcpy(cmd, c->lpData, n * sizeof(wchar_t));
         cmd[n] = 0;
+        wchar_t path[MAX_PATH];
+        if (!wcsncmp(cmd, L"open\t", 5))   // a file from another program (VestaFiles): no hello - it only shows it;
+            return VhapField(cmd, L"path", path, MAX_PATH) && OpenOutside(path);   // FALSE: not opened
         PlugReceive((HWND)wp, cmd);
         return TRUE;
     }

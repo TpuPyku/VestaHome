@@ -387,10 +387,21 @@ static int Sheet(HDC dc, int h)
 
 // The power button of "About the system": exit or minimize VestaHome; both bring up Explorer. The stock shell
 // and started programs keep running.
+static bool s_shellGoing;   // "Штатная" pressed: the services going off before the restart (vh_tasks.inc ShellStart)
+
 static void ScrExit(HDC dc)
 {
     Under(dc, 184);
     int top = Sheet(dc, 208);
+    if (s_shellGoing) {   // (the user 2026-11-27: ~10 s with the window as it was, only a small line on top)
+        Ico(dc, IC_POWER, kSheetInX, top + 14, 48, kOrange);
+        T(dc, kSheetInX + 60, top + 48, L"Переход в штатную оболочку", 24, kText, 700, AL_START, 600);
+        T(dc, kSheetInX, top + 92, s_status[0] ? s_status : L"выключаю службы VestaHome…", 20, kText, 400, AL_START,
+          kSheetInW);
+        T(dc, kSheetInX, top + 136, L"До 20 секунд, затем ГУ перезагрузится само. Не выключайте зажигание.", 15,
+          kMuted, 400, AL_START, kSheetInW);
+        return;
+    }
     Ico(dc, IC_POWER, kSheetInX, top + 14, 48, kText);
     T(dc, kSheetInX + 60, top + 48, L"VestaHome", 24, kText, 700, AL_START, 600);
     T(dc, kSheetInX, top + 88, L"Свернуть — останется позади.  Штатная — перезагрузка в штатную.  Выход — закроется.",

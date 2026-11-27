@@ -17,6 +17,11 @@ enum CallAct {
 // whose window was closed by hand is left so).
 CallAct CallStep(int call, bool onIncoming, bool onCall, bool phoneShows, bool fresh);
 
+// The call over: its windows (incoming, call) out of the screens' history, wherever they are in it (the user
+// 2026-11-27: hung up on the other end, the incoming window stayed under the call's - answered by the wheel - and
+// came back). The rest keep their order; the new length.
+int CallUnstack(int* hist, int n, int incoming, int call);
+
 // The call to follow (the widget and the window alike): line 1's, else line 2's (the user 2026-11-24: a call on
 // the phone's second line showed in the widget, no window).
 int CallLine(int line1, int line2);
