@@ -579,7 +579,9 @@ static void DoActionOn(const Btn& b)
     case A_USERWG:   // a user widget's tap (an add-on's: to the add-on)
         if (b.arg >= 0 && b.arg < s_uwCount && PlugWidgetTap(s_uw[b.arg]))
             break;
-        if (b.arg >= 0 && b.arg < s_uwCount && VhActionOf(s_uw[b.arg].tap) != VHA_NONE)
+        if (b.arg >= 0 && b.arg < s_uwCount && VhActionOf(s_uw[b.arg].tap) == VHA_REFRESH)
+            UserWgRefresh(b.arg);
+        else if (b.arg >= 0 && b.arg < s_uwCount && VhActionOf(s_uw[b.arg].tap) != VHA_NONE)
             VhDo(VhActionOf(s_uw[b.arg].tap), s_uw[b.arg].key);
         else if (b.arg >= 0 && b.arg < s_uwCount && s_uw[b.arg].tap[0])
             UserWgRun(s_uw[b.arg], s_uw[b.arg].tap, L"нажатие");

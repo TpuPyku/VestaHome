@@ -587,6 +587,23 @@ static void UserWgWake(int u)   // shown again: its script, its data, its url no
     LeaveCriticalSection(&s_uwCs);
 }
 
+// tap=vh:refresh (the user 2026-11-27, probki.ini): the widget's data now - its url fetched within a second, its file
+// read; a url not again within kVhRefreshMs (vhaction.h).
+static void UserWgRefresh(int u)
+{
+    EnterCriticalSection(&s_uwCs);
+    bool due = VhRefreshDue(s_uw[u].fetchTick, GetTickCount());
+    LeaveCriticalSection(&s_uwCs);
+    if (s_uw[u].url[0] && !due) {
+        _snwprintf(s_status, 96, L"%s: только что обновлено", s_uw[u].title);
+        s_status[95] = 0;
+        return;
+    }
+    UserWgWake(u);
+    _snwprintf(s_status, 96, L"%s: обновляю", s_uw[u].title);
+    s_status[95] = 0;
+}
+
 static void PlugWidgetsAppend();   // (vh_plugins.inc: the add-ons' widgets join the list)
 
 static void UserWidgetsScan()
@@ -647,7 +664,8 @@ static void WUser(HDC dc, int x, int y, int u)
         Disc(dc, x + ww - 24, y + 21, 7, d ? kInk : dot[w.state]);
     }
     int act = VhActionOf(w.tap);
-    if (!w.have && act != VHA_NONE) {   // a button of VestaHome's action (tap=vh:...), no data of its own: what it does
+    if (!w.have && act != VHA_NONE && act != VHA_REFRESH) {   // a button of VestaHome's action (tap=vh:...), no data
+                                                               // of its own: what it does
         T(dc, x + 16, y + 84, act == VHA_ASSISTANT ? L"Помощник телефона" : L"Нет такого действия", 22, fg, 700,
           AL_START, ww - 32);
         TWrap(dc, x + 16, y + 108, act == VHA_ASSISTANT ? L"нажмите и говорите" : w.tap, 14, mg, 400, ww - 32, 3, 18);
