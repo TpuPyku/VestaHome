@@ -193,7 +193,14 @@ static unsigned char* FileFacts(const wchar_t* path, int* outLen, bool keep)
     PeFacts f;
     if (PeRead(b, len, &f))
         StampText(f.stamp, when, 16);
-    Log(L"  %s: %d Б, md5 %s%s%s, экспортов %d", path, len, md, when[0] ? L", сборка " : L"", when, f.pe ? f.exports : 0);
+    unsigned v[4];
+    wchar_t ver[48] = L"";   // the user 2026-11-27: which CAN panel (its exe says 1.3.6.0)
+    if (f.pe && PeFileVersion(b, len, v))
+        _snwprintf(ver, 48, L", версия %u.%u.%u.%u", v[0], v[1], v[2], v[3]);
+    Log(L"  %s: %d Б, md5 %s%s%s%s, экспортов %d", path, len, md, when[0] ? L", сборка " : L"", when, ver,
+        f.pe ? f.exports : 0);
+    if (ver[0] && wcsstr(path, L"can_panel.exe"))
+        Sum(L"CAN-панель:%s", ver + 1);
     if (!keep) {
         free(b);
         return NULL;
@@ -976,7 +983,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     MEMORYSTATUS ms;
     ms.dwLength = sizeof(ms);
     GlobalMemoryStatus(&ms);
-    Log(L"=== VHCheck 1.5: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
+    Log(L"=== VHCheck 1.6: ОС %u.%u.%u, память свободно %u из %u КБ", v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber,
         ms.dwAvailPhys / 1024, ms.dwTotalPhys / 1024);
     bool th = Toolhelp();
     Firmware();

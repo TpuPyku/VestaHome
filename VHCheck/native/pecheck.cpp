@@ -63,6 +63,20 @@ bool PeRead(const unsigned char* b, int len, PeFacts* f)
     return Open(b, len, &p, f, &names);
 }
 
+bool PeFileVersion(const unsigned char* b, int len, unsigned v[4])
+{
+    Pe p = { b, len };
+    for (int i = 0; i + 16 <= len; i += 4)
+        if (U32(p, i) == 0xFEEF04BD && U32(p, i + 4) == 0x00010000) {
+            v[0] = U16(p, i + 10);
+            v[1] = U16(p, i + 8);
+            v[2] = U16(p, i + 14);
+            v[3] = U16(p, i + 12);
+            return true;
+        }
+    return false;
+}
+
 bool PeHasExport(const unsigned char* b, int len, const char* name)
 {
     Pe p;
