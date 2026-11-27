@@ -198,7 +198,9 @@ static bool UserWgLoad(const wchar_t* dir, const wchar_t* file, UserWg* w)
         } else if (!_wcsicmp(k, L"refresh")) {
             w->refresh = _wtoi(v) < 1 ? 1 : _wtoi(v) > 3600 ? 3600 : _wtoi(v);
         } else if (!_wcsicmp(k, L"tap")) {
-            if (v[0])
+            if (VhActionOf(v) != VHA_NONE)   // tap=vh:<name>: VestaHome's own action, not a path
+                wcsncpy(w->tap, v, MAX_PATH - 1);
+            else if (v[0])
                 UserWgPath(*w, v, w->tap);
         } else if (!_wcsicmp(k, L"start")) {
             if (v[0])
@@ -282,6 +284,25 @@ static bool UserWgRead(UserWg& w)
 
 // Runs a widget's command: a .mscr through MortScript.exe (looked for beside the widget, on the card, next to
 // VestaHome, in the usual folders), anything else as a program.
+// VestaHome's own actions (vhaction.h): the diagnostics' button, a widget's tap=vh:<name>, an add-on's "do"; who - for
+// the log. The phone's assistant: Bluetooth's voice dial (the user 2026-11-21: Alice starts).
+static void VhDo(int act, const wchar_t* who)
+{
+    if (act != VHA_ASSISTANT) {
+        wcscpy(s_status, L"нет такого действия VestaHome");
+        VLog(L"%s: нет такого действия VestaHome", who);
+        return;
+    }
+    BtState bt;
+    if (!BtGet(&bt, NULL) || bt.hf != 2) {
+        wcscpy(s_status, L"телефон не подключён по Bluetooth (звонки)");
+        return;
+    }
+    BtCmdText(BT_CMD_VOICEDIAL, L"1");
+    wcscpy(s_status, L"помощник телефона: команда послана — говорите");
+    VLog(L"помощник телефона: голосовой набор (Hf_VoiceDial) послан (%s)", who);
+}
+
 static void UserWgRun(const UserWg& w, const wchar_t* cmd, const wchar_t* why)
 {
     wchar_t exe[MAX_PATH], args[MAX_PATH + 4];
@@ -624,6 +645,13 @@ static void WUser(HDC dc, int x, int y, int u)
     if (w.state) {
         static const COLORREF dot[4] = { 0, kOk, kOrange, kStop };
         Disc(dc, x + ww - 24, y + 21, 7, d ? kInk : dot[w.state]);
+    }
+    int act = VhActionOf(w.tap);
+    if (!w.have && act != VHA_NONE) {   // a button of VestaHome's action (tap=vh:...), no data of its own: what it does
+        T(dc, x + 16, y + 84, act == VHA_ASSISTANT ? L"Помощник телефона" : L"Нет такого действия", 22, fg, 700,
+          AL_START, ww - 32);
+        TWrap(dc, x + 16, y + 108, act == VHA_ASSISTANT ? L"нажмите и говорите" : w.tap, 14, mg, 400, ww - 32, 3, 18);
+        return;
     }
     if (!w.have) {
         T(dc, x + 16, y + 84, L"Нет данных", 22, fg, 700, AL_START, ww - 32);
