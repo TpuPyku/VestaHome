@@ -791,7 +791,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 s_lastCall = c;
                 if (c == BT_CALL_ACTIVE)
                     s_callTick = GetTickCount();
-                CallAct act = CallStep(c, s_screen == S_INCOMING, s_screen == S_CALL, AaInFront(), fresh);
+                bool under = false;   // a call's window under the one shown (the volume's over it...)
+                for (int k = 0; k < s_histLen; k++)
+                    under = under || s_hist[k] == S_INCOMING || s_hist[k] == S_CALL;
+                bool shownInc = s_screen == S_INCOMING, shownCall = s_screen == S_CALL;
+                CallAct act = CallStep(c, shownInc || (c == BT_CALL_NONE && under), shownCall, AaInFront(), fresh);
                 if (act == CA_INCOMING || act == CA_CALL) {   // (one dialed on the phone: the call's window)
                     CallFront();
                     Go(act == CA_CALL ? S_CALL : S_INCOMING, true);
@@ -800,8 +804,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 } else if (act == CA_TAKEN) {
                     Back();
                     Go(S_CALL, true);
-                } else if (act == CA_CLOSE) {
-                    Back();
+                } else if (act == CA_CLOSE) {   // its windows out of the history too: none comes back after it
+                    int h[16];
+                    for (int k = 0; k < s_histLen; k++)
+                        h[k] = s_hist[k];
+                    s_histLen = CallUnstack(h, s_histLen, S_INCOMING, S_CALL);
+                    for (int k = 0; k < s_histLen; k++)
+                        s_hist[k] = (Screen)h[k];
+                    if (shownInc || shownCall)
+                        Back();
+                    VLog(L"звонок окончен: окно звонка закрыто%s", shownInc || shownCall ? L"" : L" (было под другим)");
                     CallGiveBack();
                 }
                 if (IsWindowVisible(hwnd))

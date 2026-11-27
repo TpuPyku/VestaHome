@@ -1260,6 +1260,8 @@ static void HwKey(int key, int st, int kind)
         BtState bt;
         if (BtGet(&bt, NULL) && bt.call[0] == BT_CALL_INCOMING) {
             BtCmd(BT_CMD_ANSWER);
+            if (s_screen == S_INCOMING)
+                Back();   // the call's window instead of the incoming one, as the screen's "answer" (not over it)
             Go(S_CALL, true);
         } else {
             MediaStep(1);
