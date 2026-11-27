@@ -30,6 +30,8 @@ PLAN = (
         ('OSMapsCE.exe', 'Images', 'Fonts', 'Lang', 'Voice')),   # toolhelp.dll: the firmware's own (\Windows) is used; Fonts: Golos (OFL); Voice: the prompts
     # VHCheck: the unit's facts before VestaHome moves to the stub alone (2026-11-20): stock firmware and CAN panel
     (os.path.join(ROOT, 'VestaHome', 'VHCheck', 'VHCheck'), r'SDCard\VHCheck', ('VHCheck.exe',)),
+    # VestaFiles: the file manager (its own closed repo, the user 2026-11-27); fonts and colours from VestaHome's folder
+    (os.path.join(ROOT, 'VestaFiles', 'VestaFiles'), r'SDCard\VestaFiles', ('VestaFiles.exe', 'Skin')),
     # VestaHome is installed by VestaHomeInstall (SDCard\VestaHomeInstall, from make_deploy.py), VestaLaunch by LaunchInstall
     # short audio / video files and photos to try VestaHome's players and photo viewer on (make_testmedia.py)
     (os.path.join(V, 'VestaHome', 'VestaHome'), r'SDCard',
