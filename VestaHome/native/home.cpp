@@ -1574,6 +1574,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         n = n > 1023 ? 1023 : n;
         memcpy(cmd, c->lpData, n * sizeof(wchar_t));
         cmd[n] = 0;
+        wchar_t path[MAX_PATH];
+        if (!wcsncmp(cmd, L"open\t", 5))   // a file from another program (VestaFiles): no hello - it only shows it;
+            return VhapField(cmd, L"path", path, MAX_PATH) && OpenOutside(path);   // FALSE: not opened
         PlugReceive((HWND)wp, cmd);
         return TRUE;
     }
