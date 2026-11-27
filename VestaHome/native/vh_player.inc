@@ -403,14 +403,16 @@ static void PlayerPrev()
     PlayerStep(-1, false);
 }
 
-static void PlayerToggle()
+// pick: nothing to play - the list to choose from (the play button); MODE's media gives false (the user 2026-11-27:
+// the volumes' list popped up and stayed through the next MODE presses)
+static void PlayerToggle(bool pick = true)
 {
     if (!BassLoad()) {
         wcscpy(s_status, s_bass.state == -1 ? L"нет bass.dll: папка bass рядом с VestaHome (см. «Медиа»)" : L"звук не запускается (BASS_Init)");
         return;
     }
     if (!s_chan) {   // nothing loaded: the last track, otherwise the list
-        if (!s_cfg.musicDir[0] || !PlayerLoadDir(s_cfg.musicDir, s_cfg.musicFile, s_cfg.musicTree))
+        if ((!s_cfg.musicDir[0] || !PlayerLoadDir(s_cfg.musicDir, s_cfg.musicFile, s_cfg.musicTree)) && pick)
             Go(S_AUDIO_LIST, true);
         return;
     }

@@ -1195,10 +1195,19 @@ static bool ShellStart()
         if (f != INVALID_HANDLE_VALUE)
             CloseHandle(f);
         VLog(L"штатная оболочка: флаг %s %s, перезагрузка", kStockFlag, f != INVALID_HANDLE_VALUE ? L"есть" : L"НЕ ЗАПИСАН");
+        s_shellGoing = true;   // (the exit window says what goes on, each step - ScrExit)
+        s_status[0] = 0;
+        InvalidateRect(s_wnd, NULL, FALSE);
+        UpdateWindow(s_wnd);
         RadioForShell();
         BtOffForShell();
-        if (!Reboot(true))
+        wcscpy(s_status, L"перезагрузка…");
+        InvalidateRect(s_wnd, NULL, FALSE);
+        UpdateWindow(s_wnd);
+        if (!Reboot(true)) {
+            s_shellGoing = false;
             wcscpy(s_status, L"перезагрузите ГУ: удерживайте крутилку 10 с");
+        }
         return false;
     }
     TaskInfo* t = (TaskInfo*)calloc(1, sizeof(TaskInfo));

@@ -110,8 +110,8 @@ static void FollowSource(int src)
         return;
     bool over = s_screen == S_VOLUME && s_histLen > 0;
     Screen* at = over ? &s_hist[s_histLen - 1] : &s_screen;
-    if (*at != S_RADIO && *at != S_AUDIO && *at != S_AUDIO_BT && *at != S_AUX)
-        return;
+    if (*at != S_RADIO && *at != S_AUDIO && *at != S_AUDIO_LIST && *at != S_AUDIO_BT && *at != S_AUX)
+        return;   // (the music's list too: it stayed through MODE's round - the user 2026-11-27)
     Screen to = src == 6 || src == 7 ? S_AUDIO : src == 9 ? S_AUDIO_BT : src == 0 ? S_RADIO
               : src == s_auxSrc ? S_AUX : *at;
     if (to == *at)

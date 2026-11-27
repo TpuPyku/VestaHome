@@ -970,7 +970,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (s_srcSeen != -2 && (src == 6 || src == 7) && !ours && !PlayerPlaying() &&
                     !s_netOn && s_vidState != VID_PLAYING && McuHostOn()) {
                     VLog(L"источник: медиа (MODE) - наша музыка");
-                    PlayerToggle();
+                    PlayerToggle(false);   // (nothing chosen yet: no list popping up - the music screen says so)
                 }
                 if (s_srcSeen != -2 && !ours)
                     FollowSource(src);
