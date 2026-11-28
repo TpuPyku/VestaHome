@@ -44,6 +44,7 @@
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
 #include "coex.h"      // Wi-Fi and Bluetooth side by side (the channel Bluetooth keeps off, Wi-Fi after BT's off)
+#include "stubcan.h"    // the loader on the unit knows the update from «О системе»
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
 #include "srcwatch.h"   // a source change: ours or the user's (MODE)
 #include "numpad.h"    // the digits' keyboard (km, coordinates, a date)

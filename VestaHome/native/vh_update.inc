@@ -71,11 +71,43 @@ static bool UpdReady()   // a signed installer of a newer VestaHome
     return s_upd.state == 2 && s_upd.result == UPDATE_OK && UpdVsMine() > 0;
 }
 
+// The loader on the unit knows the boot job (stubcan.h): its file read whole (it is ~100 KB)
+static bool StubCanUpdate()
+{
+    HANDLE f = CreateFile(L"\\ResidentFlash\\navigation\\app\\G3NavHMI.exe", GENERIC_READ,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE)
+        return false;
+    DWORD n = GetFileSize(f, NULL), got = 0;
+    unsigned char* b = n && n < (4u << 20) ? (unsigned char*)malloc(n) : NULL;
+    bool can = b && ReadFile(f, b, n, &got, NULL) && StubKnowsUpdate(b, (int)got);
+    free(b);
+    CloseHandle(f);
+    return can;
+}
+
+// An old loader (stubcan.h): the installer opened as by hand - it puts the new loader too
+static void UpdByHand()
+{
+    PROCESS_INFORMATION pi;
+    bool run = CreateProcess(s_upd.exe, NULL, NULL, NULL, FALSE, 0, NULL, NULL, NULL, &pi) != 0;
+    if (run) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+    VLog(L"обновление: загрузчик старый (не знает задания) - установщик %s %s", s_upd.exe, run ? L"открыт" : L"не запустился");
+    wcscpy(s_status, run ? L"загрузчик старый: открыт установщик, обновите в нём" : L"установщик не запустился");
+}
+
 // "Обновить и перезагрузить": the boot job, the restart (the loader installs before VestaHome starts).
 static void UpdGo()
 {
     if (!UpdReady())
         return;
+    if (!StubCanUpdate()) {
+        UpdByHand();
+        return;
+    }
     char t[700];
     int n = UpdateJobText(s_upd.exe, s_upd.ver, s_upd.sha, t, sizeof(t));
     // On the disk before the restart (the testers 2026-11-28: "Обновить" restarted, nothing installed - the MCU's reset
