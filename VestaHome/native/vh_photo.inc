@@ -636,6 +636,12 @@ static void DoActionOn(const Btn& b)
             LogsSet(s_on[T_LOGS]);
         if (b.arg == T_BT)
             BtPowerSet(s_on[T_BT]);
+        if (b.arg == T_COEX) {   // the Wi-Fi driver's coexistence with BT (Diagnostics, the probe of 2026-11-28)
+            s_cfg.wifiCoex = s_on[T_COEX];
+            SaveCfg();
+            VLog(L"диагностика: совмещение Wi-Fi и BT %s", s_cfg.wifiCoex ? L"вкл." : L"выкл.");
+            WifiCoex(s_cfg.wifiCoex);
+        }
         if (b.arg == T_BT_VIRTUAL) {   // the virtual call put down (callwin.h CallVirtual; the user 2026-11-24)
             s_cfg.btVirtualDown = s_on[T_BT_VIRTUAL];
             SaveCfg();

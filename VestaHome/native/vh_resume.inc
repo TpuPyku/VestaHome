@@ -198,12 +198,43 @@ static void BtPowerTick(const BtState& bt)   // the start: as it was left (Vesta
     }
 }
 
+// Wi-Fi and Bluetooth side by side (coex.h): the joined network's channel to the proxy (Bluetooth keeps off it), and
+// a Wi-Fi without a link restarted 10 s after Bluetooth's off (the users 2026-11-28: Wi-Fi only after a reboot)
+static void CoexTick()
+{
+    static Coex s_coex;
+    static bool s_init;
+    if (!s_init) {
+        CoexInit(&s_coex);
+        s_init = true;
+    }
+    WifiInfo w;
+    WifiGet(&w);
+    int pw = BtPowerState(), ch = 0;
+    int act = CoexStep(&s_coex, pw == BT_POW_ON, pw == BT_POW_OFF, &w, s_cfg.wifiOn, GetTickCount(), &ch);
+    if (act & CX_AFH) {
+        wchar_t t[8];
+        _snwprintf(t, 8, L"%d", ch);
+        t[7] = 0;
+        VLog(ch ? L"bt: Bluetooth обходит канал Wi-Fi %d" : L"bt: Bluetooth на всех каналах (Wi-Fi без связи)", ch);
+        BtCmdText(BT_CMD_AFH, t);
+    }
+    if (act & CX_KICK) {
+        VLog(L"wifi: Bluetooth выключен 10 с, а Wi-Fi без связи - перезапускаю");
+        WifiEnable(false);
+        WifiEnable(true);
+    }
+    if (act & CX_FINE)
+        VLog(L"wifi: Bluetooth выключен 10 с, Wi-Fi не трогаю (состояние %d)", w.state);
+}
+
 static void BtOwnerTick()   // once a second, 10 s on from the start
 {
     BtState bt;
     if (GetTickCount() - s_bootTick < 10000 || !BtGet(&bt, NULL))
         return;
     BtPowerTick(bt);
+    CoexTick();
     if (!kObdOn) {
         if (s_cfg.btOwner == BTO_OBD)
             BtPhoneBack(L"OBD отключён в этой версии");

@@ -11,6 +11,7 @@
 #include "g_btproxy.h"
 #include "btshm.h"
 #include "panstate.h"
+#include "afhmap.h"
 
 extern "C" void* g_real[PROXY_COUNT] = {0};
 
@@ -550,6 +551,43 @@ static int PanLowDisconnect(const char* addr)
     return r;
 }
 
+// Bluetooth kept off the Wi-Fi channel (BT_CMD_AFH, afhmap.h): the map to the stack (btapi #254
+// XCBM_SetChannelClassification(map, 1)), then read back (#253 XCBM_GetChannelClassification) - both into the log, so
+// the unit shows whether the stack took it. The channel kept: put back after Bluetooth's on. Its answer: #254's, -1 no btapi.
+static int s_afhCh;   // the last one asked (0: none)
+
+static int AfhApply(int ch)
+{
+    typedef int (*SetFn)(unsigned char*, unsigned long);
+    typedef int (*GetFn)(unsigned char*);
+    HMODULE m = GetModuleHandleW(L"btapi.dll");
+#ifdef UNDER_CE
+    SetFn set = m ? (SetFn)GetProcAddressW(m, (LPCWSTR)254) : NULL;
+    GetFn get = m ? (GetFn)GetProcAddressW(m, (LPCWSTR)253) : NULL;
+#else
+    SetFn set = m ? (SetFn)GetProcAddress(m, (LPCSTR)254) : NULL;
+    GetFn get = m ? (GetFn)GetProcAddress(m, (LPCSTR)253) : NULL;
+#endif
+    unsigned char map[10], back[10];
+    int bad = AfhMap(ch, map), r = -1, g = -1;
+    memset(back, 0, sizeof(back));
+    __try {
+        if (set)
+            r = set(map, 1);
+        if (get)
+            g = get(back);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        r = -2;
+    }
+    char hm[21], hb[21];
+    AfhHex(map, hm);
+    AfhHex(back, hb);
+    wchar_t b[160];
+    wsprintfW(b, L"AFH: Wi-Fi channel %d, %d BT channels off, set %S -> %d, read %S -> %d", ch, bad, hm, r, hb, g);
+    LogLine(b);
+    return r;
+}
+
 static int PowerCmd(bool on);
 
 // The restart (BT_CMD_POWER "2"): the switch's off, a second, its on. (The probe of 2026-11-13 unloaded the stack's
@@ -639,6 +677,8 @@ static int PowerCmd(bool on)
                   GetTickCount() - t0);
     }
     LogLine(b);
+    if (on && r == 0 && s_afhCh)
+        AfhApply(s_afhCh);   // (the stack started anew: its map too)
     return r;
 }
 
@@ -737,6 +777,14 @@ static DWORD WINAPI CmdThread(LPVOID)
             wchar_t b[64];
             wsprintfW(b, L"VOICEDIAL %d -> %d", s_shm->cmdText[0] == '1', r);
             LogLine(b);
+        } else if (cmd == BT_CMD_AFH) {   // Bluetooth off the Wi-Fi channel ("0": everywhere again)
+            char t[8];
+            CopyText(t, s_shm->cmdText, 8);
+            int ch = AfhChannel(t);
+            if (ch >= 0) {
+                s_afhCh = ch;
+                r = AfhApply(ch);
+            }
         } else if (cmd == BT_CMD_PAN) {   // the phone's internet: connect to its NAP (0x1116), or let it go
             char a[40];
             CopyText(a, s_shm->cmdText, 18);

@@ -43,6 +43,7 @@
 #include "obd.h"
 #include "btrf.h"     // its direct channel: the link brought up by an SDP search
 #include "btowner.h"   // Bluetooth for the phone or the OBD adapter, one at a time
+#include "coex.h"      // Wi-Fi and Bluetooth side by side (the channel Bluetooth keeps off, Wi-Fi after BT's off)
 #include "trackend.h"  // a track ended: the next one only while the sound is ours
 #include "srcwatch.h"   // a source change: ours or the user's (MODE)
 #include "numpad.h"    // the digits' keyboard (km, coordinates, a date)
@@ -190,7 +191,7 @@ struct Btn {
 // in VestaHome.ini (T_GPS_TIME, T_W_GPS .. T_CAM_ALERT, G_WPROV, G_CAMDIST, G_CAMSND: see CfgToControls).
 enum { T_GPS_TIME, T_NOISE, T_MW, T_RDS, T_AF, T_CT, T_TA, T_BT, T_AUTOCONNECT, T_AUTOANSWER,
        T_WIFI, T_VIDEO_MOVING, T_SLIDES_OPEN, T_AUTOROTATE,
-       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_BT_VIRTUAL, T_PHONE_USB, T_PHONE_ANY, T_VOLALGO, T_NAVI_MIX, T_COUNT };
+       T_W_GPS, T_CAM_ALERT, T_CAM_WEEKLY, T_WIFI_AP_AUTO, T_MS, T_LOGS, T_NMEA_PORT, T_NET_AUTO, T_PB_AUTO, T_BT_VIRTUAL, T_PHONE_USB, T_PHONE_ANY, T_VOLALGO, T_NAVI_MIX, T_COEX, T_COUNT };
 static bool s_on[T_COUNT] = { true, true, true, false, true, false, true, true, true, true, false,
                               true, false, false, true };
 enum { G_TIME_FMT, G_VIDEO_SCALE, G_PHOTO_SCALE, G_WPROV, G_CAMDIST, G_CAMSND, G_SAVER, G_COUNT };
@@ -624,6 +625,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         WifiEnable(s_cfg.wifiOn);
         WifiApSetup(s_cfg.wifiApSsid, s_cfg.wifiApPass, false);   // (no automatic access point: the user 2026-11-08)
         WifiStart(hwnd, WM_APP_WIFI, VLog);
+        if (!s_cfg.wifiCoex)   // (the registry is new at every boot: the driver's coexistence off again)
+            WifiCoex(false);
         ObdInit(hwnd, WM_APP_OBD, VLog);
         if (s_cfg.nmeaPort)   // the navigators' COM port (the registry is new at every boot)
             NmeaPortStart(true, false);

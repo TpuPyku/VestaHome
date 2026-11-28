@@ -51,6 +51,10 @@ void WifiRemember(const wchar_t* ssid, const wchar_t* pass);   // the known netw
 // left of a full power cut from a program (the restart's button gone, the user 2026-11-16).
 void WifiEnable(bool on);
 void WifiQuiet(bool on);   // no networks handed to WZC meanwhile (another internet is on: its link left alone)
+// The driver's coexistence with Bluetooth (the probe of 2026-11-28, Diagnostics): CoexEnable of both adapters (the
+// firmware's 1), the driver reloaded to read it, the client restarted - in a thread of its own. The registry is reset
+// on every boot: called again at each start while it is off.
+void WifiCoex(bool on);
 // The unit's own access point (2.4 GHz, WPA2-AES), for a phone whose hotspot is on 5 GHz: a phone connected to a
 // 2.4 GHz network puts its hotspot on 2.4 GHz and keeps it there. autoOn: with no known network in sight the unit
 // raises it, waits for a phone, then goes back to a client and joins the phone's hotspot (a known network).

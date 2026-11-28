@@ -49,6 +49,7 @@ struct Cfg {
     int btAutoConnect, btAutoAnswer;   // the stack's options, -1 never set (VestaStub applies them at each boot)
     int pbAuto;                        // the kept phone book refreshed at each connect (the user 2026-11-12: off)
     bool btVirtualDown;                // Android's virtual call "10000000" put down (the user 2026-11-24: off)
+    bool wifiCoex;                     // the Wi-Fi driver's coexistence with BT, CoexEnable (the probe 2026-11-28: on)
     wchar_t btName[32];                // the unit's Bluetooth name (VestaStub writes it before the stack starts)
     double  homeLat, homeLon;          // both 0 = not set
     double  lastLat, lastLon;          // the last place the GPS told (placepick.h), both 0 = none yet
@@ -151,6 +152,7 @@ static void CfgDefaults()
     s_cfg.camOverBy = 10;
     s_cfg.beepDev = 1;   // "Audio Output" 1: heard over the radio (HU 2026-10-18-2)
     s_cfg.wifiOn = true;
+    s_cfg.wifiCoex = true;
     s_cfg.btPower = true;
     s_cfg.netAuto = true;   // (the user 2026-10-30: the modem in - online)
     s_cfg.phoneUsb = true;  // (the user 2026-11-15, sheet 38: Android Auto and the modem by cable work - built in)
@@ -431,6 +433,8 @@ static void LoadCfg()
             s_cfg.pbAuto = CfgBool(v);
         } else if (!wcscmp(k, L"bt.virtualdown")) {
             s_cfg.btVirtualDown = CfgBool(v);
+        } else if (!wcscmp(k, L"wifi.coex")) {
+            s_cfg.wifiCoex = CfgBool(v);
         } else if (!wcscmp(k, L"bt.name")) {
             wcsncpy(s_cfg.btName, v, 31);
             s_cfg.btName[31] = 0;
@@ -791,6 +795,10 @@ static void SaveCfg()
         int k = _snwprintf(text + n, 12000 - n, L"# bt.virtualdown: Android's virtual call \"10000000\" (an app took the "
                            L"car's microphone: Alice - WhatsApp's, Telegram's calls too) put down (0: a call as any)\r\n"
                            L"bt.virtualdown=%d\r\n", s_cfg.btVirtualDown ? 1 : 0);
+        n += k > 0 ? k : 0;
+        k = _snwprintf(text + n, 12000 - n, L"# wifi.coex: the Wi-Fi driver's coexistence with Bluetooth, CoexEnable "
+                       L"(Diagnostics; 1 as the firmware, 0 - the driver reloaded without it at each start)\r\n"
+                       L"wifi.coex=%d\r\n", s_cfg.wifiCoex ? 1 : 0);
         n += k > 0 ? k : 0;
         k = _snwprintf(text + n, 12000 - n, L"# rvc.lines: the camera's guide lines - 0 classic, 1 as the stock shell, "
                        L"2 modern, 3 modern with the wheels' tracks\r\nrvc.lines=%d\r\n", s_cfg.rvcLines);
