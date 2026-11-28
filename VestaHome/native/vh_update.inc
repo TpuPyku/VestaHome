@@ -78,9 +78,12 @@ static void UpdGo()
         return;
     char t[700];
     int n = UpdateJobText(s_upd.exe, s_upd.ver, s_upd.sha, t, sizeof(t));
-    HANDLE f = n > 0 ? CreateFile(kUpdJob, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL) : INVALID_HANDLE_VALUE;
+    // On the disk before the restart (the testers 2026-11-28: "Обновить" restarted, nothing installed - the MCU's reset
+    // is a power cut: the job left in the file system's cache never reached \SDMMC; a hand-run installer has no restart)
+    HANDLE f = n > 0 ? CreateFile(kUpdJob, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH, NULL)
+                     : INVALID_HANDLE_VALUE;
     DWORD w = 0;
-    bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, t, n, &w, NULL) && (int)w == n;
+    bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, t, n, &w, NULL) && (int)w == n && FlushFileBuffers(f);
     if (f != INVALID_HANDLE_VALUE)
         CloseHandle(f);
     if (!ok) {
