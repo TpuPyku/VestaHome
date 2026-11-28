@@ -14,6 +14,8 @@ static DWORD         s_canRecPid;     // the panel's process, 0: it did not run
 static bool          s_canRecBack;    // the panel started after: it ran, or this boot left it off (the canrec job)
 static wchar_t       s_canRecPath[MAX_PATH];
 static wchar_t       s_canRecLast[64];   // the last run's result, for the button's line
+static int           s_canRecFail;       // the failure's letter (canrec.h CRF_*) and its GetLastError: the thread
+static DWORD         s_canRecErr;        // writes them before WM_APP_CANREC, the window reads them after
 // the decoded values (VestaCore vcan3) while it records: the thread writes, the screen reads a copy (the user
 // 2026-11-27: seen live); the marks pressed meanwhile into <recording>_marks.txt
 static CRITICAL_SECTION s_canLiveCs;
@@ -156,10 +158,12 @@ static DWORD WINAPI CanRecThread(LPVOID arg)
     HANDLE f = com == INVALID_HANDLE_VALUE || !rec ? INVALID_HANDLE_VALUE
                : CreateFile(s_canRecPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     bool ok = rec ? f != INVALID_HANDLE_VALUE : com != INVALID_HANDLE_VALUE;
-    if (com == INVALID_HANDLE_VALUE)
-        VLog(L"COM3 панели: COM3 не открылся, ошибка %lu", GetLastError());
-    else if (!ok)
-        VLog(L"COM3 панели: файл не создаётся, ошибка %lu", GetLastError());
+    if (!ok) {
+        s_canRecErr = GetLastError();
+        s_canRecFail = com == INVALID_HANDLE_VALUE ? CRF_PORT : CRF_FILE;
+        VLog(s_canRecFail == CRF_PORT ? L"COM3 панели: COM3 не открылся, ошибка %lu"
+                                      : L"COM3 панели: файл не создаётся, ошибка %lu", s_canRecErr);
+    }
     static unsigned char buf[512], out[6 + 512];
     static VCan3 dec;
     VCan3Init(&dec);
@@ -310,10 +314,13 @@ static void CanRecBegin(bool boot)
     VLog(L"COM3 панели: запись в %s, панель %s", s_canRecPath, s_canRecPid ? L"останавливается"
          : boot ? L"не запущена (задание загрузчика)" : L"не запущена");
     HANDLE h = CreateThread(NULL, 0, CanRecThread, (LPVOID)1, 0, NULL);
-    if (h)
+    if (h) {
         CloseHandle(h);
-    else
+    } else {
         s_canRecOn = s_canThread = 0;
+        CanRecResult(s_canRecLast, 64, false, 0, CRF_THREAD, GetLastError());
+        VLog(L"COM3 панели: %s", s_canRecLast);
+    }
     SetTimer(s_wnd, TIMER_CANRECUI, 1000, NULL);   // the button's seconds (COM4 is quiet meanwhile: no WM_APP_GPS)
 }
 
@@ -389,7 +396,7 @@ static void CanRecDone(int how, DWORD bytes)   // how: 1 recorded, 0 failed, 2 t
         return;
     }
     bool ok = how == 1;
-    _snwprintf(s_canRecLast, 64, ok ? L"записано %u КБ" : L"не записано (см. журнал)", (unsigned)(bytes / 1024));
+    CanRecResult(s_canRecLast, 64, ok, bytes, s_canRecFail, s_canRecErr);
     VLog(L"COM3 панели: %s", s_canRecLast);
     if (ok && s_canRecBack && s_canLog == INVALID_HANDLE_VALUE) {
         CanLogToggle();

@@ -190,6 +190,18 @@ int main()
     CanWheelText(w4, 4, &c);
     Check(w4[3] == 0, "wheel: a short buffer ended");
     Check(kCanRecMs == 30 * 60 * 1000, "the user 2026-11-27: up to 30 min, till stop");
+    wchar_t res[64];
+    CanRecResult(res, 64, true, 1024 * 1024 + 1023, CRF_PORT, 0);
+    Check(!wcscmp(res, L"записано 1024 КБ"), "result: recorded, its KB");
+    CanRecResult(res, 64, false, 0, CRF_FILE, 112);
+    Check(!wcscmp(res, L"ошибка F112"), "result: the file not made - F and Windows' error");
+    CanRecResult(res, 64, false, 0, CRF_PORT, 55);
+    Check(!wcscmp(res, L"ошибка P55"), "result: COM3 not opened - P");
+    CanRecResult(res, 64, false, 0, CRF_THREAD, 8);
+    Check(!wcscmp(res, L"ошибка T8"), "result: no thread - T");
+    wchar_t res4[4];
+    CanRecResult(res4, 4, false, 0, CRF_FILE, 112);
+    Check(res4[3] == 0, "result: a short buffer ended");
     printf("canrec: %d checks, %d failed\n", s_checks, s_failed);
     return s_failed;
 }

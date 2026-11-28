@@ -159,6 +159,21 @@ inline void CanVal(wchar_t* out, int cap, bool has, const wchar_t* fmt, int v)
     out[cap - 1] = 0;
 }
 
+// The run's result on the diagnostics' button (the user 2026-11-28: a failure as a short code, its table in
+// PROJECT.md): the letter - what failed (P COM3 not opened, F the file not made, T no thread), the number - Windows'
+// GetLastError
+enum { CRF_PORT = 'P', CRF_FILE = 'F', CRF_THREAD = 'T' };
+
+inline void CanRecResult(wchar_t* out, int cap, bool ok, unsigned long bytes, int kind, unsigned long err)
+{
+    if (ok) {
+        CanVal(out, cap, true, L"записано %d КБ", (int)(bytes / 1024));
+        return;
+    }
+    _snwprintf(out, cap, L"ошибка %c%lu", (wchar_t)kind, err);
+    out[cap - 1] = 0;
+}
+
 // the ignition 0x50 data[0] & 7: 5 on, 4 off
 inline void CanIgn(wchar_t* out, const VCan3* c)
 {
