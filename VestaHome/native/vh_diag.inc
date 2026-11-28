@@ -20,14 +20,13 @@ static bool    s_touchDragged;
 static int     s_wanderMax, s_wanderTaps;   // the most wander of the presses that stayed presses, how many
 
 struct Test { const wchar_t* label; Action a; int arg; };
-static const Test kTests[10] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L"Касания", A_SCREEN, S_TEST_TOUCH },
+static const Test kTests[9] = { { L"Экран", A_SCREEN, S_TEST_SCREEN }, { L"Касания", A_SCREEN, S_TEST_TOUCH },
                                 { L"Калибровка", A_CALIBRATE, 0 }, { L"Память и диски", A_SCREEN, S_TEST_MEM },
                                 { L"Кнопки · MCU", A_SCREEN, S_TEST_MCU }, { L"Звук", A_SCREEN, S_TEST_AV },
                                 { L"GPS · CAN · Поток", A_SCREEN, S_TEST_CAN },
                                 { L"Камера заднего хода", A_RVCVIEW, 0 },   // (the user 2026-10-29: here, not in "Car")
-                                { L"Текстовые файлы", A_TEXTFILES, 0 },
-                                // the phone's assistant by Bluetooth (the user 2026-11-21: a probe - does Alice start)
-                                { L"Помощник телефона", A_VOICEDIAL, 0 } };
+                                { L"Текстовые файлы", A_TEXTFILES, 0 } };
+                                // (the tenth place: the COM3 recording - "Помощник телефона" gone, the user 2026-11-28)
                                 // ("Перезапуск Bluetooth" gone: the user 2026-11-16)
 
 static int   s_modemState;   // the USB modem's driver (vh_gps.inc ModemUsbSet): 0 not yet, 1 registered, -1 failed
@@ -74,24 +73,26 @@ static void ModemLabel(wchar_t* s, int n)
 }
 
 static void CanRecLabel(wchar_t* s, int n, bool* busy);   // (vh_canrec.inc)
-static bool CanRecScreen(HDC dc);   // (vh_canrec.inc) while COM3 records: its values and marks
+static bool CanRecScreen(HDC dc);   // (vh_canrec.inc) while COM3 records: its picture, marks and stop
 
-// Diagnostics (from "About the system"): the tests 2 x 4, then closing and minimizing VestaHome.
+// Diagnostics (from "About the system"): the tests 2 x 5 (the last: the COM3 recording), the logs' switch.
 static void ScrDiag(HDC dc)
 {
     Frame(dc, L"Диагностика");
     Panel(dc, 16, 68, 768, 336);   // (above y 404: "back" at the bottom left)
-    for (int i = 0; i < 10 && kTests[i].label && !CanRecScreen(dc); i++)
+    if (CanRecScreen(dc))
+        return;   // (the user 2026-11-28: no "Журналы" there, its stop in the bottom bar)
+    for (int i = 0; i < 9; i++)
         Button(dc, 40 + (i % 2) * 368, 80 + (i / 2) * 52, 352, 44, kTests[i].label,
                B_N, IC_NONE, 16, 0, kTests[i].a, kTests[i].arg);
+    wchar_t cr[64];   // the CAN panel's COM3 (branch canrec, vh_canrec.inc)
+    bool busy;
+    CanRecLabel(cr, 64, &busy);
+    Button(dc, 408, 288, 352, 44, cr, busy ? B_SEL : B_N, IC_NONE, 15, 0, A_CANREC);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
     T(dc, 40, 390, L"в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 260);
     Toggle(dc, 688, 354, T_LOGS);
-    wchar_t cr[64];   // the CAN panel's COM3 (branch canrec, vh_canrec.inc)
-    bool busy;
-    CanRecLabel(cr, 64, &busy);
-    Button(dc, 312, 350, 352, 44, cr, busy ? B_SEL : B_N, IC_NONE, 15, 0, A_CANREC);
 }
 
 // Screen test: full-screen white, red, green, blue, black (dead pixels, uniformity), a grey ramp (banding) and a

@@ -443,7 +443,103 @@ static void CanRecMark(int button)
     s_canRecStep = CanRecStepAfter(s_canRecStep, button);
 }
 
-// The diagnostics while it records (instead of its tests): the decoded values, the mark buttons
+// The check picture's colours (canrec.h CanPart): open / on - its colour, closed / off - grey, not come yet - dim
+static COLORREF CanPartColor(int part, COLORREF on)
+{
+    return part == CNP_ON ? on : part == CNP_OFF ? kMuted : kOff;
+}
+
+// A door: closed - a strip along the body's side, open - swung out (side -1 the left, +1 the right)
+static void CanDoor(HDC dc, int x, int y, int h, int side, int part)
+{
+    if (part != CNP_ON) {
+        Fill(dc, side < 0 ? x - 6 : x, y, side < 0 ? x : x + 6, y + h, CanPartColor(part, kStop));
+        return;
+    }
+    POINT p[4] = { { x, y }, { x + side * 40, y + 18 }, { x + side * 40, y + 18 + h - 8 }, { x, y + h } };
+    Poly(dc, p, 4, kStop);
+}
+
+// A turn's arrow at a corner, pointing out (side -1 / +1)
+static void CanTurn(HDC dc, int x, int y, int side, int part)
+{
+    POINT p[3] = { { x + side * 14, y }, { x, y - 9 }, { x, y + 9 } };
+    Poly(dc, p, 3, CanPartColor(part, kOrange));
+}
+
+// The car from above, its front up, cx its middle, y its top (the beams above it): 100 x 240, the doors 40 out
+static void CanCarPic(HDC dc, int cx, int y, const VCan3* c)
+{
+    int l = cx - 50, r = cx + 50, top = y + 34;
+    bool b = c->hasBody, li = c->hasLight;
+    int light = c->light;
+    if (li && light & (VCL_LOW | VCL_HIGH)) {   // the beams: the low short, the high long
+        int len = light & VCL_HIGH ? 34 : 18;
+        COLORREF beam = light & VCL_HIGH ? RGB(0xa8, 0xd0, 0xff) : RGB(0xff, 0xd6, 0x5a);
+        for (int s = -1; s <= 1; s += 2) {
+            int x = cx + s * 32;
+            POINT q[4] = { { x - 10, top - 2 }, { x + 10, top - 2 }, { x + 16, top - len }, { x - 16, top - len } };
+            Poly(dc, q, 4, beam);
+        }
+    }
+    R(dc, l, top, 100, 240, 26, kPanel, kLine);
+    R(dc, l + 8, top + 6, 84, 52, 14, CanPartColor(CanPart(b, (c->open & VCO_HOOD) != 0), kStop));   // the hood
+    T(dc, cx, top + 38, L"капот", 13, kInk, 700, AL_MID);
+    R(dc, l + 12, top + 66, 76, 28, 8, kLine);    // the windscreen
+    R(dc, l + 8, top + 192, 84, 42, 14, CanPartColor(CanPart(b, (c->open & VCO_TRUNK) != 0), kStop));   // the trunk
+    T(dc, cx, top + 219, L"багажник", 13, kInk, 700, AL_MID);
+    int fl = CanPart(b, (c->open & VCO_FL) != 0), fr = CanPart(b, (c->open & VCO_FR) != 0);
+    int rear = CanPart(b, (c->open & VCO_REAR) != 0);   // (one flag for both rear doors)
+    CanDoor(dc, l, top + 74, 56, -1, fl);
+    CanDoor(dc, r, top + 74, 56, 1, fr);
+    CanDoor(dc, l, top + 134, 52, -1, rear);
+    CanDoor(dc, r, top + 134, 52, 1, rear);
+    int lo = CanPart(li, (light & VCL_LOW) != 0), hi = CanPart(li, (light & VCL_HIGH) != 0);
+    int side = CanPart(li, (light & VCL_SIDE) != 0);
+    COLORREF head = hi == CNP_ON ? RGB(0xa8, 0xd0, 0xff) : lo == CNP_ON ? RGB(0xff, 0xd6, 0x5a)
+                    : side == CNP_ON ? RGB(0xc0, 0x8a, 0x30) : CanPartColor(lo, 0);
+    R(dc, l + 6, top - 4, 30, 8, 4, head);    // the headlights
+    R(dc, r - 36, top - 4, 30, 8, 4, head);
+    COLORREF tail = side == CNP_ON ? RGB(0x90, 0x20, 0x18) : CanPartColor(side, 0);
+    R(dc, l + 6, top + 236, 24, 7, 3, tail);   // the side lights at the back
+    R(dc, r - 30, top + 236, 24, 7, 3, tail);
+    int ff = CanPart(li, (light & VCL_FOGF) != 0), fo = CanPart(li, (light & VCL_FOGR) != 0);
+    Disc(dc, l - 8, top + 14, 6, CanPartColor(ff, RGB(0xff, 0xf0, 0xb0)));   // the front fogs
+    Disc(dc, r + 8, top + 14, 6, CanPartColor(ff, RGB(0xff, 0xf0, 0xb0)));
+    R(dc, cx - 12, top + 238, 24, 8, 3, CanPartColor(fo, RGB(0xff, 0x20, 0x20)));   // the rear fog
+    int tl = CanPart(li, (light & VCL_LEFT) != 0), tr = CanPart(li, (light & VCL_RIGHT) != 0);
+    CanTurn(dc, l - 6, top + 40, -1, tl);
+    CanTurn(dc, r + 6, top + 40, 1, tr);
+    CanTurn(dc, l - 6, top + 210, -1, tl);
+    CanTurn(dc, r + 6, top + 210, 1, tr);
+}
+
+// The wheel turned by the angle CAN gives (as can_panel's @ANG: plus - clockwise on the picture; which way is the
+// car's right is what the step "руль" checks)
+static void CanWheelPic(HDC dc, int cx, int cy, const VCan3* c)
+{
+    Disc(dc, cx, cy, 36, CLR_INVALID, c->hasWheel ? kText : kOff);
+    double an = c->hasWheel && c->wheel ? (c->wheel - 32767) / 15.0 * 3.14159265 / 180 : 0;
+    double s = sin(an), k = cos(an);
+    int ux = (int)(34 * s), uy = (int)(-34 * k);
+    Line(dc, cx - (int)(34 * k), cy - (int)(34 * s), cx + (int)(34 * k), cy + (int)(34 * s), 4,
+         c->hasWheel ? kMuted : kOff);   // the spokes across
+    Disc(dc, cx + ux, cy + uy, 6, c->hasWheel ? kOrange : kOff);   // its top mark
+    wchar_t w[24];
+    CanWheelText(w, 24, c);
+    T(dc, cx, cy + 58, w, 15, kText, 700, AL_MID);
+}
+
+// A pill: the handbrake, the ignition
+static void CanPill(HDC dc, int x, int y, int w, const wchar_t* label, int part, COLORREF on)
+{
+    R(dc, x, y, w, 28, 14, part == CNP_ON ? on : kPanel, CanPartColor(part, on));
+    T(dc, x + w / 2, y + 20, label, 14, part == CNP_ON ? kInk : CanPartColor(part, on), 700, AL_MID);
+}
+
+// The diagnostics while it records (instead of its tests and its "Журналы" row; the stop in the bottom bar): the
+// car's picture on the left (what CAN says, to check against the car itself), the step and its buttons on the
+// right, the wheel and the numbers under them
 static bool CanRecScreen(HDC dc)   // false: not recording
 {
     if (!s_canRecOn)
@@ -453,21 +549,29 @@ static bool CanRecScreen(HDC dc)   // false: not recording
     EnterCriticalSection(&s_canLiveCs);
     c = s_canLive;
     LeaveCriticalSection(&s_canLiveCs);
-    wchar_t a[96], b[96];
-    CanRecLive(a, 96, b, 96, &c);
-    T(dc, 40, 84, L"Запись COM3 панели", 19, kText, 700);
-    T(dc, 40, 116, a, 17, kText, 400, AL_START, 720);
-    T(dc, 40, 144, b, 17, kText, 400, AL_START, 720);
+    CanCarPic(dc, 150, 72, &c);
+    CanPill(dc, 40, 362, 104, L"Ручник", CanPart(c.hasHand, c.hand), kStop);
+    CanPill(dc, 156, 362, 104, L"Зажигание", CanPart(c.hasBody, c.ign == 5), kOk);
+    T(dc, 312, 96, L"Запись COM3 панели", 19, kText, 700);
     wchar_t step[160];
     CanRecStepTitle(step, 160, s_canRecStep);
-    T(dc, 40, 176, step, 17, kOrange, 700, AL_START, 720);
+    T(dc, 312, 126, step, 16, kOrange, 700, AL_START, 460);
     bool done = s_canRecStep >= CRS_COUNT;
     for (int i = 0; i < 3; i++)
-        Button(dc, i ? 90 + i * 182 : 40, 212, i ? 170 : 220, 56, labels[i], done && i < 2 ? B_DIS : i ? B_N : B_SEL, IC_NONE,
-               16, 0, done && i < 2 ? A_NONE : A_CANRECMARK, i);
+        Button(dc, 312 + i * 156, 142, 148, 52, labels[i], done && i < 2 ? B_DIS : i ? B_N : B_SEL, IC_NONE, 16, 0,
+               done && i < 2 ? A_NONE : A_CANRECMARK, i);
     wchar_t m[64];
     _snwprintf(m, 64, s_canRecMarkN ? L"Меток: %d · %s" : L"Меток пока нет", s_canRecMarkN, s_canMarkLast);
     m[63] = 0;
-    T(dc, 40, 296, m, 15, kMuted, 400, AL_START, 720);
+    T(dc, 312, 220, m, 14, kMuted, 400, AL_START, 460);
+    CanWheelPic(dc, 356, 290, &c);
+    wchar_t rows[CRR_COUNT][96];
+    CanRecRows(rows, &c);
+    for (int i = 0; i < CRR_COUNT; i++)
+        T(dc, 420, 254 + i * 24, rows[i], 15, i == CRR_COUNT - 1 ? kMuted : kText, 400, AL_START, 356);
+    wchar_t cr[64];   // its stop in the bottom bar, right of "back" (the user 2026-11-28)
+    bool busy;
+    CanRecLabel(cr, 64, &busy);
+    Button(dc, 456, 418, 320, 52, cr, B_SEL, IC_NONE, 16, 0, A_CANREC);
     return true;
 }

@@ -84,39 +84,76 @@ int main()
     // the user 2026-11-27: the decoded values live on the screen while recording
     VCan3 c;
     memset(&c, 0, sizeof(c));
-    wchar_t a[96], b[96];
-    CanRecLive(a, 96, b, 96, &c);
-    Check(!wcscmp(a, L"Скорость — · руль — · зажигание —"), "live: nothing seen yet - dashes");
-    Check(!wcscmp(b, L"Свет — · GPS нет · кадров 0"), "live: second line, nothing yet");
+    wchar_t r[CRR_COUNT][96];
+    CanRecRows(r, &c);
+    Check(!wcscmp(r[0], L"Скорость — · обороты — · зажигание —"), "rows: nothing seen yet - dashes");
+    Check(!wcscmp(r[1], L"ОЖ — · улица —"), "rows: the temperatures, nothing yet");
+    Check(!wcscmp(r[2], L"Топливо — · запас —"), "rows: the fuel, nothing yet");
+    Check(!wcscmp(r[3], L"Климат — · вентилятор —"), "rows: the climate, nothing yet");
+    Check(!wcscmp(r[4], L"БК —"), "rows: the trip computer, nothing yet");
+    Check(!wcscmp(r[5], L"GPS нет · кадров 0"), "rows: GPS, nothing yet");
+    wchar_t w[24];
+    CanWheelText(w, 24, &c);
+    Check(!wcscmp(w, L"руль —"), "wheel: nothing yet");
     c.hasCar = true;
     c.carKmh100 = 1234;    // (0xd7: km/h x 100)
+    c.hasRpm = true;
+    c.rpm = 3000;
+    c.hasBody = true;
+    c.ign = 5;             // (0x50 data[0] & 7: 5 - the ignition on, 4 - off; can_panel 1.3.6.1)
+    c.hasCool = true;
+    c.coolC = 88;
+    c.hasAir = true;
+    c.airC = -3;
+    c.hasFuel = true;
+    c.fuel2 = 95;          // 47.5 l
+    c.rangeKm = 656;
+    c.hasClima = true;
+    c.climaT = 45;         // 22.5
+    c.fan = 0;
+    c.hasTrip = true;
+    c.use10 = 91;
+    c.trip10 = 1902;
+    c.used10 = 173;
+    c.avg10 = 125;        // (12.5: x % 11 would not be x % 10)
     c.hasWheel = true;
     c.wheel = 32767 - 464; // (0xc6: (raw - 32767) / 15 degrees)
-    c.hasGear = true;
-    c.gear = 5;            // (0x50 data[0] & 7: 5 - the ignition on, 4 - off; can_panel 1.3.6.1)
-    c.hasDoors = true;
-    c.doors = 0x81;        // (0xde data[0]: the lights' bits)
     c.hasPos = true;
     c.hasMove = true;
     c.kn100 = 1000;        // 10 knots = 18.5 km/h
     c.course100 = 35999;
     c.frames = 19292;
-    CanRecLive(a, 96, b, 96, &c);
-    Check(!wcscmp(a, L"Скорость 12,34 км/ч · руль -30,9° · зажигание вкл"), "live: the car's speed, the wheel in degrees, the ignition");
-    Check(!wcscmp(b, L"Свет 81 · GPS 18,5 км/ч, курс 359° · кадров 19292"), "live: doors, GPS");
+    CanRecRows(r, &c);
+    Check(!wcscmp(r[0], L"Скорость 12,34 км/ч · обороты 3000 · зажигание вкл"), "rows: the speed, the revs, the ignition");
+    Check(!wcscmp(r[1], L"ОЖ 88° · улица -3°"), "rows: the temperatures");
+    Check(!wcscmp(r[2], L"Топливо 47,5 л · запас 656 км"), "rows: the fuel in 0.5 l, the range");
+    Check(!wcscmp(r[3], L"Климат 22,5° · вентилятор авто"), "rows: the climate x 0.5, the fan 0 - auto");
+    Check(!wcscmp(r[4], L"БК 9,1 л/100 · 190,2 км · 17,3 л · 12,5 км/ч"), "rows: the trip computer, each x 0.1");
+    Check(!wcscmp(r[5], L"GPS 18,5 км/ч, курс 359° · кадров 19292"), "rows: GPS");
+    CanWheelText(w, 24, &c);
+    Check(!wcscmp(w, L"руль -30,9°"), "wheel: degrees, the comma");
     c.hasMove = false;
-    CanRecLive(a, 96, b, 96, &c);
-    Check(!wcscmp(b, L"Свет 81 · GPS есть · кадров 19292"), "live: a position, no speed yet");
-    c.gear = 4;
+    c.ign = 4;
+    c.fuel2 = 94;
+    c.climaT = 8;
+    c.fan = 15;
     c.wheel = 0;
-    CanRecLive(a, 96, b, 96, &c);
-    Check(!wcscmp(a, L"Скорость 12,34 км/ч · руль 0,0° · зажигание выкл"), "live: the ignition off; raw 0 - 0°");
-    c.gear = 3;
-    CanRecLive(a, 96, b, 96, &c);
-    Check(wcsstr(a, L"зажигание 3") != NULL, "live: another value - the number");
-    wchar_t s4[4];
-    CanRecLive(s4, 4, b, 96, &c);
-    Check(s4[3] == 0, "live: a short buffer ended");
+    CanRecRows(r, &c);
+    Check(!wcscmp(r[5], L"GPS есть · кадров 19292"), "rows: a position, no speed yet");
+    Check(wcsstr(r[0], L"зажигание выкл") != NULL, "rows: the ignition off");
+    Check(!wcscmp(r[2], L"Топливо 47 л · запас 656 км"), "rows: whole litres - no ,0");
+    Check(!wcscmp(r[3], L"Климат LOW · вентилятор выкл"), "rows: the climate 8 - LOW, the fan 15 - off");
+    CanWheelText(w, 24, &c);
+    Check(!wcscmp(w, L"руль 0,0°"), "wheel: raw 0 - 0°");
+    c.ign = 3;
+    c.climaT = 10;
+    c.fan = 4;
+    CanRecRows(r, &c);
+    Check(wcsstr(r[0], L"зажигание 3") != NULL, "rows: another ignition value - the number");
+    Check(!wcscmp(r[3], L"Климат HI · вентилятор 4"), "rows: the climate 10 - HI, the fan's step");
+    // the picture's parts: not come yet, off / closed, on / open
+    Check(CanPart(false, true) == CNP_NONE && CanPart(true, false) == CNP_OFF && CanPart(true, true) == CNP_ON,
+          "part: none, off, on");
 
     // the bridge (the user 2026-11-27: GPS and the wheel to COM4 / COM5 without the panel)
     Check(CanBridgeWanted(true, false, 60000, false), "bridge: the panel's firmware, the panel not running, 60 s up");
@@ -146,11 +183,12 @@ int main()
     c.carKmh100 = 10000;
     c.hasPos = c.hasMove = true;
     c.kn100 = 10000;       // 100 knots = 185.2 km/h
-    CanRecLive(a, 96, b, 96, &c);
-    Check(wcsstr(a, L"Скорость 100,00 км/ч") == a && wcsstr(b, L"GPS 185,2 км/ч") != NULL, "live: 100 km/h, 100 knots");
-    wchar_t b4[4];
-    CanRecLive(a, 96, b4, 4, &c);
-    Check(b4[3] == 0, "live: the second line's short buffer ended");
+    CanRecRows(r, &c);
+    Check(wcsstr(r[0], L"Скорость 100,00 км/ч") == r[0] && wcsstr(r[5], L"GPS 185,2 км/ч") != NULL,
+          "rows: 100 km/h, 100 knots");
+    wchar_t w4[4];
+    CanWheelText(w4, 4, &c);
+    Check(w4[3] == 0, "wheel: a short buffer ended");
     Check(kCanRecMs == 30 * 60 * 1000, "the user 2026-11-27: up to 30 min, till stop");
     printf("canrec: %d checks, %d failed\n", s_checks, s_failed);
     return s_failed;

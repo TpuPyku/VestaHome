@@ -987,9 +987,6 @@ static void DoActionOn(const Btn& b)
         BtCmdText(BT_CMD_CONNECT, t);
         break;
     }
-    case A_VOICEDIAL:   // the phone's assistant through Bluetooth (the answer in BTProxy.log)
-        VhDo(VHA_ASSISTANT, L"диагностика");
-        break;
     case A_RVCVIEW:   // the camera's picture now, whatever the gear (powered only in reverse? - to be seen)
         s_rvcManual = true;
         s_rvcManualTick = GetTickCount();

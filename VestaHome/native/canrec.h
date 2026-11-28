@@ -117,32 +117,114 @@ inline void CanRecMarkPath(wchar_t* out, int cap, const wchar_t* bin)
     out[cap - 1] = 0;
 }
 
-// The decoded values as two lines for the screen; a dash: not come yet (can_panel 1.3.6.1's own reading, 2026-11-27):
-// the car's speed 0xd7 (km/h x 100), the wheel 0xc6 ((raw - 32767) / 15 degrees, raw 0 - 0, as its @ANG), the
-// ignition 0x50 data[0] & 7 (5 on, 4 off), the lights 0xde data[0]; the GPS speed from knots x 100 (x 1.852).
-inline void CanRecLive(wchar_t* a, int na, wchar_t* b, int nb, const VCan3* c)
+// The check picture (the user 2026-11-28: "виджет с графическим сопоставлением данных, что бы тестер мог напрямую
+// посмотреть соответствуют ли данные"): the car drawn with what CAN says beside the tester's own eyes - each part
+// not come yet (dim), off / closed, on / open; the numbers in rows under it. can_panel 1.3.6.1's reading (vcan3.h).
+enum { CNP_NONE, CNP_OFF, CNP_ON };
+inline int CanPart(bool has, bool on)
 {
-    wchar_t sp[24] = L"—", st[16] = L"—", ig[8] = L"—", li[8] = L"—", gps[48] = L"нет";
-    if (c->hasCar)
-        _snwprintf(sp, 24, L"%d,%02d км/ч", c->carKmh100 / 100, c->carKmh100 % 100);
-    if (c->hasWheel) {
-        _snwprintf(st, 16, L"%.1f°", c->wheel ? (c->wheel - 32767) / 15.0 : 0.0);
-        st[15] = 0;
-        wchar_t* dot = wcschr(st, L'.');
-        if (dot)
-            *dot = L',';
+    return !has ? CNP_NONE : on ? CNP_ON : CNP_OFF;
+}
+
+// v halves: "47" / "47,5"
+inline void CanHalf(wchar_t* out, int cap, int v2)
+{
+    _snwprintf(out, cap, v2 % 2 ? L"%d,5" : L"%d", v2 / 2);
+    out[cap - 1] = 0;
+}
+
+inline void CanWheelText(wchar_t* out, int cap, const VCan3* c)
+{
+    if (!c->hasWheel) {
+        _snwprintf(out, cap, L"руль —");
+        out[cap - 1] = 0;
+        return;
     }
-    if (c->hasGear)
-        _snwprintf(ig, 8, c->gear == 5 ? L"вкл" : c->gear == 4 ? L"выкл" : L"%d", c->gear);
-    if (c->hasDoors)
-        _snwprintf(li, 8, L"%02X", c->doors);
+    _snwprintf(out, cap, L"руль %.1f°", c->wheel ? (c->wheel - 32767) / 15.0 : 0.0);
+    out[cap - 1] = 0;
+    wchar_t* dot = wcschr(out, L'.');
+    if (dot)
+        *dot = L',';
+}
+
+enum { CRR_COUNT = 6 };
+
+// a value by its format, a dash when not come yet
+inline void CanVal(wchar_t* out, int cap, bool has, const wchar_t* fmt, int v)
+{
+    if (has)
+        _snwprintf(out, cap, fmt, v);
+    else
+        _snwprintf(out, cap, L"—");
+    out[cap - 1] = 0;
+}
+
+// the ignition 0x50 data[0] & 7: 5 on, 4 off
+inline void CanIgn(wchar_t* out, const VCan3* c)
+{
+    if (c->hasBody)
+        _snwprintf(out, 8, c->ign == 5 ? L"вкл" : c->ign == 4 ? L"выкл" : L"%d", c->ign);
+    else
+        wcscpy(out, L"—");
+}
+
+// the climate's d1: 8 LOW, 10 HI, else halves of a degree; the fan's d3 >> 4: 15 off, 0 auto, else its step
+inline void CanRowClima(wchar_t* out, const VCan3* c)
+{
+    wchar_t t[12] = L"—", f[12] = L"—";
+    if (c->hasClima) {
+        if (c->climaT == 8 || c->climaT == 10)
+            _snwprintf(t, 12, c->climaT == 8 ? L"LOW" : L"HI");
+        else {
+            CanHalf(t, 10, c->climaT);
+            wcscat(t, L"°");
+        }
+        _snwprintf(f, 12, c->fan == 15 ? L"выкл" : c->fan ? L"%d" : L"авто", c->fan);
+    }
+    _snwprintf(out, 96, L"Климат %s · вентилятор %s", t, f);
+}
+
+inline void CanRowTrip(wchar_t* out, const VCan3* c)
+{
+    if (c->hasTrip)
+        _snwprintf(out, 96, L"БК %d,%d л/100 · %d,%d км · %d,%d л · %d,%d км/ч", c->use10 / 10, c->use10 % 10,
+                   c->trip10 / 10, c->trip10 % 10, c->used10 / 10, c->used10 % 10, c->avg10 / 10, c->avg10 % 10);
+    else
+        _snwprintf(out, 96, L"БК —");
+}
+
+// the GPS speed from knots x 100 (x 1.852)
+inline void CanRowGps(wchar_t* out, const VCan3* c)
+{
+    wchar_t gps[48] = L"нет";
     int kmh10 = c->kn100 * 1852 / 10000;
     if (c->hasPos)
         _snwprintf(gps, 48, c->hasMove ? L"%d,%d км/ч, курс %d°" : L"есть", kmh10 / 10, kmh10 % 10, c->course100 / 100);
-    _snwprintf(a, na, L"Скорость %s · руль %s · зажигание %s", sp, st, ig);
-    a[na - 1] = 0;
-    _snwprintf(b, nb, L"Свет %s · GPS %s · кадров %lu", li, gps, c->frames);
-    b[nb - 1] = 0;
+    _snwprintf(out, 96, L"GPS %s · кадров %lu", gps, c->frames);
+}
+
+inline void CanRecRows(wchar_t (*rows)[96], const VCan3* c)
+{
+    wchar_t sp[24] = L"—", rp[12], ig[8], co[12], ai[12], l[16] = L"—", km[16];
+    if (c->hasCar)
+        _snwprintf(sp, 24, L"%d,%02d км/ч", c->carKmh100 / 100, c->carKmh100 % 100);
+    CanVal(rp, 12, c->hasRpm, L"%d", c->rpm);
+    CanIgn(ig, c);
+    _snwprintf(rows[0], 96, L"Скорость %s · обороты %s · зажигание %s", sp, rp, ig);
+    CanVal(co, 12, c->hasCool, L"%d°", c->coolC);
+    CanVal(ai, 12, c->hasAir, L"%d°", c->airC);
+    _snwprintf(rows[1], 96, L"ОЖ %s · улица %s", co, ai);
+    if (c->hasFuel) {
+        CanHalf(l, 12, c->fuel2);
+        wcscat(l, L" л");
+    }
+    CanVal(km, 16, c->hasFuel, L"%d км", c->rangeKm);
+    _snwprintf(rows[2], 96, L"Топливо %s · запас %s", l, km);
+    CanRowClima(rows[3], c);
+    CanRowTrip(rows[4], c);
+    CanRowGps(rows[5], c);
+    for (int i = 0; i < CRR_COUNT; i++)
+        rows[i][95] = 0;
 }
 
 // The bridge (the user 2026-11-27: "NMEA с рулём в ком 4, 5 ... когда панель выключена"): with the panel's firmware
