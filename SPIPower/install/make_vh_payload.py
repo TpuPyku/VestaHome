@@ -23,14 +23,18 @@ BASS_FILES = ('bass.dll', 'bass_aac.dll', 'bassflac.dll', 'bassalac.dll', 'bass_
 
 
 def vh_version(exe):
-    """VestaHome's version from its mark "VHVER:<release>|<__DATE__>" (vh_draw.inc): "1.1.261125"; None - no mark."""
+    """VestaHome's version from its mark "VHVER:<release>|<__DATE__>|<build of the day>" (vh_draw.inc):
+    "1.1.261125", from the second build of a day on "1.1.261125.2"; None - no mark."""
     at = exe.find(b'VHVER:')
     if at < 0:
         return None
-    rel, date = exe[at + 6:exe.index(bytes(1), at)].decode('ascii').split('|')
+    parts = exe[at + 6:exe.index(bytes(1), at)].decode('ascii').split('|')
+    rel, date = parts[0], parts[1]
     mon, day, year = date.split()
     m = 'JanFebMarAprMayJunJulAugSepOctNovDec'.index(mon) // 3 + 1
-    return '%s.%02d%02d%02d' % (rel, int(year) % 100, m, int(day))
+    ver = '%s.%02d%02d%02d' % (rel, int(year) % 100, m, int(day))
+    n = int(parts[2]) if len(parts) > 2 else 1
+    return ver + ('.%d' % n if n > 1 else '')
 
 
 def main():

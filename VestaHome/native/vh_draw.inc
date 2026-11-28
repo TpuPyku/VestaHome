@@ -5,16 +5,23 @@
 #include "vversion.h"
 
 // The version's mark: the release here, the date the build's (VestaHomeInstall's build reads it from the exe -
-// make_vh_payload.py - and marks the installer with it, 2026-11-25). 1.1: the unit ID from the MCU.
-static const char kVhMark[] = "VHVER:1.2|" __DATE__;
+// make_vh_payload.py - and marks the installer with it, 2026-11-25). 1.1: the unit ID from the MCU. After the date the
+// build of the day (tools\vh_buildno.py, the user 2026-11-28): from the second on, the version's fourth part.
+#include "obj\vh_buildno.h"
+static const char kVhMark[] = "VHVER:1.2|" __DATE__ "|" VH_BUILDNO_S;
 
-static const wchar_t* VhVersion()   // "1.2.261125" (1.2: the update from "О системе", the fine equalizer)
+static const wchar_t* VhVersion()   // "1.2.261125", "1.2.261125.2" (1.2: the update from "О системе", the fine EQ)
 {
-    static wchar_t rel[8];
-    if (!rel[0])
+    static wchar_t v[32];
+    if (!v[0]) {
+        wchar_t rel[8] = L"";
         for (int k = 0; k < 7 && kVhMark[6 + k] != '|'; k++)
             rel[k] = kVhMark[6 + k];
-    return AppVersion(rel);
+        wcscpy(v, AppVersion(rel));
+        if (VH_BUILDNO > 1)
+            _snwprintf(v + wcslen(v), 8, L".%d", VH_BUILDNO);
+    }
+    return v;
 }
 
 // ---------------------------------------------------------------- drawing helpers

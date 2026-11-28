@@ -33,6 +33,11 @@ call build_bearssl.bat
 if errorlevel 1 goto fail
 :bearssl_ok
 
+rem the build of the day (the version 1.2.261128, then 1.2.261128.2 when the code changed the same day):
+rem obj\vh_buildno.h for vh_draw.inc; the state in obj\buildno.txt
+python ..\..\tools\vh_buildno.py obj\buildno.txt obj\vh_buildno.h . "%CORE%" ..\..\VHCheck\native ..\..\VestaModem\native
+if errorlevel 1 goto fail
+
 echo === icon (app.rc, same .res for both builds)
 rc /fo obj\app.res app.rc
 if errorlevel 1 goto fail
