@@ -79,7 +79,10 @@ enum { BT_CMD_NONE, BT_CMD_PLAYPAUSE, BT_CMD_PLAY, BT_CMD_PAUSE, BT_CMD_NEXT, BT
                        the state in BtShm::power */,
        BT_CMD_VOICEDIAL /* cmdText "1" / "0": the phone's voice assistant through the hands-free link (the user
                        2026-11-21, the probe: Alice as the phone's assistant) - Flc_Bluetooth_Hf_VoiceDial(on, 0):
-                       r0 on, r1 the phone's line (as Hf_Answer's; capstone 2026-11-21) */ };
+                       r0 on, r1 the phone's line (as Hf_Answer's; capstone 2026-11-21) */,
+       BT_CMD_AFH /* cmdText "1".."14": Bluetooth kept off that Wi-Fi channel, "0": all channels again (the users
+                     2026-11-28: Wi-Fi and BT spoil each other) - afhmap.h, btapi #254 XCBM_SetChannelClassification;
+                     the proxy puts it back after Bluetooth's on */ };
 enum { BT_POW_ON, BT_POW_GOING_OFF, BT_POW_OFF, BT_POW_GOING_ON };   // (0: a proxy older than it - on)
 enum { BT_PAN_IDLE, BT_PAN_CONNECTING, BT_PAN_ONLINE, BT_PAN_FAILED };
 enum { BT_CALL_NONE, BT_CALL_INCOMING, BT_CALL_DIALING, BT_CALL_ALERTING, BT_CALL_ACTIVE, BT_CALL_HELD, BT_CALL_WAITING };

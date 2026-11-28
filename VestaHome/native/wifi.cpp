@@ -1641,6 +1641,50 @@ void WifiEnable(bool on)
     }
 }
 
+// The driver's coexistence with Bluetooth (WifiCoex): CoexEnable of both adapters, the driver reloaded to read it
+// (WDK_DMW_ResetDriver(1): 1 - its filter loaded again, PROJECT.md), then the switch's restart. Each step into the log.
+static DWORD WINAPI CoexThread(LPVOID arg)
+{
+    DWORD v = arg ? 1 : 0;
+    for (int i = 0; i < 600 && !s_dkReady && !s_stop; i++)   // (the SDK looked for first: up to a minute)
+        Sleep(100);
+    static const wchar_t* const keys[2] = { L"Comm\\NDCUFMP1\\Parms", L"Comm\\NDCUFMP2\\Parms" };
+    LONG r[2];
+    for (int i = 0; i < 2; i++) {
+        HKEY k;
+        r[i] = RegOpenKeyEx(HKEY_LOCAL_MACHINE, keys[i], 0, 0, &k);
+        if (r[i] == ERROR_SUCCESS) {
+            r[i] = RegSetValueEx(k, L"CoexEnable", 0, REG_DWORD, (const BYTE*)&v, sizeof(v));
+            RegCloseKey(k);
+        }
+    }
+    Log(L"wifi: совмещение с BT (CoexEnable) %lu: реестр %ld / %ld", v, r[0], r[1]);
+#ifdef UNDER_CE
+    if (s_dkReset) {
+        DWORD t0 = GetTickCount();
+        LONG hr = s_dkReset(1);
+        int mode = -1;
+        if (s_dkGetMode)
+            s_dkGetMode(&mode);
+        Log(L"wifi: совмещение: драйвер перезагружен 0x%08X за %lu мс, режим %d", (unsigned)hr, GetTickCount() - t0, mode);
+    } else {
+        Log(L"wifi: совмещение: нет WDK_DMW_ResetDriver - до перезагрузки ГУ по-старому");
+    }
+#endif
+    if (s_wantOn && !s_stop) {   // the client up again as the switch does it
+        WifiEnable(false);
+        WifiEnable(true);
+    }
+    return 0;
+}
+
+void WifiCoex(bool on)
+{
+    HANDLE h = CreateThread(NULL, 0, CoexThread, on ? (LPVOID)1 : NULL, 0, NULL);
+    if (h)
+        CloseHandle(h);
+}
+
 void WifiGet(WifiInfo* out)
 {
     if (!s_thread) {

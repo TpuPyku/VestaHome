@@ -91,8 +91,12 @@ static void ScrDiag(HDC dc)
     Button(dc, 408, 288, 352, 44, cr, busy ? B_SEL : B_N, IC_NONE, 15, 0, A_CANREC);
     Sep(dc, 40, 340, 720);
     T(dc, 40, 368, L"Журналы", 19, kText, 700);   // VestaHome, the proxies, VestaStub (s_logsOn)
-    T(dc, 40, 390, L"в VestaLogs на SD-карте или USB", 14, kMuted, 400, AL_START, 260);
-    Toggle(dc, 688, 354, T_LOGS);
+    T(dc, 40, 390, L"в VestaLogs на SD или USB", 14, kMuted, 400, AL_START, 230);
+    Toggle(dc, 304, 354, T_LOGS);
+    // the Wi-Fi driver's coexistence with Bluetooth (the probe of 2026-11-28; wifi.cpp WifiCoex)
+    T(dc, 408, 368, L"Wi-Fi и BT вместе", 19, kText, 700, AL_START, 270);
+    T(dc, 408, 390, L"CoexEnable драйвера Wi-Fi", 14, kMuted, 400, AL_START, 270);
+    Toggle(dc, 688, 354, T_COEX);
 }
 
 // Screen test: full-screen white, red, green, blue, black (dead pixels, uniformity), a grey ramp (banding) and a
